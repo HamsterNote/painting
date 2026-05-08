@@ -1,0 +1,48 @@
+{
+  "name": "@hamster-note/painting-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "HamsterNote Painting - React component library with Expo Web",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "lint": "eslint .",
+    "format:check": "prettier --check .",
+    "format": "prettier --write .",
+    "typecheck": "yarn workspace @hamster-note/painting typecheck && yarn workspace @hamster-note/painting-playground tsc --noEmit",
+    "build": "yarn workspace @hamster-note/painting build",
+    "test": "jest --runInBand",
+    "test:ui": "playwright test --config=playwright.config.ts",
+    "ci:local": "yarn install --frozen-lockfile && yarn lint && yarn test && yarn test:ui && yarn build && yarn pack:dry",
+    "pack:dry": "cd packages/painting && npm pack --dry-run",
+    "playground:web": "yarn workspace @hamster-note/painting-playground expo start --web --port 8081"
+  },
+  "devDependencies": {
+    "@babel/preset-env": "^7.24.0",
+    "@babel/preset-react": "^7.24.0",
+    "@babel/preset-typescript": "^7.24.0",
+    "@eslint/js": "^9.39.2",
+    "@playwright/test": "1.59.1",
+    "@types/jest": "^29.5.12",
+    "@typescript-eslint/eslint-plugin": "^8.8.0",
+    "@typescript-eslint/parser": "^8.8.0",
+    "babel-jest": "^29.7.0",
+    "eslint": "^9.12.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-jest": "^27.9.0",
+    "eslint-plugin-prettier": "^5.5.4",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^5",
+    "globals": "^17.0.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.3.3",
+    "prettier-config-standard": "^7.0.0",
+    "react-test-renderer": "^18.3.1",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.52.0"
+  },
+  "packageManager": "yarn@1.22.22"
+}

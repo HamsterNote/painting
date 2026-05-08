@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Expo
+.expo/
+.metro-health-check*
+
+# Build outputs
+dist/
+build/
+*.log
+yarn-error.log
+
+# Test outputs
+coverage/
+playwright-report/
+test-results/
+
+# IDE
+.idea/
+.vscode/
+
+# Package output
+packages/painting/lib/
+
+# Misc
+.DS_Store
