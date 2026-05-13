@@ -18,6 +18,7 @@
     "test:ui": "playwright test --config=playwright.config.ts",
     "ci:local": "yarn install --frozen-lockfile && yarn lint && yarn test && yarn test:ui && yarn build && yarn pack:dry",
     "pack:dry": "cd packages/painting && npm pack --dry-run",
+    "dev": "yarn playground:web",
     "playground:web": "yarn workspace @hamster-note/painting-playground expo start --web --port 8081"
   },
   "devDependencies": {
@@ -40,7 +41,7 @@
     "jest": "^29.7.0",
     "prettier": "^3.3.3",
     "prettier-config-standard": "^7.0.0",
-    "react-test-renderer": "^18.3.1",
+    "react-test-renderer": "19.1.0",
     "typescript": "^5.6.3",
     "typescript-eslint": "^8.52.0"
   },

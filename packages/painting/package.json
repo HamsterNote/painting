@@ -23,14 +23,14 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "react": "^18.0.0",
-    "react-native": ">=0.74"
+    "react": "^19.0.0",
+    "react-native": ">=0.81"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",
-    "@types/react": "~18.3.12",
-    "react": "18.3.1",
-    "react-native": "0.76.5",
+    "@types/react": "~19.1.8",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
     "react-native-builder-bob": "^0.40.13",
     "typescript": "^5.8.3"
   },
