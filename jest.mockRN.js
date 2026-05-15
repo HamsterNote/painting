@@ -1,15 +1,18 @@
 const React = require('react');
 
-const View = ({ children, testID, style }) =>
-  React.createElement('View', { testID, style }, children);
-const Text = ({ children, style }) => React.createElement('Text', { style }, children);
-const TouchableOpacity = ({ children, onPress, testID, style }) =>
-  React.createElement('TouchableOpacity', { onPress, testID, style }, children);
+const makeMockComponent = (tag) => {
+  return ({ children, testID, style, ...props }) =>
+    React.createElement(tag, { style, 'data-testid': testID, ...props }, children);
+};
+
+const View = makeMockComponent('view');
+const Text = makeMockComponent('text');
+const TouchableOpacity = makeMockComponent('TouchableOpacity');
 const StyleSheet = {
   create: (styles) => styles,
   flatten: (style) => (Array.isArray(style) ? Object.assign({}, ...style) : style),
 };
-const Platform = { OS: 'android', select: (obj) => obj.android || obj.default };
+const Platform = { OS: 'web', select: (obj) => obj.web || obj.default };
 
 const ReactNative = {
   View,

@@ -10,7 +10,7 @@ export default defineConfig({
   workers: isCI ? 1 : undefined,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8081',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5266',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -19,8 +19,8 @@ export default defineConfig({
     },
   },
   webServer: {
-    command: 'yarn playground:web',
-    port: 8081,
+    command: 'yarn dev',
+    port: 5266,
     reuseExistingServer: !isCI,
     timeout: isCI ? 60000 : 30000,
   },

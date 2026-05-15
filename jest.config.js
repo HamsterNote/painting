@@ -1,5 +1,5 @@
 export default {
-  testEnvironment: 'node',
+  testEnvironment: 'jsdom',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   roots: ['<rootDir>/packages'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
