@@ -208,4 +208,95 @@ test.describe('DrawingSurface playground', () => {
     const parsed = JSON.parse(previewText!);
     expect(parsed.strokes.length).toBe(1);
   });
+
+  test('switches drawing tools', async ({ page }) => {
+    const surface = page.getByTestId('drawing-surface-controlled');
+    const preview = page.getByTestId('drawing-preview-controlled');
+    const toolSelect = page.getByTestId('drawing-tool-select');
+
+    await expect(surface).toBeVisible();
+    await expect(preview).toBeVisible();
+    await expect(toolSelect).toBeVisible();
+
+    await toolSelect.selectOption('line');
+
+    const box = await surface.boundingBox();
+    expect(box).not.toBeNull();
+    const startX = box!.x + 60;
+    const startY = box!.y + 60;
+    const endX = box!.x + 180;
+    const endY = box!.y + 180;
+
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(endX, endY);
+    await page.mouse.up();
+
+    const previewText = await preview.textContent();
+    expect(previewText).toBeTruthy();
+    expect(previewText!).toContain('"tool": "line"');
+
+    await expect(surface.locator('line').first()).toBeVisible();
+  });
+
+  test('applies stroke props', async ({ page }) => {
+    const surface = page.getByTestId('drawing-surface-controlled');
+    const colorInput = page.getByTestId('drawing-stroke-color-input');
+    const widthInput = page.getByTestId('drawing-stroke-width-input');
+
+    await expect(surface).toBeVisible();
+    await expect(colorInput).toBeVisible();
+    await expect(widthInput).toBeVisible();
+
+    await colorInput.fill('#ff0000');
+    await widthInput.fill('7');
+
+    const box = await surface.boundingBox();
+    expect(box).not.toBeNull();
+    const startX = box!.x + 70;
+    const startY = box!.y + 70;
+    const endX = box!.x + 170;
+    const endY = box!.y + 170;
+
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(endX, endY);
+    await page.mouse.up();
+
+    const strokeEl = surface.locator('svg').locator('polyline').last();
+    await expect(strokeEl).toHaveAttribute('stroke', '#ff0000');
+    await expect(strokeEl).toHaveAttribute('stroke-width', '7');
+  });
+
+  test('draws normalized rectangle', async ({ page }) => {
+    const surface = page.getByTestId('drawing-surface-controlled');
+    const toolSelect = page.getByTestId('drawing-tool-select');
+
+    await expect(surface).toBeVisible();
+    await expect(toolSelect).toBeVisible();
+
+    await toolSelect.selectOption('rect');
+
+    const box = await surface.boundingBox();
+    expect(box).not.toBeNull();
+    const startX = box!.x + 220;
+    const startY = box!.y + 220;
+    const endX = box!.x + 120;
+    const endY = box!.y + 120;
+
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(endX, endY);
+    await page.mouse.up();
+
+    const rect = surface.locator('rect').first();
+    await expect(rect).toBeVisible();
+
+    const width = await rect.getAttribute('width');
+    const height = await rect.getAttribute('height');
+    expect(width).toBeTruthy();
+    expect(height).toBeTruthy();
+    expect(Number(width)).toBeGreaterThan(0);
+    expect(Number(height)).toBeGreaterThan(0);
+  });
 });

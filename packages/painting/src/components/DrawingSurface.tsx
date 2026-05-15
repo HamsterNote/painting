@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { appendPoint, createStroke, isValidStroke, pointsToPolyline } from '../stroke-helpers';
 
 // Public drawing contract types
-export type DrawingTool = 'pen';
+export type DrawingTool = 'pen' | 'line' | 'rect';
 
 export type DrawingPoint = {
   x: number;
@@ -14,7 +14,7 @@ export type DrawingPoint = {
 
 export type DrawingStroke = {
   id: string;
-  tool: 'pen';
+  tool: DrawingTool;
   points: DrawingPoint[];
 };
 
@@ -31,6 +31,10 @@ export type DrawingSurfaceProps = {
   defaultValue?: DrawingValue;
   /** Callback fired when drawing changes (controlled mode). */
   onChange?: (nextValue: DrawingValue) => void;
+  /** Stroke color. Defaults to 'black'. Invalid/empty values resolve to 'black'. */
+  strokeColor?: string;
+  /** Stroke width. Defaults to 2. Non-finite or < 1 values resolve to 2. */
+  strokeWidth?: number;
   /** Test identifier. */
   testID?: string;
 };
@@ -52,7 +56,7 @@ type DragFinger = {
 };
 
 function isDrawingToolSupported(tool: unknown): tool is DrawingTool {
-  return tool === 'pen';
+  return tool === 'pen' || tool === 'line' || tool === 'rect';
 }
 
 function isDrawingInput(event: DragInputEvent | undefined): boolean {
@@ -72,11 +76,14 @@ function isDrawingInput(event: DragInputEvent | undefined): boolean {
 }
 
 export function DrawingSurface(props: DrawingSurfaceProps) {
-  const { tool, value, defaultValue, onChange, testID } = props;
+  const { tool, value, defaultValue, onChange, strokeColor, strokeWidth, testID } = props;
   const hostRef = useRef<HTMLDivElement>(null);
 
   const effectiveTool: DrawingTool = isDrawingToolSupported(tool) ? tool : 'pen';
   const isDrawingEnabled = tool === undefined || isDrawingToolSupported(tool);
+
+  const resolvedColor = strokeColor && strokeColor.trim() !== '' ? strokeColor : 'black';
+  const resolvedWidth = typeof strokeWidth === 'number' && Number.isFinite(strokeWidth) && strokeWidth >= 1 ? strokeWidth : 2;
 
   const isControlled = value !== undefined;
   const [internalStrokes, setInternalStrokes] = useState<DrawingStroke[]>(defaultValue?.strokes ?? []);
@@ -234,28 +241,105 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
         }}
       >
         <title>Drawing surface</title>
-        {strokes.map((stroke) => (
-          <polyline
-            key={stroke.id}
-            points={pointsToPolyline(stroke.points)}
-            fill="none"
-            stroke="black"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        ))}
+        {strokes.map((stroke) => {
+          if (stroke.points.length === 0) {
+            return null;
+          }
+          const first = stroke.points[0];
+          const last = stroke.points[stroke.points.length - 1];
+          if (stroke.tool === 'rect') {
+            const x = Math.min(first.x, last.x);
+            const y = Math.min(first.y, last.y);
+            const width = Math.abs(last.x - first.x);
+            const height = Math.abs(last.y - first.y);
+            return (
+              <rect
+                key={stroke.id}
+                x={x}
+                y={y}
+                width={width}
+                height={height}
+                fill="none"
+                stroke={resolvedColor}
+                strokeWidth={resolvedWidth}
+              />
+            );
+          }
+          if (stroke.tool === 'line') {
+            return (
+              <line
+                key={stroke.id}
+                x1={first.x}
+                y1={first.y}
+                x2={last.x}
+                y2={last.y}
+                fill="none"
+                stroke={resolvedColor}
+                strokeWidth={resolvedWidth}
+                strokeLinecap="round"
+              />
+            );
+          }
+          return (
+            <polyline
+              key={stroke.id}
+              points={pointsToPolyline(stroke.points)}
+              fill="none"
+              stroke={resolvedColor}
+              strokeWidth={resolvedWidth}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          );
+        })}
 
         {activeStroke && activeStroke.points.length > 0 && (
-          <polyline
-            points={pointsToPolyline(activeStroke.points)}
-            fill="none"
-            stroke="black"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            opacity="0.7"
-          />
+          activeStroke.tool === 'rect' ? (() => {
+            const first = activeStroke.points[0];
+            const last = activeStroke.points[activeStroke.points.length - 1];
+            const x = Math.min(first.x, last.x);
+            const y = Math.min(first.y, last.y);
+            const width = Math.abs(last.x - first.x);
+            const height = Math.abs(last.y - first.y);
+            return (
+              <rect
+                x={x}
+                y={y}
+                width={width}
+                height={height}
+                fill="none"
+                stroke={resolvedColor}
+                strokeWidth={resolvedWidth}
+                opacity="0.7"
+              />
+            );
+          })() : activeStroke.tool === 'line' ? (() => {
+            const first = activeStroke.points[0];
+            const last = activeStroke.points[activeStroke.points.length - 1];
+            return (
+              <line
+                x1={first.x}
+                y1={first.y}
+                x2={last.x}
+                y2={last.y}
+                fill="none"
+                stroke={resolvedColor}
+                strokeWidth={resolvedWidth}
+                strokeLinecap="round"
+                opacity="0.7"
+              />
+            );
+          })() : (
+            <polyline
+              points={pointsToPolyline(activeStroke.points)}
+              fill="none"
+              stroke={resolvedColor}
+              strokeWidth={resolvedWidth}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity="0.7"
+            />
+          )
         )}
       </svg>
     </div>

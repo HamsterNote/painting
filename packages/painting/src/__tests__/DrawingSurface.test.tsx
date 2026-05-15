@@ -1,7 +1,6 @@
 import { DrawingSurface as DrawingSurfaceFromIndex } from '@hamster-note/painting';
 import { act, render, screen } from '@testing-library/react';
-import { DrawingSurface } from '../components/DrawingSurface';
-import type { DrawingTool } from '../components/DrawingSurface';
+import { DrawingSurface, type DrawingTool } from '../components/DrawingSurface';
 
 jest.mock(
   '@system-ui-js/multi-drag',
@@ -166,6 +165,85 @@ describe('DrawingSurface', () => {
     expect(container.querySelector('polyline')).toBeNull();
   });
 
+  it('committed pen stroke respects strokeColor and strokeWidth', () => {
+    const onChange = jest.fn();
+    const { container, rerender } = render(
+      <DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} onChange={onChange} tool="pen" strokeColor="#ff0000" strokeWidth={7} />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        finger([
+          { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    const committed = onChange.mock.calls[0][0];
+    rerender(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={committed}
+        onChange={onChange}
+        tool="pen"
+        strokeColor="#ff0000"
+        strokeWidth={7}
+      />
+    );
+
+    const polyline = container.querySelector('polyline');
+    expect(polyline?.getAttribute('stroke')).toBe('#ff0000');
+    expect(polyline?.getAttribute('stroke-width')).toBe('7');
+  });
+
+  it('active preview respects strokeColor and strokeWidth for pen/line/rect', () => {
+    const hostTestId = 'drawing-surface-active-style-host';
+    const color = '#00ff00';
+    const width = 9;
+    const drawPreviewForTool = (tool: 'pen' | 'line' | 'rect') => {
+      const { container, unmount } = render(
+        <DrawingSurface
+          testID={hostTestId}
+          value={{ strokes: [] }}
+          tool={tool}
+          strokeColor={color}
+          strokeWidth={width}
+        />
+      );
+      const host = screen.getByTestId(hostTestId);
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
+            { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 } },
+          ]),
+        ]);
+      });
+
+      const activeElement =
+        tool === 'rect'
+          ? container.querySelector('rect')
+          : tool === 'line'
+            ? container.querySelector('line')
+            : container.querySelector('polyline');
+      expect(activeElement?.getAttribute('stroke')).toBe(color);
+      expect(activeElement?.getAttribute('stroke-width')).toBe(String(width));
+      unmount();
+    };
+
+    drawPreviewForTool('pen');
+    drawPreviewForTool('line');
+    drawPreviewForTool('rect');
+  });
+
   it('renders polylines from defaultValue', () => {
     const defaultValue = {
       strokes: [
@@ -311,5 +389,226 @@ describe('DrawingSurface', () => {
       const { container } = render(<DrawingSurfaceFromIndex />);
       expect(container.querySelector('svg')).toBeTruthy();
     }).not.toThrow();
+  });
+
+  it('renders with blank strokeColor and uses black as default', () => {
+    const { container } = render(
+      <DrawingSurface
+        strokeColor=""
+        value={{
+          strokes: [{ id: 'stroke-1', tool: 'pen' as const, points: [{ x: 0, y: 0 }] }],
+        }}
+      />
+    );
+    const polyline = container.querySelector('polyline');
+    expect(polyline).toBeTruthy();
+    expect(polyline.getAttribute('stroke')).toBe('black');
+  });
+
+  it('renders with invalid strokeColor (whitespace only) and uses black as default', () => {
+    const { container } = render(
+      <DrawingSurface
+        strokeColor="   "
+        value={{
+          strokes: [{ id: 'stroke-1', tool: 'pen' as const, points: [{ x: 0, y: 0 }] }],
+        }}
+      />
+    );
+    const polyline = container.querySelector('polyline');
+    expect(polyline).toBeTruthy();
+    expect(polyline.getAttribute('stroke')).toBe('black');
+  });
+
+  it('renders with invalid strokeWidth (non-finite) and uses 2 as default', () => {
+    const { container } = render(
+      <DrawingSurface
+        strokeWidth={NaN}
+        value={{
+          strokes: [{ id: 'stroke-1', tool: 'pen' as const, points: [{ x: 0, y: 0 }] }],
+        }}
+      />
+    );
+    const polyline = container.querySelector('polyline');
+    expect(polyline).toBeTruthy();
+    expect(polyline.getAttribute('stroke-width')).toBe('2');
+  });
+
+  it('renders with invalid strokeWidth (< 1) and uses 2 as default', () => {
+    const { container } = render(
+      <DrawingSurface
+        strokeWidth={0.5}
+        value={{
+          strokes: [{ id: 'stroke-1', tool: 'pen' as const, points: [{ x: 0, y: 0 }] }],
+        }}
+      />
+    );
+    const polyline = container.querySelector('polyline');
+    expect(polyline).toBeTruthy();
+    expect(polyline.getAttribute('stroke-width')).toBe('2');
+  });
+
+  it('renders with valid strokeColor and strokeWidth', () => {
+    const { container } = render(<DrawingSurface strokeColor="red" strokeWidth={5} />);
+    const svg = container.querySelector('svg');
+    expect(svg).toBeTruthy();
+  });
+
+  it('commits completed rect stroke on drag all-end', () => {
+    const onChange = jest.fn();
+    const { container } = render(<DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} onChange={onChange} tool="rect" />);
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        finger([
+          { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 40, y: 55 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+    });
+
+    const rectEl = container.querySelector('rect');
+    expect(rectEl).toBeTruthy();
+    expect(Number(rectEl.getAttribute('x'))).toBeGreaterThan(0);
+    expect(Number(rectEl.getAttribute('y'))).toBeGreaterThan(0);
+    expect(Number(rectEl.getAttribute('width'))).toBeGreaterThan(0);
+    expect(Number(rectEl.getAttribute('height'))).toBeGreaterThan(0);
+    expect(rectEl.getAttribute('fill')).toBe('none');
+    expect(onChange).not.toHaveBeenCalled();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].strokes).toHaveLength(1);
+    expect(onChange.mock.calls[0][0].strokes[0].tool).toBe('rect');
+    expect(container.querySelector('rect')).toBeNull();
+  });
+
+  it('reverse drag renders normalized rect', () => {
+    const onChange = jest.fn();
+    const { container } = render(<DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} onChange={onChange} tool="rect" />);
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        finger([
+          { point: { x: 60, y: 70 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+    });
+
+    const rectEl = container.querySelector('rect');
+    expect(rectEl).toBeTruthy();
+    expect(Number(rectEl.getAttribute('x'))).toBe(5);
+    expect(Number(rectEl.getAttribute('y'))).toBe(5);
+    expect(Number(rectEl.getAttribute('width'))).toBe(45);
+    expect(Number(rectEl.getAttribute('height'))).toBe(45);
+    expect(Number(rectEl.getAttribute('width'))).toBeGreaterThan(0);
+    expect(Number(rectEl.getAttribute('height'))).toBeGreaterThan(0);
+  });
+
+  it('active rect preview renders during drag', () => {
+    const { container } = render(<DrawingSurface testID="drawing-surface-host" tool="rect" />);
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        finger([
+          { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 40, y: 55 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+    });
+
+    const rectEl = container.querySelector('rect');
+    expect(rectEl).toBeTruthy();
+    expect(rectEl.getAttribute('fill')).toBe('none');
+    expect(rectEl.getAttribute('opacity')).toBe('0.7');
+  });
+
+  it('commits completed line stroke on drag all-end', () => {
+    const onChange = jest.fn();
+    const { container } = render(<DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} onChange={onChange} tool="line" />);
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        finger([
+          { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 40, y: 55 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+    });
+
+    const lineEl = container.querySelector('line');
+    expect(lineEl).toBeTruthy();
+    expect(Number(lineEl.getAttribute('x1'))).toBe(5);
+    expect(Number(lineEl.getAttribute('y1'))).toBe(5);
+    expect(Number(lineEl.getAttribute('x2'))).toBe(30);
+    expect(Number(lineEl.getAttribute('y2'))).toBe(35);
+    expect(lineEl.getAttribute('fill')).toBe('none');
+    expect(lineEl.getAttribute('stroke-linecap')).toBe('round');
+    expect(onChange).not.toHaveBeenCalled();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].strokes).toHaveLength(1);
+    expect(onChange.mock.calls[0][0].strokes[0].tool).toBe('line');
+    expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
+      { x: 5, y: 5 },
+      { x: 30, y: 35 },
+    ]);
+    expect(container.querySelector('line')).toBeNull();
+    expect(container.querySelector('polyline')).toBeNull();
+  });
+
+  it('active line preview renders during drag', () => {
+    const { container } = render(<DrawingSurface testID="drawing-surface-host" tool="line" />);
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        finger([
+          { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 40, y: 55 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+    });
+
+    const lineEl = container.querySelector('line');
+    expect(lineEl).toBeTruthy();
+    expect(lineEl.getAttribute('fill')).toBe('none');
+    expect(lineEl.getAttribute('opacity')).toBe('0.7');
+    expect(lineEl.getAttribute('stroke-linecap')).toBe('round');
+  });
+
+  it('tap/no-move still rejected for line tool', () => {
+    const onChange = jest.fn();
+    render(<DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} onChange={onChange} tool="line" />);
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

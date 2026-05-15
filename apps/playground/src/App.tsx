@@ -1,6 +1,5 @@
-import { useState, useCallback } from 'react';
-import { DrawingSurface } from '@hamster-note/painting';
-import type { DrawingValue } from '@hamster-note/painting';
+import { DrawingSurface, type DrawingTool, type DrawingValue } from '@hamster-note/painting';
+import { useCallback, useState } from 'react';
 
 const SEED_VALUE: DrawingValue = {
   strokes: [
@@ -17,6 +16,9 @@ const SEED_VALUE: DrawingValue = {
 };
 
 export default function App() {
+  const [tool, setTool] = useState<DrawingTool>('pen');
+  const [color, setColor] = useState('#000000');
+  const [width, setWidth] = useState(2);
   const [controlledValue, setControlledValue] = useState<DrawingValue>({ strokes: [] });
   const [uncontrolledStrokes, setUncontrolledStrokes] = useState<DrawingValue>(SEED_VALUE);
 
@@ -38,6 +40,45 @@ export default function App() {
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       <h1 style={{ marginBottom: '20px' }}>DrawingSurface Playground</h1>
 
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <label>
+          Tool{' '}
+          <select
+            data-testid="drawing-tool-select"
+            value={tool}
+            onChange={(e) => setTool(e.target.value as DrawingTool)}
+          >
+            <option value="pen">Pen</option>
+            <option value="line">Line</option>
+            <option value="rect">Rect</option>
+          </select>
+        </label>
+
+        <label>
+          Color{' '}
+          <input
+            type="color"
+            data-testid="drawing-stroke-color-input"
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+          />
+        </label>
+
+        <label>
+          Width{' '}
+          <input
+            type="number"
+            data-testid="drawing-stroke-width-input"
+            value={width}
+            min={1}
+            max={24}
+            onChange={(e) =>
+              setWidth(Math.min(24, Math.max(1, parseInt(e.target.value, 10) || 1)))
+            }
+          />
+        </label>
+      </div>
+
       <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: '400px' }}>
           <h2>Uncontrolled (defaultValue)</h2>
@@ -45,6 +86,9 @@ export default function App() {
             <DrawingSurface
               defaultValue={uncontrolledStrokes}
               onChange={handleUncontrolledChange}
+              tool={tool}
+              strokeColor={color}
+              strokeWidth={width}
               testID="drawing-surface-uncontrolled"
             />
           </div>
@@ -70,6 +114,9 @@ export default function App() {
             <DrawingSurface
               value={controlledStrokes}
               onChange={handleControlledChange}
+              tool={tool}
+              strokeColor={color}
+              strokeWidth={width}
               testID="drawing-surface-controlled"
             />
           </div>

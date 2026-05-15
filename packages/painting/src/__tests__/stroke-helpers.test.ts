@@ -18,6 +18,18 @@ describe('stroke-helpers', () => {
       const stroke = createStroke('pen');
       expect(stroke.points).toEqual([]);
     });
+
+    it('creates stroke with line tool and empty points', () => {
+      const stroke = createStroke('line');
+      expect(stroke.tool).toBe('line');
+      expect(stroke.points).toEqual([]);
+    });
+
+    it('creates stroke with rect tool and empty points', () => {
+      const stroke = createStroke('rect');
+      expect(stroke.tool).toBe('rect');
+      expect(stroke.points).toEqual([]);
+    });
   });
 
   describe('appendPoint', () => {
