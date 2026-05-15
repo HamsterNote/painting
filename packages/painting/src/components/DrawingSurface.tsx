@@ -16,6 +16,8 @@ export type DrawingStroke = {
   id: string;
   tool: DrawingTool;
   points: DrawingPoint[];
+  strokeColor?: string;
+  strokeWidth?: number;
 };
 
 export type DrawingValue = {
@@ -86,7 +88,14 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
   const resolvedWidth = typeof strokeWidth === 'number' && Number.isFinite(strokeWidth) && strokeWidth >= 1 ? strokeWidth : 2;
 
   const isControlled = value !== undefined;
-  const [internalStrokes, setInternalStrokes] = useState<DrawingStroke[]>(defaultValue?.strokes ?? []);
+  const [internalStrokes, setInternalStrokes] = useState<DrawingStroke[]>(() => {
+    const initialStrokes = defaultValue?.strokes ?? [];
+    return initialStrokes.map((stroke) => ({
+      ...stroke,
+      strokeColor: stroke.strokeColor ?? resolvedColor,
+      strokeWidth: stroke.strokeWidth ?? resolvedWidth,
+    }));
+  });
 
   const strokes = isControlled ? value?.strokes ?? [] : internalStrokes;
   const [activeStroke, setActiveStroke] = useState<DrawingStroke | null>(null);
@@ -99,12 +108,16 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
   const valueRef = useRef(value);
   const previousValueRef = useRef(value);
   const onChangeRef = useRef(onChange);
+  const resolvedColorRef = useRef(resolvedColor);
+  const resolvedWidthRef = useRef(resolvedWidth);
 
   effectiveToolRef.current = effectiveTool;
   isDrawingEnabledRef.current = isDrawingEnabled;
   isControlledRef.current = isControlled;
   valueRef.current = value;
   onChangeRef.current = onChange;
+  resolvedColorRef.current = resolvedColor;
+  resolvedWidthRef.current = resolvedWidth;
 
   const getLocalCoordinates = useCallback(
     (clientX: number, clientY: number): DrawingPoint => {
@@ -170,7 +183,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 
       let nextStroke = activeStrokeRef.current;
       if (!nextStroke) {
-        nextStroke = createStroke(effectiveToolRef.current);
+        nextStroke = createStroke(effectiveToolRef.current, resolvedColorRef.current, resolvedWidthRef.current);
         activeStrokeRef.current = nextStroke;
         isDrawingRef.current = true;
         processedPathLengthRef.current = 0;
@@ -247,6 +260,8 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
           }
           const first = stroke.points[0];
           const last = stroke.points[stroke.points.length - 1];
+          const strokeColor = stroke.strokeColor ?? resolvedColor;
+          const strokeWidth = stroke.strokeWidth ?? resolvedWidth;
           if (stroke.tool === 'rect') {
             const x = Math.min(first.x, last.x);
             const y = Math.min(first.y, last.y);
@@ -260,8 +275,8 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
                 width={width}
                 height={height}
                 fill="none"
-                stroke={resolvedColor}
-                strokeWidth={resolvedWidth}
+                stroke={strokeColor}
+                strokeWidth={strokeWidth}
               />
             );
           }
@@ -274,8 +289,8 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
                 x2={last.x}
                 y2={last.y}
                 fill="none"
-                stroke={resolvedColor}
-                strokeWidth={resolvedWidth}
+                stroke={strokeColor}
+                strokeWidth={strokeWidth}
                 strokeLinecap="round"
               />
             );
@@ -285,8 +300,8 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
               key={stroke.id}
               points={pointsToPolyline(stroke.points)}
               fill="none"
-              stroke={resolvedColor}
-              strokeWidth={resolvedWidth}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
               strokeLinecap="round"
               strokeLinejoin="round"
             />

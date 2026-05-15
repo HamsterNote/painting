@@ -4,11 +4,13 @@ function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
-export function createStroke(tool: DrawingTool): DrawingStroke {
+export function createStroke(tool: DrawingTool, strokeColor?: string, strokeWidth?: number): DrawingStroke {
   return {
     id: generateId(),
     tool,
     points: [],
+    strokeColor,
+    strokeWidth,
   };
 }
 

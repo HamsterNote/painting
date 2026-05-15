@@ -611,4 +611,109 @@ describe('DrawingSurface', () => {
 
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it('changing strokeColor and strokeWidth props only affects new strokes, not existing ones', () => {
+    const onChange = jest.fn();
+    const { container, rerender } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange}
+        tool="pen"
+        strokeColor="#ff0000"
+        strokeWidth={5}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        finger([
+          { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    const firstStroke = onChange.mock.calls[0][0].strokes[0];
+    expect(firstStroke.strokeColor).toBe('#ff0000');
+    expect(firstStroke.strokeWidth).toBe(5);
+
+    rerender(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [firstStroke] }}
+        onChange={onChange}
+        tool="pen"
+        strokeColor="#0000ff"
+        strokeWidth={10}
+      />
+    );
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        finger([
+          { point: { x: 50, y: 60 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 55, y: 70 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    const secondStroke = onChange.mock.calls[1][0].strokes[1];
+    expect(secondStroke.strokeColor).toBe('#0000ff');
+    expect(secondStroke.strokeWidth).toBe(10);
+
+    const committedBoth = onChange.mock.calls[1][0];
+    rerender(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={committedBoth}
+        onChange={onChange}
+        tool="pen"
+        strokeColor="#0000ff"
+        strokeWidth={10}
+      />
+    );
+
+    const polylines = container.querySelectorAll('polyline');
+    expect(polylines.length).toBe(2);
+    expect(polylines[0].getAttribute('stroke')).toBe('#ff0000');
+    expect(polylines[0].getAttribute('stroke-width')).toBe('5');
+    expect(polylines[1].getAttribute('stroke')).toBe('#0000ff');
+    expect(polylines[1].getAttribute('stroke-width')).toBe('10');
+  });
+
+  it('uncontrolled defaultValue snapshots current props and is unaffected by later prop changes', () => {
+    const defaultValue = {
+      strokes: [
+        {
+          id: 'old-stroke',
+          tool: 'pen' as const,
+          points: [
+            { x: 10, y: 20 },
+            { x: 30, y: 40 },
+          ],
+        },
+      ],
+    };
+    const { container, rerender } = render(
+      <DrawingSurface defaultValue={defaultValue} strokeColor="#ff0000" strokeWidth={5} />
+    );
+
+    const polyline = container.querySelector('polyline');
+    expect(polyline?.getAttribute('stroke')).toBe('#ff0000');
+    expect(polyline?.getAttribute('stroke-width')).toBe('5');
+
+    rerender(
+      <DrawingSurface defaultValue={defaultValue} strokeColor="#0000ff" strokeWidth={10} />
+    );
+
+    const polylineAfter = container.querySelector('polyline');
+    expect(polylineAfter?.getAttribute('stroke')).toBe('#ff0000');
+    expect(polylineAfter?.getAttribute('stroke-width')).toBe('5');
+  });
 });
