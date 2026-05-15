@@ -2,25 +2,23 @@
   "name": "@hamster-note/painting-playground",
   "private": true,
   "version": "0.1.0",
-  "main": "index.js",
+  "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
+    "dev": "vite --port 8081",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
-    "@expo/metro-runtime": "~6.1.2",
     "@hamster-note/painting": "*",
-    "expo": "~54.0.0",
     "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "react-native": "0.81.5",
-    "react-native-web": "~0.21.0"
+    "react-dom": "19.1.0"
   },
   "devDependencies": {
     "@types/react": "~19.1.8",
-    "typescript": "^5.3.3"
+    "@types/react-dom": "~19.1.8",
+    "@vitejs/plugin-react": "^4.3.0",
+    "typescript": "^5.3.3",
+    "vite": "^6.0.0"
   }
 }

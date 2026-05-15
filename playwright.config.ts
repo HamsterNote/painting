@@ -19,7 +19,7 @@ export default defineConfig({
     },
   },
   webServer: {
-    command: 'yarn playground:web',
+    command: 'yarn dev',
     port: 8081,
     reuseExistingServer: !isCI,
     timeout: isCI ? 60000 : 30000,

@@ -1,0 +1,1 @@
+export { normalizePointerInput } from './normalizePointerInput';

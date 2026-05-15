@@ -10,7 +10,6 @@ export default [
   {
     ignores: [
       'node_modules/',
-      '.expo/',
       '**/lib/**',
       '**/dist/**',
       'build/',
@@ -24,7 +23,7 @@ export default [
     ],
   },
   {
-    files: ['**/*.config.{js,cjs}'],
+    files: ['**/*.config.{js,cjs,ts}', 'jest.setup.js', 'jest.config.js'],
     languageOptions: {
       sourceType: 'script',
       globals: {
@@ -69,6 +68,11 @@ export default [
     settings: {
       react: {
         version: 'detect',
+      },
+    },
+    languageOptions: {
+      globals: {
+        ...globals.browser,
       },
     },
     rules: {

@@ -8,9 +8,11 @@
     "skipLibCheck": true,
     "declaration": true,
     "emitDeclarationOnly": false,
+    "outDir": "dist",
     "rootDir": "src",
-    "types": ["react", "react-native", "jest"]
+    "esModuleInterop": true,
+    "types": ["react", "react-dom", "jest"]
   },
   "include": ["src"],
-  "exclude": ["node_modules", "lib", "**/__tests__", "**/*.test.ts", "**/*.test.tsx"]
+  "exclude": ["node_modules", "dist", "**/__tests__", "**/*.test.ts", "**/*.test.tsx"]
 }

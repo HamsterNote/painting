@@ -1,13 +1,2 @@
-import { Text, View } from 'react-native';
-
-export type DrawingSurfaceProps = {
-  testID?: string;
-};
-
-export function DrawingSurface({ testID }: DrawingSurfaceProps) {
-  return (
-    <View testID={testID}>
-      <Text>DrawingSurface placeholder</Text>
-    </View>
-  );
-}
+export { DrawingSurface, default, default as HamsterPainting } from './HamsterPainting';
+export type { DrawingSurfaceProps, HamsterPaintingProps } from './HamsterPainting';
