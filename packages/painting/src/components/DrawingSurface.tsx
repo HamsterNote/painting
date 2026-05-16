@@ -1,7 +1,8 @@
 /// <reference path="../multi-drag.d.ts" />
 
 import { Drag, DragOperationType } from "@system-ui-js/multi-drag";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import { useCanvas } from "../hooks/useCanvas";
 import {
 	appendPoint,
 	createStroke,
@@ -12,9 +13,10 @@ import {
 	resolveStrokeSmoothingOptions,
 	type TimedDrawingPoint,
 } from "../stroke-helpers";
+import { pick as pickStroke } from "../utils";
 
 // Public drawing contract types
-export type DrawingTool = "pen" | "line" | "rect";
+export type DrawingTool = "pen" | "line" | "rect" | "eraser";
 
 export type DrawingPoint = {
 	x: number;
@@ -75,7 +77,7 @@ type DragFinger = {
 };
 
 function isDrawingToolSupported(tool: unknown): tool is DrawingTool {
-	return tool === "pen" || tool === "line" || tool === "rect";
+	return tool === "pen" || tool === "line" || tool === "rect" || tool === "eraser";
 }
 
 function isDrawingInput(event: DragInputEvent | undefined): boolean {
@@ -142,31 +144,37 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			? strokeWidth
 			: 2;
 
-	const isControlled = value !== undefined;
-	const [internalStrokes, setInternalStrokes] = useState<DrawingStroke[]>(
-		() => {
-			const initialStrokes = defaultValue?.strokes ?? [];
-			return initialStrokes.map((stroke) => ({
-				...stroke,
-				strokeColor: stroke.strokeColor ?? resolvedColor,
-				strokeWidth: stroke.strokeWidth ?? resolvedWidth,
-			}));
-		},
-	);
+	const hasCapturedDefaultValueRef = useRef(false);
+	const initialDefaultValueRef = useRef<DrawingValue | undefined>(undefined);
+	if (!hasCapturedDefaultValueRef.current) {
+		hasCapturedDefaultValueRef.current = true;
+		initialDefaultValueRef.current = defaultValue
+			? {
+					strokes: defaultValue.strokes.map((stroke) => ({
+						...stroke,
+						strokeColor: stroke.strokeColor ?? resolvedColor,
+						strokeWidth: stroke.strokeWidth ?? resolvedWidth,
+					})),
+				}
+			: undefined;
+	}
 
-	const strokes = isControlled ? (value?.strokes ?? []) : internalStrokes;
-	const [activeStroke, setActiveStroke] = useState<DrawingStroke | null>(null);
-	const activeStrokeRef = useRef<DrawingStroke | null>(null);
+	const { strokes, activeStroke, setActiveStroke, addStroke, removeStroke } = useCanvas({
+		value,
+		onChange,
+		defaultValue: initialDefaultValueRef.current,
+	});
 	const isDrawingRef = useRef(false);
 	const processedPathLengthRef = useRef(0);
 	const effectiveToolRef = useRef(effectiveTool);
 	const isDrawingEnabledRef = useRef(isDrawingEnabled);
-	const isControlledRef = useRef(isControlled);
-	const valueRef = useRef(value);
 	const previousValueRef = useRef(value);
-	const onChangeRef = useRef(onChange);
+	const addStrokeRef = useRef(addStroke);
+	const removeStrokeRef = useRef(removeStroke);
+	const clearActiveStrokeRef = useRef<(() => void) | null>(null);
 	const resolvedColorRef = useRef(resolvedColor);
 	const resolvedWidthRef = useRef(resolvedWidth);
+	const strokesRef = useRef(strokes);
 	const pressureRef = useRef(pressure);
 	const smoothingOptionsRef = useRef(
 		resolveStrokeSmoothingOptions(strokeSmoothing),
@@ -174,9 +182,9 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 
 	effectiveToolRef.current = effectiveTool;
 	isDrawingEnabledRef.current = isDrawingEnabled;
-	isControlledRef.current = isControlled;
-	valueRef.current = value;
-	onChangeRef.current = onChange;
+	addStrokeRef.current = addStroke;
+	removeStrokeRef.current = removeStroke;
+	strokesRef.current = strokes;
 	resolvedColorRef.current = resolvedColor;
 	resolvedWidthRef.current = resolvedWidth;
 	pressureRef.current = pressure;
@@ -197,28 +205,34 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 	);
 
 	const clearActiveStroke = useCallback(() => {
-		activeStrokeRef.current = null;
+		clearActiveStrokeRef.current?.();
 		isDrawingRef.current = false;
 		processedPathLengthRef.current = 0;
 		setActiveStroke(null);
-	}, []);
+	}, [setActiveStroke]);
 
 	useEffect(() => {
 		if (
 			previousValueRef.current !== value &&
-			isControlled &&
+			value !== undefined &&
 			isDrawingRef.current
 		) {
 			clearActiveStroke();
 		}
 		previousValueRef.current = value;
-	}, [clearActiveStroke, isControlled, value]);
+	}, [clearActiveStroke, value]);
 
 	useEffect(() => {
 		const host = hostRef.current;
 		if (!host) {
 			return undefined;
 		}
+
+		let currentActiveStroke: DrawingStroke | null = null;
+		const clearCurrentActiveStroke = () => {
+			currentActiveStroke = null;
+		};
+		clearActiveStrokeRef.current = clearCurrentActiveStroke;
 
 		const drag = new Drag(host, {
 			maxFingerCount: 1,
@@ -248,14 +262,32 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				return;
 			}
 
-			let nextStroke = activeStrokeRef.current;
+			if (effectiveToolRef.current === "eraser") {
+				for (const pathItem of path.slice(processedPathLengthRef.current)) {
+					const sourcePoint =
+						pathItem.event?.clientX !== undefined &&
+						pathItem.event.clientY !== undefined
+							? { x: pathItem.event.clientX, y: pathItem.event.clientY }
+							: pathItem.point;
+					const localPoint = getLocalCoordinates(sourcePoint.x, sourcePoint.y);
+					const eraserRadius = resolvedWidthRef.current / 2;
+					const hitStroke = pickStroke(localPoint, strokesRef.current, eraserRadius);
+					if (hitStroke) {
+						removeStrokeRef.current(hitStroke.id);
+					}
+				}
+				processedPathLengthRef.current = path.length;
+				return;
+			}
+
+			let nextStroke = currentActiveStroke;
 			if (!nextStroke) {
 				nextStroke = createStroke(
 					effectiveToolRef.current,
 					resolvedColorRef.current,
 					resolvedWidthRef.current,
 				);
-				activeStrokeRef.current = nextStroke;
+				currentActiveStroke = nextStroke;
 				isDrawingRef.current = true;
 				processedPathLengthRef.current = 0;
 			}
@@ -297,7 +329,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			}
 
 			processedPathLengthRef.current = path.length;
-			activeStrokeRef.current = nextStroke;
+			currentActiveStroke = nextStroke;
 			setActiveStroke(nextStroke);
 		});
 
@@ -307,18 +339,10 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				return;
 			}
 
-			const stroke = activeStrokeRef.current;
-			if (stroke && isValidStroke(stroke)) {
-				if (isControlledRef.current) {
-					onChangeRef.current?.({
-						strokes: [...(valueRef.current?.strokes ?? []), stroke],
-					});
-				} else {
-					setInternalStrokes((currentStrokes) => {
-						const nextStrokes = [...currentStrokes, stroke];
-						onChangeRef.current?.({ strokes: nextStrokes });
-						return nextStrokes;
-					});
+			if (effectiveToolRef.current !== "eraser") {
+				const stroke = currentActiveStroke;
+				if (stroke && isValidStroke(stroke)) {
+					addStrokeRef.current(stroke);
 				}
 			}
 
@@ -326,9 +350,12 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		});
 
 		return () => {
+			if (clearActiveStrokeRef.current === clearCurrentActiveStroke) {
+				clearActiveStrokeRef.current = null;
+			}
 			drag.destroy();
 		};
-	}, [clearActiveStroke, getLocalCoordinates]);
+	}, [clearActiveStroke, getLocalCoordinates, setActiveStroke]);
 
 	return (
 		<div

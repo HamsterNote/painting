@@ -112,8 +112,11 @@ export function clearStrokes(value: DrawingValue): DrawingValue {
  * - pen: minimum distance to polyline segments
  * - line: minimum distance to the segment between first and last point
  * - rect: distance to axis-aligned bounding rectangle (0 when inside)
+ *
+ * @param maxDistance - Optional maximum distance threshold. If the closest stroke
+ *   is farther than this distance, returns `null`. Used for object eraser radius.
  */
-export function pick(point: DrawingPoint, strokes: DrawingStroke[]): DrawingStroke | null {
+export function pick(point: DrawingPoint, strokes: DrawingStroke[], maxDistance?: number): DrawingStroke | null {
   if (strokes.length === 0) {
     return null;
   }
@@ -126,6 +129,14 @@ export function pick(point: DrawingPoint, strokes: DrawingStroke[]): DrawingStro
     if (d < bestDistSq) {
       bestDistSq = d;
       bestStroke = strokes[i];
+    }
+  }
+
+  // If maxDistance is specified, check if the closest stroke is within range
+  if (maxDistance !== undefined) {
+    const maxDistSq = maxDistance * maxDistance;
+    if (bestDistSq > maxDistSq) {
+      return null;
     }
   }
 

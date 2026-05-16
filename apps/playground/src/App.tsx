@@ -52,6 +52,7 @@ export default function App() {
             <option value="pen">Pen</option>
             <option value="line">Line</option>
             <option value="rect">Rect</option>
+            <option value="eraser">Eraser</option>
           </select>
         </label>
 
