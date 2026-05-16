@@ -58,6 +58,7 @@ type MockFinger = {
   getPath: () => Array<{
     point: { x: number; y: number };
     event?: { pointerType?: string; button?: number; clientX?: number; clientY?: number };
+    pressure?: number;
   }>;
 };
 
@@ -149,7 +150,7 @@ describe('DrawingSurface', () => {
       ]);
     });
 
-    expect(container.querySelector('polyline')?.getAttribute('points')).toBe('5,5 10,15');
+    expect(container.querySelector('path')?.getAttribute('d')).toBe('M 5 5 L 10 15');
     expect(onChange).not.toHaveBeenCalled();
 
     act(() => {
@@ -162,7 +163,7 @@ describe('DrawingSurface', () => {
       { x: 5, y: 5 },
       { x: 10, y: 15 },
     ]);
-    expect(container.querySelector('polyline')).toBeNull();
+    expect(container.querySelector('path')).toBeNull();
   });
 
   it('committed pen stroke respects strokeColor and strokeWidth', () => {
@@ -196,9 +197,288 @@ describe('DrawingSurface', () => {
       />
     );
 
-    const polyline = container.querySelector('polyline');
-    expect(polyline?.getAttribute('stroke')).toBe('#ff0000');
-    expect(polyline?.getAttribute('stroke-width')).toBe('7');
+    const path = container.querySelector('path');
+    expect(path?.getAttribute('stroke')).toBe('#ff0000');
+    expect(path?.getAttribute('stroke-width')).toBe('7');
+  });
+
+  it('captures pen pressure and renders active and committed segment widths', () => {
+    const onChange = jest.fn();
+    const { container, rerender } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange}
+        tool="pen"
+        strokeWidth={10}
+        strokeSmoothing={false}
+        pressure={true}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        finger([
+          { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, pressure: 0.2 },
+          { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, pressure: 0.8 },
+        ]),
+      ]);
+    });
+
+    expect(container.querySelector('path')).toBeNull();
+    expect(container.querySelector('line')?.getAttribute('stroke-width')).toBe('8');
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
+      { x: 5, y: 5, pressure: 0.2 },
+      { x: 10, y: 15, pressure: 0.8 },
+    ]);
+
+    rerender(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={onChange.mock.calls[0][0]}
+        onChange={onChange}
+        tool="pen"
+        strokeWidth={10}
+        strokeSmoothing={false}
+        pressure={true}
+      />
+    );
+
+    expect(container.querySelector('path')).toBeNull();
+    expect(container.querySelector('line')?.getAttribute('stroke-width')).toBe('8');
+  });
+
+  it('ignores pressure input when pressure prop is false', () => {
+    const onChange = jest.fn();
+    const { container } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange}
+        tool="pen"
+        strokeWidth={10}
+        strokeSmoothing={false}
+        pressure={false}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        finger([
+          { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, pressure: 0.2 },
+          { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, pressure: 0.8 },
+        ]),
+      ]);
+    });
+
+    expect(container.querySelector('path')?.getAttribute('stroke-width')).toBe('10');
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
+      { x: 5, y: 5 },
+      { x: 10, y: 15 },
+    ]);
+  });
+
+  it('ignores pressure input when pressure prop is omitted', () => {
+    const onChange = jest.fn();
+    const { container } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange}
+        tool="pen"
+        strokeWidth={10}
+        strokeSmoothing={false}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        finger([
+          { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, pressure: 0.2 },
+          { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, pressure: 0.8 },
+        ]),
+      ]);
+    });
+
+    expect(container.querySelector('path')?.getAttribute('stroke-width')).toBe('10');
+    expect(container.querySelector('line')).toBeNull();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
+      { x: 5, y: 5 },
+      { x: 10, y: 15 },
+    ]);
+  });
+
+  it('leaves non-pen tools unaffected by pressure input', () => {
+    const onChange = jest.fn();
+    const { container } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange}
+        tool="line"
+        strokeWidth={10}
+        pressure={true}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        finger([
+          { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, pressure: 0.2 },
+          { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, pressure: 0.8 },
+        ]),
+      ]);
+    });
+
+    expect(container.querySelector('line')?.getAttribute('stroke-width')).toBe('10');
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
+      { x: 5, y: 5 },
+      { x: 10, y: 15 },
+    ]);
+  });
+
+  it('renders zero pressure as zero-width pen segments', () => {
+    const { container } = render(
+      <DrawingSurface
+        value={{
+          strokes: [
+            {
+              id: 'zero-pressure-stroke',
+              tool: 'pen' as const,
+              strokeWidth: 10,
+              points: [
+                { x: 0, y: 0, pressure: 1 },
+                { x: 10, y: 10, pressure: 0 },
+              ],
+            },
+          ],
+        }}
+      />
+    );
+
+    expect(container.querySelector('line')?.getAttribute('stroke-width')).toBe('0');
+  });
+
+  it('falls back to base width for invalid pressure values', () => {
+    const { container } = render(
+      <DrawingSurface
+        value={{
+          strokes: [
+            {
+              id: 'invalid-pressure-stroke',
+              tool: 'pen' as const,
+              strokeWidth: 10,
+              points: [
+                { x: 0, y: 0, pressure: 0.5 },
+                { x: 10, y: 10, pressure: NaN },
+                { x: 20, y: 20, pressure: 2 },
+                { x: 30, y: 30 },
+              ],
+            },
+          ],
+        }}
+      />
+    );
+
+    const lines = container.querySelectorAll('line');
+    expect(lines[0].getAttribute('stroke-width')).toBe('10');
+    expect(lines[1].getAttribute('stroke-width')).toBe('10');
+    expect(lines[2].getAttribute('stroke-width')).toBe('10');
+  });
+
+  it('does not set pressure when pathItem.pressure is undefined even with pressure prop enabled', () => {
+    const onChange = jest.fn();
+    const { container } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange}
+        tool="pen"
+        strokeWidth={10}
+        strokeSmoothing={false}
+        pressure={true}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        finger([
+          { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+    });
+
+    // Active stroke should render as a single path (no pressure data)
+    expect(container.querySelectorAll('path').length).toBeGreaterThanOrEqual(1);
+    expect(container.querySelector('line')).toBeNull();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
+      { x: 5, y: 5 },
+      { x: 10, y: 15 },
+    ]);
+  });
+
+  it('preserves historical pressure rendering without pressure prop', () => {
+    const { container } = render(
+      <DrawingSurface
+        value={{
+          strokes: [
+            {
+              id: 'historical-pressure-stroke',
+              tool: 'pen' as const,
+              strokeWidth: 10,
+              points: [
+                { x: 0, y: 0, pressure: 0.2 },
+                { x: 10, y: 10, pressure: 0.8 },
+              ],
+            },
+          ],
+        }}
+      />
+    );
+
+    expect(container.querySelector('path')).toBeNull();
+    expect(container.querySelector('line')?.getAttribute('stroke-width')).toBe('8');
   });
 
   it('active preview respects strokeColor and strokeWidth for pen/line/rect', () => {
@@ -233,7 +513,7 @@ describe('DrawingSurface', () => {
           ? container.querySelector('rect')
           : tool === 'line'
             ? container.querySelector('line')
-            : container.querySelector('polyline');
+            : container.querySelector('path');
       expect(activeElement?.getAttribute('stroke')).toBe(color);
       expect(activeElement?.getAttribute('stroke-width')).toBe(String(width));
       unmount();
@@ -244,7 +524,7 @@ describe('DrawingSurface', () => {
     drawPreviewForTool('rect');
   });
 
-  it('renders polylines from defaultValue', () => {
+  it('renders paths from defaultValue', () => {
     const defaultValue = {
       strokes: [
         {
@@ -266,13 +546,13 @@ describe('DrawingSurface', () => {
       ],
     };
     const { container } = render(<DrawingSurface defaultValue={defaultValue} />);
-    const polylines = container.querySelectorAll('polyline');
-    expect(polylines.length).toBe(2);
-    expect(polylines[0].getAttribute('points')).toBe('10,20 30,40');
-    expect(polylines[1].getAttribute('points')).toBe('50,60 70,80');
+    const paths = container.querySelectorAll('path');
+    expect(paths.length).toBe(2);
+    expect(paths[0].getAttribute('d')).toBe('M 10 20 L 30 40');
+    expect(paths[1].getAttribute('d')).toBe('M 50 60 L 70 80');
   });
 
-  it('renders polylines from controlled value', () => {
+  it('renders paths from controlled value', () => {
     const value = {
       strokes: [
         {
@@ -286,9 +566,9 @@ describe('DrawingSurface', () => {
       ],
     };
     const { container } = render(<DrawingSurface value={value} />);
-    const polylines = container.querySelectorAll('polyline');
-    expect(polylines.length).toBe(1);
-    expect(polylines[0].getAttribute('points')).toBe('5,10 15,20');
+    const paths = container.querySelectorAll('path');
+    expect(paths.length).toBe(1);
+    expect(paths[0].getAttribute('d')).toBe('M 5 10 L 15 20');
   });
 
   it('controlled value updates replace previous strokes while idle', () => {
@@ -305,7 +585,7 @@ describe('DrawingSurface', () => {
         }}
       />
     );
-    expect(container.querySelectorAll('polyline').length).toBe(1);
+    expect(container.querySelectorAll('path').length).toBe(1);
 
     rerender(
       <DrawingSurface
@@ -325,10 +605,10 @@ describe('DrawingSurface', () => {
         }}
       />
     );
-    const polylines = container.querySelectorAll('polyline');
-    expect(polylines.length).toBe(2);
-    expect(polylines[0].getAttribute('points')).toBe('3,4');
-    expect(polylines[1].getAttribute('points')).toBe('5,6');
+    const paths = container.querySelectorAll('path');
+    expect(paths.length).toBe(2);
+    expect(paths[0].getAttribute('d')).toBe('M 3 4');
+    expect(paths[1].getAttribute('d')).toBe('M 5 6');
   });
 
   it('unsupported tool renders without crashing and does not enable drawing', () => {
@@ -378,10 +658,10 @@ describe('DrawingSurface', () => {
       { x: 5, y: 5 },
       { x: 10, y: 15 },
     ]);
-    const polylines = container.querySelectorAll('polyline');
-    expect(polylines.length).toBe(2);
-    expect(polylines[0].getAttribute('points')).toBe('1,2');
-    expect(polylines[1].getAttribute('points')).toBe('5,5 10,15');
+    const paths = container.querySelectorAll('path');
+    expect(paths.length).toBe(2);
+    expect(paths[0].getAttribute('d')).toBe('M 1 2');
+    expect(paths[1].getAttribute('d')).toBe('M 5 5 L 10 15');
   });
 
   it('module import does not crash in jsdom', () => {
@@ -400,9 +680,9 @@ describe('DrawingSurface', () => {
         }}
       />
     );
-    const polyline = container.querySelector('polyline');
-    expect(polyline).toBeTruthy();
-    expect(polyline.getAttribute('stroke')).toBe('black');
+    const path = container.querySelector('path');
+    expect(path).toBeTruthy();
+    expect(path.getAttribute('stroke')).toBe('black');
   });
 
   it('renders with invalid strokeColor (whitespace only) and uses black as default', () => {
@@ -414,9 +694,9 @@ describe('DrawingSurface', () => {
         }}
       />
     );
-    const polyline = container.querySelector('polyline');
-    expect(polyline).toBeTruthy();
-    expect(polyline.getAttribute('stroke')).toBe('black');
+    const path = container.querySelector('path');
+    expect(path).toBeTruthy();
+    expect(path.getAttribute('stroke')).toBe('black');
   });
 
   it('renders with invalid strokeWidth (non-finite) and uses 2 as default', () => {
@@ -428,9 +708,9 @@ describe('DrawingSurface', () => {
         }}
       />
     );
-    const polyline = container.querySelector('polyline');
-    expect(polyline).toBeTruthy();
-    expect(polyline.getAttribute('stroke-width')).toBe('2');
+    const path = container.querySelector('path');
+    expect(path).toBeTruthy();
+    expect(path.getAttribute('stroke-width')).toBe('2');
   });
 
   it('renders with invalid strokeWidth (< 1) and uses 2 as default', () => {
@@ -442,9 +722,9 @@ describe('DrawingSurface', () => {
         }}
       />
     );
-    const polyline = container.querySelector('polyline');
-    expect(polyline).toBeTruthy();
-    expect(polyline.getAttribute('stroke-width')).toBe('2');
+    const path = container.querySelector('path');
+    expect(path).toBeTruthy();
+    expect(path.getAttribute('stroke-width')).toBe('2');
   });
 
   it('renders with valid strokeColor and strokeWidth', () => {
@@ -679,12 +959,12 @@ describe('DrawingSurface', () => {
       />
     );
 
-    const polylines = container.querySelectorAll('polyline');
-    expect(polylines.length).toBe(2);
-    expect(polylines[0].getAttribute('stroke')).toBe('#ff0000');
-    expect(polylines[0].getAttribute('stroke-width')).toBe('5');
-    expect(polylines[1].getAttribute('stroke')).toBe('#0000ff');
-    expect(polylines[1].getAttribute('stroke-width')).toBe('10');
+    const paths = container.querySelectorAll('path');
+    expect(paths.length).toBe(2);
+    expect(paths[0].getAttribute('stroke')).toBe('#ff0000');
+    expect(paths[0].getAttribute('stroke-width')).toBe('5');
+    expect(paths[1].getAttribute('stroke')).toBe('#0000ff');
+    expect(paths[1].getAttribute('stroke-width')).toBe('10');
   });
 
   it('uncontrolled defaultValue snapshots current props and is unaffected by later prop changes', () => {
@@ -704,16 +984,16 @@ describe('DrawingSurface', () => {
       <DrawingSurface defaultValue={defaultValue} strokeColor="#ff0000" strokeWidth={5} />
     );
 
-    const polyline = container.querySelector('polyline');
-    expect(polyline?.getAttribute('stroke')).toBe('#ff0000');
-    expect(polyline?.getAttribute('stroke-width')).toBe('5');
+    const path = container.querySelector('path');
+    expect(path?.getAttribute('stroke')).toBe('#ff0000');
+    expect(path?.getAttribute('stroke-width')).toBe('5');
 
     rerender(
       <DrawingSurface defaultValue={defaultValue} strokeColor="#0000ff" strokeWidth={10} />
     );
 
-    const polylineAfter = container.querySelector('polyline');
-    expect(polylineAfter?.getAttribute('stroke')).toBe('#ff0000');
-    expect(polylineAfter?.getAttribute('stroke-width')).toBe('5');
+    const pathAfter = container.querySelector('path');
+    expect(pathAfter?.getAttribute('stroke')).toBe('#ff0000');
+    expect(pathAfter?.getAttribute('stroke-width')).toBe('5');
   });
 });

@@ -263,9 +263,109 @@ test.describe('DrawingSurface playground', () => {
     await page.mouse.move(endX, endY);
     await page.mouse.up();
 
-    const strokeEl = surface.locator('svg').locator('polyline').last();
+    const strokeEl = surface.locator('svg').locator('path').last();
     await expect(strokeEl).toHaveAttribute('stroke', '#ff0000');
     await expect(strokeEl).toHaveAttribute('stroke-width', '7');
+  });
+
+  test('pressure toggle enables variable-width pen stroke', async ({ page }) => {
+    await page.getByTestId('drawing-pressure-toggle').check();
+    await page.getByTestId('drawing-stroke-width-input').fill('10');
+
+    const surface = page.getByTestId('drawing-surface-controlled');
+    const box = await surface.boundingBox();
+    expect(box).not.toBeNull();
+
+    await page.evaluate((rect) => {
+      const el = document.querySelector('[data-testid="drawing-surface-controlled"]');
+      if (!el) return;
+      const x1 = rect.x + 50;
+      const y1 = rect.y + 50;
+      const x2 = rect.x + 150;
+      const y2 = rect.y + 150;
+
+      el.dispatchEvent(new PointerEvent('pointerdown', {
+        pointerId: 1,
+        pointerType: 'pen',
+        clientX: x1,
+        clientY: y1,
+        pressure: 0.25,
+        buttons: 1,
+        bubbles: true,
+      }));
+      el.dispatchEvent(new PointerEvent('pointermove', {
+        pointerId: 1,
+        pointerType: 'pen',
+        clientX: x2,
+        clientY: y2,
+        pressure: 0.75,
+        buttons: 1,
+        bubbles: true,
+      }));
+      el.dispatchEvent(new PointerEvent('pointerup', {
+        pointerId: 1,
+        pointerType: 'pen',
+        clientX: x2,
+        clientY: y2,
+        pressure: 0.75,
+        buttons: 0,
+        bubbles: true,
+      }));
+    }, box);
+
+    const segment = surface.locator('line[stroke-width="7.5"]').first();
+    await expect(segment).toBeVisible();
+  });
+
+  test('pressure toggle off keeps base width', async ({ page }) => {
+    await page.getByTestId('drawing-stroke-width-input').fill('10');
+
+    const surface = page.getByTestId('drawing-surface-controlled');
+    const box = await surface.boundingBox();
+    expect(box).not.toBeNull();
+
+    await page.evaluate((rect) => {
+      const el = document.querySelector('[data-testid="drawing-surface-controlled"]');
+      if (!el) return;
+      const x1 = rect.x + 50;
+      const y1 = rect.y + 50;
+      const x2 = rect.x + 150;
+      const y2 = rect.y + 150;
+
+      el.dispatchEvent(new PointerEvent('pointerdown', {
+        pointerId: 1,
+        pointerType: 'pen',
+        clientX: x1,
+        clientY: y1,
+        pressure: 0.25,
+        buttons: 1,
+        bubbles: true,
+      }));
+      el.dispatchEvent(new PointerEvent('pointermove', {
+        pointerId: 1,
+        pointerType: 'pen',
+        clientX: x2,
+        clientY: y2,
+        pressure: 0.75,
+        buttons: 1,
+        bubbles: true,
+      }));
+      el.dispatchEvent(new PointerEvent('pointerup', {
+        pointerId: 1,
+        pointerType: 'pen',
+        clientX: x2,
+        clientY: y2,
+        pressure: 0.75,
+        buttons: 0,
+        bubbles: true,
+      }));
+    }, box);
+
+    const segments = surface.locator('line[stroke-width="7.5"]');
+    await expect(segments).toHaveCount(0);
+
+    const baseWidthElement = surface.locator('[stroke-width="10"]').first();
+    await expect(baseWidthElement).toBeVisible();
   });
 
   test('draws normalized rectangle', async ({ page }) => {

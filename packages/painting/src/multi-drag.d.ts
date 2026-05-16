@@ -4,10 +4,13 @@ declare module '@system-ui-js/multi-drag' {
     button?: number;
     clientX?: number;
     clientY?: number;
+    timeStamp?: number;
   };
 
   export type FingerPathItem = {
     point: { x: number; y: number };
+    timestamp?: number;
+    pressure?: number;
     event?: DragInputEvent;
   };
 

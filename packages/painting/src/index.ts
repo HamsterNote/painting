@@ -1,8 +1,9 @@
-export { DrawingSurface } from './components/DrawingSurface';
 export type {
-  DrawingSurfaceProps,
-  DrawingTool,
-  DrawingPoint,
-  DrawingStroke,
-  DrawingValue,
-} from './components/DrawingSurface';
+	DrawingPoint,
+	DrawingStroke,
+	DrawingSurfaceProps,
+	DrawingTool,
+	DrawingValue,
+} from "./components/DrawingSurface";
+export { DrawingSurface } from "./components/DrawingSurface";
+export type { DrawingStrokeSmoothingOptions } from "./stroke-helpers";

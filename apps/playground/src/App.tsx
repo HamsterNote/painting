@@ -19,6 +19,7 @@ export default function App() {
   const [tool, setTool] = useState<DrawingTool>('pen');
   const [color, setColor] = useState('#000000');
   const [width, setWidth] = useState(2);
+  const [pressure, setPressure] = useState(false);
   const [controlledValue, setControlledValue] = useState<DrawingValue>({ strokes: [] });
   const [uncontrolledStrokes, setUncontrolledStrokes] = useState<DrawingValue>(SEED_VALUE);
 
@@ -77,6 +78,16 @@ export default function App() {
             }
           />
         </label>
+
+        <label>
+          Pressure{' '}
+          <input
+            type="checkbox"
+            data-testid="drawing-pressure-toggle"
+            checked={pressure}
+            onChange={(e) => setPressure(e.target.checked)}
+          />
+        </label>
       </div>
 
       <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
@@ -89,6 +100,7 @@ export default function App() {
               tool={tool}
               strokeColor={color}
               strokeWidth={width}
+              pressure={pressure}
               testID="drawing-surface-uncontrolled"
             />
           </div>
@@ -117,6 +129,7 @@ export default function App() {
               tool={tool}
               strokeColor={color}
               strokeWidth={width}
+              pressure={pressure}
               testID="drawing-surface-controlled"
             />
           </div>
