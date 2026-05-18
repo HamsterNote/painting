@@ -101,6 +101,9 @@ export default [
       ...react.configs.recommended.rules,
       ...reactHooks.configs.recommended.rules,
       ...prettier.rules,
+      // TypeScript handles these — base ESLint rules produce false positives on TS type annotations
+      'no-undef': 'off',
+      'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
