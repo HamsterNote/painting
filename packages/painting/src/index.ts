@@ -1,4 +1,5 @@
 export type {
+	DrawingInputMethod,
 	DrawingPoint,
 	DrawingStroke,
 	DrawingSurfaceProps,
@@ -6,13 +7,13 @@ export type {
 	DrawingValue,
 } from "./components/DrawingSurface";
 export { DrawingSurface } from "./components/DrawingSurface";
-export type { DrawingStrokeSmoothingOptions } from "./stroke-helpers";
-export { useCanvas } from "./hooks/useCanvas";
 export type { UseCanvasOptions, UseCanvasReturn } from "./hooks/useCanvas";
+export { useCanvas } from "./hooks/useCanvas";
+export type { DrawingStrokeSmoothingOptions } from "./stroke-helpers";
 export {
-  addStroke,
-  clearStrokes,
-  pick,
-  removeStroke,
-  updateStroke,
+	addStroke,
+	clearStrokes,
+	pick,
+	removeStroke,
+	updateStroke,
 } from "./utils";

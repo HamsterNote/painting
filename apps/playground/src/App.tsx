@@ -1,4 +1,4 @@
-import { DrawingSurface, type DrawingTool, type DrawingValue } from '@hamster-note/painting';
+import { DrawingSurface, type DrawingTool, type DrawingInputMethod, type DrawingValue } from '@hamster-note/painting';
 import { useCallback, useState } from 'react';
 
 const SEED_VALUE: DrawingValue = {
@@ -20,6 +20,7 @@ export default function App() {
   const [color, setColor] = useState('#000000');
   const [width, setWidth] = useState(2);
   const [pressure, setPressure] = useState(false);
+  const [inputMethods, setInputMethods] = useState<DrawingInputMethod[]>(['touch', 'mouse', 'pen']);
   const [controlledValue, setControlledValue] = useState<DrawingValue>({ strokes: [] });
   const [uncontrolledStrokes, setUncontrolledStrokes] = useState<DrawingValue>(SEED_VALUE);
 
@@ -33,6 +34,14 @@ export default function App() {
 
   const handleReset = useCallback(() => {
     setControlledValue({ strokes: [] });
+  }, []);
+
+  const handleInputMethodToggle = useCallback((method: DrawingInputMethod) => {
+    setInputMethods((prev) =>
+      prev.includes(method)
+        ? prev.filter((m) => m !== method)
+        : [...prev, method]
+    );
   }, []);
 
   const controlledStrokes = controlledValue;
@@ -89,6 +98,36 @@ export default function App() {
             onChange={(e) => setPressure(e.target.checked)}
           />
         </label>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <input
+            type="checkbox"
+            data-testid="drawing-input-method-touch"
+            checked={inputMethods.includes('touch')}
+            onChange={() => handleInputMethodToggle('touch')}
+          />
+          Touch
+        </label>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <input
+            type="checkbox"
+            data-testid="drawing-input-method-mouse"
+            checked={inputMethods.includes('mouse')}
+            onChange={() => handleInputMethodToggle('mouse')}
+          />
+          Mouse
+        </label>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <input
+            type="checkbox"
+            data-testid="drawing-input-method-pen"
+            checked={inputMethods.includes('pen')}
+            onChange={() => handleInputMethodToggle('pen')}
+          />
+          Pen
+        </label>
       </div>
 
       <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
@@ -102,6 +141,7 @@ export default function App() {
               strokeColor={color}
               strokeWidth={width}
               pressure={pressure}
+              inputMethods={inputMethods}
               testID="drawing-surface-uncontrolled"
             />
           </div>
@@ -131,6 +171,7 @@ export default function App() {
               strokeColor={color}
               strokeWidth={width}
               pressure={pressure}
+              inputMethods={inputMethods}
               testID="drawing-surface-controlled"
             />
           </div>

@@ -17,6 +17,7 @@ import { pick as pickStroke } from "../utils";
 
 // Public drawing contract types
 export type DrawingTool = "pen" | "line" | "rect" | "eraser";
+export type DrawingInputMethod = "touch" | "mouse" | "pen";
 
 export type DrawingPoint = {
 	x: number;
@@ -51,6 +52,8 @@ export type DrawingSurfaceProps = {
 	strokeWidth?: number;
 	/** Enable velocity-adaptive stroke smoothing. Default: true. */
 	strokeSmoothing?: boolean | DrawingStrokeSmoothingOptions;
+	/** Allowed input methods. Defaults to ['touch', 'mouse', 'pen']. */
+	inputMethods?: DrawingInputMethod[];
 	/** Capture and render pen pressure when available. */
 	pressure?: boolean;
 	/** Test identifier. */
@@ -80,20 +83,29 @@ function isDrawingToolSupported(tool: unknown): tool is DrawingTool {
 	return tool === "pen" || tool === "line" || tool === "rect" || tool === "eraser";
 }
 
-function isDrawingInput(event: DragInputEvent | undefined): boolean {
+const DEFAULT_INPUT_METHODS: DrawingInputMethod[] = ["touch", "mouse", "pen"];
+
+function isDrawingInput(
+	event: DragInputEvent | undefined,
+	allowedMethods: DrawingInputMethod[],
+): boolean {
 	if (!event) {
 		return false;
 	}
 
 	if (event.pointerType === "pen") {
-		return true;
+		return allowedMethods.includes("pen");
 	}
 
-	if (event.pointerType !== undefined && event.pointerType !== "mouse") {
-		return false;
+	if (event.pointerType === undefined || event.pointerType === "touch") {
+		return allowedMethods.includes("touch");
 	}
 
-	return event.button === 0;
+	if (event.pointerType === "mouse") {
+		return allowedMethods.includes("mouse") && event.button === 0;
+	}
+
+	return false;
 }
 
 function normalizePointPressure(pressure: number | undefined): number {
@@ -125,6 +137,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		strokeColor,
 		strokeWidth,
 		strokeSmoothing,
+		inputMethods,
 		pressure,
 		testID,
 	} = props;
@@ -176,6 +189,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 	const resolvedWidthRef = useRef(resolvedWidth);
 	const strokesRef = useRef(strokes);
 	const pressureRef = useRef(pressure);
+	const inputMethodsRef = useRef<DrawingInputMethod[]>(DEFAULT_INPUT_METHODS);
 	const smoothingOptionsRef = useRef(
 		resolveStrokeSmoothingOptions(strokeSmoothing),
 	);
@@ -188,6 +202,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 	resolvedColorRef.current = resolvedColor;
 	resolvedWidthRef.current = resolvedWidth;
 	pressureRef.current = pressure;
+	inputMethodsRef.current = inputMethods ?? DEFAULT_INPUT_METHODS;
 	smoothingOptionsRef.current = resolveStrokeSmoothingOptions(strokeSmoothing);
 
 	const getLocalCoordinates = useCallback(
@@ -257,7 +272,10 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			const path = finger.getPath();
 			const firstPathItem = path[0];
 
-			if (!firstPathItem || !isDrawingInput(firstPathItem.event)) {
+			if (
+				!firstPathItem ||
+				!isDrawingInput(firstPathItem.event, inputMethodsRef.current)
+			) {
 				clearActiveStroke();
 				return;
 			}

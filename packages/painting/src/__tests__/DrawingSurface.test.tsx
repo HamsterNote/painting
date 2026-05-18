@@ -1,6 +1,6 @@
 import { DrawingSurface as DrawingSurfaceFromIndex } from '@hamster-note/painting';
 import { act, render, screen } from '@testing-library/react';
-import { DrawingSurface, type DrawingTool } from '../components/DrawingSurface';
+import { type DrawingInputMethod, DrawingSurface, type DrawingTool } from '../components/DrawingSurface';
 
 jest.mock(
   '@system-ui-js/multi-drag',
@@ -90,6 +90,54 @@ function mockHostRect(element: HTMLElement) {
   }));
 }
 
+type MockInputEvent = { pointerType?: string; button?: number; clientX?: number; clientY?: number };
+
+function emitCompletedStroke(instance: MockDragInstance, event: MockInputEvent) {
+  act(() => {
+    instance.emit(multiDragMock.DragOperationType.Move, [
+      finger([
+        { point: { x: 15, y: 25 }, event },
+        { point: { x: 20, y: 35 }, event },
+      ]),
+    ]);
+    instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+  });
+}
+
+function renderForInputMethods(inputMethods?: DrawingInputMethod[]) {
+  const onChange = jest.fn();
+  const { unmount } = render(
+    <DrawingSurface
+      testID="drawing-surface-host"
+      value={{ strokes: [] }}
+      onChange={onChange}
+      inputMethods={inputMethods}
+    />
+  );
+  const host = screen.getByTestId('drawing-surface-host');
+  mockHostRect(host);
+
+  return { instance: latestDragInstance(), onChange, unmount };
+}
+
+function expectInputAccepted(inputMethods: DrawingInputMethod[] | undefined, event: MockInputEvent) {
+  const { instance, onChange, unmount } = renderForInputMethods(inputMethods);
+
+  emitCompletedStroke(instance, event);
+
+  expect(onChange).toHaveBeenCalledTimes(1);
+  unmount();
+}
+
+function expectInputRejected(inputMethods: DrawingInputMethod[] | undefined, event: MockInputEvent) {
+  const { instance, onChange, unmount } = renderForInputMethods(inputMethods);
+
+  emitCompletedStroke(instance, event);
+
+  expect(onChange).not.toHaveBeenCalled();
+  unmount();
+}
+
 beforeEach(() => {
   multiDragMock.Drag.mockClear();
   multiDragMock.__mockDragInstances.splice(0, multiDragMock.__mockDragInstances.length);
@@ -164,6 +212,32 @@ describe('DrawingSurface', () => {
       { x: 10, y: 15 },
     ]);
     expect(container.querySelector('path')).toBeNull();
+  });
+
+  it('accepts pen, left mouse, and touch input by default', () => {
+    expectInputAccepted(undefined, { pointerType: 'pen', button: 0 });
+    expectInputAccepted(undefined, { pointerType: 'mouse', button: 0 });
+    expectInputAccepted(undefined, { pointerType: 'touch' });
+  });
+
+  it('inputMethods pen accepts pen and rejects mouse and touch', () => {
+    expectInputAccepted(['pen'], { pointerType: 'pen', button: 0 });
+    expectInputRejected(['pen'], { pointerType: 'mouse', button: 0 });
+    expectInputRejected(['pen'], { pointerType: 'touch' });
+  });
+
+  it('inputMethods mouse accepts only left mouse and rejects pen and touch', () => {
+    expectInputAccepted(['mouse'], { pointerType: 'mouse', button: 0 });
+    expectInputRejected(['mouse'], { pointerType: 'mouse', button: 1 });
+    expectInputRejected(['mouse'], { pointerType: 'pen', button: 0 });
+    expectInputRejected(['mouse'], { pointerType: 'touch' });
+  });
+
+  it('inputMethods touch accepts touch and undefined pointerType and rejects pen and mouse', () => {
+    expectInputAccepted(['touch'], { pointerType: 'touch' });
+    expectInputAccepted(['touch'], {});
+    expectInputRejected(['touch'], { pointerType: 'pen', button: 0 });
+    expectInputRejected(['touch'], { pointerType: 'mouse', button: 0 });
   });
 
   it('committed pen stroke respects strokeColor and strokeWidth', () => {
