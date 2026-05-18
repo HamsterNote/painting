@@ -1,67 +1,58 @@
 {
-  "active_plan": "/home/zhangxiao/frontend/HamsterNote/painting/.sisyphus/plans/expo-component-library-init.md",
-  "started_at": "2026-05-08T03:19:29.147Z",
+  "active_plan": "/home/zhangxiao/frontend/worktrees/painting/refactor-use-canvas/.sisyphus/plans/multi-drag-pressure.md",
+  "started_at": "2026-05-16T04:09:13.079Z",
   "session_ids": [
-    "ses_1fa671196ffevAyy21u73qkjW5"
+    "ses_1d106a9abffeHKLXBbmKgdYPCL"
   ],
   "session_origins": {
-    "ses_1fa671196ffevAyy21u73qkjW5": "direct"
+    "ses_1d106a9abffeHKLXBbmKgdYPCL": "direct"
   },
-  "plan_name": "expo-component-library-init",
+  "plan_name": "multi-drag-pressure",
   "agent": "atlas",
   "task_sessions": {
     "todo:1": {
       "task_key": "todo:1",
       "task_label": "1",
-      "task_title": "Establish root workspace contract",
-      "session_id": "ses_1fa659a89ffevWQjRr4Cc5ivYq",
+      "task_title": "Pin Multi Drag 0.4.0 And Type Shim",
+      "session_id": "ses_1d1011132ffeJFmWZm6cq2fxfT",
       "agent": "Sisyphus-Junior",
       "category": "quick",
-      "updated_at": "2026-05-08T03:22:16.269Z"
+      "updated_at": "2026-05-16T04:16:02.293Z"
     },
     "todo:2": {
       "task_key": "todo:2",
       "task_label": "2",
-      "task_title": "Scaffold Expo example app workbench",
-      "session_id": "ses_1fa6285b0ffeoznE2dyxMMVnBW",
+      "task_title": "Preserve Pressure Through Stroke Helpers",
+      "session_id": "ses_1d0fa8b26ffeJDlQ93n3qd13XE",
       "agent": "Sisyphus-Junior",
       "category": "quick",
-      "updated_at": "2026-05-08T03:27:23.764Z"
+      "updated_at": "2026-05-16T04:25:51.885Z"
+    },
+    "todo:3": {
+      "task_key": "todo:3",
+      "task_label": "3",
+      "task_title": "Add DrawingSurface Pressure Capture And Segment Rendering",
+      "session_id": "ses_1d0f498f9ffeHCYFiBnRjz2zH5",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-05-16T04:34:00.479Z"
     },
     "todo:4": {
       "task_key": "todo:4",
       "task_label": "4",
-      "task_title": "Wire package-name consumption across the workspace",
-      "session_id": "ses_1fa5e233fffeY6VLXoBtK5zSmv",
+      "task_title": "Add Playground Pressure Toggle And UI Coverage",
+      "session_id": "ses_1d0ed2c5fffemPjE6aiGUoNK9K",
       "agent": "Sisyphus-Junior",
-      "category": "unspecified-low",
-      "updated_at": "2026-05-08T03:34:42.346Z"
-    },
-    "todo:6": {
-      "task_key": "todo:6",
-      "task_label": "6",
-      "task_title": "Standardize build, typecheck, and pack automation",
-      "session_id": "ses_1fa4a14e5ffeV8JlMkdq60oBo5",
-      "agent": "Sisyphus-Junior",
-      "category": "quick",
-      "updated_at": "2026-05-08T03:56:52.081Z"
-    },
-    "todo:9": {
-      "task_key": "todo:9",
-      "task_label": "9",
-      "task_title": "Add PR CI workflow adapted from chameleon",
-      "session_id": "ses_1fa420034ffe03HG1Amlvq6RZe",
-      "agent": "Sisyphus-Junior",
-      "category": "writing",
-      "updated_at": "2026-05-08T04:01:11.167Z"
+      "category": "visual-engineering",
+      "updated_at": "2026-05-16T05:07:03.911Z"
     },
     "final-wave:f1": {
       "task_key": "final-wave:f1",
       "task_label": "F1",
       "task_title": "Plan Compliance Audit — oracle",
-      "session_id": "ses_1fa1871b9ffeKgm6nyCNBDobv5",
+      "session_id": "ses_1d0cb752dffe2pVW0oBqMQFdDQ",
       "agent": "oracle",
-      "updated_at": "2026-05-08T04:48:05.186Z"
+      "updated_at": "2026-05-16T05:14:44.542Z"
     }
   }
 }
