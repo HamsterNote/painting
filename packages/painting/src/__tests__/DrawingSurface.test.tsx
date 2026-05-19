@@ -59,6 +59,7 @@ type MockFinger = {
     point: { x: number; y: number };
     event?: { pointerType?: string; button?: number; clientX?: number; clientY?: number };
     pressure?: number;
+    timestamp?: number;
   }>;
 };
 
@@ -74,6 +75,22 @@ function latestDragInstance(): MockDragInstance {
 
 function finger(path: ReturnType<MockFinger['getPath']>): MockFinger {
   return { getPath: () => path };
+}
+
+function fingerWithTimestamps(
+  points: { x: number; y: number }[],
+  startTime = 0,
+  interval = 16,
+  event: MockInputEvent = { pointerType: 'pen', button: 0 }
+): MockFinger {
+  return {
+    getPath: () =>
+      points.map((point, index) => ({
+        point,
+        timestamp: startTime + index * interval,
+        event,
+      })),
+  };
 }
 
 function mockHostRect(element: HTMLElement) {
@@ -1069,5 +1086,427 @@ describe('DrawingSurface', () => {
     const pathAfter = container.querySelector('path');
     expect(pathAfter?.getAttribute('stroke')).toBe('#ff0000');
     expect(pathAfter?.getAttribute('stroke-width')).toBe('5');
+  });
+
+  it('samples at default ~8.333ms (120Hz) with interpolation', () => {
+    const onChange = jest.fn();
+    render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange}
+        tool="pen"
+        strokeSmoothing={false}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    // 10ms-interval points: should produce ~120Hz sampled output
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        fingerWithTimestamps(
+          [
+            { x: 15, y: 25 },
+            { x: 20, y: 30 },
+            { x: 25, y: 35 },
+            { x: 30, y: 40 },
+            { x: 35, y: 45 },
+          ],
+          0,
+          10
+        ),
+      ]);
+    });
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const points = onChange.mock.calls[0][0].strokes[0].points;
+    // First point always kept
+    expect(points[0]).toEqual({ x: 5, y: 5, timestamp: 0 });
+    // Should have interpolated points + flushed last point
+    expect(points.length).toBeGreaterThanOrEqual(3);
+    // Last point should be the flushed raw end point
+    expect(points[points.length - 1].x).toBe(25);
+    expect(points[points.length - 1].y).toBe(25);
+  });
+
+  it('respects custom samplingInterval prop', () => {
+    const onChange = jest.fn();
+    render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange}
+        tool="pen"
+        strokeSmoothing={false}
+        samplingInterval={20}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        fingerWithTimestamps(
+          [
+            { x: 15, y: 25 },
+            { x: 20, y: 30 },
+            { x: 25, y: 35 },
+            { x: 30, y: 40 },
+            { x: 35, y: 45 },
+          ],
+          0,
+          10
+        ),
+      ]);
+    });
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    const points = onChange.mock.calls[0][0].strokes[0].points;
+    expect(points[0]).toEqual({ x: 5, y: 5, timestamp: 0 });
+    // With 20ms interval on 10ms-spaced points, expect fewer samples than default
+    expect(points.length).toBeLessThanOrEqual(4);
+  });
+
+  it('interpolates coordinates on fixed time grid', () => {
+    const onChange = jest.fn();
+    render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange}
+        tool="pen"
+        strokeSmoothing={false}
+        samplingInterval={10}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        fingerWithTimestamps(
+          [
+            { x: 15, y: 25 },
+            { x: 25, y: 35 },
+            { x: 35, y: 45 },
+            { x: 45, y: 55 },
+            { x: 55, y: 65 },
+          ],
+          0,
+          10
+        ),
+      ]);
+    });
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    const points = onChange.mock.calls[0][0].strokes[0].points;
+    // At 10ms interval on 10ms-spaced points: 0, 10, 20, 30, 40
+    // Local coords: 5,15,25,35,45
+    expect(points).toHaveLength(5);
+    expect(points[0]).toEqual({ x: 5, y: 5, timestamp: 0 });
+    expect(points[1]).toEqual({ x: 15, y: 15, timestamp: 10 });
+    expect(points[2]).toEqual({ x: 25, y: 25, timestamp: 20 });
+    expect(points[3]).toEqual({ x: 35, y: 35, timestamp: 30 });
+    expect(points[4]).toEqual({ x: 45, y: 45, timestamp: 40 });
+  });
+
+  it('AllEnd flushes the last raw point even if it is within interval', () => {
+    const onChange = jest.fn();
+    render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange}
+        tool="pen"
+        strokeSmoothing={false}
+        samplingInterval={50}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        fingerWithTimestamps(
+          [
+            { x: 15, y: 25 },
+            { x: 20, y: 30 },
+            { x: 25, y: 35 },
+          ],
+          0,
+          10
+        ),
+      ]);
+    });
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    const points = onChange.mock.calls[0][0].strokes[0].points;
+    expect(points[0]).toEqual({ x: 5, y: 5, timestamp: 0 });
+    // Last raw point should be flushed
+    expect(points[points.length - 1]).toEqual({ x: 15, y: 15, timestamp: 20 });
+  });
+
+  it('passes all points through when no timestamps are present', () => {
+    const onChange = jest.fn();
+    const { container } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange}
+        tool="pen"
+        strokeSmoothing={false}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        finger([
+          { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 25, y: 45 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+    });
+
+    const activePath = container.querySelector('path');
+    expect(activePath?.getAttribute('d')).toBe(
+      'M 5 5 C 6.666666666666667 8.333333333333334 8.333333333333334 11.666666666666666 10 15 C 11.666666666666666 18.333333333333332 15 25 15 25'
+    );
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
+      { x: 5, y: 5 },
+      { x: 10, y: 15 },
+      { x: 15, y: 25 },
+    ]);
+  });
+
+  it('resets sampling on new stroke after AllEnd', () => {
+    const onChange = jest.fn();
+    const { rerender } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange}
+        tool="pen"
+        strokeSmoothing={false}
+        samplingInterval={10}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        fingerWithTimestamps([
+          { x: 15, y: 25 },
+          { x: 25, y: 35 },
+        ], 0, 10),
+      ]);
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    const firstStrokeValue = onChange.mock.calls[0][0];
+    expect(firstStrokeValue.strokes[0].points).toEqual([
+      { x: 5, y: 5, timestamp: 0 },
+      { x: 15, y: 15, timestamp: 10 },
+    ]);
+
+    rerender(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={firstStrokeValue}
+        onChange={onChange}
+        tool="pen"
+        strokeSmoothing={false}
+        samplingInterval={10}
+      />
+    );
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        fingerWithTimestamps([
+          { x: 50, y: 60 },
+          { x: 60, y: 70 },
+        ], 100, 10),
+      ]);
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    expect(onChange).toHaveBeenCalledTimes(2);
+    const secondStrokeValue = onChange.mock.calls[1][0];
+    expect(secondStrokeValue.strokes).toHaveLength(2);
+    expect(secondStrokeValue.strokes[1].points).toEqual([
+      { x: 40, y: 40, timestamp: 100 },
+      { x: 50, y: 50, timestamp: 110 },
+    ]);
+  });
+
+  it('produces consistent stroke regardless of rAF refresh rate', () => {
+    const onChange60 = jest.fn();
+    const onChange120 = jest.fn();
+    const onChange144 = jest.fn();
+
+    const { unmount: unmount60 } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange60}
+        tool="pen"
+        strokeSmoothing={false}
+      />
+    );
+    const host60 = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host60);
+    const instance60 = latestDragInstance();
+
+    // Simulate 60Hz rAF batches: ~16.67ms apart
+    act(() => {
+      instance60.emit(multiDragMock.DragOperationType.Move, [
+        fingerWithTimestamps(
+          [
+            { x: 15, y: 25 },
+            { x: 20, y: 30 },
+            { x: 25, y: 35 },
+            { x: 30, y: 40 },
+            { x: 35, y: 45 },
+            { x: 40, y: 50 },
+          ],
+          0,
+          16.667
+        ),
+      ]);
+    });
+    act(() => {
+      instance60.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    multiDragMock.__mockDragInstances.length = 0;
+    unmount60();
+
+    const { unmount: unmount120 } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange120}
+        tool="pen"
+        strokeSmoothing={false}
+      />
+    );
+    const host120 = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host120);
+    const instance120 = latestDragInstance();
+
+    // Simulate 120Hz rAF batches: ~8.33ms apart
+    act(() => {
+      instance120.emit(multiDragMock.DragOperationType.Move, [
+        fingerWithTimestamps(
+          [
+            { x: 15, y: 25 },
+            { x: 17.5, y: 27.5 },
+            { x: 20, y: 30 },
+            { x: 22.5, y: 32.5 },
+            { x: 25, y: 35 },
+            { x: 27.5, y: 37.5 },
+            { x: 30, y: 40 },
+            { x: 32.5, y: 42.5 },
+            { x: 35, y: 45 },
+            { x: 37.5, y: 47.5 },
+            { x: 40, y: 50 },
+          ],
+          0,
+          8.333
+        ),
+      ]);
+    });
+    act(() => {
+      instance120.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    multiDragMock.__mockDragInstances.length = 0;
+    unmount120();
+
+    const { unmount: unmount144 } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange144}
+        tool="pen"
+        strokeSmoothing={false}
+      />
+    );
+    const host144 = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host144);
+    const instance144 = latestDragInstance();
+
+    // Simulate 144Hz rAF batches: ~6.94ms apart
+    act(() => {
+      instance144.emit(multiDragMock.DragOperationType.Move, [
+        fingerWithTimestamps(
+          [
+            { x: 15, y: 25 },
+            { x: 17.143, y: 27.143 },
+            { x: 19.286, y: 29.286 },
+            { x: 21.429, y: 31.429 },
+            { x: 23.571, y: 33.571 },
+            { x: 25.714, y: 35.714 },
+            { x: 27.857, y: 37.857 },
+            { x: 30, y: 40 },
+            { x: 32.143, y: 42.143 },
+            { x: 34.286, y: 44.286 },
+            { x: 36.429, y: 46.429 },
+            { x: 38.571, y: 48.571 },
+            { x: 40, y: 50 },
+          ],
+          0,
+          6.944
+        ),
+      ]);
+    });
+    act(() => {
+      instance144.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    const points60 = onChange60.mock.calls[0][0].strokes[0].points;
+    const points120 = onChange120.mock.calls[0][0].strokes[0].points;
+    const points144 = onChange144.mock.calls[0][0].strokes[0].points;
+
+    // All should start at the same place
+    expect(points60[0]).toEqual({ x: 5, y: 5, timestamp: 0 });
+    expect(points120[0]).toEqual({ x: 5, y: 5, timestamp: 0 });
+    expect(points144[0]).toEqual({ x: 5, y: 5, timestamp: 0 });
+
+    // Counts should be similar (within 1-2 points)
+    expect(Math.abs(points60.length - points120.length)).toBeLessThanOrEqual(2);
+    expect(Math.abs(points120.length - points144.length)).toBeLessThanOrEqual(2);
+
+    unmount60();
+    unmount120();
+    unmount144();
   });
 });

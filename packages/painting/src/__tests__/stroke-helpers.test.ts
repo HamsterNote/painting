@@ -9,6 +9,7 @@ import {
   isValidStroke,
   pointsToPolyline,
   pointsToSvgPath,
+  sampleFixedTimeGrid,
 } from '../stroke-helpers';
 
 describe('stroke-helpers', () => {
@@ -336,6 +337,108 @@ describe('stroke-helpers', () => {
       result.forEach((p) => {
         expect(p.pressure).toBeUndefined();
       });
+    });
+  });
+
+  describe('sampleFixedTimeGrid', () => {
+    it('returns empty array for empty input', () => {
+      expect(sampleFixedTimeGrid([], 8.333, false)).toEqual([]);
+    });
+
+    it('returns all points when no timestamps present', () => {
+      const raw = [{ x: 0, y: 0 }, { x: 10, y: 10 }, { x: 20, y: 20 }];
+      const result = sampleFixedTimeGrid(raw, 8.333, false);
+      expect(result).toEqual(raw);
+    });
+
+    it('keeps first point and samples at fixed intervals', () => {
+      const raw = [
+        { x: 0, y: 0, timestamp: 0 },
+        { x: 10, y: 10, timestamp: 10 },
+        { x: 20, y: 20, timestamp: 20 },
+        { x: 30, y: 30, timestamp: 30 },
+      ];
+      const result = sampleFixedTimeGrid(raw, 8.333, false);
+      expect(result.length).toBeGreaterThanOrEqual(2);
+      expect(result[0]).toEqual({ x: 0, y: 0, timestamp: 0 });
+      // Should have interpolated points around 8.333, 16.666, 25
+    });
+
+    it('interpolates x/y linearly between raw points', () => {
+      const raw = [
+        { x: 0, y: 0, timestamp: 0 },
+        { x: 100, y: 100, timestamp: 100 },
+      ];
+      const result = sampleFixedTimeGrid(raw, 25, false);
+      // Target times: 0, 25, 50, 75
+      expect(result).toHaveLength(4);
+      expect(result[1]).toEqual({ x: 25, y: 25, timestamp: 25 });
+      expect(result[2]).toEqual({ x: 50, y: 50, timestamp: 50 });
+      expect(result[3]).toEqual({ x: 75, y: 75, timestamp: 75 });
+    });
+
+    it('interpolates pressure when available', () => {
+      const raw = [
+        { x: 0, y: 0, timestamp: 0, pressure: 0.2 },
+        { x: 100, y: 100, timestamp: 100, pressure: 0.8 },
+      ];
+      const result = sampleFixedTimeGrid(raw, 50, false);
+      expect(result).toHaveLength(2);
+      expect(result[1].pressure).toBeCloseTo(0.5);
+    });
+
+    it('flushes last raw point when flushLast is true', () => {
+      const raw = [
+        { x: 0, y: 0, timestamp: 0 },
+        { x: 100, y: 0, timestamp: 100 },
+      ];
+      const noFlush = sampleFixedTimeGrid(raw, 30, false);
+      const flush = sampleFixedTimeGrid(raw, 30, true);
+      expect(flush.length).toBeGreaterThanOrEqual(noFlush.length);
+      const last = flush[flush.length - 1];
+      expect(last.x).toBe(100);
+      expect(last.y).toBe(0);
+    });
+
+    it('avoids duplicating last point when it already matches target', () => {
+      const raw = [
+        { x: 0, y: 0, timestamp: 0 },
+        { x: 30, y: 30, timestamp: 30 },
+      ];
+      const result = sampleFixedTimeGrid(raw, 30, true);
+      // Should have first point at 0 and last at 30, but not duplicate
+      expect(result.filter((p) => p.timestamp === 30)).toHaveLength(1);
+    });
+
+    it('produces consistent output across different refresh rates', () => {
+      // Simulate same 100ms path at different rAF frequencies
+      const path60Hz = Array.from({ length: 7 }, (_, i) => ({
+        x: i * 10,
+        y: i * 10,
+        timestamp: i * 16.667,
+      }));
+      const path120Hz = Array.from({ length: 13 }, (_, i) => ({
+        x: i * 5,
+        y: i * 5,
+        timestamp: i * 8.333,
+      }));
+      const path144Hz = Array.from({ length: 15 }, (_, i) => ({
+        x: i * 4.286,
+        y: i * 4.286,
+        timestamp: i * 6.944,
+      }));
+
+      const sample60 = sampleFixedTimeGrid(path60Hz, 8.333, true);
+      const sample120 = sampleFixedTimeGrid(path120Hz, 8.333, true);
+      const sample144 = sampleFixedTimeGrid(path144Hz, 8.333, true);
+
+      expect(sample60.length).toBeCloseTo(sample120.length, -1);
+      expect(sample120.length).toBeCloseTo(sample144.length, -1);
+
+      // Key coordinates should be similar
+      expect(sample60[0]).toEqual({ x: 0, y: 0, timestamp: 0 });
+      expect(sample120[0]).toEqual({ x: 0, y: 0, timestamp: 0 });
+      expect(sample144[0]).toEqual({ x: 0, y: 0, timestamp: 0 });
     });
   });
 });

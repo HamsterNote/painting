@@ -4,13 +4,14 @@ import { Drag, DragOperationType } from "@system-ui-js/multi-drag";
 import { useCallback, useEffect, useRef } from "react";
 import { useCanvas } from "../hooks/useCanvas";
 import {
-	appendPoint,
 	createStroke,
 	createVelocityAdaptivePoints,
+	DEFAULT_SAMPLING_INTERVAL,
 	type DrawingStrokeSmoothingOptions,
 	isValidStroke,
 	pointsToSvgPath,
 	resolveStrokeSmoothingOptions,
+	sampleFixedTimeGrid,
 	type TimedDrawingPoint,
 } from "../stroke-helpers";
 import { pick as pickStroke } from "../utils";
@@ -56,6 +57,8 @@ export type DrawingSurfaceProps = {
 	inputMethods?: DrawingInputMethod[];
 	/** Capture and render pen pressure when available. */
 	pressure?: boolean;
+	/** Fixed sampling interval in milliseconds. Defaults to ~8.333ms (120Hz). */
+	samplingInterval?: number;
 	/** Test identifier. */
 	testID?: string;
 };
@@ -139,6 +142,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		strokeSmoothing,
 		inputMethods,
 		pressure,
+		samplingInterval,
 		testID,
 	} = props;
 	const hostRef = useRef<HTMLDivElement>(null);
@@ -172,6 +176,13 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			: undefined;
 	}
 
+	const resolvedSamplingInterval =
+		typeof samplingInterval === "number" &&
+		Number.isFinite(samplingInterval) &&
+		samplingInterval > 0
+			? samplingInterval
+			: DEFAULT_SAMPLING_INTERVAL;
+
 	const { strokes, activeStroke, setActiveStroke, addStroke, removeStroke } = useCanvas({
 		value,
 		onChange,
@@ -193,6 +204,9 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 	const smoothingOptionsRef = useRef(
 		resolveStrokeSmoothingOptions(strokeSmoothing),
 	);
+	const samplingIntervalRef = useRef(resolvedSamplingInterval);
+	const rawPointBufferRef = useRef<TimedDrawingPoint[]>([]);
+	const lastSampledCountRef = useRef(0);
 
 	effectiveToolRef.current = effectiveTool;
 	isDrawingEnabledRef.current = isDrawingEnabled;
@@ -204,6 +218,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 	pressureRef.current = pressure;
 	inputMethodsRef.current = inputMethods ?? DEFAULT_INPUT_METHODS;
 	smoothingOptionsRef.current = resolveStrokeSmoothingOptions(strokeSmoothing);
+	samplingIntervalRef.current = resolvedSamplingInterval;
 
 	const getLocalCoordinates = useCallback(
 		(clientX: number, clientY: number): DrawingPoint => {
@@ -223,6 +238,8 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		clearActiveStrokeRef.current?.();
 		isDrawingRef.current = false;
 		processedPathLengthRef.current = 0;
+		rawPointBufferRef.current = [];
+		lastSampledCountRef.current = 0;
 		setActiveStroke(null);
 	}, [setActiveStroke]);
 
@@ -280,21 +297,44 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				return;
 			}
 
+			// Append new raw points to the buffer
+			for (const pathItem of path.slice(processedPathLengthRef.current)) {
+				const sourcePoint =
+					pathItem.event?.clientX !== undefined &&
+					pathItem.event.clientY !== undefined
+						? { x: pathItem.event.clientX, y: pathItem.event.clientY }
+						: pathItem.point;
+				const localPoint = getLocalCoordinates(sourcePoint.x, sourcePoint.y);
+				const timedPoint: TimedDrawingPoint = {
+					...localPoint,
+					timestamp: pathItem.timestamp ?? pathItem.event?.timeStamp,
+				};
+				if (
+					pressureRef.current === true &&
+					effectiveToolRef.current === "pen" &&
+					pathItem.pressure !== undefined
+				) {
+					timedPoint.pressure = normalizePointPressure(pathItem.pressure);
+				}
+				rawPointBufferRef.current.push(timedPoint);
+			}
+			processedPathLengthRef.current = path.length;
+
 			if (effectiveToolRef.current === "eraser") {
-				for (const pathItem of path.slice(processedPathLengthRef.current)) {
-					const sourcePoint =
-						pathItem.event?.clientX !== undefined &&
-						pathItem.event.clientY !== undefined
-							? { x: pathItem.event.clientX, y: pathItem.event.clientY }
-							: pathItem.point;
-					const localPoint = getLocalCoordinates(sourcePoint.x, sourcePoint.y);
+				const sampled = sampleFixedTimeGrid(
+					rawPointBufferRef.current,
+					samplingIntervalRef.current,
+					false,
+				);
+				const newSampled = sampled.slice(lastSampledCountRef.current);
+				lastSampledCountRef.current = sampled.length;
+				for (const point of newSampled) {
 					const eraserRadius = resolvedWidthRef.current / 2;
-					const hitStroke = pickStroke(localPoint, strokesRef.current, eraserRadius);
+					const hitStroke = pickStroke(point, strokesRef.current, eraserRadius);
 					if (hitStroke) {
 						removeStrokeRef.current(hitStroke.id);
 					}
 				}
-				processedPathLengthRef.current = path.length;
 				return;
 			}
 
@@ -307,46 +347,29 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				);
 				currentActiveStroke = nextStroke;
 				isDrawingRef.current = true;
-				processedPathLengthRef.current = 0;
+				lastSampledCountRef.current = 0;
 			}
 
-			const rawTimedPoints: TimedDrawingPoint[] = [];
-			for (const pathItem of path.slice(processedPathLengthRef.current)) {
-				const sourcePoint =
-					pathItem.event?.clientX !== undefined &&
-					pathItem.event.clientY !== undefined
-						? { x: pathItem.event.clientX, y: pathItem.event.clientY }
-						: pathItem.point;
-				const localPoint = getLocalCoordinates(sourcePoint.x, sourcePoint.y);
-				const timedPoint: TimedDrawingPoint = {
-					...localPoint,
-					timestamp: pathItem.timestamp || pathItem.event?.timeStamp,
-				};
-
-				if (
-					pressureRef.current === true &&
-					effectiveToolRef.current === "pen" &&
-					pathItem.pressure !== undefined
-				) {
-					timedPoint.pressure = normalizePointPressure(pathItem.pressure);
-				}
-
-				rawTimedPoints.push(timedPoint);
-			}
+			const sampled = sampleFixedTimeGrid(
+				rawPointBufferRef.current,
+				samplingIntervalRef.current,
+				false,
+			);
 
 			const nextPoints =
 				effectiveToolRef.current === "pen"
 					? createVelocityAdaptivePoints(
-							rawTimedPoints,
+							sampled,
 							smoothingOptionsRef.current,
 						)
-					: rawTimedPoints;
+					: sampled;
 
-			for (const point of nextPoints) {
-				nextStroke = appendPoint(nextStroke, point);
-			}
+			// Rebuild stroke points from scratch (sampled points may shift as buffer grows)
+			nextStroke = {
+				...nextStroke,
+				points: nextPoints,
+			};
 
-			processedPathLengthRef.current = path.length;
 			currentActiveStroke = nextStroke;
 			setActiveStroke(nextStroke);
 		});
@@ -357,10 +380,44 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				return;
 			}
 
-			if (effectiveToolRef.current !== "eraser") {
-				const stroke = currentActiveStroke;
-				if (stroke && isValidStroke(stroke)) {
-					addStrokeRef.current(stroke);
+			if (effectiveToolRef.current === "eraser") {
+				const sampled = sampleFixedTimeGrid(
+					rawPointBufferRef.current,
+					samplingIntervalRef.current,
+					true,
+				);
+				const newSampled = sampled.slice(lastSampledCountRef.current);
+				for (const point of newSampled) {
+					const eraserRadius = resolvedWidthRef.current / 2;
+					const hitStroke = pickStroke(point, strokesRef.current, eraserRadius);
+					if (hitStroke) {
+						removeStrokeRef.current(hitStroke.id);
+					}
+				}
+				clearActiveStroke();
+				return;
+			}
+
+			const sampled = sampleFixedTimeGrid(
+				rawPointBufferRef.current,
+				samplingIntervalRef.current,
+				true,
+			);
+			const nextPoints =
+				effectiveToolRef.current === "pen"
+					? createVelocityAdaptivePoints(
+							sampled,
+							smoothingOptionsRef.current,
+						)
+					: sampled;
+
+			if (currentActiveStroke) {
+				currentActiveStroke = {
+					...currentActiveStroke,
+					points: nextPoints,
+				};
+				if (isValidStroke(currentActiveStroke)) {
+					addStrokeRef.current(currentActiveStroke);
 				}
 			}
 

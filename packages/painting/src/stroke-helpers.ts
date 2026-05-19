@@ -69,6 +69,111 @@ export type TimedDrawingPoint = DrawingPoint & {
   timestamp?: number;
 };
 
+export const DEFAULT_SAMPLING_INTERVAL = 1000 / 120; // ~8.333ms for 120Hz
+
+export function sampleFixedTimeGrid(
+  rawPoints: TimedDrawingPoint[],
+  samplingInterval: number,
+  flushLast: boolean
+): TimedDrawingPoint[] {
+  if (rawPoints.length === 0) {
+    return [];
+  }
+
+  // If no timestamps, return all points as-is (backward compatibility)
+  if (rawPoints.every((p) => p.timestamp === undefined)) {
+    return rawPoints.map((p) => ({ ...p }));
+  }
+
+  const result: TimedDrawingPoint[] = [];
+
+  // Find first point with a timestamp
+  let startIndex = 0;
+  while (startIndex < rawPoints.length && rawPoints[startIndex].timestamp === undefined) {
+    result.push({ ...rawPoints[startIndex] });
+    startIndex++;
+  }
+
+  if (startIndex >= rawPoints.length) {
+    return result;
+  }
+
+  // First timestamped point is always kept
+  result.push({ ...rawPoints[startIndex] });
+  let lastSampleTime = rawPoints[startIndex].timestamp!;
+  let targetTime = lastSampleTime + samplingInterval;
+
+  for (let i = startIndex + 1; i < rawPoints.length; i++) {
+    const curr = rawPoints[i];
+    const prev = rawPoints[i - 1];
+
+    const currTime = curr.timestamp;
+    const prevTime = prev.timestamp;
+
+    if (currTime === undefined) {
+      // No timestamp: keep the point (backward compatibility)
+      result.push({ ...curr });
+      continue;
+    }
+
+    if (prevTime === undefined) {
+      // Previous had no timestamp, just keep this one and reset sampling
+      result.push({ ...curr });
+      lastSampleTime = currTime;
+      targetTime = lastSampleTime + samplingInterval;
+      continue;
+    }
+
+    // Interpolate points at each target time that falls within [prevTime, currTime]
+    while (targetTime <= currTime + 1e-9) {
+      if (targetTime <= prevTime + 1e-9) {
+        targetTime += samplingInterval;
+        continue;
+      }
+
+      // Skip interpolation at the last raw point's timestamp when not flushing
+      // (the flushLast logic will handle appending it if needed)
+      if (!flushLast && i === rawPoints.length - 1 && Math.abs(targetTime - currTime) < 1e-9) {
+        break;
+      }
+
+      const t =
+        currTime === prevTime
+          ? 0
+          : (targetTime - prevTime) / (currTime - prevTime);
+
+      const x = prev.x + (curr.x - prev.x) * t;
+      const y = prev.y + (curr.y - prev.y) * t;
+      const sampled: TimedDrawingPoint = { x, y, timestamp: targetTime };
+
+      if (prev.pressure !== undefined || curr.pressure !== undefined) {
+        const prevPressure = prev.pressure ?? 1;
+        const currPressure = curr.pressure ?? 1;
+        sampled.pressure = prevPressure + (currPressure - prevPressure) * t;
+      }
+
+      result.push(sampled);
+      targetTime += samplingInterval;
+    }
+  }
+
+  // Flush last raw point if requested and not already present
+  if (flushLast && rawPoints.length > 0) {
+    const last = rawPoints[rawPoints.length - 1];
+    const lastResult = result[result.length - 1];
+    if (
+      !lastResult ||
+      lastResult.x !== last.x ||
+      lastResult.y !== last.y ||
+      lastResult.timestamp !== last.timestamp
+    ) {
+      result.push({ ...last });
+    }
+  }
+
+  return result;
+}
+
 const DEFAULT_SMOOTHING_OPTIONS: Required<DrawingStrokeSmoothingOptions> = {
   enabled: true,
   strength: 0.5,
