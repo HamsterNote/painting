@@ -1,0 +1,9 @@
+Task 4: Attach multi-drag pen interaction bridge
+- yarn typecheck: PASS
+- yarn test -- DrawingSurface: PASS (10/10 tests)
+- Drag instance created with maxFingerCount: 1
+- Move/AllEnd event handling implemented
+- Pen/left-mouse input filtering
+- Controlled and uncontrolled commit logic
+- drag.destroy() cleanup on unmount
+- Mid-stroke controlled value cancellation

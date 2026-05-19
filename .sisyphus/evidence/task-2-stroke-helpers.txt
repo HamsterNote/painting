@@ -1,0 +1,7 @@
+Task 2: Build stroke model and SVG serialization helpers
+- yarn typecheck: PASS
+- yarn test -- stroke-helpers: PASS (18/18 tests)
+- stroke-helpers.ts created with: createStroke, appendPoint, isValidStroke, pointsToPolyline, createDrawingValue
+- Point dedupe: PASS
+- Minimum stroke rejection: PASS
+- SVG polyline serialization: PASS
