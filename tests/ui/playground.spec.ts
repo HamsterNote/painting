@@ -399,4 +399,47 @@ test.describe('DrawingSurface playground', () => {
     expect(Number(width)).toBeGreaterThan(0);
     expect(Number(height)).toBeGreaterThan(0);
   });
+
+  test('sampling rate input is visible and defaults to 0', async ({ page }) => {
+    const samplingRateInput = page.getByTestId('drawing-sampling-rate-input');
+
+    await expect(samplingRateInput).toBeVisible();
+    await expect(samplingRateInput).toHaveValue('0');
+  });
+
+  test('drawing works with fixed sampling rate', async ({ page }) => {
+    const samplingRateInput = page.getByTestId('drawing-sampling-rate-input');
+    const surface = page.getByTestId('drawing-surface-controlled');
+    const preview = page.getByTestId('drawing-preview-controlled');
+
+    await expect(samplingRateInput).toBeVisible();
+    await expect(surface).toBeVisible();
+
+    // 设置采样率为 10（每秒最多 10 个点）
+    await samplingRateInput.fill('10');
+
+    const box = await surface.boundingBox();
+    expect(box).not.toBeNull();
+    const startX = box!.x + 60;
+    const startY = box!.y + 60;
+    const endX = box!.x + 160;
+    const endY = box!.y + 160;
+
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    // 添加中间点，间隔 150ms（> 100ms 阈值）
+    await page.mouse.move(startX + 25, startY + 25);
+    await page.waitForTimeout(150);
+    await page.mouse.move(endX, endY);
+    await page.mouse.up();
+
+    await expect(preview).not.toContainText('"strokes": []');
+
+    const previewText = await preview.textContent();
+    expect(previewText).toBeTruthy();
+    const parsed = JSON.parse(previewText!);
+    expect(parsed.strokes.length).toBeGreaterThanOrEqual(1);
+    expect(parsed.strokes[0].tool).toBe('pen');
+    expect(parsed.strokes[0].points.length).toBeGreaterThan(0);
+  });
 });

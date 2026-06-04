@@ -56,6 +56,8 @@ export type DrawingSurfaceProps = {
 	inputMethods?: DrawingInputMethod[];
 	/** Capture and render pen pressure when available. */
 	pressure?: boolean;
+	/** 采样率（点/秒），控制笔画点密度。0 表示保留所有点。 */
+	samplingRate?: number;
 	/** Test identifier. */
 	testID?: string;
 };
@@ -139,6 +141,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		strokeSmoothing,
 		inputMethods,
 		pressure,
+		samplingRate,
 		testID,
 	} = props;
 	const hostRef = useRef<HTMLDivElement>(null);
@@ -156,6 +159,13 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		strokeWidth >= 1
 			? strokeWidth
 			: 2;
+
+	const resolvedSamplingRate =
+		typeof samplingRate === "number" &&
+		Number.isFinite(samplingRate) &&
+		samplingRate > 0
+			? samplingRate
+			: 0;
 
 	const hasCapturedDefaultValueRef = useRef(false);
 	const initialDefaultValueRef = useRef<DrawingValue | undefined>(undefined);
@@ -194,6 +204,11 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		resolveStrokeSmoothingOptions(strokeSmoothing),
 	);
 
+	const samplingRateRef = useRef(samplingRate);
+	const pendingPointsRef = useRef<TimedDrawingPoint[]>([]);
+	// 跟踪最后一个被保留的采样点的时间戳，用于按采样率降采样
+	const lastSampledTimestampRef = useRef(0);
+
 	effectiveToolRef.current = effectiveTool;
 	isDrawingEnabledRef.current = isDrawingEnabled;
 	addStrokeRef.current = addStroke;
@@ -204,6 +219,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 	pressureRef.current = pressure;
 	inputMethodsRef.current = inputMethods ?? DEFAULT_INPUT_METHODS;
 	smoothingOptionsRef.current = resolveStrokeSmoothingOptions(strokeSmoothing);
+	samplingRateRef.current = resolvedSamplingRate;
 
 	const getLocalCoordinates = useCallback(
 		(clientX: number, clientY: number): DrawingPoint => {
@@ -223,6 +239,8 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		clearActiveStrokeRef.current?.();
 		isDrawingRef.current = false;
 		processedPathLengthRef.current = 0;
+		pendingPointsRef.current = [];
+		lastSampledTimestampRef.current = 0;
 		setActiveStroke(null);
 	}, [setActiveStroke]);
 
@@ -254,6 +272,62 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			getPose: () => ({ position: { x: 0, y: 0 }, width: 0, height: 0 }),
 			setPose: () => {},
 		});
+
+		const processPoints = (points: TimedDrawingPoint[]) => {
+			if (!currentActiveStroke || points.length === 0) return;
+
+			const nextPoints =
+				effectiveToolRef.current === "pen" && !samplingRateRef.current
+					? createVelocityAdaptivePoints(
+							points,
+							smoothingOptionsRef.current,
+						)
+					: points;
+
+			for (const point of nextPoints) {
+				currentActiveStroke = appendPoint(currentActiveStroke, point);
+			}
+
+			setActiveStroke(currentActiveStroke);
+		};
+
+		// Flush any pending points immediately (used in auto mode and cleanup)
+		const flushPendingPoints = () => {
+			const pending = pendingPointsRef.current;
+			if (pending.length === 0) return;
+
+			const rate = samplingRateRef.current;
+			if (!rate || rate <= 0) {
+				processPoints(pending);
+				pendingPointsRef.current = [];
+				return;
+			}
+
+			const minIntervalMs = 1000 / rate;
+			const lastTimestamp = lastSampledTimestampRef.current;
+			const filtered: TimedDrawingPoint[] = [];
+			let lastKept = lastTimestamp;
+
+			for (const point of pending) {
+				const ts = point.timestamp ?? Date.now();
+				// 第一个点（lastKept === 0 表示笔画刚开始）总是保留，
+				// 之后只有时间间隔 >= minIntervalMs 的点才保留
+				if (lastKept === 0 || ts - lastKept >= minIntervalMs) {
+					filtered.push(point);
+					lastKept = ts;
+				}
+			}
+
+			if (filtered.length === 1 && pending.length > 1) {
+				filtered.push(pending[pending.length - 1]);
+			}
+
+			if (filtered.length > 0) {
+				lastSampledTimestampRef.current = lastKept;
+				processPoints(filtered);
+			}
+			pendingPointsRef.current = [];
+		};
 
 		drag.addEventListener(DragOperationType.Move, (fingers: DragFinger[]) => {
 			if (!isDrawingEnabledRef.current) {
@@ -298,16 +372,15 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				return;
 			}
 
-			let nextStroke = currentActiveStroke;
-			if (!nextStroke) {
-				nextStroke = createStroke(
+			if (!currentActiveStroke) {
+				currentActiveStroke = createStroke(
 					effectiveToolRef.current,
 					resolvedColorRef.current,
 					resolvedWidthRef.current,
 				);
-				currentActiveStroke = nextStroke;
 				isDrawingRef.current = true;
 				processedPathLengthRef.current = 0;
+				lastSampledTimestampRef.current = 0;
 			}
 
 			const rawTimedPoints: TimedDrawingPoint[] = [];
@@ -334,21 +407,9 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				rawTimedPoints.push(timedPoint);
 			}
 
-			const nextPoints =
-				effectiveToolRef.current === "pen"
-					? createVelocityAdaptivePoints(
-							rawTimedPoints,
-							smoothingOptionsRef.current,
-						)
-					: rawTimedPoints;
-
-			for (const point of nextPoints) {
-				nextStroke = appendPoint(nextStroke, point);
-			}
-
+			pendingPointsRef.current.push(...rawTimedPoints);
 			processedPathLengthRef.current = path.length;
-			currentActiveStroke = nextStroke;
-			setActiveStroke(nextStroke);
+			flushPendingPoints();
 		});
 
 		drag.addEventListener(DragOperationType.AllEnd, (fingers: DragFinger[]) => {
@@ -356,6 +417,8 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				clearActiveStroke();
 				return;
 			}
+
+			flushPendingPoints();
 
 			if (effectiveToolRef.current !== "eraser") {
 				const stroke = currentActiveStroke;

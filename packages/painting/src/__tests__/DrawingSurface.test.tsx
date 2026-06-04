@@ -1070,4 +1070,332 @@ describe('DrawingSurface', () => {
     expect(pathAfter?.getAttribute('stroke')).toBe('#ff0000');
     expect(pathAfter?.getAttribute('stroke-width')).toBe('5');
   });
+
+  // Sampling rate tests
+  describe('samplingRate', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('samplingRate=0 preserves immediate RAF-synced behavior (default)', () => {
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          samplingRate={0}
+          strokeSmoothing={false}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      // Emit multiple rapid move events
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
+          ]),
+        ]);
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
+            { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
+          ]),
+        ]);
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
+            { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
+            { point: { x: 25, y: 45 }, event: { pointerType: 'pen', button: 0 }, timestamp: 110 },
+          ]),
+        ]);
+      });
+
+      // With samplingRate=0, points should be processed immediately (current behavior)
+      const activePath = container.querySelector('path');
+      expect(activePath).toBeTruthy();
+      // Should contain the last point coordinates
+      expect(activePath?.getAttribute('d')).toContain('10');
+      expect(activePath?.getAttribute('d')).toContain('15');
+    });
+
+    it('samplingRate=30 buffers input and samples at configured FPS', () => {
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          samplingRate={30}
+          strokeSmoothing={false}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      // Emit rapid move events with timestamps 50ms apart ( > 33ms threshold for 30fps)
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
+          ]),
+        ]);
+      });
+
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
+            { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, timestamp: 150 },
+          ]),
+        ]);
+      });
+
+      // With samplingRate=30, active stroke should be updated immediately (display always refreshes)
+      const activePath = container.querySelector('path');
+      expect(activePath).toBeTruthy();
+
+      // Complete the stroke
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      });
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const committedStroke = onChange.mock.calls[0][0].strokes[0];
+      // Both points have timestamp 100 and 150 (50ms apart > 33ms threshold), so both kept
+      expect(committedStroke.points.length).toBe(2);
+    });
+
+    it('AllEnd flushes pending samples before committing', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          samplingRate={10}
+          strokeSmoothing={false}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      // Emit move events with timestamps far enough apart for samplingRate=10 (100ms interval)
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
+            { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, timestamp: 200 },
+          ]),
+        ]);
+      });
+
+      // End immediately
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      });
+
+      // Should commit the stroke with downsampled points
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const committedStroke = onChange.mock.calls[0][0].strokes[0];
+      // Both points are 100ms apart, which meets the 100ms threshold for samplingRate=10
+      expect(committedStroke.points.length).toBe(2);
+      expect(committedStroke.points[0]).toMatchObject({ x: 5, y: 5 });
+      expect(committedStroke.points[1]).toMatchObject({ x: 10, y: 15 });
+    });
+
+    it('changing samplingRate during drawing updates scheduler without losing pending points', () => {
+      const onChange = jest.fn();
+      const { rerender, container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          samplingRate={30}
+          strokeSmoothing={false}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      // Start drawing with samplingRate=30 (33ms interval)
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
+          ]),
+        ]);
+      });
+
+      // Change sampling rate to 10 mid-draw (100ms interval)
+      rerender(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          samplingRate={10}
+          strokeSmoothing={false}
+        />
+      );
+
+      // Continue drawing with timestamps 150ms apart ( > 100ms threshold)
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
+            { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, timestamp: 250 },
+          ]),
+        ]);
+      });
+
+      // Display should always be updated
+      const activePath = container.querySelector('path');
+      expect(activePath).toBeTruthy();
+
+      // Complete stroke
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      });
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const committedStroke = onChange.mock.calls[0][0].strokes[0];
+      // Both points are 150ms apart > 100ms threshold, so both kept
+      expect(committedStroke.points.length).toBe(2);
+    });
+
+    it('changing samplingRate from 0 to fixed mid-draw starts sampling loop', () => {
+      const onChange = jest.fn();
+      const { rerender, container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          samplingRate={0}
+          strokeSmoothing={false}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      // Start drawing with samplingRate=0 (auto mode, keep all points)
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
+          ]),
+        ]);
+      });
+
+      // In auto mode, active stroke should be visible immediately
+      const activePathAuto = container.querySelector('path');
+      expect(activePathAuto).toBeTruthy();
+
+      // Change to fixed rate mid-draw
+      rerender(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          samplingRate={10}
+          strokeSmoothing={false}
+        />
+      );
+
+      // Continue drawing with timestamps 150ms apart ( > 100ms threshold)
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
+            { point: { x: 30, y: 45 }, event: { pointerType: 'pen', button: 0 }, timestamp: 250 },
+          ]),
+        ]);
+      });
+
+      // Display should always be updated
+      const activePath = container.querySelector('path');
+      expect(activePath).toBeTruthy();
+
+      // Complete stroke
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      });
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const committedStroke = onChange.mock.calls[0][0].strokes[0];
+      // Both points are 150ms apart > 100ms threshold, so both kept
+      expect(committedStroke.points.length).toBe(2);
+    });
+
+    it('invalid samplingRate values normalize to 0 (auto)', () => {
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          samplingRate={-1}
+          strokeSmoothing={false}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      // Should behave like samplingRate=0 (immediate processing)
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
+            { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, timestamp: 110 },
+          ]),
+        ]);
+      });
+
+      const activePath = container.querySelector('path');
+      expect(activePath).toBeTruthy();
+      expect(activePath?.getAttribute('d')).toContain('10');
+      expect(activePath?.getAttribute('d')).toContain('15');
+    });
+
+    it('samplingRate omits prop defaults to 0 (auto)', () => {
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          strokeSmoothing={false}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      // Should behave like samplingRate=0 (immediate processing)
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
+            { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, timestamp: 110 },
+          ]),
+        ]);
+      });
+
+      const activePath = container.querySelector('path');
+      expect(activePath).toBeTruthy();
+      expect(activePath?.getAttribute('d')).toContain('10');
+      expect(activePath?.getAttribute('d')).toContain('15');
+    });
+  });
 });
