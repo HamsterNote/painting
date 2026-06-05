@@ -59,6 +59,7 @@ type MockFinger = {
     point: { x: number; y: number };
     event?: { pointerType?: string; button?: number; clientX?: number; clientY?: number };
     pressure?: number;
+    timestamp?: number;
   }>;
 };
 

@@ -277,7 +277,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			if (!currentActiveStroke || points.length === 0) return;
 
 			const nextPoints =
-				effectiveToolRef.current === "pen" && !samplingRateRef.current
+				effectiveToolRef.current === "pen" && smoothingOptionsRef.current.enabled
 					? createVelocityAdaptivePoints(
 							points,
 							smoothingOptionsRef.current,
@@ -307,9 +307,11 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			const lastTimestamp = lastSampledTimestampRef.current;
 			const filtered: TimedDrawingPoint[] = [];
 			let lastKept = lastTimestamp;
+			// 为缺失时间戳的点提供确定性单调回退，避免 Date.now() 引入处理时序依赖
+			let fallbackTs = lastTimestamp;
 
 			for (const point of pending) {
-				const ts = point.timestamp ?? Date.now();
+				const ts = point.timestamp ?? ++fallbackTs;
 				// 第一个点（lastKept === 0 表示笔画刚开始）总是保留，
 				// 之后只有时间间隔 >= minIntervalMs 的点才保留
 				if (lastKept === 0 || ts - lastKept >= minIntervalMs) {
@@ -319,7 +321,12 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			}
 
 			if (filtered.length === 1 && pending.length > 1) {
-				filtered.push(pending[pending.length - 1]);
+				const lastPoint = pending[pending.length - 1];
+				const firstPoint = filtered[0];
+				// 避免在单点敲击无移动时产生重复坐标
+				if (lastPoint.x !== firstPoint.x || lastPoint.y !== firstPoint.y) {
+					filtered.push(lastPoint);
+				}
 			}
 
 			if (filtered.length > 0) {

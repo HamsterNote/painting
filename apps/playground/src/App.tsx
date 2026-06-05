@@ -182,13 +182,11 @@ export default function App() {
     ref.pointerType = e.pointerType as 'mouse' | 'touch' | 'pen';
     ref.supportsRawUpdate = 'onpointerrawupdate' in HTMLElement.prototype;
     ref.supportsCoalescedEvents = typeof (e.nativeEvent as PointerEvent).getCoalescedEvents === 'function';
-    console.log('[RawSampling] Pointer down');
-    console.log('  - supportsRawUpdate:', ref.supportsRawUpdate);
-    console.log('  - supportsCoalescedEvents:', ref.supportsCoalescedEvents);
   }, []);
 
   const handleRawSamplingPointerMove = useCallback((_e: React.PointerEvent<HTMLDivElement>) => {
-    // pointerMoveCount 在 useEffect 的原生事件监听器中计数
+    // React 合成事件不暴露 getCoalescedEvents，因此实际计数在 useEffect 的原生 pointermove 监听器中处理
+    // 此处保留空回调是为了让 React 不会优化掉该事件的合成事件绑定
   }, []);
 
   const handleRawSamplingPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -221,17 +219,9 @@ export default function App() {
     const area = rawSamplingAreaRef.current;
     if (!area) return;
 
-    // 检查是否在安全上下文中
-    const isSecureContext = window.isSecureContext;
-    console.log('[RawSampling] 安全上下文:', isSecureContext);
-
     // 正确的 API 检测方式
     const supportsCoalesced = typeof PointerEvent.prototype.getCoalescedEvents === 'function';
     const supportsRawUpdate = 'onpointerrawupdate' in HTMLElement.prototype;
-
-    console.log('[RawSampling] API 检测结果:');
-    console.log('  - PointerEvent.prototype.getCoalescedEvents:', supportsCoalesced);
-    console.log('  - onpointerrawupdate in HTMLElement.prototype:', supportsRawUpdate);
 
     const moveHandler = (event: Event) => {
       const e = event as PointerEvent;
@@ -241,7 +231,6 @@ export default function App() {
 
       if (typeof e.getCoalescedEvents === 'function') {
         const coalescedEvents = e.getCoalescedEvents();
-        console.log('[RawSampling] pointermove coalesced count:', coalescedEvents.length);
         rawSamplingDemoRef.current.coalescedPointsCount += coalescedEvents.length;
       } else {
         rawSamplingDemoRef.current.coalescedPointsCount++;
