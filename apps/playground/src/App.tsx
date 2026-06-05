@@ -219,10 +219,6 @@ export default function App() {
     const area = rawSamplingAreaRef.current;
     if (!area) return;
 
-    // 正确的 API 检测方式
-    const supportsCoalesced = typeof PointerEvent.prototype.getCoalescedEvents === 'function';
-    const supportsRawUpdate = 'onpointerrawupdate' in HTMLElement.prototype;
-
     const moveHandler = (event: Event) => {
       const e = event as PointerEvent;
       if (!rawSamplingDemoRef.current.isPressed) return;
