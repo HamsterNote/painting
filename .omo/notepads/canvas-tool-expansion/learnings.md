@@ -11,6 +11,12 @@
 - `normalizeDrawingValue` preserves extra drawing value fields by spreading the source value, then replacing `schemaVersion` and `strokes` with cloned v2 data. This keeps existing `selectedId`-style payloads from tests intact while avoiding input mutation.
 - Frozen v1 and v2 migration fixtures now live under `packages/painting/src/__tests__/fixtures/v1/` and `packages/painting/src/__tests__/fixtures/v2/`, with nested `Object.freeze()` calls on values, strokes, point arrays, and points.
 
+## 2026-06-06T15:08:41Z Task: 3
+
+- `packages/painting/src/components/DrawingSurface.tsx` still converts browser coordinates to canvas-local points with `clientX/clientY - getBoundingClientRect().left/top`; Task 3 keeps that persisted canvas-local invariant in a standalone pure helper instead of changing renderer behavior.
+- Viewport scale inputs need defensive normalization at helper boundaries because downstream gesture tasks may pass `0`, out-of-range values, `Infinity`, or `NaN`; transform helpers now clamp or default these without producing `NaN` coordinates.
+- Pinch midpoint stability can be proven by converting the screen midpoint to canvas space before scale change, then solving `tx/ty` so that same canvas point maps back to the original screen midpoint.
+
 ## 2026-06-06T15:30:00Z Task: 4
 
 - `DrawingSurface` root div already had `data-testid`, `data-tool`, and `data-enabled`. Added `data-stroke-count` (bound to `strokes.length` from `useCanvas`), `data-active-tool` (bound to `effectiveTool`), and static defaults `data-scale="1"`, `data-tx="0"`, `data-ty="0"` for future Task 13 viewport transform integration.

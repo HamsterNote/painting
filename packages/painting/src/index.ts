@@ -33,3 +33,14 @@ export {
 	removeStroke,
 	updateStroke,
 } from "./utils";
+export type { DrawingViewport, ViewportPoint } from "./viewport";
+export {
+  DEFAULT_DRAWING_VIEWPORT,
+  MAX_VIEWPORT_SCALE,
+  MIN_VIEWPORT_SCALE,
+  canvasToScreen,
+  clampScale,
+  resetViewport,
+  screenToCanvas,
+  zoomViewportAroundScreenPoint,
+} from "./viewport";

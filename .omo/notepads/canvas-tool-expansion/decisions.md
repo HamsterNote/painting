@@ -10,6 +10,12 @@
 - Decision: represent all v2 stroke variants with cloned canvas-local `points` arrays for this task. This minimizes migration risk for existing v1 `{ id, tool, points, strokeColor?, strokeWidth? }` data while still giving later renderer/reducer tasks a strict `tool` + `schemaVersion: 2` discriminated union.
 - Decision: unknown future persisted tools are ignored by `normalizeDrawingValue` rather than throwing, matching the Task 2 safety scenario and keeping old JSON loading resilient.
 
+## 2026-06-06T15:08:41Z Task: 3
+
+- Decision: add `packages/painting/src/viewport.ts` as the public pure-math home for viewport state and transforms, exported through `packages/painting/src/index.ts`, without wiring it into `DrawingSurface` yet.
+- Decision: treat `NaN` scale as the default scale `1`, clamp finite/out-of-range scale and infinities to `[0.25, 8]`, and normalize invalid translations to `0` so coordinate conversion never emits `NaN` for invalid viewport inputs.
+- Decision: expose `zoomViewportAroundScreenPoint` for pinch-midpoint math; it accepts a requested absolute scale, clamps it, and recomputes `tx/ty` to keep the midpoint stable in screen space.
+
 ## 2026-06-06T15:30:00Z Task: 4
 
 - Decision: place all new testability data attributes on the root `<div>` (same element as `data-testid`) rather than on the inner `<svg>`. This keeps Playwright selectors flat — tests can query `[data-testid="drawing-surface-controlled"][data-stroke-count="1"]` without nested element traversal.
