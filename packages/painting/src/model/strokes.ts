@@ -16,6 +16,10 @@ type DrawingStrokeBaseV2<Tool extends DrawingStrokeToolV2> = {
   points: DrawingPointV2[];
   strokeColor?: string;
   strokeWidth?: number;
+  dashArray?: number[];
+  dashOffset?: number;
+  fillColor?: string;
+  fillOpacity?: number;
 };
 
 export type PenStrokeV2 = DrawingStrokeBaseV2<'pen'>;

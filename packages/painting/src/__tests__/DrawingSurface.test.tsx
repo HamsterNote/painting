@@ -663,6 +663,170 @@ describe('DrawingSurface', () => {
     drawPreviewForTool('rect');
   });
 
+  it('renders dashed open line from DrawingSurface props with fill none', () => {
+    const onChange = jest.fn();
+    const { container, rerender } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange}
+        tool="line"
+        dashArray={[5, 2]}
+        dashOffset={1}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        finger([
+          { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 40, y: 55 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].strokes[0]).toMatchObject({
+      dashArray: [5, 2],
+      dashOffset: 1,
+    });
+
+    rerender(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={onChange.mock.calls[0][0]}
+        onChange={onChange}
+        tool="line"
+        dashArray={[5, 2]}
+        dashOffset={1}
+      />
+    );
+
+    const line = container.querySelector('line');
+    expect(line?.getAttribute('stroke-dasharray')).toBe('5 2');
+    expect(line?.getAttribute('stroke-dashoffset')).toBe('1');
+    expect(line?.getAttribute('fill')).toBe('none');
+  });
+
+  it('renders fill-only rect with no stroke when strokeWidth is zero', () => {
+    const { container } = render(
+      <DrawingSurface
+        value={{
+          strokes: [
+            {
+              id: 'fill-only-rect',
+              tool: 'rect' as const,
+              points: [
+                { x: 0, y: 0 },
+                { x: 20, y: 10 },
+              ],
+            },
+          ],
+        }}
+        strokeWidth={0}
+        fillColor="#ff0000"
+      />
+    );
+
+    const rect = container.querySelector('rect');
+    expect(rect?.getAttribute('fill')).toBe('#ff0000');
+    expect(rect?.getAttribute('fill-opacity')).toBe('1');
+    expect(rect?.hasAttribute('stroke')).toBe(false);
+    expect(rect?.hasAttribute('stroke-width')).toBe(false);
+  });
+
+  it('defaults closed-shape stroke width to one when omitted', () => {
+    const { container } = render(
+      <DrawingSurface
+        value={{
+          strokes: [
+            {
+              id: 'default-width-rect',
+              tool: 'rect' as const,
+              points: [
+                { x: 0, y: 0 },
+                { x: 20, y: 10 },
+              ],
+            },
+          ],
+        }}
+      />
+    );
+
+    expect(container.querySelector('rect')?.getAttribute('stroke-width')).toBe('1');
+  });
+
+  it('normalizes invalid dash arrays from DrawingSurface props to solid strokes', () => {
+    for (const dashArray of [[], [0], [Number.NaN, 2]]) {
+      const { container, unmount } = render(
+        <DrawingSurface
+          value={{
+            strokes: [
+              {
+                id: `solid-line-${dashArray.length}`,
+                tool: 'line' as const,
+                points: [
+                  { x: 0, y: 0 },
+                  { x: 20, y: 10 },
+                ],
+              },
+            ],
+          }}
+          dashArray={dashArray}
+        />
+      );
+
+      expect(container.querySelector('line')?.hasAttribute('stroke-dasharray')).toBe(false);
+      unmount();
+    }
+  });
+
+  it('eraser deletes a fill-only rect by clicking inside the fill', () => {
+    const onChange = jest.fn();
+    render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{
+          strokes: [
+            {
+              id: 'erasable-fill-only-rect',
+              tool: 'rect' as const,
+              points: [
+                { x: 0, y: 0 },
+                { x: 40, y: 40 },
+              ],
+              strokeWidth: 0,
+              fillColor: '#ff0000',
+            },
+          ],
+        }}
+        onChange={onChange}
+        tool="eraser"
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        finger([
+          {
+            point: { x: 30, y: 40 },
+            event: { pointerType: 'pen', button: 0, clientX: 30, clientY: 40 },
+          },
+        ]),
+      ]);
+    });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].strokes).toEqual([]);
+  });
+
   it('renders paths from defaultValue', () => {
     const defaultValue = {
       strokes: [

@@ -31,7 +31,15 @@ function normalizeDashArray(dashArray: number[] | undefined): string | undefined
 		return undefined;
 	}
 
-	return dashArray.every(isFiniteNonNegative) ? dashArray.join(" ") : undefined;
+	if (!dashArray.every(isFiniteNonNegative)) {
+		return undefined;
+	}
+
+	return dashArray.some((value) => value > 0) ? dashArray.join(" ") : undefined;
+}
+
+function normalizeFillColor(fillColor: string | undefined): string {
+	return fillColor !== undefined && fillColor !== "none" ? fillColor : "none";
 }
 
 export function resolveStrokeStyle(
@@ -42,9 +50,7 @@ export function resolveStrokeStyle(
 	const shouldOmitStroke =
 		options.isClosedShape === true && strokeWidth === 0;
 	const fill =
-		options.isClosedShape === true && style.fillColor !== undefined
-			? style.fillColor
-			: "none";
+		options.isClosedShape === true ? normalizeFillColor(style.fillColor) : "none";
 	const strokeDasharray = normalizeDashArray(style.dashArray);
 	const strokeDashoffset =
 		style.dashOffset !== undefined && Number.isFinite(style.dashOffset)

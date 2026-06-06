@@ -1,16 +1,27 @@
-import type { DrawingPoint, DrawingStroke, DrawingTool, DrawingValue } from './components/DrawingSurface';
+import type { DrawingPoint, DrawingStroke, DrawingStrokeStyle, DrawingTool, DrawingValue } from './components/DrawingSurface';
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
-export function createStroke(tool: DrawingTool, strokeColor?: string, strokeWidth?: number): DrawingStroke {
+export function createStroke(tool: DrawingTool, style?: DrawingStrokeStyle): DrawingStroke;
+export function createStroke(tool: DrawingTool, strokeColor?: string, strokeWidth?: number): DrawingStroke;
+export function createStroke(
+  tool: DrawingTool,
+  styleOrStrokeColor: DrawingStrokeStyle | string = {},
+  strokeWidth?: number
+): DrawingStroke {
+  const style =
+    typeof styleOrStrokeColor === 'string'
+      ? { strokeColor: styleOrStrokeColor, strokeWidth }
+      : styleOrStrokeColor;
+
   return {
     id: generateId(),
     tool,
     points: [],
-    strokeColor,
-    strokeWidth,
+    ...style,
+    dashArray: style.dashArray ? [...style.dashArray] : undefined,
   };
 }
 

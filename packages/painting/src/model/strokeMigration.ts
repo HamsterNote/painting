@@ -13,6 +13,10 @@ type StrokeLike = {
   readonly points?: unknown;
   readonly strokeColor?: unknown;
   readonly strokeWidth?: unknown;
+  readonly dashArray?: unknown;
+  readonly dashOffset?: unknown;
+  readonly fillColor?: unknown;
+  readonly fillOpacity?: unknown;
 };
 
 type ValueLike = {
@@ -66,11 +70,22 @@ function clonePoints(points: unknown): DrawingPointV2[] {
   });
 }
 
+function cloneDashArray(dashArray: unknown): number[] | undefined {
+  if (!Array.isArray(dashArray)) {
+    return undefined;
+  }
+
+  return dashArray.every((value): value is number => typeof value === 'number' && Number.isFinite(value))
+    ? [...dashArray]
+    : undefined;
+}
+
 function buildStroke(stroke: StrokeLike, tool: DrawingStrokeToolV2): DrawingStrokeV2 | null {
   if (typeof stroke.id !== 'string') {
     return null;
   }
 
+  const dashArray = cloneDashArray(stroke.dashArray);
   const base = {
     schemaVersion: DRAWING_STROKE_SCHEMA_VERSION,
     id: stroke.id,
@@ -78,6 +93,14 @@ function buildStroke(stroke: StrokeLike, tool: DrawingStrokeToolV2): DrawingStro
     ...(typeof stroke.strokeColor === 'string' ? { strokeColor: stroke.strokeColor } : {}),
     ...(typeof stroke.strokeWidth === 'number' && Number.isFinite(stroke.strokeWidth)
       ? { strokeWidth: stroke.strokeWidth }
+      : {}),
+    ...(dashArray ? { dashArray } : {}),
+    ...(typeof stroke.dashOffset === 'number' && Number.isFinite(stroke.dashOffset)
+      ? { dashOffset: stroke.dashOffset }
+      : {}),
+    ...(typeof stroke.fillColor === 'string' ? { fillColor: stroke.fillColor } : {}),
+    ...(typeof stroke.fillOpacity === 'number' && Number.isFinite(stroke.fillOpacity)
+      ? { fillOpacity: stroke.fillOpacity }
       : {}),
   };
 

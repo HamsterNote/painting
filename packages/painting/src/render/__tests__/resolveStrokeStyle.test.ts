@@ -29,8 +29,8 @@ describe("resolveStrokeStyle", () => {
 		});
 	});
 
-	it("omits undefined empty or invalid dash arrays", () => {
-		for (const dashArray of [undefined, [], [4, Number.POSITIVE_INFINITY], [-1, 2]]) {
+	it("omits undefined empty all-zero or invalid dash arrays", () => {
+		for (const dashArray of [undefined, [], [0], [0, 0], [4, Number.POSITIVE_INFINITY], [-1, 2]]) {
 			expect(
 				resolveStrokeStyle(
 					{ dashArray },
@@ -38,6 +38,18 @@ describe("resolveStrokeStyle", () => {
 				).strokeDasharray,
 			).toBeUndefined();
 		}
+	});
+
+	it("treats fill color none as no closed-shape fill", () => {
+		expect(
+			resolveStrokeStyle(
+				{ fillColor: "none", fillOpacity: 0.25 },
+				{ fallbackColor: "black", fallbackWidth: 1, isClosedShape: true },
+			),
+		).toMatchObject({
+			fill: "none",
+			fillOpacity: undefined,
+		});
 	});
 
 	it("omits non-finite dash offsets", () => {

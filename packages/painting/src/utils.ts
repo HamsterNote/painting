@@ -1,4 +1,7 @@
 import type { DrawingPoint, DrawingStroke, DrawingValue } from './components/DrawingSurface';
+import type { DrawingStrokeV2 } from './model/strokes';
+
+type PickableStroke = DrawingStroke | DrawingStrokeV2;
 
 function distanceSqPointToSegment(point: DrawingPoint, a: DrawingPoint, b: DrawingPoint): number {
   const dx = b.x - a.x;
@@ -59,7 +62,113 @@ function distanceSqPointToRect(point: DrawingPoint, first: DrawingPoint, last: D
   return dx * dx + dy * dy;
 }
 
-function distanceSqPointToStroke(point: DrawingPoint, stroke: DrawingStroke): number {
+function pointInRect(point: DrawingPoint, first: DrawingPoint, last: DrawingPoint): boolean {
+  const minX = Math.min(first.x, last.x);
+  const maxX = Math.max(first.x, last.x);
+  const minY = Math.min(first.y, last.y);
+  const maxY = Math.max(first.y, last.y);
+
+  return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY;
+}
+
+function distanceSqPointToEllipse(point: DrawingPoint, first: DrawingPoint, last: DrawingPoint): number {
+  const centerX = (first.x + last.x) / 2;
+  const centerY = (first.y + last.y) / 2;
+  const rx = Math.abs(last.x - first.x) / 2;
+  const ry = Math.abs(last.y - first.y) / 2;
+
+  if (rx === 0 || ry === 0) {
+    return distanceSqPointToSegment(point, first, last);
+  }
+
+  const normalizedX = (point.x - centerX) / rx;
+  const normalizedY = (point.y - centerY) / ry;
+  const angle = Math.atan2(normalizedY, normalizedX);
+  const closestX = centerX + rx * Math.cos(angle);
+  const closestY = centerY + ry * Math.sin(angle);
+  const dx = point.x - closestX;
+  const dy = point.y - closestY;
+
+  return dx * dx + dy * dy;
+}
+
+function pointInEllipse(point: DrawingPoint, first: DrawingPoint, last: DrawingPoint): boolean {
+  const centerX = (first.x + last.x) / 2;
+  const centerY = (first.y + last.y) / 2;
+  const rx = Math.abs(last.x - first.x) / 2;
+  const ry = Math.abs(last.y - first.y) / 2;
+
+  if (rx === 0 || ry === 0) {
+    return false;
+  }
+
+  const normalizedX = (point.x - centerX) / rx;
+  const normalizedY = (point.y - centerY) / ry;
+  return normalizedX * normalizedX + normalizedY * normalizedY <= 1;
+}
+
+function distanceSqPointToPolygon(point: DrawingPoint, points: DrawingPoint[]): number {
+  if (points.length < 2) {
+    return distanceSqPointToPolyline(point, points);
+  }
+
+  let min = distanceSqPointToPolyline(point, points);
+  const closingDistance = distanceSqPointToSegment(point, points[points.length - 1], points[0]);
+  if (closingDistance < min) {
+    min = closingDistance;
+  }
+
+  return min;
+}
+
+function pointInPolygon(point: DrawingPoint, points: DrawingPoint[]): boolean {
+  if (points.length < 3) {
+    return false;
+  }
+
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const a = points[i];
+    const b = points[j];
+    const intersects =
+      a.y > point.y !== b.y > point.y &&
+      point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x;
+
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+}
+
+function hasRenderedFill(stroke: PickableStroke): boolean {
+  return stroke.fillColor !== undefined && stroke.fillColor !== 'none';
+}
+
+function pointInClosedShape(point: DrawingPoint, stroke: PickableStroke): boolean {
+  const { points, tool } = stroke;
+
+  if (points.length < 2) {
+    return false;
+  }
+
+  if (tool === 'rect') {
+    return pointInRect(point, points[0], points[points.length - 1]);
+  }
+
+  if (tool === 'ellipse') {
+    return pointInEllipse(point, points[0], points[points.length - 1]);
+  }
+
+  if (tool === 'polygon') {
+    return pointInPolygon(point, points);
+  }
+
+  return false;
+}
+
+function distanceSqPointToStroke(point: DrawingPoint, stroke: PickableStroke): number {
   const { points, tool } = stroke;
 
   if (points.length === 0) {
@@ -68,6 +177,18 @@ function distanceSqPointToStroke(point: DrawingPoint, stroke: DrawingStroke): nu
 
   if (tool === 'rect' && points.length >= 2) {
     return distanceSqPointToRect(point, points[0], points[points.length - 1]);
+  }
+
+  if (hasRenderedFill(stroke) && pointInClosedShape(point, stroke)) {
+    return 0;
+  }
+
+  if (tool === 'ellipse' && points.length >= 2) {
+    return distanceSqPointToEllipse(point, points[0], points[points.length - 1]);
+  }
+
+  if (tool === 'polygon' && points.length >= 2) {
+    return distanceSqPointToPolygon(point, points);
   }
 
   if (tool === 'line' && points.length >= 2) {
@@ -116,12 +237,12 @@ export function clearStrokes(value: DrawingValue): DrawingValue {
  * @param maxDistance - Optional maximum distance threshold. If the closest stroke
  *   is farther than this distance, returns `null`. Used for object eraser radius.
  */
-export function pick(point: DrawingPoint, strokes: DrawingStroke[], maxDistance?: number): DrawingStroke | null {
+export function pick<TStroke extends PickableStroke>(point: DrawingPoint, strokes: TStroke[], maxDistance?: number): TStroke | null {
   if (strokes.length === 0) {
     return null;
   }
 
-  let bestStroke: DrawingStroke = strokes[0];
+  let bestStroke: TStroke = strokes[0];
   let bestDistSq: number = distanceSqPointToStroke(point, strokes[0]);
 
   for (let i = 1; i < strokes.length; i++) {

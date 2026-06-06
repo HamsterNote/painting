@@ -33,3 +33,9 @@
 - Decision: add `packages/painting/src/interaction/reducer.ts` as a standalone pure reducer with the exact action discriminants `POINTER_DOWN`, `POINTER_MOVE`, `POINTER_UP`, `POINTER_CANCEL`, `KEY_DOWN`, `TOOL_CHANGE`, `BLUR`, `RESET_REQUEST`, and `SHIFT_CHANGE`; pointer actions carry already-normalized canvas-local `{ x, y }` points plus optional pointer/gesture metadata.
 - Decision: completion and reset are modeled as one-step idle-state signals rather than side effects. Successful stroke completion returns `{ phase: 'idle', tool, completedStroke: { tool, points } }`; reset returns `{ phase: 'idle', tool, shouldResetViewport: true }`. Future DrawingSurface integration can consume these fields and then continue from ordinary idle state.
 - Decision: line supports both drag-shape mode and continuous placement. `POINTER_DOWN` on tool `line` defaults to `drawingDragShape`; callers opt into continuous `placingLine` with `mode: 'place'`, keeping current drag-line behavior available for later integration tasks.
+
+## 2026-06-07 Task: 7
+
+- Decision: keep dash/fill rendering centralized in `packages/painting/src/render/resolveStrokeStyle.ts` and pass component-level style as renderer fallbacks, with persisted stroke fields taking precedence.
+- Decision: model closed-shape fallback width separately from open stroke fallback width. Closed shapes default to `1` and allow explicit `0`; open tools still normalize invalid or `< 1` prop widths to the existing visual fallback.
+- Decision: treat fill-only eraser selection as geometry containment for closed shapes rather than inflating stroke distance; this makes interior clicks deterministic for filled rect/ellipse/polygon while preserving normal line/pen distance behavior.

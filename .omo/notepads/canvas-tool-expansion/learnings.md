@@ -37,3 +37,10 @@
 - Continuous line completion is explicit: double-click (`POINTER_DOWN` with `detail: 2`) commits only when at least 2 distinct vertices exist; Escape, blur, tool change, pointer cancel, and reset all cancel without `completedStroke`.
 - Bezier placement uses a fixed `[start, cp1, cp2, end]` tuple with `pendingPointIndex`; the fourth canvas-local click immediately emits the idle `completedStroke`, while partial Bezier previews remain active state only.
 - The reducer intentionally stores `shiftHeld` in drawable in-progress phases, but leaves idle/pan/pinch untouched; future integration can apply snapping without adding extra global state.
+
+## 2026-06-07 Task: 7
+
+- `DrawingSurfaceProps` now accepts `dashArray`, `dashOffset`, `fillColor`, and `fillOpacity`; new active strokes snapshot those fields, while existing controlled strokes can still render with component-level fallback style props.
+- `resolveStrokeStyle` is the single normalization point for rendering: open tools always resolve `fill: "none"`, closed tools omit stroke attrs when `strokeWidth === 0`, all-zero dash arrays such as `[0]` are solid, and `fillColor: "none"` disables fill opacity.
+- Closed-shape rendering uses fallback stroke width `1` independently from open pen/line fallback width `2`, so pen/line keep the existing `< 1` clamp while rect/ellipse/polygon can be fill-only with `strokeWidth: 0`.
+- Eraser hit-testing now supports filled closed-shape interiors for rect, ellipse, and polygon in addition to stroke-distance picking; fill-only rect deletion is covered through both `utils.pick` and `DrawingSurface` tests.

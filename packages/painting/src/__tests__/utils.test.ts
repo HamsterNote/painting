@@ -1,4 +1,5 @@
 import type { DrawingPoint, DrawingStroke, DrawingValue } from '../components/DrawingSurface';
+import type { DrawingStrokeV2 } from '../model/strokes';
 import { addStroke, removeStroke, updateStroke, clearStrokes, pick } from '../utils';
 
 describe('utils', () => {
@@ -189,6 +190,35 @@ describe('utils', () => {
       const stroke = createMockStroke('1', 'rect', [{ x: 0, y: 0 }, { x: 10, y: 10 }]);
       const result = pick({ x: 5, y: 5 }, [stroke]);
       expect(result?.id).toBe('1');
+    });
+
+    it('picks fill-only rect by interior point even with a small eraser radius', () => {
+      const stroke: DrawingStroke = {
+        id: 'fill-only-rect',
+        tool: 'rect',
+        points: [{ x: 0, y: 0 }, { x: 10, y: 10 }],
+        strokeWidth: 0,
+        fillColor: '#ff0000',
+      };
+
+      const result = pick({ x: 5, y: 5 }, [stroke], 1);
+
+      expect(result?.id).toBe('fill-only-rect');
+    });
+
+    it('picks v2 fill-only polygon by interior point', () => {
+      const stroke: DrawingStrokeV2 = {
+        schemaVersion: 2,
+        id: 'fill-only-polygon',
+        tool: 'polygon',
+        points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: 10 }],
+        strokeWidth: 0,
+        fillColor: '#ff0000',
+      };
+
+      const result = pick({ x: 5, y: 5 }, [stroke], 1);
+
+      expect(result?.id).toBe('fill-only-polygon');
     });
 
     it('handles stroke with empty points', () => {

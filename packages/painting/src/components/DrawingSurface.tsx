@@ -32,7 +32,16 @@ export type DrawingStroke = {
 	points: DrawingPoint[];
 	strokeColor?: string;
 	strokeWidth?: number;
+	dashArray?: number[];
+	dashOffset?: number;
+	fillColor?: string;
+	fillOpacity?: number;
 };
+
+export type DrawingStrokeStyle = Pick<
+	DrawingStroke,
+	"strokeColor" | "strokeWidth" | "dashArray" | "dashOffset" | "fillColor" | "fillOpacity"
+>;
 
 export type DrawingValue = {
 	strokes: DrawingStroke[];
@@ -51,6 +60,14 @@ export type DrawingSurfaceProps = {
 	strokeColor?: string;
 	/** Stroke width. Defaults to 2. Non-finite or < 1 values resolve to 2. */
 	strokeWidth?: number;
+	/** Numeric SVG dash segments. Invalid arrays render as a solid stroke. */
+	dashArray?: number[];
+	/** Numeric SVG dash offset. Non-finite values are ignored. */
+	dashOffset?: number;
+	/** Closed-shape fill color. Open tools always render with fill="none". */
+	fillColor?: string;
+	/** Closed-shape fill opacity. Defaults to 1 when a fill color is rendered. */
+	fillOpacity?: number;
 	/** Enable velocity-adaptive stroke smoothing. Default: true. */
 	strokeSmoothing?: boolean | DrawingStrokeSmoothingOptions;
 	/** Allowed input methods. Defaults to ['touch', 'mouse', 'pen']. */
@@ -132,6 +149,10 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		onChange,
 		strokeColor,
 		strokeWidth,
+		dashArray,
+		dashOffset,
+		fillColor,
+		fillOpacity,
 		strokeSmoothing,
 		inputMethods,
 		pressure,
@@ -147,12 +168,27 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 
 	const resolvedColor =
 		strokeColor && strokeColor.trim() !== "" ? strokeColor : "black";
-	const resolvedWidth =
+	const resolvedOpenWidth =
 		typeof strokeWidth === "number" &&
 		Number.isFinite(strokeWidth) &&
 		strokeWidth >= 1
 			? strokeWidth
 			: 2;
+	const resolvedClosedWidth =
+		typeof strokeWidth === "number" &&
+		Number.isFinite(strokeWidth) &&
+		strokeWidth >= 0
+			? strokeWidth
+			: 1;
+	const resolvedDashArray = dashArray ? [...dashArray] : undefined;
+	const resolvedDashOffset =
+		typeof dashOffset === "number" && Number.isFinite(dashOffset)
+			? dashOffset
+			: undefined;
+	const resolvedFillOpacity =
+		typeof fillOpacity === "number" && Number.isFinite(fillOpacity)
+			? fillOpacity
+			: undefined;
 
 	const resolvedSamplingRate =
 		typeof samplingRate === "number" &&
@@ -170,7 +206,13 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 					strokes: defaultValue.strokes.map((stroke) => ({
 						...stroke,
 						strokeColor: stroke.strokeColor ?? resolvedColor,
-						strokeWidth: stroke.strokeWidth ?? resolvedWidth,
+						strokeWidth:
+							stroke.strokeWidth ??
+							(stroke.tool === "rect" ? resolvedClosedWidth : resolvedOpenWidth),
+						dashArray: stroke.dashArray ?? resolvedDashArray,
+						dashOffset: stroke.dashOffset ?? resolvedDashOffset,
+						fillColor: stroke.fillColor ?? fillColor,
+						fillOpacity: stroke.fillOpacity ?? resolvedFillOpacity,
 					})),
 				}
 			: undefined;
@@ -190,7 +232,12 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 	const removeStrokeRef = useRef(removeStroke);
 	const clearActiveStrokeRef = useRef<(() => void) | null>(null);
 	const resolvedColorRef = useRef(resolvedColor);
-	const resolvedWidthRef = useRef(resolvedWidth);
+	const resolvedOpenWidthRef = useRef(resolvedOpenWidth);
+	const resolvedClosedWidthRef = useRef(resolvedClosedWidth);
+	const resolvedDashArrayRef = useRef(resolvedDashArray);
+	const resolvedDashOffsetRef = useRef(resolvedDashOffset);
+	const resolvedFillColorRef = useRef(fillColor);
+	const resolvedFillOpacityRef = useRef(resolvedFillOpacity);
 	const strokesRef = useRef(strokes);
 	const pressureRef = useRef(pressure);
 	const inputMethodsRef = useRef<DrawingInputMethod[]>(DEFAULT_INPUT_METHODS);
@@ -209,7 +256,12 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 	removeStrokeRef.current = removeStroke;
 	strokesRef.current = strokes;
 	resolvedColorRef.current = resolvedColor;
-	resolvedWidthRef.current = resolvedWidth;
+	resolvedOpenWidthRef.current = resolvedOpenWidth;
+	resolvedClosedWidthRef.current = resolvedClosedWidth;
+	resolvedDashArrayRef.current = resolvedDashArray;
+	resolvedDashOffsetRef.current = resolvedDashOffset;
+	resolvedFillColorRef.current = fillColor;
+	resolvedFillOpacityRef.current = resolvedFillOpacity;
 	pressureRef.current = pressure;
 	inputMethodsRef.current = inputMethods ?? DEFAULT_INPUT_METHODS;
 	smoothingOptionsRef.current = resolveStrokeSmoothingOptions(strokeSmoothing);
@@ -363,8 +415,12 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 							? { x: pathItem.event.clientX, y: pathItem.event.clientY }
 							: pathItem.point;
 					const localPoint = getLocalCoordinates(sourcePoint.x, sourcePoint.y);
-					const eraserRadius = resolvedWidthRef.current / 2;
-					const hitStroke = pickStroke(localPoint, strokesRef.current, eraserRadius);
+					const eraserRadius = resolvedOpenWidthRef.current / 2;
+					const pickableStrokes = strokesRef.current.map((stroke) => ({
+						...stroke,
+						fillColor: stroke.fillColor ?? resolvedFillColorRef.current,
+					}));
+					const hitStroke = pickStroke(localPoint, pickableStrokes, eraserRadius);
 					if (hitStroke) {
 						removeStrokeRef.current(hitStroke.id);
 					}
@@ -374,11 +430,18 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			}
 
 			if (!currentActiveStroke) {
-				currentActiveStroke = createStroke(
-					effectiveToolRef.current,
-					resolvedColorRef.current,
-					resolvedWidthRef.current,
-				);
+				const currentTool = effectiveToolRef.current;
+				currentActiveStroke = createStroke(currentTool, {
+					strokeColor: resolvedColorRef.current,
+					strokeWidth:
+						currentTool === "rect"
+							? resolvedClosedWidthRef.current
+							: resolvedOpenWidthRef.current,
+					dashArray: resolvedDashArrayRef.current,
+					dashOffset: resolvedDashOffsetRef.current,
+					fillColor: resolvedFillColorRef.current,
+					fillOpacity: resolvedFillOpacityRef.current,
+				});
 				isDrawingRef.current = true;
 				processedPathLengthRef.current = 0;
 				lastSampledTimestampRef.current = 0;
@@ -475,7 +538,12 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 						key={stroke.id}
 						stroke={stroke}
 						fallbackColor={resolvedColor}
-						fallbackWidth={resolvedWidth}
+						fallbackWidth={resolvedOpenWidth}
+						fallbackClosedWidth={resolvedClosedWidth}
+						fallbackDashArray={resolvedDashArray}
+						fallbackDashOffset={resolvedDashOffset}
+						fallbackFillColor={fillColor}
+						fallbackFillOpacity={resolvedFillOpacity}
 					/>
 				))}
 
@@ -484,7 +552,12 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 						stroke={activeStroke}
 						isActive={true}
 						fallbackColor={resolvedColor}
-						fallbackWidth={resolvedWidth}
+						fallbackWidth={resolvedOpenWidth}
+						fallbackClosedWidth={resolvedClosedWidth}
+						fallbackDashArray={resolvedDashArray}
+						fallbackDashOffset={resolvedDashOffset}
+						fallbackFillColor={fillColor}
+						fallbackFillOpacity={resolvedFillOpacity}
 					/>
 				)}
 			</svg>

@@ -14,6 +14,11 @@ export type StrokeRendererProps = {
 	isActive?: boolean;
 	fallbackColor: string;
 	fallbackWidth: number;
+	fallbackClosedWidth?: number;
+	fallbackDashArray?: number[];
+	fallbackDashOffset?: number;
+	fallbackFillColor?: string;
+	fallbackFillOpacity?: number;
 };
 
 type StyledRenderableStroke = RenderableStroke & StrokeStyleFields;
@@ -76,12 +81,20 @@ function styleFor(
 	stroke: StyledRenderableStroke,
 	fallbackColor: string,
 	fallbackWidth: number,
+	fallbackClosedWidth: number | undefined,
+	fallbackStyle: StrokeStyleFields,
 	isClosedShape: boolean,
 ) {
-	return resolveStrokeStyle(stroke, {
+	return resolveStrokeStyle({
+		...stroke,
+		dashArray: stroke.dashArray ?? fallbackStyle.dashArray,
+		dashOffset: stroke.dashOffset ?? fallbackStyle.dashOffset,
+		fillColor: stroke.fillColor ?? fallbackStyle.fillColor,
+		fillOpacity: stroke.fillOpacity ?? fallbackStyle.fillOpacity,
+	}, {
 		isClosedShape,
 		fallbackColor,
-		fallbackWidth,
+		fallbackWidth: isClosedShape ? (fallbackClosedWidth ?? fallbackWidth) : fallbackWidth,
 	});
 }
 
@@ -89,9 +102,11 @@ function renderPen(
 	stroke: StyledRenderableStroke,
 	fallbackColor: string,
 	fallbackWidth: number,
+	fallbackClosedWidth: number | undefined,
+	fallbackStyle: StrokeStyleFields,
 	opacity: "0.7" | undefined,
 ): ReactElement | ReactElement[] | null {
-	const style = styleFor(stroke, fallbackColor, fallbackWidth, false);
+	const style = styleFor(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, false);
 
 	if (hasPressureData(stroke) && stroke.points.length >= 2) {
 		return stroke.points.slice(1).map((point, index) => {
@@ -104,6 +119,7 @@ function renderPen(
 					y1={previousPoint.y}
 					x2={point.x}
 					y2={point.y}
+					fill={style.fill}
 					stroke={style.stroke}
 					strokeWidth={(style.strokeWidth ?? fallbackWidth) * normalizePointPressure(point.pressure)}
 					strokeDasharray={style.strokeDasharray}
@@ -136,6 +152,8 @@ function renderV1Stroke(
 	stroke: StyledRenderableStroke & DrawingStroke,
 	fallbackColor: string,
 	fallbackWidth: number,
+	fallbackClosedWidth: number | undefined,
+	fallbackStyle: StrokeStyleFields,
 	opacity: "0.7" | undefined,
 ): ReactElement | ReactElement[] | null {
 	const endpoints = firstAndLast(stroke.points);
@@ -150,7 +168,7 @@ function renderV1Stroke(
 		if (!bbox) {
 			return null;
 		}
-		const style = styleFor(stroke, fallbackColor, fallbackWidth, true);
+		const style = styleFor(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, true);
 		return (
 			<rect
 				key={opacity ? undefined : stroke.id}
@@ -170,7 +188,7 @@ function renderV1Stroke(
 	}
 
 	if (stroke.tool === "line") {
-		const style = styleFor(stroke, fallbackColor, fallbackWidth, false);
+		const style = styleFor(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, false);
 		return (
 			<line
 				key={opacity ? undefined : stroke.id}
@@ -189,13 +207,15 @@ function renderV1Stroke(
 		);
 	}
 
-	return renderPen(stroke, fallbackColor, fallbackWidth, opacity);
+	return renderPen(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, opacity);
 }
 
 function renderV2Stroke(
 	stroke: StyledRenderableStroke & DrawingStrokeV2,
 	fallbackColor: string,
 	fallbackWidth: number,
+	fallbackClosedWidth: number | undefined,
+	fallbackStyle: StrokeStyleFields,
 	opacity: "0.7" | undefined,
 ): ReactElement | ReactElement[] | null {
 	const endpoints = firstAndLast(stroke.points);
@@ -207,9 +227,9 @@ function renderV2Stroke(
 
 	switch (stroke.tool) {
 		case "pen":
-			return renderPen(stroke, fallbackColor, fallbackWidth, opacity);
+			return renderPen(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, opacity);
 		case "line": {
-			const style = styleFor(stroke, fallbackColor, fallbackWidth, false);
+			const style = styleFor(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, false);
 			return (
 				<line
 					key={opacity ? undefined : stroke.id}
@@ -232,7 +252,7 @@ function renderV2Stroke(
 			if (!bbox) {
 				return null;
 			}
-			const style = styleFor(stroke, fallbackColor, fallbackWidth, true);
+			const style = styleFor(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, true);
 			return (
 				<rect
 					key={opacity ? undefined : stroke.id}
@@ -255,7 +275,7 @@ function renderV2Stroke(
 			if (!bbox) {
 				return null;
 			}
-			const style = styleFor(stroke, fallbackColor, fallbackWidth, true);
+			const style = styleFor(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, true);
 			return (
 				<ellipse
 					key={opacity ? undefined : stroke.id}
@@ -274,7 +294,7 @@ function renderV2Stroke(
 			);
 		}
 		case "polygon": {
-			const style = styleFor(stroke, fallbackColor, fallbackWidth, true);
+			const style = styleFor(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, true);
 			return (
 				<polygon
 					key={opacity ? undefined : stroke.id}
@@ -294,7 +314,7 @@ function renderV2Stroke(
 			if (!d) {
 				return null;
 			}
-			const style = styleFor(stroke, fallbackColor, fallbackWidth, false);
+			const style = styleFor(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, false);
 			return (
 				<path
 					key={opacity ? undefined : stroke.id}
@@ -324,15 +344,26 @@ export function StrokeRenderer({
 	isActive,
 	fallbackColor,
 	fallbackWidth,
+	fallbackClosedWidth,
+	fallbackDashArray,
+	fallbackDashOffset,
+	fallbackFillColor,
+	fallbackFillOpacity,
 }: StrokeRendererProps): ReactElement | null {
 	if (stroke.points.length === 0) {
 		return null;
 	}
 
 	const opacity = isActive ? "0.7" : undefined;
+	const fallbackStyle = {
+		dashArray: fallbackDashArray,
+		dashOffset: fallbackDashOffset,
+		fillColor: fallbackFillColor,
+		fillOpacity: fallbackFillOpacity,
+	};
 	const rendered = isV2Stroke(stroke)
-		? renderV2Stroke(stroke, fallbackColor, fallbackWidth, opacity)
-		: renderV1Stroke(stroke, fallbackColor, fallbackWidth, opacity);
+		? renderV2Stroke(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, opacity)
+		: renderV1Stroke(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, opacity);
 
 	if (Array.isArray(rendered)) {
 		return <Fragment>{rendered}</Fragment>;
