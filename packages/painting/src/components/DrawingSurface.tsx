@@ -17,7 +17,7 @@ import { StrokeRenderer } from "../render/StrokeRenderer";
 import { pick as pickStroke } from "../utils";
 
 // Public drawing contract types
-export type DrawingTool = "pen" | "line" | "rect" | "eraser";
+export type DrawingTool = "pen" | "line" | "rect" | "ellipse" | "eraser";
 export type DrawingInputMethod = "touch" | "mouse" | "pen";
 
 export type DrawingPoint = {
@@ -100,7 +100,43 @@ type DragFinger = {
 };
 
 function isDrawingToolSupported(tool: unknown): tool is DrawingTool {
-	return tool === "pen" || tool === "line" || tool === "rect" || tool === "eraser";
+	return (
+		tool === "pen" ||
+		tool === "line" ||
+		tool === "rect" ||
+		tool === "ellipse" ||
+		tool === "eraser"
+	);
+}
+
+function isClosedShapeTool(tool: DrawingTool): boolean {
+	return tool === "rect" || tool === "ellipse";
+}
+
+// Shift 约束：把首末两点收敛为正方形 bbox，保持原拖拽方向（dx/dy 符号不变），
+// 长边吸住短边。仅对闭合 bbox 形状（rect/ellipse）生效；其他工具或点数 < 2 时原样返回。
+function applyShiftConstraintToShape(stroke: DrawingStroke): DrawingStroke {
+	if (!isClosedShapeTool(stroke.tool) || stroke.points.length < 2) {
+		return stroke;
+	}
+	const first = stroke.points[0];
+	const last = stroke.points[stroke.points.length - 1];
+	const dx = last.x - first.x;
+	const dy = last.y - first.y;
+	const size = Math.max(Math.abs(dx), Math.abs(dy));
+	if (size === 0) {
+		return stroke;
+	}
+	const signX = dx === 0 ? 1 : Math.sign(dx);
+	const signY = dy === 0 ? 1 : Math.sign(dy);
+	const constrainedLast: DrawingPoint = {
+		...last,
+		x: first.x + signX * size,
+		y: first.y + signY * size,
+	};
+	const nextPoints = stroke.points.slice(0, -1);
+	nextPoints.push(constrainedLast);
+	return { ...stroke, points: nextPoints };
 }
 
 const DEFAULT_INPUT_METHODS: DrawingInputMethod[] = ["touch", "mouse", "pen"];
@@ -208,7 +244,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 						strokeColor: stroke.strokeColor ?? resolvedColor,
 						strokeWidth:
 							stroke.strokeWidth ??
-							(stroke.tool === "rect" ? resolvedClosedWidth : resolvedOpenWidth),
+							(isClosedShapeTool(stroke.tool) ? resolvedClosedWidth : resolvedOpenWidth),
 						dashArray: stroke.dashArray ?? resolvedDashArray,
 						dashOffset: stroke.dashOffset ?? resolvedDashOffset,
 						fillColor: stroke.fillColor ?? fillColor,
@@ -249,6 +285,9 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 	const pendingPointsRef = useRef<TimedDrawingPoint[]>([]);
 	// 跟踪最后一个被保留的采样点的时间戳，用于按采样率降采样
 	const lastSampledTimestampRef = useRef(0);
+	// Shift 键按下状态：用于 rect/ellipse 工具的正方形/正圆约束。
+	// 不依赖 DragInputEvent（multi-drag 未透传 shiftKey），改用 window 监听。
+	const shiftPressedRef = useRef(false);
 
 	effectiveToolRef.current = effectiveTool;
 	isDrawingEnabledRef.current = isDrawingEnabled;
@@ -337,7 +376,15 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				currentActiveStroke = appendPoint(currentActiveStroke, point);
 			}
 
-			setActiveStroke(currentActiveStroke);
+			// 闭合形状（rect/ellipse）按住 Shift 时实时显示正方形/正圆预览；
+			// 渲染用的 stroke 单独构造，currentActiveStroke 保留原始拖拽点，
+			// 这样松开 Shift 后能立即恢复无约束预览。
+			const renderableStroke =
+				shiftPressedRef.current && isClosedShapeTool(currentActiveStroke.tool)
+					? applyShiftConstraintToShape(currentActiveStroke)
+					: currentActiveStroke;
+
+			setActiveStroke(renderableStroke);
 		};
 
 		// Flush any pending points immediately (used in auto mode and cleanup)
@@ -433,10 +480,9 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				const currentTool = effectiveToolRef.current;
 				currentActiveStroke = createStroke(currentTool, {
 					strokeColor: resolvedColorRef.current,
-					strokeWidth:
-						currentTool === "rect"
-							? resolvedClosedWidthRef.current
-							: resolvedOpenWidthRef.current,
+					strokeWidth: isClosedShapeTool(currentTool)
+						? resolvedClosedWidthRef.current
+						: resolvedOpenWidthRef.current,
 					dashArray: resolvedDashArrayRef.current,
 					dashOffset: resolvedDashOffsetRef.current,
 					fillColor: resolvedFillColorRef.current,
@@ -487,17 +533,47 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			if (effectiveToolRef.current !== "eraser") {
 				const stroke = currentActiveStroke;
 				if (stroke && isValidStroke(stroke)) {
-					addStrokeRef.current(stroke);
+					const committed =
+						shiftPressedRef.current && isClosedShapeTool(stroke.tool)
+							? applyShiftConstraintToShape(stroke)
+							: stroke;
+					addStrokeRef.current(committed);
 				}
 			}
 
 			clearActiveStroke();
 		});
 
+		const handleKeyChange = (event: KeyboardEvent) => {
+			if (event.key !== "Shift") return;
+			const nextPressed = event.type === "keydown";
+			if (shiftPressedRef.current === nextPressed) return;
+			shiftPressedRef.current = nextPressed;
+			// 拖拽进行中时立刻刷新预览：按下时收敛到正方形/正圆，松开时恢复原始 bbox。
+			if (
+				currentActiveStroke &&
+				isClosedShapeTool(currentActiveStroke.tool)
+			) {
+				const renderableStroke = nextPressed
+					? applyShiftConstraintToShape(currentActiveStroke)
+					: currentActiveStroke;
+				setActiveStroke(renderableStroke);
+			}
+		};
+		const handleBlur = () => {
+			shiftPressedRef.current = false;
+		};
+		window.addEventListener("keydown", handleKeyChange);
+		window.addEventListener("keyup", handleKeyChange);
+		window.addEventListener("blur", handleBlur);
+
 		return () => {
 			if (clearActiveStrokeRef.current === clearCurrentActiveStroke) {
 				clearActiveStrokeRef.current = null;
 			}
+			window.removeEventListener("keydown", handleKeyChange);
+			window.removeEventListener("keyup", handleKeyChange);
+			window.removeEventListener("blur", handleBlur);
 			drag.destroy();
 			pointerInputController.destroy();
 		};

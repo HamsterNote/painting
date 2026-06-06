@@ -1627,4 +1627,384 @@ describe('DrawingSurface', () => {
       expect(activePath?.getAttribute('d')).toContain('15');
     });
   });
+
+  describe('ellipse tool', () => {
+    function emitEllipseDrag(
+      instance: MockDragInstance,
+      startX: number,
+      startY: number,
+      endX: number,
+      endY: number,
+    ) {
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: startX, y: startY }, event: { pointerType: 'pen', button: 0 } },
+            { point: { x: endX, y: endY }, event: { pointerType: 'pen', button: 0 } },
+          ]),
+        ]);
+      });
+    }
+
+    it('renders active ellipse preview during drag', () => {
+      const { container } = render(<DrawingSurface testID="drawing-surface-host" tool="ellipse" />);
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      emitEllipseDrag(instance, 20, 40, 120, 90);
+
+      const ellipseEl = container.querySelector('ellipse');
+      expect(ellipseEl).toBeTruthy();
+      expect(ellipseEl.getAttribute('fill')).toBe('none');
+      expect(ellipseEl.getAttribute('opacity')).toBe('0.7');
+    });
+
+    it('commits completed ellipse stroke on drag all-end', () => {
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} onChange={onChange} tool="ellipse" />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      emitEllipseDrag(instance, 20, 40, 120, 90);
+
+      expect(container.querySelector('ellipse')).toBeTruthy();
+      expect(onChange).not.toHaveBeenCalled();
+
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      });
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0][0].strokes).toHaveLength(1);
+      expect(onChange.mock.calls[0][0].strokes[0].tool).toBe('ellipse');
+      expect(container.querySelector('ellipse')).toBeNull();
+    });
+
+    it('ellipse bbox produces correct cx cy rx ry from drag corners', () => {
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} onChange={onChange} tool="ellipse" />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      // local (10,20) -> (110,70) after subtracting host rect (left=10, top=20)
+      emitEllipseDrag(instance, 20, 40, 120, 90);
+
+      const ellipseEl = container.querySelector('ellipse');
+      expect(ellipseEl).toBeTruthy();
+      expect(Number(ellipseEl.getAttribute('cx'))).toBe(60);
+      expect(Number(ellipseEl.getAttribute('cy'))).toBe(45);
+      expect(Number(ellipseEl.getAttribute('rx'))).toBe(50);
+      expect(Number(ellipseEl.getAttribute('ry'))).toBe(25);
+    });
+
+    it('reverse drag ellipse normalizes to non-negative rx ry', () => {
+      const { container } = render(<DrawingSurface testID="drawing-surface-host" tool="ellipse" />);
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      // drag from bottom-right to top-left
+      emitEllipseDrag(instance, 120, 90, 20, 40);
+
+      const ellipseEl = container.querySelector('ellipse');
+      expect(ellipseEl).toBeTruthy();
+      expect(Number(ellipseEl.getAttribute('rx'))).toBe(50);
+      expect(Number(ellipseEl.getAttribute('ry'))).toBe(25);
+      expect(Number(ellipseEl.getAttribute('cx'))).toBe(60);
+      expect(Number(ellipseEl.getAttribute('cy'))).toBe(45);
+    });
+
+    it('active ellipse preview respects strokeColor and strokeWidth', () => {
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          tool="ellipse"
+          strokeColor="#00ff00"
+          strokeWidth={9}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      emitEllipseDrag(instance, 20, 40, 120, 90);
+
+      const ellipseEl = container.querySelector('ellipse');
+      expect(ellipseEl).toBeTruthy();
+      expect(ellipseEl.getAttribute('stroke')).toBe('#00ff00');
+      expect(ellipseEl.getAttribute('stroke-width')).toBe('9');
+    });
+
+    it('committed ellipse tool stroke uses closed-shape default strokeWidth of 1', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} onChange={onChange} tool="ellipse" />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      emitEllipseDrag(instance, 20, 40, 120, 90);
+
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      });
+
+      expect(onChange.mock.calls[0][0].strokes[0].strokeWidth).toBe(1);
+    });
+
+    it('eraser deletes a filled ellipse by clicking inside the fill', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{
+            strokes: [
+              {
+                id: 'erasable-ellipse',
+                tool: 'ellipse' as const,
+                points: [
+                  { x: 0, y: 0 },
+                  { x: 40, y: 40 },
+                ],
+                strokeWidth: 0,
+                fillColor: '#ff0000',
+              },
+            ],
+          }}
+          onChange={onChange}
+          tool="eraser"
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            {
+              point: { x: 30, y: 40 },
+              event: { pointerType: 'pen', button: 0, clientX: 30, clientY: 40 },
+            },
+          ]),
+        ]);
+      });
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0][0].strokes).toEqual([]);
+    });
+  });
+
+  describe('Shift constraint', () => {
+    function shiftDown() {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift' }));
+    }
+
+    function shiftUp() {
+      window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift' }));
+    }
+
+    it('Shift+rect produces square (equal width/height)', () => {
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} onChange={onChange} tool="rect" />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      shiftDown();
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 20, y: 40 }, event: { pointerType: 'pen', button: 0 } },
+            // drag 100x50 -> constrained to 100x100 (max abs delta preserves sign)
+            { point: { x: 120, y: 90 }, event: { pointerType: 'pen', button: 0 } },
+          ]),
+        ]);
+      });
+
+      const rectEl = container.querySelector('rect');
+      expect(rectEl).toBeTruthy();
+      const w = Number(rectEl.getAttribute('width'));
+      const h = Number(rectEl.getAttribute('height'));
+      expect(w).toBe(h);
+      expect(w).toBe(100);
+      // constrained: x=10, y=20, size=100 (drag dy positive so y unchanged)
+      expect(Number(rectEl.getAttribute('x'))).toBe(10);
+      expect(Number(rectEl.getAttribute('y'))).toBe(20);
+    });
+
+    it('Shift+ellipse produces circle (equal rx/ry)', () => {
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} onChange={onChange} tool="ellipse" />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      shiftDown();
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 20, y: 40 }, event: { pointerType: 'pen', button: 0 } },
+            // drag 100x50 -> constrained to 100x100
+            { point: { x: 120, y: 90 }, event: { pointerType: 'pen', button: 0 } },
+          ]),
+        ]);
+      });
+
+      const ellipseEl = container.querySelector('ellipse');
+      expect(ellipseEl).toBeTruthy();
+      const rx = Number(ellipseEl.getAttribute('rx'));
+      const ry = Number(ellipseEl.getAttribute('ry'));
+      expect(rx).toBe(ry);
+      expect(rx).toBe(50);
+      // cx = 10 + 100/2 = 60, cy = 20 + 100/2 = 70
+      expect(Number(ellipseEl.getAttribute('cx'))).toBe(60);
+      expect(Number(ellipseEl.getAttribute('cy'))).toBe(70);
+    });
+
+    it('Shift not held leaves rect unconstrained', () => {
+      const { container } = render(<DrawingSurface testID="drawing-surface-host" tool="rect" />);
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 20, y: 40 }, event: { pointerType: 'pen', button: 0 } },
+            { point: { x: 120, y: 90 }, event: { pointerType: 'pen', button: 0 } },
+          ]),
+        ]);
+      });
+
+      const rectEl = container.querySelector('rect');
+      expect(Number(rectEl.getAttribute('width'))).toBe(100);
+      expect(Number(rectEl.getAttribute('height'))).toBe(50);
+    });
+
+    it('Shift+rect commits square stroke', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} onChange={onChange} tool="rect" />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      shiftDown();
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 20, y: 40 }, event: { pointerType: 'pen', button: 0 } },
+            { point: { x: 120, y: 90 }, event: { pointerType: 'pen', button: 0 } },
+          ]),
+        ]);
+      });
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      });
+      shiftUp();
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const stroke = onChange.mock.calls[0][0].strokes[0];
+      const dx = Math.abs(stroke.points[1].x - stroke.points[0].x);
+      const dy = Math.abs(stroke.points[1].y - stroke.points[0].y);
+      expect(dx).toBe(dy);
+      expect(dx).toBe(100);
+    });
+
+    it('Shift+ellipse commits circle stroke', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} onChange={onChange} tool="ellipse" />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      shiftDown();
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 20, y: 40 }, event: { pointerType: 'pen', button: 0 } },
+            { point: { x: 120, y: 90 }, event: { pointerType: 'pen', button: 0 } },
+          ]),
+        ]);
+      });
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      });
+      shiftUp();
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const stroke = onChange.mock.calls[0][0].strokes[0];
+      const dx = Math.abs(stroke.points[1].x - stroke.points[0].x);
+      const dy = Math.abs(stroke.points[1].y - stroke.points[0].y);
+      expect(dx).toBe(dy);
+      expect(dx).toBe(100);
+    });
+
+    it('Shift state resets on window blur', () => {
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} onChange={onChange} tool="rect" />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      shiftDown();
+      window.dispatchEvent(new Event('blur'));
+
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 20, y: 40 }, event: { pointerType: 'pen', button: 0 } },
+            { point: { x: 120, y: 90 }, event: { pointerType: 'pen', button: 0 } },
+          ]),
+        ]);
+      });
+
+      const rectEl = container.querySelector('rect');
+      expect(Number(rectEl.getAttribute('width'))).toBe(100);
+      expect(Number(rectEl.getAttribute('height'))).toBe(50);
+    });
+
+    it('pen tool is not affected by Shift constraint', () => {
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} onChange={onChange} tool="pen" />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      shiftDown();
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 20, y: 40 }, event: { pointerType: 'pen', button: 0 } },
+            { point: { x: 120, y: 90 }, event: { pointerType: 'pen', button: 0 } },
+          ]),
+        ]);
+      });
+
+      const path = container.querySelector('path');
+      expect(path).toBeTruthy();
+      // Pen should render as path, not constrained shape
+      expect(path.getAttribute('d')).toBe('M 10 20 L 110 70');
+    });
+  });
 });

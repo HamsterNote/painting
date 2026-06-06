@@ -428,7 +428,7 @@ Wave 5: Task 14 (Demo integration), Task 15 (regression/CI hardening) — depend
 
   **Commit**: YES | Message: `feat(style): support dashed strokes and filled shapes` | Files: [`packages/painting/src/**/*.ts`, `packages/painting/src/**/*.tsx`, `packages/painting/src/__tests__/*.test.tsx`, `packages/painting/src/__tests__/*.test.ts`]
 
-- [ ] 8. Ellipse Tool and Shift Constraints: add ellipse plus rect square/circle behavior
+- [x] 8. Ellipse Tool and Shift Constraints: add ellipse plus rect square/circle behavior
 
   **What to do**: Add `ellipse` stroke variant and tool support. Encode ellipse geometry as two canvas-local bounding-box corners (`start`, `end`) to match current rect drag semantics and simplify migration mental model. Renderer converts bbox to SVG `<ellipse cx cy rx ry>`. Shift constraint applies live during drag: rect becomes square and ellipse becomes circle based on the larger absolute delta while preserving drag direction; releasing Shift reverts to unconstrained preview before commit unless Shift is held at commit. Add keydown/keyup handling scoped to active drawing.
   **Must NOT do**: Do not add ellipse rotation. Do not constrain line angles. Do not introduce center-first ellipse UX.

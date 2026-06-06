@@ -187,6 +187,30 @@ function renderV1Stroke(
 		);
 	}
 
+	if (stroke.tool === "ellipse") {
+		const bbox = getBbox(stroke.points);
+		if (!bbox) {
+			return null;
+		}
+		const style = styleFor(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, true);
+		return (
+			<ellipse
+				key={opacity ? undefined : stroke.id}
+				cx={bbox.x + bbox.width / 2}
+				cy={bbox.y + bbox.height / 2}
+				rx={bbox.width / 2}
+				ry={bbox.height / 2}
+				fill={style.fill}
+				stroke={style.stroke}
+				strokeWidth={style.strokeWidth}
+				strokeDasharray={style.strokeDasharray}
+				strokeDashoffset={style.strokeDashoffset}
+				fillOpacity={style.fillOpacity}
+				opacity={opacity}
+			/>
+		);
+	}
+
 	if (stroke.tool === "line") {
 		const style = styleFor(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, false);
 		return (
