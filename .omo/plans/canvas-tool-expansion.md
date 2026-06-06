@@ -471,7 +471,7 @@ Wave 5: Task 14 (Demo integration), Task 15 (regression/CI hardening) — depend
 
   **Commit**: YES | Message: `feat(tools): add ellipse and shift constraints` | Files: [`packages/painting/src/**/*.ts`, `packages/painting/src/**/*.tsx`, `packages/painting/src/__tests__/*.test.tsx`, `tests/ui/playground.spec.ts`]
 
-- [ ] 9. Polygon Tool: click-to-add closed shape with fill/dash support
+- [x] 9. Polygon Tool: click-to-add closed shape with fill/dash support
 
   **What to do**: Add `polygon` stroke variant with ordered canvas-local vertices. Interaction: click adds vertex; moving pointer previews edge from last vertex to cursor; double-click, Esc, or click within 10 canvas px of first vertex finishes if at least 3 distinct vertices; fewer vertices discard. Render committed polygon as SVG `<polygon>` or `<path>` closed path using shared style resolver. Preview shows current vertices plus cursor edge and optional closing edge when near first vertex.
   **Must NOT do**: Do not add vertex editing, regular polygon mode, snap-to-grid, or polygon open/closed toggle. Polygon is always closed when committed.

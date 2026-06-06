@@ -2007,4 +2007,275 @@ describe('DrawingSurface', () => {
       expect(path.getAttribute('d')).toBe('M 10 20 L 110 70');
     });
   });
+
+  describe('polygon tool', () => {
+    // jsdom does not implement PointerEvent constructor; dispatch a synthetic Event
+    // with pointer-shaped fields (clientX/Y, pointerId, button) — the polygon listener
+    // only reads property values, not prototype membership.
+    function pointerDown(host: HTMLElement, clientX: number, clientY: number, detail = 1) {
+      const event = new Event('pointerdown', { bubbles: true, cancelable: true });
+      Object.assign(event, { clientX, clientY, pointerId: 1, button: 0, detail });
+      act(() => {
+        host.dispatchEvent(event);
+      });
+    }
+
+    function pointerMove(host: HTMLElement, clientX: number, clientY: number) {
+      const event = new Event('pointermove', { bubbles: true, cancelable: true });
+      Object.assign(event, { clientX, clientY, pointerId: 1 });
+      act(() => {
+        host.dispatchEvent(event);
+      });
+    }
+
+    function doubleClick(host: HTMLElement, clientX: number, clientY: number) {
+      const event = new Event('dblclick', { bubbles: true, cancelable: true });
+      Object.assign(event, { clientX, clientY });
+      act(() => {
+        host.dispatchEvent(event);
+      });
+    }
+
+    function escapeKey() {
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      });
+    }
+
+    it('commits a polygon stroke after four clicks plus dblclick finish', () => {
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="polygon"
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      pointerDown(host, 20, 30);
+      pointerDown(host, 60, 30);
+      pointerDown(host, 60, 80);
+      pointerDown(host, 20, 80);
+      // dblclick finishes when >= 3 distinct vertices
+      doubleClick(host, 20, 80);
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const committed = onChange.mock.calls[0][0].strokes[0];
+      expect(committed.tool).toBe('polygon');
+      expect(committed.schemaVersion).toBe(2);
+      expect(committed.points).toEqual([
+        { x: 10, y: 10 },
+        { x: 50, y: 10 },
+        { x: 50, y: 60 },
+        { x: 10, y: 60 },
+      ]);
+      // Active polygon preview cleared after commit
+      expect(container.querySelectorAll('polygon').length).toBe(0);
+    });
+
+    it('does not commit polygon when dblclick fires with fewer than three distinct vertices', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="polygon"
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      pointerDown(host, 20, 30);
+      pointerDown(host, 60, 30);
+      doubleClick(host, 60, 30);
+
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('Escape cancels in-progress polygon without committing', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="polygon"
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      pointerDown(host, 20, 30);
+      pointerDown(host, 60, 30);
+      pointerDown(host, 60, 80);
+      escapeKey();
+
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('clicking within 10 canvas px of first vertex closes polygon when >= 3 distinct vertices', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="polygon"
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      // First vertex at canvas (10, 10); host offset adds (10, 20) -> client (20, 30)
+      pointerDown(host, 20, 30);
+      pointerDown(host, 60, 30);
+      pointerDown(host, 60, 80);
+      // Click near first vertex (within 10 px) — should close
+      pointerDown(host, 25, 35);
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const committed = onChange.mock.calls[0][0].strokes[0];
+      expect(committed.tool).toBe('polygon');
+      // Closing click is NOT added as a vertex — first three remain
+      expect(committed.points).toEqual([
+        { x: 10, y: 10 },
+        { x: 50, y: 10 },
+        { x: 50, y: 60 },
+      ]);
+    });
+
+    it('renders polygon preview with placed vertices plus cursor edge', () => {
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          tool="polygon"
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      pointerDown(host, 20, 30);
+      pointerDown(host, 60, 30);
+      pointerMove(host, 80, 80);
+
+      const polygon = container.querySelector('polygon');
+      expect(polygon).toBeTruthy();
+      // Preview includes 2 placed vertices + cursor as third point
+      expect(polygon?.getAttribute('points')).toBe('10,10 50,10 70,60');
+      expect(polygon?.getAttribute('opacity')).toBe('0.7');
+    });
+
+    it('switching tool mid-polygon cancels the in-progress placement', () => {
+      const onChange = jest.fn();
+      const { container, rerender } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="polygon"
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      pointerDown(host, 20, 30);
+      pointerDown(host, 60, 30);
+      pointerDown(host, 60, 80);
+
+      // Switch to pen — polygon state must reset, no commit
+      rerender(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="pen"
+        />,
+      );
+
+      expect(onChange).not.toHaveBeenCalled();
+      expect(container.querySelector('polygon')).toBeNull();
+    });
+
+    it('eraser deletes a filled polygon by clicking inside the fill', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{
+            strokes: [
+              {
+                id: 'erasable-polygon',
+                tool: 'polygon' as const,
+                points: [
+                  { x: 0, y: 0 },
+                  { x: 40, y: 0 },
+                  { x: 40, y: 40 },
+                  { x: 0, y: 40 },
+                ],
+                strokeWidth: 0,
+                fillColor: '#ff0000',
+              },
+            ],
+          }}
+          onChange={onChange}
+          tool="eraser"
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            {
+              point: { x: 30, y: 40 },
+              event: { pointerType: 'pen', button: 0, clientX: 30, clientY: 40 },
+            },
+          ]),
+        ]);
+      });
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0][0].strokes).toEqual([]);
+    });
+
+    it('commits polygon with v2 schemaVersion and respects strokeColor/strokeWidth/fill props', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="polygon"
+          strokeColor="#00aa00"
+          strokeWidth={3}
+          fillColor="#aabbcc"
+          fillOpacity={0.5}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      pointerDown(host, 20, 30);
+      pointerDown(host, 60, 30);
+      pointerDown(host, 60, 80);
+      doubleClick(host, 60, 80);
+
+      const committed = onChange.mock.calls[0][0].strokes[0];
+      expect(committed).toMatchObject({
+        tool: 'polygon',
+        schemaVersion: 2,
+        strokeColor: '#00aa00',
+        strokeWidth: 3,
+        fillColor: '#aabbcc',
+        fillOpacity: 0.5,
+      });
+    });
+  });
 });

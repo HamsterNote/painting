@@ -1,9 +1,14 @@
 /// <reference path="../multi-drag.d.ts" />
 
 import { Drag, DragOperationType } from "@system-ui-js/multi-drag";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import { useCanvas } from "../hooks/useCanvas";
 import { createPointerInputController } from "../input/pointerInputController";
+import {
+	createInitialState,
+	interactionReducer,
+} from "../interaction/reducer";
+import { DRAWING_STROKE_SCHEMA_VERSION, type PolygonStrokeV2 } from "../model/strokes";
 import {
 	appendPoint,
 	createStroke,
@@ -17,7 +22,7 @@ import { StrokeRenderer } from "../render/StrokeRenderer";
 import { pick as pickStroke } from "../utils";
 
 // Public drawing contract types
-export type DrawingTool = "pen" | "line" | "rect" | "ellipse" | "eraser";
+export type DrawingTool = "pen" | "line" | "rect" | "ellipse" | "polygon" | "eraser";
 export type DrawingInputMethod = "touch" | "mouse" | "pen";
 
 export type DrawingPoint = {
@@ -105,18 +110,25 @@ function isDrawingToolSupported(tool: unknown): tool is DrawingTool {
 		tool === "line" ||
 		tool === "rect" ||
 		tool === "ellipse" ||
+		tool === "polygon" ||
 		tool === "eraser"
 	);
 }
 
 function isClosedShapeTool(tool: DrawingTool): boolean {
+	return tool === "rect" || tool === "ellipse" || tool === "polygon";
+}
+
+// Shift constraint only applies to bbox-defined shapes (rect/ellipse).
+// Polygon is closed but defined by vertex list, not bbox; shift has no meaning there.
+function isBboxShapeTool(tool: DrawingTool): boolean {
 	return tool === "rect" || tool === "ellipse";
 }
 
 // Shift 约束：把首末两点收敛为正方形 bbox，保持原拖拽方向（dx/dy 符号不变），
 // 长边吸住短边。仅对闭合 bbox 形状（rect/ellipse）生效；其他工具或点数 < 2 时原样返回。
 function applyShiftConstraintToShape(stroke: DrawingStroke): DrawingStroke {
-	if (!isClosedShapeTool(stroke.tool) || stroke.points.length < 2) {
+	if (!isBboxShapeTool(stroke.tool) || stroke.points.length < 2) {
 		return stroke;
 	}
 	const first = stroke.points[0];
@@ -140,6 +152,18 @@ function applyShiftConstraintToShape(stroke: DrawingStroke): DrawingStroke {
 }
 
 const DEFAULT_INPUT_METHODS: DrawingInputMethod[] = ["touch", "mouse", "pen"];
+
+function generateStrokeId(): string {
+	return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+function verticesEndWith(
+	vertices: { x: number; y: number }[],
+	point: { x: number; y: number },
+): boolean {
+	const last = vertices[vertices.length - 1];
+	return last !== undefined && last.x === point.x && last.y === point.y;
+}
 
 function isDrawingInput(
 	event: DragInputEvent | undefined,
@@ -259,6 +283,15 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		onChange,
 		defaultValue: initialDefaultValueRef.current,
 	});
+
+	// Click-to-place interaction state (polygon tool). The standalone reducer from Task 5
+	// owns all vertex/cursor bookkeeping and completion semantics; we only translate native
+	// pointer events to reducer actions and observe `completedStroke` to commit.
+	const [interactionState, dispatchInteraction] = useReducer(
+		interactionReducer,
+		effectiveTool,
+		createInitialState,
+	);
 	const isDrawingRef = useRef(false);
 	const processedPathLengthRef = useRef(0);
 	const effectiveToolRef = useRef(effectiveTool);
@@ -380,7 +413,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			// 渲染用的 stroke 单独构造，currentActiveStroke 保留原始拖拽点，
 			// 这样松开 Shift 后能立即恢复无约束预览。
 			const renderableStroke =
-				shiftPressedRef.current && isClosedShapeTool(currentActiveStroke.tool)
+				shiftPressedRef.current && isBboxShapeTool(currentActiveStroke.tool)
 					? applyShiftConstraintToShape(currentActiveStroke)
 					: currentActiveStroke;
 
@@ -435,6 +468,11 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		drag.addEventListener(DragOperationType.Move, (fingers: DragFinger[]) => {
 			if (!isDrawingEnabledRef.current) {
 				clearActiveStroke();
+				return;
+			}
+
+			// Polygon uses click-to-place, not drag — handled by a separate effect below.
+			if (effectiveToolRef.current === "polygon") {
 				return;
 			}
 
@@ -534,7 +572,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				const stroke = currentActiveStroke;
 				if (stroke && isValidStroke(stroke)) {
 					const committed =
-						shiftPressedRef.current && isClosedShapeTool(stroke.tool)
+						shiftPressedRef.current && isBboxShapeTool(stroke.tool)
 							? applyShiftConstraintToShape(stroke)
 							: stroke;
 					addStrokeRef.current(committed);
@@ -552,7 +590,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			// 拖拽进行中时立刻刷新预览：按下时收敛到正方形/正圆，松开时恢复原始 bbox。
 			if (
 				currentActiveStroke &&
-				isClosedShapeTool(currentActiveStroke.tool)
+				isBboxShapeTool(currentActiveStroke.tool)
 			) {
 				const renderableStroke = nextPressed
 					? applyShiftConstraintToShape(currentActiveStroke)
@@ -578,6 +616,136 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			pointerInputController.destroy();
 		};
 	}, [clearActiveStroke, getLocalCoordinates, setActiveStroke]);
+
+	// Tool switch: reset reducer state. Cancels any in-progress polygon placement
+	// when user picks a different tool mid-draw (or vice versa).
+	useEffect(() => {
+		dispatchInteraction({ type: "TOOL_CHANGE", tool: effectiveTool });
+	}, [effectiveTool]);
+
+	// When the reducer reaches a `completedStroke` (3+ distinct polygon vertices,
+	// finished via dblclick / Escape / close-loop click), commit a v2 polygon stroke
+	// and clear the completion marker so we don't double-commit on re-render.
+	useEffect(() => {
+		if (interactionState.phase !== "idle" || !interactionState.completedStroke) {
+			return;
+		}
+		const completed = interactionState.completedStroke;
+		if (completed.tool === "polygon" && completed.points.length >= 3) {
+			const polygon: PolygonStrokeV2 = {
+				schemaVersion: DRAWING_STROKE_SCHEMA_VERSION,
+				id: generateStrokeId(),
+				tool: "polygon",
+				points: completed.points.map((point) => ({ x: point.x, y: point.y })),
+				strokeColor: resolvedColorRef.current,
+				strokeWidth: resolvedClosedWidthRef.current,
+				dashArray: resolvedDashArrayRef.current
+					? [...resolvedDashArrayRef.current]
+					: undefined,
+				dashOffset: resolvedDashOffsetRef.current,
+				fillColor: resolvedFillColorRef.current,
+				fillOpacity: resolvedFillOpacityRef.current,
+			};
+			addStrokeRef.current(polygon as unknown as DrawingStroke);
+		}
+		dispatchInteraction({ type: "TOOL_CHANGE", tool: effectiveTool });
+	}, [interactionState, effectiveTool]);
+
+	// Click-to-place listeners are only wired when the polygon tool is active.
+	// Re-mounting on tool change is intentional: a different tool means a different
+	// set of pointer semantics, so the listener lifetime tracks the tool.
+	useEffect(() => {
+		if (effectiveTool !== "polygon" || !isDrawingEnabled) {
+			return undefined;
+		}
+		const host = hostRef.current;
+		if (!host) {
+			return undefined;
+		}
+
+		const toCanvasPoint = (clientX: number, clientY: number) => {
+			const rect = host.getBoundingClientRect();
+			return { x: clientX - rect.left, y: clientY - rect.top };
+		};
+
+		const handlePointerDown = (event: PointerEvent) => {
+			if (event.button !== undefined && event.button !== 0) {
+				return;
+			}
+			const point = toCanvasPoint(event.clientX, event.clientY);
+			dispatchInteraction({
+				type: "POINTER_DOWN",
+				point,
+				pointerId: event.pointerId,
+				detail: event.detail,
+			});
+		};
+
+		const handlePointerMove = (event: PointerEvent) => {
+			const point = toCanvasPoint(event.clientX, event.clientY);
+			dispatchInteraction({
+				type: "POINTER_MOVE",
+				point,
+				pointerId: event.pointerId,
+			});
+		};
+
+		const handleDoubleClick = (event: MouseEvent) => {
+			// Forward as a POINTER_DOWN with detail=2 — the reducer recognises
+			// that as the polygon/line/bezier finish signal.
+			const point = toCanvasPoint(event.clientX, event.clientY);
+			dispatchInteraction({
+				type: "POINTER_DOWN",
+				point,
+				detail: 2,
+			});
+		};
+
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				dispatchInteraction({ type: "KEY_DOWN", key: "Escape" });
+			}
+		};
+
+		const handleBlur = () => {
+			dispatchInteraction({ type: "BLUR" });
+		};
+
+		host.addEventListener("pointerdown", handlePointerDown);
+		host.addEventListener("pointermove", handlePointerMove);
+		host.addEventListener("dblclick", handleDoubleClick);
+		window.addEventListener("keydown", handleKeyDown);
+		window.addEventListener("blur", handleBlur);
+
+		return () => {
+			host.removeEventListener("pointerdown", handlePointerDown);
+			host.removeEventListener("pointermove", handlePointerMove);
+			host.removeEventListener("dblclick", handleDoubleClick);
+			window.removeEventListener("keydown", handleKeyDown);
+			window.removeEventListener("blur", handleBlur);
+		};
+	}, [effectiveTool, isDrawingEnabled]);
+
+	// Derive polygon preview stroke directly from reducer state. Vertices placed so far
+	// plus the cursor edge form a v2 polygon (auto-closes back to vertex 0 via SVG <polygon>).
+	const polygonPreviewStroke: PolygonStrokeV2 | null =
+		interactionState.phase === "placingPolygon"
+			? {
+					schemaVersion: DRAWING_STROKE_SCHEMA_VERSION,
+					id: "polygon-preview",
+					tool: "polygon",
+					points: interactionState.cursorPoint &&
+						!verticesEndWith(interactionState.vertices, interactionState.cursorPoint)
+						? [...interactionState.vertices, interactionState.cursorPoint]
+						: [...interactionState.vertices],
+					strokeColor: resolvedColor,
+					strokeWidth: resolvedClosedWidth,
+					dashArray: resolvedDashArray ? [...resolvedDashArray] : undefined,
+					dashOffset: resolvedDashOffset,
+					fillColor,
+					fillOpacity: resolvedFillOpacity,
+				}
+			: null;
 
 	return (
 		<div
@@ -626,6 +794,20 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				{activeStroke && (
 					<StrokeRenderer
 						stroke={activeStroke}
+						isActive={true}
+						fallbackColor={resolvedColor}
+						fallbackWidth={resolvedOpenWidth}
+						fallbackClosedWidth={resolvedClosedWidth}
+						fallbackDashArray={resolvedDashArray}
+						fallbackDashOffset={resolvedDashOffset}
+						fallbackFillColor={fillColor}
+						fallbackFillOpacity={resolvedFillOpacity}
+					/>
+				)}
+
+				{polygonPreviewStroke && (
+					<StrokeRenderer
+						stroke={polygonPreviewStroke}
 						isActive={true}
 						fallbackColor={resolvedColor}
 						fallbackWidth={resolvedOpenWidth}
