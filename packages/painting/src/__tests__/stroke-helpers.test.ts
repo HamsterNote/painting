@@ -1,3 +1,4 @@
+import { migrateStroke, normalizeDrawingValue } from '../model/strokeMigration';
 import {
   appendPoint,
   createDrawingValue,
@@ -10,8 +11,50 @@ import {
   pointsToPolyline,
   pointsToSvgPath,
 } from '../stroke-helpers';
+import { v1DrawingValue, v1PenStroke } from './fixtures/v1/strokes';
+import { v2DrawingValue, v2PenStroke } from './fixtures/v2/strokes';
 
 describe('stroke-helpers', () => {
+  describe('versioned stroke model migration', () => {
+    it('normalizes frozen v1 fixtures to v2 golden fixtures without mutation', () => {
+      const beforeNormalize = JSON.parse(JSON.stringify(v1DrawingValue));
+      const result = normalizeDrawingValue(v1DrawingValue);
+
+      expect(result).toEqual(v2DrawingValue);
+      expect(v1DrawingValue).toEqual(beforeNormalize);
+      expect(result).not.toBe(v1DrawingValue);
+      expect(result.strokes).not.toBe(v1DrawingValue.strokes);
+      expect(result.strokes[0]).not.toBe(v1DrawingValue.strokes[0]);
+      expect(result.strokes[0].points).not.toBe(v1DrawingValue.strokes[0].points);
+      expect(result.strokes[0].points[0]).not.toBe(v1DrawingValue.strokes[0].points[0]);
+    });
+
+    it('migrates a single frozen v1 stroke to a new v2 object', () => {
+      const result = migrateStroke(v1PenStroke);
+
+      expect(result).toEqual(v2PenStroke);
+      expect(result).not.toBe(v1PenStroke);
+      expect(result?.points).not.toBe(v1PenStroke.points);
+    });
+
+    it('ignores unknown future tools without throwing', () => {
+      const futureStroke = Object.freeze({
+        id: 'future-1',
+        tool: 'future-tool',
+        points: Object.freeze([Object.freeze({ x: 1, y: 2 })]),
+      });
+      const value = Object.freeze({
+        strokes: Object.freeze([v1PenStroke, futureStroke]),
+      });
+
+      expect(() => normalizeDrawingValue(value)).not.toThrow();
+      expect(normalizeDrawingValue(value)).toEqual({
+        schemaVersion: 2,
+        strokes: [v2PenStroke],
+      });
+    });
+  });
+
   describe('createStroke', () => {
     it('creates stroke with generated id', () => {
       const stroke = createStroke('pen');
