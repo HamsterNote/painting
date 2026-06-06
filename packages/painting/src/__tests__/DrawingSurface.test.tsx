@@ -1966,7 +1966,9 @@ describe('DrawingSurface', () => {
       const instance = latestDragInstance();
 
       shiftDown();
-      window.dispatchEvent(new Event('blur'));
+      act(() => {
+        window.dispatchEvent(new Event('blur'));
+      });
 
       act(() => {
         instance.emit(multiDragMock.DragOperationType.Move, [
@@ -2758,6 +2760,248 @@ describe('DrawingSurface', () => {
         );
       });
       expect(container.querySelector('[data-crosshair]')).toBeNull();
+    });
+  });
+
+  describe('viewport gestures', () => {
+    function pointerEvent(
+      type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel',
+      props: { clientX: number; clientY: number; pointerId?: number; pointerType?: string; button?: number },
+    ): Event {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.assign(event, {
+        pointerId: 1,
+        pointerType: 'touch',
+        button: 0,
+        ...props,
+      });
+      return event;
+    }
+
+    function dispatchHostPointer(
+      host: HTMLElement,
+      type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel',
+      props: { clientX: number; clientY: number; pointerId?: number; pointerType?: string; button?: number },
+    ) {
+      act(() => {
+        host.dispatchEvent(pointerEvent(type, props));
+      });
+    }
+
+    function dispatchDocumentPointer(
+      type: 'pointermove' | 'pointerup' | 'pointercancel',
+      props: { clientX: number; clientY: number; pointerId?: number; pointerType?: string; button?: number },
+    ) {
+      act(() => {
+        document.dispatchEvent(pointerEvent(type, props));
+      });
+    }
+
+    it('default props ignore a two-pointer pinch attempt', () => {
+      render(<DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} />);
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 60, clientY: 80 });
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 2, clientX: 80, clientY: 80 });
+      dispatchDocumentPointer('pointermove', { pointerId: 1, clientX: 40, clientY: 80 });
+      dispatchDocumentPointer('pointermove', { pointerId: 2, clientX: 100, clientY: 80 });
+
+      expect(host.getAttribute('data-scale')).toBe('1');
+      expect(host.getAttribute('data-tx')).toBe('0');
+      expect(host.getAttribute('data-ty')).toBe('0');
+    });
+
+    it('pinchZoom increases scale and clamps to maxScale', () => {
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          gestures={{ pinchZoom: true, maxScale: 2 }}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 60, clientY: 80 });
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 2, clientX: 80, clientY: 80 });
+      dispatchDocumentPointer('pointermove', { pointerId: 1, clientX: -40, clientY: 80 });
+      dispatchDocumentPointer('pointermove', { pointerId: 2, clientX: 180, clientY: 80 });
+
+      expect(host.getAttribute('data-scale')).toBe('2');
+      expect(host.getAttribute('data-tx')).toBe('-60');
+      expect(host.getAttribute('data-ty')).toBe('-60');
+    });
+
+    it('pinchZoom clamps scale to minScale', () => {
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          gestures={{ pinchZoom: true, minScale: 0.5 }}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 20, clientY: 80 });
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 2, clientX: 120, clientY: 80 });
+      dispatchDocumentPointer('pointermove', { pointerId: 1, clientX: 68, clientY: 80 });
+      dispatchDocumentPointer('pointermove', { pointerId: 2, clientX: 72, clientY: 80 });
+
+      expect(host.getAttribute('data-scale')).toBe('0.5');
+    });
+
+    it('pan moves tx and ty when no drawing tool is active', () => {
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          tool={'none' as unknown as DrawingTool}
+          gestures={{ pan: true }}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 30, clientY: 50 });
+      dispatchDocumentPointer('pointermove', { pointerId: 1, clientX: 55, clientY: 85 });
+
+      expect(host.getAttribute('data-tx')).toBe('25');
+      expect(host.getAttribute('data-ty')).toBe('35');
+      expect(host.getAttribute('data-scale')).toBe('1');
+    });
+
+    it('pan with a drawing tool lets drawing win and commits without panning', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="pen"
+          gestures={{ pan: true }}
+          strokeSmoothing={false}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 30, clientY: 50, pointerType: 'pen' });
+      dispatchDocumentPointer('pointermove', { pointerId: 1, clientX: 55, clientY: 85, pointerType: 'pen' });
+
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            { point: { x: 30, y: 50 }, event: { pointerType: 'pen', button: 0 } },
+            { point: { x: 55, y: 85 }, event: { pointerType: 'pen', button: 0 } },
+          ]),
+        ]);
+        instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      });
+
+      expect(host.getAttribute('data-tx')).toBe('0');
+      expect(host.getAttribute('data-ty')).toBe('0');
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
+        { x: 20, y: 30 },
+        { x: 45, y: 65 },
+      ]);
+    });
+
+    it('resetViewport callable restores viewport and preserves strokes', () => {
+      const value = {
+        strokes: [
+          {
+            id: 'preserved-stroke',
+            tool: 'pen' as const,
+            points: [
+              { x: 0, y: 0 },
+              { x: 20, y: 20 },
+            ],
+          },
+        ],
+      };
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={value}
+          tool={'none' as unknown as DrawingTool}
+          gestures={{ pan: true, pinchZoom: true, reset: true }}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host') as HTMLElement & { resetViewport?: () => void };
+      mockHostRect(host);
+
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 60, clientY: 80 });
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 2, clientX: 80, clientY: 80 });
+      dispatchDocumentPointer('pointermove', { pointerId: 1, clientX: 40, clientY: 80 });
+      dispatchDocumentPointer('pointermove', { pointerId: 2, clientX: 100, clientY: 80 });
+      expect(Number(host.getAttribute('data-scale'))).toBeGreaterThan(1);
+
+      act(() => {
+        host.resetViewport?.();
+      });
+
+      expect(host.getAttribute('data-scale')).toBe('1');
+      expect(host.getAttribute('data-tx')).toBe('0');
+      expect(host.getAttribute('data-ty')).toBe('0');
+      expect(host.getAttribute('data-stroke-count')).toBe('1');
+      expect(container.querySelector('path')?.getAttribute('d')).toBe('M 0 0 L 20 20');
+      expect(value.strokes[0].points).toEqual([
+        { x: 0, y: 0 },
+        { x: 20, y: 20 },
+      ]);
+    });
+
+    it('eraser hits the correct stroke at scale 2 using screen coordinates', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{
+            strokes: [
+              {
+                id: 'scaled-eraser-target',
+                tool: 'pen' as const,
+                points: [
+                  { x: 10, y: 10 },
+                  { x: 20, y: 10 },
+                ],
+                strokeWidth: 2,
+              },
+            ],
+          }}
+          onChange={onChange}
+          tool="eraser"
+          strokeWidth={10}
+          gestures={{ pinchZoom: true, maxScale: 2 }}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const instance = latestDragInstance();
+
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 10, clientY: 20 });
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 2, clientX: 30, clientY: 20 });
+      dispatchDocumentPointer('pointermove', { pointerId: 1, clientX: 0, clientY: 20 });
+      dispatchDocumentPointer('pointermove', { pointerId: 2, clientX: 50, clientY: 20 });
+      expect(host.getAttribute('data-scale')).toBe('2');
+
+      act(() => {
+        instance.emit(multiDragMock.DragOperationType.Move, [
+          finger([
+            {
+              point: { x: 40, y: 40 },
+              event: { pointerType: 'pen', button: 0, clientX: 40, clientY: 40 },
+            },
+          ]),
+        ]);
+      });
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0][0].strokes).toEqual([]);
     });
   });
 });

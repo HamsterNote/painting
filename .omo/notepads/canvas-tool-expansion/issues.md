@@ -9,3 +9,7 @@
 ## 2026-06-07 Task: 7
 
 - No new task-specific tool or implementation issues. Targeted tests, full Jest, typecheck, and build all completed successfully; build emitted only the existing bob package exports warnings.
+
+## Task 13 — Opt-in viewport gestures
+
+- No unresolved Task 13 implementation issues. Verification passed with the existing bob package exports warnings during build; build still exited 0.

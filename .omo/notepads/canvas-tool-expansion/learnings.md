@@ -86,3 +86,9 @@
 - **Two `pointermove` listeners on the same host coexist.** The crosshair effect installs one; the click-to-place effect (polygon/line/bezier) installs another when those tools are active. Both fire independently; neither calls `stopPropagation()` or `preventDefault()`. Multi-drag also subscribes via its own internal listeners on the host, but its handler is gated by gesture state and never blocks the per-effect listeners.
 - **`cursorPointerDownRef` lives outside the effect to survive re-renders.** It is the only piece of crosshair state that must persist across renders without retriggering the effect. State (`cursorState`) is intentionally regular `useState` because every visibility/position change needs to drive a re-render of the overlay.
 - **`cursor && typeof cursor === 'object'` is the correct narrowing.** `cursor !== false && cursor` is NOT sufficient — `cursor` is `false | DrawingCursorOptions | undefined`, and `cursor && cursor !== false` triggers `TS2367` because TS already narrowed away `false` after the truthy check. Use the explicit `typeof` discriminant.
+
+## Task 13 — Opt-in viewport gestures
+
+- DrawingSurface now owns real DrawingViewport state and keeps persisted stroke coordinates canvas-local; only the SVG render path applies the single translate/scale group transform.
+- jsdom gesture tests can use plain Event objects on host/document with pointer-shaped fields; document-level pointermove is needed because the gesture listener tracks active pointers outside the host after pointerdown.
+- Eraser hit testing at zoom must convert screen coordinates through screenToCanvas and divide the hit radius by viewport.scale so screen-space eraser size remains stable.

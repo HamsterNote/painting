@@ -642,7 +642,7 @@ Wave 5: Task 14 (Demo integration), Task 15 (regression/CI hardening) — depend
 
   **Commit**: YES | Message: `feat(cursor): add pointer crosshair overlay` | Files: [`packages/painting/src/components/DrawingSurface.tsx`, `packages/painting/src/**/*.ts`, `packages/painting/src/__tests__/*.test.tsx`, `tests/ui/playground.spec.ts`]
 
-- [ ] 13. Opt-in Viewport Gestures: pan, pinch zoom, reset controls
+- [x] 13. Opt-in Viewport Gestures: pan, pinch zoom, reset controls
 
   **What to do**: Add `gestures?: { pan?: boolean; pinchZoom?: boolean; reset?: boolean; minScale?: number; maxScale?: number }` or equivalent prop. Defaults: all booleans false, min/max `[0.25, 8]`. When enabled, two active pointers enter pinch mode and zoom around their centroid; one-finger pan on empty canvas when `pan` is true and drawing is not active; reset restores viewport only. Apply transform via a single SVG `<g transform>` or equivalent central render group so stored points remain canvas-local. Update hit testing/eraser radius using inverse scale.
   **Must NOT do**: Do not add rotation gestures, bounds clamping to content, inertial scrolling, or default-on behavior. Do not clear strokes on reset.

@@ -1,7 +1,14 @@
 /// <reference path="../multi-drag.d.ts" />
 
 import { Drag, DragOperationType } from "@system-ui-js/multi-drag";
-import { type ReactNode, useCallback, useEffect, useReducer, useRef, useState } from "react";
+import {
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useReducer,
+	useRef,
+	useState,
+} from "react";
 import { useCanvas } from "../hooks/useCanvas";
 import { createPointerInputController } from "../input/pointerInputController";
 import {
@@ -26,6 +33,12 @@ import {
 } from "../stroke-helpers";
 import { StrokeRenderer } from "../render/StrokeRenderer";
 import { pick as pickStroke } from "../utils";
+import {
+	type DrawingViewport,
+	resetViewport as createResetViewport,
+	screenToCanvas,
+	zoomViewportAroundScreenPoint,
+} from "../viewport";
 
 // Public drawing contract types
 export type DrawingTool =
@@ -101,6 +114,19 @@ export type DrawingCursorOptions = {
 	render?: (state: DrawingCursorRenderState) => ReactNode;
 };
 
+export type DrawingSurfaceGestures = {
+	/** Enable one-pointer viewport panning when no drawing tool is active. Defaults to false. */
+	pan?: boolean;
+	/** Enable two-pointer pinch zoom around the active pointers' centroid. Defaults to false. */
+	pinchZoom?: boolean;
+	/** Enable imperative viewport reset controls. Defaults to false. */
+	reset?: boolean;
+	/** Minimum viewport scale for pinch zoom. Defaults to 0.25. */
+	minScale?: number;
+	/** Maximum viewport scale for pinch zoom. Defaults to 8. */
+	maxScale?: number;
+};
+
 export type DrawingSurfaceProps = {
 	/** The drawing tool to use. Defaults to 'pen'. */
 	tool?: DrawingTool;
@@ -136,6 +162,8 @@ export type DrawingSurfaceProps = {
 	 * options object to customize size/color or fully override rendering.
 	 */
 	cursor?: false | DrawingCursorOptions;
+	/** Opt-in viewport gestures. Pan, pinch zoom, and reset all default to disabled. */
+	gestures?: DrawingSurfaceGestures;
 	/** Test identifier. */
 	testID?: string;
 };
@@ -225,6 +253,8 @@ function applyShiftConstraintToShape(stroke: DrawingStroke): DrawingStroke {
 
 const DEFAULT_INPUT_METHODS: DrawingInputMethod[] = ["touch", "mouse", "pen"];
 const LINE_DRAG_THRESHOLD_PX = 4;
+const DEFAULT_MIN_VIEWPORT_SCALE = 0.25;
+const DEFAULT_MAX_VIEWPORT_SCALE = 8;
 
 function generateStrokeId(): string {
 	return Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -284,6 +314,31 @@ function normalizePointPressure(pressure: number | undefined): number {
 		: 1;
 }
 
+function resolveGestureScaleBounds(gestures: DrawingSurfaceGestures | undefined) {
+	const rawMin =
+		typeof gestures?.minScale === "number" && Number.isFinite(gestures.minScale)
+			? gestures.minScale
+			: DEFAULT_MIN_VIEWPORT_SCALE;
+	const rawMax =
+		typeof gestures?.maxScale === "number" && Number.isFinite(gestures.maxScale)
+			? gestures.maxScale
+			: DEFAULT_MAX_VIEWPORT_SCALE;
+	const minScale = Math.max(DEFAULT_MIN_VIEWPORT_SCALE, Math.min(rawMin, rawMax));
+	const maxScale = Math.min(DEFAULT_MAX_VIEWPORT_SCALE, Math.max(rawMin, rawMax));
+
+	return { minScale, maxScale };
+}
+
+function clampGestureScale(
+	scale: number,
+	bounds: { minScale: number; maxScale: number },
+): number {
+	if (Number.isNaN(scale)) {
+		return 1;
+	}
+	return Math.max(bounds.minScale, Math.min(bounds.maxScale, scale));
+}
+
 export function DrawingSurface(props: DrawingSurfaceProps) {
 	const {
 		tool,
@@ -301,9 +356,17 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		pressure,
 		samplingRate,
 		cursor,
+		gestures,
 		testID,
 	} = props;
 	const hostRef = useRef<HTMLDivElement>(null);
+	const [viewport, setViewport] = useState<DrawingViewport>(() =>
+		createResetViewport(),
+	);
+	const viewportRef = useRef<DrawingViewport>(viewport);
+	viewportRef.current = viewport;
+	const gesturesRef = useRef<DrawingSurfaceGestures | undefined>(gestures);
+	gesturesRef.current = gestures;
 
 	const effectiveTool: DrawingTool = isDrawingToolSupported(tool)
 		? tool
@@ -437,6 +500,20 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		[],
 	);
 
+	const getCanvasCoordinates = useCallback(
+		(clientX: number, clientY: number): DrawingPoint => {
+			return screenToCanvas(
+				getLocalCoordinates(clientX, clientY),
+				viewportRef.current,
+			);
+		},
+		[getLocalCoordinates],
+	);
+
+	const resetViewportToDefault = useCallback(() => {
+		setViewport(createResetViewport());
+	}, []);
+
 	const clearActiveStroke = useCallback(() => {
 		clearActiveStrokeRef.current?.();
 		isDrawingRef.current = false;
@@ -475,7 +552,9 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			setPose: () => {},
 		});
 		const pointerInputController = createPointerInputController(host, {
-			gesturesEnabled: false,
+			gesturesEnabled:
+				gesturesRef.current?.pan === true ||
+				gesturesRef.current?.pinchZoom === true,
 		});
 
 		const processPoints = (points: TimedDrawingPoint[]) => {
@@ -584,8 +663,9 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 						pathItem.event.clientY !== undefined
 							? { x: pathItem.event.clientX, y: pathItem.event.clientY }
 							: pathItem.point;
-					const localPoint = getLocalCoordinates(sourcePoint.x, sourcePoint.y);
-					const eraserRadius = resolvedOpenWidthRef.current / 2;
+					const localPoint = getCanvasCoordinates(sourcePoint.x, sourcePoint.y);
+					const eraserRadius =
+						resolvedOpenWidthRef.current / 2 / viewportRef.current.scale;
 					const pickableStrokes = strokesRef.current.map((stroke) => ({
 						...stroke,
 						fillColor: stroke.fillColor ?? resolvedFillColorRef.current,
@@ -605,7 +685,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 					pathItem.event.clientY !== undefined
 						? { x: pathItem.event.clientX, y: pathItem.event.clientY }
 						: pathItem.point;
-				return getLocalCoordinates(sourcePoint.x, sourcePoint.y);
+				return getCanvasCoordinates(sourcePoint.x, sourcePoint.y);
 			});
 
 			// Line is now click-to-place by default. Multi-drag remains the legacy shortcut,
@@ -715,7 +795,237 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			drag.destroy();
 			pointerInputController.destroy();
 		};
-	}, [clearActiveStroke, getLocalCoordinates, setActiveStroke]);
+	}, [clearActiveStroke, getCanvasCoordinates, setActiveStroke]);
+
+	useEffect(() => {
+		const host = hostRef.current;
+		if (!host) {
+			return undefined;
+		}
+
+		type ActivePointer = { x: number; y: number };
+		type GestureMode =
+			| {
+					type: "pan";
+					pointerId: number;
+					startPoint: ActivePointer;
+					startViewport: DrawingViewport;
+				}
+			| {
+					type: "pinch";
+					pointerIds: readonly [number, number];
+					startDistance: number;
+					startViewport: DrawingViewport;
+				};
+
+		const activePointers = new Map<number, ActivePointer>();
+		let gestureMode: GestureMode | null = null;
+
+		const readPointer = (event: Event) => {
+			const pointerLike = event as Event & {
+				clientX?: number;
+				clientY?: number;
+				pointerId?: number;
+				button?: number;
+			};
+			return {
+				clientX: pointerLike.clientX ?? 0,
+				clientY: pointerLike.clientY ?? 0,
+				pointerId: pointerLike.pointerId ?? 1,
+				button: pointerLike.button ?? 0,
+			};
+		};
+
+		const distance = (a: ActivePointer, b: ActivePointer) =>
+			Math.hypot(a.x - b.x, a.y - b.y);
+
+		const centroid = (a: ActivePointer, b: ActivePointer): ActivePointer => ({
+			x: (a.x + b.x) / 2,
+			y: (a.y + b.y) / 2,
+		});
+
+		const tryStartPinch = () => {
+			if (gesturesRef.current?.pinchZoom !== true || activePointers.size < 2) {
+				return;
+			}
+
+			const pointerIds = Array.from(activePointers.keys()).slice(0, 2) as [
+				number,
+				number,
+			];
+			const first = activePointers.get(pointerIds[0]);
+			const second = activePointers.get(pointerIds[1]);
+			if (!first || !second) {
+				return;
+			}
+
+			const startDistance = distance(first, second);
+			if (startDistance === 0) {
+				return;
+			}
+
+			const midpoint = centroid(first, second);
+			gestureMode = {
+				type: "pinch",
+				pointerIds,
+				startDistance,
+				startViewport: viewportRef.current,
+			};
+			dispatchInteraction({
+				type: "POINTER_DOWN",
+				gesture: "pinch",
+				viewport: viewportRef.current,
+				pointerIds,
+				centroid: midpoint,
+			});
+		};
+
+		const handlePointerDown = (event: Event) => {
+			const pointer = readPointer(event);
+			if (pointer.button !== 0) {
+				return;
+			}
+
+			const point = getLocalCoordinates(pointer.clientX, pointer.clientY);
+			activePointers.set(pointer.pointerId, point);
+
+			if (activePointers.size >= 2) {
+				tryStartPinch();
+				return;
+			}
+
+			if (
+				gesturesRef.current?.pan === true &&
+				!isDrawingEnabledRef.current &&
+				!isDrawingRef.current
+			) {
+				gestureMode = {
+					type: "pan",
+					pointerId: pointer.pointerId,
+					startPoint: point,
+					startViewport: viewportRef.current,
+				};
+				dispatchInteraction({
+					type: "POINTER_DOWN",
+					gesture: "pan",
+					viewport: viewportRef.current,
+					pointerId: pointer.pointerId,
+					point,
+				});
+			}
+		};
+
+		const handlePointerMove = (event: Event) => {
+			const pointer = readPointer(event);
+			if (!activePointers.has(pointer.pointerId)) {
+				return;
+			}
+
+			const point = getLocalCoordinates(pointer.clientX, pointer.clientY);
+			activePointers.set(pointer.pointerId, point);
+
+			if (gestureMode?.type === "pan") {
+				if (gestureMode.pointerId !== pointer.pointerId || isDrawingRef.current) {
+					return;
+				}
+				const dx = point.x - gestureMode.startPoint.x;
+				const dy = point.y - gestureMode.startPoint.y;
+				const nextViewport = {
+					scale: gestureMode.startViewport.scale,
+					tx: gestureMode.startViewport.tx + dx,
+					ty: gestureMode.startViewport.ty + dy,
+				};
+				setViewport(nextViewport);
+				dispatchInteraction({
+					type: "POINTER_MOVE",
+					viewport: nextViewport,
+					pointerId: pointer.pointerId,
+					point,
+				});
+				return;
+			}
+
+			if (activePointers.size >= 2 && gestureMode?.type !== "pinch") {
+				tryStartPinch();
+			}
+
+			if (gestureMode?.type === "pinch") {
+				const [firstId, secondId] = gestureMode.pointerIds;
+				const first = activePointers.get(firstId);
+				const second = activePointers.get(secondId);
+				if (!first || !second) {
+					return;
+				}
+
+				const bounds = resolveGestureScaleBounds(gesturesRef.current);
+				const requestedScale = clampGestureScale(
+					gestureMode.startViewport.scale *
+						(distance(first, second) / gestureMode.startDistance),
+					bounds,
+				);
+				const midpoint = centroid(first, second);
+				const nextViewport = zoomViewportAroundScreenPoint(
+					gestureMode.startViewport,
+					midpoint,
+					requestedScale,
+				);
+				setViewport(nextViewport);
+				dispatchInteraction({
+					type: "POINTER_MOVE",
+					viewport: nextViewport,
+					centroid: midpoint,
+					pointerId: pointer.pointerId,
+				});
+			}
+		};
+
+		const handlePointerEnd = (event: Event) => {
+			const pointer = readPointer(event);
+			activePointers.delete(pointer.pointerId);
+			if (gestureMode?.type === "pan" && gestureMode.pointerId === pointer.pointerId) {
+				gestureMode = null;
+				dispatchInteraction({ type: "POINTER_UP", pointerId: pointer.pointerId });
+				return;
+			}
+
+			if (
+				gestureMode?.type === "pinch" &&
+				gestureMode.pointerIds.includes(pointer.pointerId)
+			) {
+				gestureMode = null;
+				dispatchInteraction({ type: "POINTER_UP", pointerId: pointer.pointerId });
+			}
+		};
+
+		host.addEventListener("pointerdown", handlePointerDown);
+		document.addEventListener("pointermove", handlePointerMove);
+		document.addEventListener("pointerup", handlePointerEnd);
+		document.addEventListener("pointercancel", handlePointerEnd);
+
+		return () => {
+			host.removeEventListener("pointerdown", handlePointerDown);
+			document.removeEventListener("pointermove", handlePointerMove);
+			document.removeEventListener("pointerup", handlePointerEnd);
+			document.removeEventListener("pointercancel", handlePointerEnd);
+			activePointers.clear();
+			gestureMode = null;
+		};
+	}, [getLocalCoordinates]);
+
+	useEffect(() => {
+		const host = hostRef.current;
+		if (!host || gestures?.reset !== true) {
+			return undefined;
+		}
+
+		const resettableHost = host as HTMLDivElement & { resetViewport?: () => void };
+		resettableHost.resetViewport = resetViewportToDefault;
+		return () => {
+			if (resettableHost.resetViewport === resetViewportToDefault) {
+				delete resettableHost.resetViewport;
+			}
+		};
+	}, [gestures?.reset, resetViewportToDefault]);
 
 	// Tool switch: reset reducer state. Cancels any in-progress polygon placement
 	// when user picks a different tool mid-draw (or vice versa).
@@ -797,8 +1107,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		}
 
 		const toCanvasPoint = (clientX: number, clientY: number) => {
-			const rect = host.getBoundingClientRect();
-			return { x: clientX - rect.left, y: clientY - rect.top };
+			return screenToCanvas(getLocalCoordinates(clientX, clientY), viewportRef.current);
 		};
 
 		let pendingLineClick: { point: DrawingPoint; pointerId?: number } | null = null;
@@ -900,7 +1209,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			window.removeEventListener("keydown", handleKeyDown);
 			window.removeEventListener("blur", handleBlur);
 		};
-	}, [effectiveTool, isDrawingEnabled]);
+	}, [effectiveTool, getLocalCoordinates, isDrawingEnabled]);
 
 	const linePreviewStroke: LineStrokeV2 | null =
 		interactionState.phase === "placingLine"
@@ -1014,11 +1323,8 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		};
 
 		const computePositions = (clientX: number, clientY: number) => {
-			const rect = host.getBoundingClientRect();
-			const screen = { x: clientX - rect.left, y: clientY - rect.top };
-			// TODO(Task 13): once viewport state is wired into DrawingSurface,
-			// derive canvas via `screenToCanvas(screen, viewport)` from `../viewport`.
-			const canvas = { x: screen.x, y: screen.y };
+			const screen = getLocalCoordinates(clientX, clientY);
+			const canvas = screenToCanvas(screen, viewportRef.current);
 			return { screen, canvas };
 		};
 
@@ -1099,7 +1405,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			host.removeEventListener("pointerup", handleUp);
 			window.removeEventListener("blur", handleWindowBlur);
 		};
-	}, [cursorEnabled]);
+	}, [cursorEnabled, getLocalCoordinates]);
 
 	const cursorRenderState: DrawingCursorRenderState = {
 		screen: cursorState.screen,
@@ -1117,9 +1423,9 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			data-enabled={String(isDrawingEnabled)}
 			data-stroke-count={strokes.length}
 			data-active-tool={effectiveTool}
-			data-scale="1"
-			data-tx="0"
-			data-ty="0"
+			data-scale={String(viewport.scale)}
+			data-tx={String(viewport.tx)}
+			data-ty={String(viewport.ty)}
 			style={{
 				width: "100%",
 				height: "100%",
@@ -1139,75 +1445,77 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				}}
 			>
 				<title>Drawing surface</title>
-				{strokes.map((stroke) => (
-					<StrokeRenderer
-						key={stroke.id}
-						stroke={stroke}
-						fallbackColor={resolvedColor}
-						fallbackWidth={resolvedOpenWidth}
-						fallbackClosedWidth={resolvedClosedWidth}
-						fallbackDashArray={resolvedDashArray}
-						fallbackDashOffset={resolvedDashOffset}
-						fallbackFillColor={fillColor}
-						fallbackFillOpacity={resolvedFillOpacity}
-					/>
-				))}
+				<g transform={`translate(${viewport.tx} ${viewport.ty}) scale(${viewport.scale})`}>
+					{strokes.map((stroke) => (
+						<StrokeRenderer
+							key={stroke.id}
+							stroke={stroke}
+							fallbackColor={resolvedColor}
+							fallbackWidth={resolvedOpenWidth}
+							fallbackClosedWidth={resolvedClosedWidth}
+							fallbackDashArray={resolvedDashArray}
+							fallbackDashOffset={resolvedDashOffset}
+							fallbackFillColor={fillColor}
+							fallbackFillOpacity={resolvedFillOpacity}
+						/>
+					))}
 
-				{activeStroke && (
-					<StrokeRenderer
-						stroke={activeStroke}
-						isActive={true}
-						fallbackColor={resolvedColor}
-						fallbackWidth={resolvedOpenWidth}
-						fallbackClosedWidth={resolvedClosedWidth}
-						fallbackDashArray={resolvedDashArray}
-						fallbackDashOffset={resolvedDashOffset}
-						fallbackFillColor={fillColor}
-						fallbackFillOpacity={resolvedFillOpacity}
-					/>
-				)}
+					{activeStroke && (
+						<StrokeRenderer
+							stroke={activeStroke}
+							isActive={true}
+							fallbackColor={resolvedColor}
+							fallbackWidth={resolvedOpenWidth}
+							fallbackClosedWidth={resolvedClosedWidth}
+							fallbackDashArray={resolvedDashArray}
+							fallbackDashOffset={resolvedDashOffset}
+							fallbackFillColor={fillColor}
+							fallbackFillOpacity={resolvedFillOpacity}
+						/>
+					)}
 
-				{linePreviewStroke && (
-					<StrokeRenderer
-						stroke={linePreviewStroke}
-						isActive={true}
-						fallbackColor={resolvedColor}
-						fallbackWidth={resolvedOpenWidth}
-						fallbackClosedWidth={resolvedClosedWidth}
-						fallbackDashArray={resolvedDashArray}
-						fallbackDashOffset={resolvedDashOffset}
-						fallbackFillColor={fillColor}
-						fallbackFillOpacity={resolvedFillOpacity}
-					/>
-				)}
+					{linePreviewStroke && (
+						<StrokeRenderer
+							stroke={linePreviewStroke}
+							isActive={true}
+							fallbackColor={resolvedColor}
+							fallbackWidth={resolvedOpenWidth}
+							fallbackClosedWidth={resolvedClosedWidth}
+							fallbackDashArray={resolvedDashArray}
+							fallbackDashOffset={resolvedDashOffset}
+							fallbackFillColor={fillColor}
+							fallbackFillOpacity={resolvedFillOpacity}
+						/>
+					)}
 
-				{polygonPreviewStroke && (
-					<StrokeRenderer
-						stroke={polygonPreviewStroke}
-						isActive={true}
-						fallbackColor={resolvedColor}
-						fallbackWidth={resolvedOpenWidth}
-						fallbackClosedWidth={resolvedClosedWidth}
-						fallbackDashArray={resolvedDashArray}
-						fallbackDashOffset={resolvedDashOffset}
-						fallbackFillColor={fillColor}
-						fallbackFillOpacity={resolvedFillOpacity}
-					/>
-				)}
+					{polygonPreviewStroke && (
+						<StrokeRenderer
+							stroke={polygonPreviewStroke}
+							isActive={true}
+							fallbackColor={resolvedColor}
+							fallbackWidth={resolvedOpenWidth}
+							fallbackClosedWidth={resolvedClosedWidth}
+							fallbackDashArray={resolvedDashArray}
+							fallbackDashOffset={resolvedDashOffset}
+							fallbackFillColor={fillColor}
+							fallbackFillOpacity={resolvedFillOpacity}
+						/>
+					)}
 
-				{bezierPreviewStroke && (
-					<StrokeRenderer
-						stroke={bezierPreviewStroke}
-						isActive={true}
-						fallbackColor={resolvedColor}
-						fallbackWidth={resolvedOpenWidth}
-						fallbackClosedWidth={resolvedClosedWidth}
-						fallbackDashArray={resolvedDashArray}
-						fallbackDashOffset={resolvedDashOffset}
-						fallbackFillColor={fillColor}
-						fallbackFillOpacity={resolvedFillOpacity}
-					/>
-				)}
+					{bezierPreviewStroke && (
+						<StrokeRenderer
+							stroke={bezierPreviewStroke}
+							isActive={true}
+							fallbackColor={resolvedColor}
+							fallbackWidth={resolvedOpenWidth}
+							fallbackClosedWidth={resolvedClosedWidth}
+							fallbackDashArray={resolvedDashArray}
+							fallbackDashOffset={resolvedDashOffset}
+							fallbackFillColor={fillColor}
+							fallbackFillOpacity={resolvedFillOpacity}
+						/>
+					)}
+				</g>
 			</svg>
 			{cursorEnabled && cursorState.visible && (
 				<div

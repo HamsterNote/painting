@@ -53,3 +53,9 @@
 - Decision: position the crosshair as a sibling `<div data-crosshair-layer>` of the drawing `<svg>`, NOT inside the SVG. Task 13 will introduce a viewport `<g transform>`; placing the crosshair inside that group would scale it with zoom, violating the "stays 10px screen pixels regardless of scale" requirement. The sibling div with `pointerEvents: 'none'` is unaffected by future SVG transforms.
 - Decision: touch crosshair shows only while pointer is DOWN; mouse/pen show on hover. Implemented via `cursorPointerDownRef` consulted in `pointermove` for touch (`visible = ref.current`) and reset to `false` on `pointerup`/`pointerleave`/window `blur`. Pinch (multi-pointer) is implicitly covered today because we never set `visible: true` for a second concurrent pointer — once Task 13 wires gesture detection, the existing `handleLeave`/blur paths already hide the crosshair when focus leaves.
 - Decision: `canvas` coordinates currently equal `screen` coordinates (host-rect-relative client offset), with a `TODO(Task 13)` marker calling out the `screenToCanvas` integration. The spec explicitly authorizes this forward-compatibility shape because viewport state does not yet live in `DrawingSurface`; the static `data-scale="1" data-tx="0" data-ty="0"` placeholders from Task 4 keep the contract consistent until Task 13 lands.
+
+## Task 13 — Opt-in viewport gestures
+
+- Decision: keep gestures fully opt-in through DrawingSurface.gestures; all booleans default false and data-scale/data-tx/data-ty remain 1/0/0 without the prop.
+- Decision: expose resetViewport as a callable on the root host when gestures.reset is true instead of changing the public component export to forwardRef; this satisfies the reset contract while preserving the existing function component shape.
+- Decision: allow pan only when drawing is disabled/unsupported, while pinch remains independent; existing drawing tools therefore win over pan and keep multi-drag behavior unchanged.
