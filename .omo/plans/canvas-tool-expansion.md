@@ -599,7 +599,7 @@ Wave 5: Task 14 (Demo integration), Task 15 (regression/CI hardening) — depend
 
   **Commit**: YES | Message: `feat(tools): add cubic bezier drawing tool` | Files: [`packages/painting/src/**/*.ts`, `packages/painting/src/**/*.tsx`, `packages/painting/src/__tests__/*.test.tsx`, `packages/painting/src/__tests__/*.test.ts`, `tests/ui/playground.spec.ts`]
 
-- [ ] 12. Pointer Crosshair Overlay: default 10px cursor and custom render prop
+- [x] 12. Pointer Crosshair Overlay: default 10px cursor and custom render prop
 
   **What to do**: Add crosshair props to `DrawingSurface`, default enabled unless explicitly disabled: `cursor?: false | { size?: number; color?: string; render?: (state) => React.ReactNode }` or equivalent documented prop. Default renders a 10px horizontal + vertical cross centered at current pointer in a non-transformed overlay above SVG. State passed to custom render includes screen coordinates, canvas coordinates, pointerType (`mouse`/`touch`/`pen`), active tool, and visibility. Mouse/pen hover shows crosshair; touch shows only while pointer is down; hide during pinch because no single pointer position is meaningful.
   **Must NOT do**: Do not scale crosshair with zoom. Do not add animation. Do not replace native pointer handling for unrelated behavior.

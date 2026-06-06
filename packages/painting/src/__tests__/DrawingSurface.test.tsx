@@ -2605,4 +2605,159 @@ describe('DrawingSurface', () => {
       expect(path?.getAttribute('opacity')).toBe('0.7');
     });
   });
+
+  describe('cursor crosshair overlay', () => {
+    // jsdom does not implement PointerEvent — dispatch a plain Event and assign
+    // pointer-shaped fields. React's synthetic pointer event normalization reads
+    // these values without doing an instanceof check.
+    function pointerEvent(
+      type: 'pointerenter' | 'pointermove' | 'pointerleave' | 'pointerdown' | 'pointerup',
+      props: { clientX?: number; clientY?: number; pointerType?: string; pointerId?: number } = {},
+    ): Event {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.assign(event, {
+        clientX: 0,
+        clientY: 0,
+        pointerType: 'mouse',
+        pointerId: 1,
+        button: 0,
+        isPrimary: true,
+        ...props,
+      });
+      return event;
+    }
+
+    it('default mouse hover renders [data-crosshair] sized 10x10 outside the SVG', () => {
+      const { container } = render(
+        <DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      expect(container.querySelector('[data-crosshair]')).toBeNull();
+
+      act(() => {
+        host.dispatchEvent(
+          pointerEvent('pointerenter', { clientX: 50, clientY: 60, pointerType: 'mouse' }),
+        );
+      });
+
+      const crosshair = container.querySelector('[data-crosshair]') as SVGSVGElement | null;
+      expect(crosshair).toBeTruthy();
+      expect(crosshair?.getAttribute('width')).toBe('10');
+      expect(crosshair?.getAttribute('height')).toBe('10');
+      // Crosshair element lives OUTSIDE the drawing SVG — the host's first child is
+      // the drawing surface SVG; the crosshair sits in a sibling overlay div.
+      const overlay = container.querySelector('[data-crosshair-layer]') as HTMLElement | null;
+      expect(overlay).toBeTruthy();
+      expect(overlay?.tagName).toBe('DIV');
+      expect(overlay?.contains(crosshair as Node)).toBe(true);
+      const drawingSvg = host.querySelector(':scope > svg');
+      expect(drawingSvg?.contains(crosshair as Node)).toBe(false);
+
+      act(() => {
+        host.dispatchEvent(pointerEvent('pointerleave', { pointerType: 'mouse' }));
+      });
+      expect(container.querySelector('[data-crosshair]')).toBeNull();
+    });
+
+    it('cursor={false} removes [data-crosshair] entirely', () => {
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          cursor={false}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      act(() => {
+        host.dispatchEvent(
+          pointerEvent('pointerenter', { clientX: 50, clientY: 60, pointerType: 'mouse' }),
+        );
+        host.dispatchEvent(
+          pointerEvent('pointermove', { clientX: 70, clientY: 80, pointerType: 'mouse' }),
+        );
+      });
+
+      expect(container.querySelector('[data-crosshair]')).toBeNull();
+      expect(container.querySelector('[data-crosshair-layer]')).toBeNull();
+    });
+
+    it('custom render prop receives screen + canvas coords and pointerType', () => {
+      const renderSpy = jest.fn(() => <span data-testid="custom-cursor">x</span>);
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          cursor={{ render: renderSpy }}
+          tool="pen"
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      act(() => {
+        host.dispatchEvent(
+          pointerEvent('pointerenter', { clientX: 50, clientY: 70, pointerType: 'pen' }),
+        );
+      });
+
+      // Host rect offset (left=10, top=20); screen and canvas coincide pre-Task-13.
+      expect(renderSpy).toHaveBeenCalled();
+      const lastCall = renderSpy.mock.calls[renderSpy.mock.calls.length - 1][0] as {
+        screen: { x: number; y: number };
+        canvas: { x: number; y: number };
+        pointerType: string;
+        activeTool: string;
+        visible: boolean;
+      };
+      expect(lastCall.screen).toEqual({ x: 40, y: 50 });
+      expect(lastCall.canvas).toEqual({ x: 40, y: 50 });
+      expect(lastCall.pointerType).toBe('pen');
+      expect(lastCall.activeTool).toBe('pen');
+      expect(lastCall.visible).toBe(true);
+
+      // Custom render replaces the default crosshair entirely.
+      expect(container.querySelector('[data-crosshair]')).toBeNull();
+      expect(screen.getByTestId('custom-cursor')).toBeTruthy();
+    });
+
+    it('touch shows crosshair only while pointer is down', () => {
+      const { container } = render(
+        <DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      act(() => {
+        host.dispatchEvent(
+          pointerEvent('pointerenter', { clientX: 50, clientY: 60, pointerType: 'touch' }),
+        );
+      });
+      expect(container.querySelector('[data-crosshair]')).toBeNull();
+
+      act(() => {
+        host.dispatchEvent(
+          pointerEvent('pointerdown', { clientX: 55, clientY: 65, pointerType: 'touch' }),
+        );
+      });
+      expect(container.querySelector('[data-crosshair]')).toBeTruthy();
+
+      act(() => {
+        host.dispatchEvent(
+          pointerEvent('pointermove', { clientX: 60, clientY: 70, pointerType: 'touch' }),
+        );
+      });
+      expect(container.querySelector('[data-crosshair]')).toBeTruthy();
+
+      act(() => {
+        host.dispatchEvent(
+          pointerEvent('pointerup', { clientX: 60, clientY: 70, pointerType: 'touch' }),
+        );
+      });
+      expect(container.querySelector('[data-crosshair]')).toBeNull();
+    });
+  });
 });

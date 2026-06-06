@@ -1,7 +1,7 @@
 /// <reference path="../multi-drag.d.ts" />
 
 import { Drag, DragOperationType } from "@system-ui-js/multi-drag";
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { type ReactNode, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useCanvas } from "../hooks/useCanvas";
 import { createPointerInputController } from "../input/pointerInputController";
 import {
@@ -65,6 +65,42 @@ export type DrawingValue = {
 	strokes: DrawingStroke[];
 };
 
+/**
+ * State passed to the cursor `render` callback. `screen` is in CSS pixels
+ * relative to the host div's top-left corner (same as the pointer event
+ * `clientX/Y` minus the host bounding rect). `canvas` is the same point
+ * expressed in canvas-local coordinates — currently identical to `screen`
+ * because viewport transform is not yet wired into DrawingSurface (Task 13
+ * will wire it; once viewport state lives here, use `screenToCanvas` from
+ * `../viewport` to derive canvas coords).
+ */
+export type DrawingCursorRenderState = {
+	/** Pointer position in screen (CSS) pixels relative to the host element. */
+	screen: { x: number; y: number };
+	/** Pointer position in canvas-local coordinates. */
+	canvas: { x: number; y: number };
+	/** Pointer type — `'mouse' | 'touch' | 'pen'`, defaulting to `'mouse'`. */
+	pointerType: DrawingInputMethod;
+	/** Currently active drawing tool. */
+	activeTool: DrawingTool;
+	/** Whether the crosshair should be visible (hover for mouse/pen; down for touch). */
+	visible: boolean;
+};
+
+/**
+ * Cursor overlay configuration. Pass `false` to disable the overlay entirely.
+ * When undefined (the default), the surface renders a 10px screen-pixel
+ * crosshair centered on the pointer.
+ */
+export type DrawingCursorOptions = {
+	/** Square size in CSS pixels (length of each cross arm). Defaults to 10. */
+	size?: number;
+	/** Stroke color used by the default crosshair shape. Defaults to `currentColor`. */
+	color?: string;
+	/** Override the rendered crosshair entirely. Receives current pointer state. */
+	render?: (state: DrawingCursorRenderState) => ReactNode;
+};
+
 export type DrawingSurfaceProps = {
 	/** The drawing tool to use. Defaults to 'pen'. */
 	tool?: DrawingTool;
@@ -94,6 +130,12 @@ export type DrawingSurfaceProps = {
 	pressure?: boolean;
 	/** 采样率（点/秒），控制笔画点密度。0 表示保留所有点。 */
 	samplingRate?: number;
+	/**
+	 * Pointer crosshair overlay. Defaults to a 10px screen-pixel cross
+	 * centered on the pointer. Pass `false` to hide the overlay, or an
+	 * options object to customize size/color or fully override rendering.
+	 */
+	cursor?: false | DrawingCursorOptions;
 	/** Test identifier. */
 	testID?: string;
 };
@@ -258,6 +300,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		inputMethods,
 		pressure,
 		samplingRate,
+		cursor,
 		testID,
 	} = props;
 	const hostRef = useRef<HTMLDivElement>(null);
@@ -931,6 +974,141 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		};
 	})();
 
+	const cursorEnabled = cursor !== false;
+	const cursorOptions: DrawingCursorOptions =
+		cursor && typeof cursor === "object" ? cursor : {};
+	const cursorSize =
+		typeof cursorOptions.size === "number" &&
+		Number.isFinite(cursorOptions.size) &&
+		cursorOptions.size > 0
+			? cursorOptions.size
+			: 10;
+	const cursorColor = cursorOptions.color ?? "currentColor";
+	const cursorRender = cursorOptions.render;
+
+	type CursorState = {
+		visible: boolean;
+		screen: { x: number; y: number };
+		canvas: { x: number; y: number };
+		pointerType: DrawingInputMethod;
+	};
+
+	const [cursorState, setCursorState] = useState<CursorState>({
+		visible: false,
+		screen: { x: 0, y: 0 },
+		canvas: { x: 0, y: 0 },
+		pointerType: "mouse",
+	});
+	const cursorPointerDownRef = useRef(false);
+
+	useEffect(() => {
+		if (!cursorEnabled) return undefined;
+		const host = hostRef.current;
+		if (!host) return undefined;
+
+		const normalizePointerType = (value: string | undefined): DrawingInputMethod => {
+			if (value === "touch" || value === "pen" || value === "mouse") {
+				return value;
+			}
+			return "mouse";
+		};
+
+		const computePositions = (clientX: number, clientY: number) => {
+			const rect = host.getBoundingClientRect();
+			const screen = { x: clientX - rect.left, y: clientY - rect.top };
+			// TODO(Task 13): once viewport state is wired into DrawingSurface,
+			// derive canvas via `screenToCanvas(screen, viewport)` from `../viewport`.
+			const canvas = { x: screen.x, y: screen.y };
+			return { screen, canvas };
+		};
+
+		const readPointer = (event: Event): {
+			clientX: number;
+			clientY: number;
+			pointerType: DrawingInputMethod;
+		} => {
+			const pointerLike = event as Event & {
+				clientX?: number;
+				clientY?: number;
+				pointerType?: string;
+			};
+			return {
+				clientX: pointerLike.clientX ?? 0,
+				clientY: pointerLike.clientY ?? 0,
+				pointerType: normalizePointerType(pointerLike.pointerType),
+			};
+		};
+
+		const handleEnter = (event: Event) => {
+			const { clientX, clientY, pointerType } = readPointer(event);
+			const { screen, canvas } = computePositions(clientX, clientY);
+			setCursorState({
+				visible: pointerType !== "touch",
+				screen,
+				canvas,
+				pointerType,
+			});
+		};
+
+		const handleMove = (event: Event) => {
+			const { clientX, clientY, pointerType } = readPointer(event);
+			const { screen, canvas } = computePositions(clientX, clientY);
+			const nextVisible =
+				pointerType === "touch" ? cursorPointerDownRef.current : true;
+			setCursorState({ visible: nextVisible, screen, canvas, pointerType });
+		};
+
+		const handleLeave = () => {
+			cursorPointerDownRef.current = false;
+			setCursorState((prev) => ({ ...prev, visible: false }));
+		};
+
+		const handleDown = (event: Event) => {
+			cursorPointerDownRef.current = true;
+			const { clientX, clientY, pointerType } = readPointer(event);
+			const { screen, canvas } = computePositions(clientX, clientY);
+			setCursorState({ visible: true, screen, canvas, pointerType });
+		};
+
+		const handleUp = (event: Event) => {
+			cursorPointerDownRef.current = false;
+			const { pointerType } = readPointer(event);
+			// Touch lifts the finger off the surface — hide; mouse/pen keep hovering.
+			if (pointerType === "touch") {
+				setCursorState((prev) => ({ ...prev, visible: false, pointerType }));
+			}
+		};
+
+		const handleWindowBlur = () => {
+			cursorPointerDownRef.current = false;
+			setCursorState((prev) => ({ ...prev, visible: false }));
+		};
+
+		host.addEventListener("pointerenter", handleEnter);
+		host.addEventListener("pointermove", handleMove);
+		host.addEventListener("pointerleave", handleLeave);
+		host.addEventListener("pointerdown", handleDown);
+		host.addEventListener("pointerup", handleUp);
+		window.addEventListener("blur", handleWindowBlur);
+
+		return () => {
+			host.removeEventListener("pointerenter", handleEnter);
+			host.removeEventListener("pointermove", handleMove);
+			host.removeEventListener("pointerleave", handleLeave);
+			host.removeEventListener("pointerdown", handleDown);
+			host.removeEventListener("pointerup", handleUp);
+			window.removeEventListener("blur", handleWindowBlur);
+		};
+	}, [cursorEnabled]);
+
+	const cursorRenderState: DrawingCursorRenderState = {
+		screen: cursorState.screen,
+		canvas: cursorState.canvas,
+		pointerType: cursorState.pointerType,
+		activeTool: effectiveTool,
+		visible: cursorState.visible,
+	};
+
 	return (
 		<div
 			ref={hostRef}
@@ -1031,6 +1209,56 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 					/>
 				)}
 			</svg>
+			{cursorEnabled && cursorState.visible && (
+				<div
+					data-crosshair-layer
+					style={{
+						position: "absolute",
+						inset: 0,
+						pointerEvents: "none",
+						overflow: "hidden",
+					}}
+				>
+					<div
+						style={{
+							position: "absolute",
+							left: cursorState.screen.x,
+							top: cursorState.screen.y,
+							transform: "translate(-50%, -50%)",
+						}}
+					>
+						{cursorRender ? (
+							cursorRender(cursorRenderState)
+						) : (
+							<svg
+								data-crosshair
+								width={cursorSize}
+								height={cursorSize}
+								viewBox={`0 0 ${cursorSize} ${cursorSize}`}
+								style={{ display: "block", overflow: "visible" }}
+							>
+								<title>Pointer crosshair</title>
+								<line
+									x1={0}
+									y1={cursorSize / 2}
+									x2={cursorSize}
+									y2={cursorSize / 2}
+									stroke={cursorColor}
+									strokeWidth={1}
+								/>
+								<line
+									x1={cursorSize / 2}
+									y1={0}
+									x2={cursorSize / 2}
+									y2={cursorSize}
+									stroke={cursorColor}
+									strokeWidth={1}
+								/>
+							</svg>
+						)}
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }
