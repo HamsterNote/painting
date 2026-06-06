@@ -215,6 +215,70 @@ describe('DrawingSurface', () => {
     expect(container.querySelector('path')).toBeNull();
   });
 
+  it('pinch feasibility two pointer default-off gesture ignores second pointer while preserving one pointer drawing', () => {
+    const onChange = jest.fn();
+    const { container } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange}
+        strokeSmoothing={false}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+    const instance = latestDragInstance();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        finger([
+          { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+    });
+
+    expect(container.querySelector('path')?.getAttribute('d')).toBe('M 5 5 L 10 15');
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        finger([
+          { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+        finger([
+          { point: { x: 80, y: 90 }, event: { pointerType: 'touch' } },
+          { point: { x: 85, y: 95 }, event: { pointerType: 'touch' } },
+        ]),
+      ]);
+    });
+
+    expect(container.querySelector('path')?.getAttribute('d')).toBe('M 5 5 L 10 15');
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.Move, [
+        finger([
+          { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 30, y: 45 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+    });
+
+    expect(container.querySelector('path')).toBeTruthy();
+
+    act(() => {
+      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+    });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
+      { x: 5, y: 5 },
+      { x: 10, y: 15 },
+      { x: 20, y: 25 },
+    ]);
+  });
+
   it('accepts pen, left mouse, and touch input by default', () => {
     expectInputAccepted(undefined, { pointerType: 'pen', button: 0 });
     expectInputAccepted(undefined, { pointerType: 'mouse', button: 0 });

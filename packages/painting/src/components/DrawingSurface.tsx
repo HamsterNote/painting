@@ -3,6 +3,7 @@
 import { Drag, DragOperationType } from "@system-ui-js/multi-drag";
 import { useCallback, useEffect, useRef } from "react";
 import { useCanvas } from "../hooks/useCanvas";
+import { createPointerInputController } from "../input/pointerInputController";
 import {
 	appendPoint,
 	createStroke,
@@ -272,6 +273,9 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			getPose: () => ({ position: { x: 0, y: 0 }, width: 0, height: 0 }),
 			setPose: () => {},
 		});
+		const pointerInputController = createPointerInputController(host, {
+			gesturesEnabled: false,
+		});
 
 		const processPoints = (points: TimedDrawingPoint[]) => {
 			if (!currentActiveStroke || points.length === 0) return;
@@ -343,9 +347,6 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			}
 
 			if (fingers.length !== 1) {
-				if (fingers.length > 1) {
-					clearActiveStroke();
-				}
 				return;
 			}
 
@@ -442,6 +443,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				clearActiveStrokeRef.current = null;
 			}
 			drag.destroy();
+			pointerInputController.destroy();
 		};
 	}, [clearActiveStroke, getLocalCoordinates, setActiveStroke]);
 

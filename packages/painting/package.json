@@ -20,6 +20,7 @@
   ],
   "scripts": {
     "build": "bob build",
+    "test": "yarn --cwd ../.. test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
