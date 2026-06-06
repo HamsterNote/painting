@@ -49,6 +49,12 @@ export default [
     },
     rules: {
       ...jest.configs.recommended.rules,
+      'jest/expect-expect': [
+        'warn',
+        {
+          assertFunctionNames: ['expect', 'expectInputAccepted', 'expectInputRejected'],
+        },
+      ],
       'no-undef': 'off',
     },
   },
