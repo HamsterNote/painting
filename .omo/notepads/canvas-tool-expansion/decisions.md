@@ -27,3 +27,9 @@
 - Decision: keep v1 `DrawingStroke` accepted by `StrokeRenderer` via absence of `schemaVersion`, while v2 strokes use an exhaustive `switch` over the six persisted tool variants and `assertNever` in the default branch.
 - Decision: keep style normalization pure in `resolveStrokeStyle`, returning React/SVG attribute names and omitting invalid dash arrays entirely when any dash segment is non-finite or negative.
 - Decision: closed shapes opt into fill only when `fillColor` is present; open tools always render `fill="none"`, and closed shapes with `strokeWidth: 0` omit stroke attributes.
+
+## 2026-06-07 Task: 5
+
+- Decision: add `packages/painting/src/interaction/reducer.ts` as a standalone pure reducer with the exact action discriminants `POINTER_DOWN`, `POINTER_MOVE`, `POINTER_UP`, `POINTER_CANCEL`, `KEY_DOWN`, `TOOL_CHANGE`, `BLUR`, `RESET_REQUEST`, and `SHIFT_CHANGE`; pointer actions carry already-normalized canvas-local `{ x, y }` points plus optional pointer/gesture metadata.
+- Decision: completion and reset are modeled as one-step idle-state signals rather than side effects. Successful stroke completion returns `{ phase: 'idle', tool, completedStroke: { tool, points } }`; reset returns `{ phase: 'idle', tool, shouldResetViewport: true }`. Future DrawingSurface integration can consume these fields and then continue from ordinary idle state.
+- Decision: line supports both drag-shape mode and continuous placement. `POINTER_DOWN` on tool `line` defaults to `drawingDragShape`; callers opt into continuous `placingLine` with `mode: 'place'`, keeping current drag-line behavior available for later integration tasks.
