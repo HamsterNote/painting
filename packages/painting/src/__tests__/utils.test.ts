@@ -1,6 +1,6 @@
 import type { DrawingPoint, DrawingStroke, DrawingValue } from '../components/DrawingSurface';
 import type { DrawingStrokeV2 } from '../model/strokes';
-import { addStroke, removeStroke, updateStroke, clearStrokes, pick } from '../utils';
+import { addStroke, clearStrokes, pick, removeStroke, updateStroke } from '../utils';
 
 describe('utils', () => {
   const createMockStroke = (id: string, tool: DrawingStroke['tool'] = 'pen', points: DrawingPoint[] = []): DrawingStroke => ({
@@ -177,6 +177,19 @@ describe('utils', () => {
       const stroke2 = createMockStroke('2', 'line', [{ x: 100, y: 100 }, { x: 110, y: 100 }]);
       const result = pick({ x: 5, y: 5 }, [stroke1, stroke2]);
       expect(result?.id).toBe('1');
+    });
+
+    it('returns v2 line stroke by checking every segment', () => {
+      const stroke: DrawingStrokeV2 = {
+        schemaVersion: 2,
+        id: 'multi-segment-line',
+        tool: 'line',
+        points: [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }],
+      };
+
+      const result = pick({ x: 22, y: 10 }, [stroke], 3);
+
+      expect(result?.id).toBe('multi-segment-line');
     });
 
     it('returns closest stroke for rect tool', () => {

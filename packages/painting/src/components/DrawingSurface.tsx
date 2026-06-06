@@ -8,7 +8,7 @@ import {
 	createInitialState,
 	interactionReducer,
 } from "../interaction/reducer";
-import { DRAWING_STROKE_SCHEMA_VERSION, type PolygonStrokeV2 } from "../model/strokes";
+import { DRAWING_STROKE_SCHEMA_VERSION, type LineStrokeV2, type PolygonStrokeV2 } from "../model/strokes";
 import {
 	appendPoint,
 	createStroke,
@@ -152,6 +152,7 @@ function applyShiftConstraintToShape(stroke: DrawingStroke): DrawingStroke {
 }
 
 const DEFAULT_INPUT_METHODS: DrawingInputMethod[] = ["touch", "mouse", "pen"];
+const LINE_DRAG_THRESHOLD_PX = 4;
 
 function generateStrokeId(): string {
 	return Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -163,6 +164,16 @@ function verticesEndWith(
 ): boolean {
 	const last = vertices[vertices.length - 1];
 	return last !== undefined && last.x === point.x && last.y === point.y;
+}
+
+function totalPathDistance(points: DrawingPoint[]): number {
+	let distance = 0;
+	for (let index = 1; index < points.length; index++) {
+		const previous = points[index - 1];
+		const current = points[index];
+		distance += Math.hypot(current.x - previous.x, current.y - previous.y);
+	}
+	return distance;
 }
 
 function isDrawingInput(
@@ -514,6 +525,25 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				return;
 			}
 
+			const localPath = path.map((pathItem) => {
+				const sourcePoint =
+					pathItem.event?.clientX !== undefined &&
+					pathItem.event.clientY !== undefined
+						? { x: pathItem.event.clientX, y: pathItem.event.clientY }
+						: pathItem.point;
+				return getLocalCoordinates(sourcePoint.x, sourcePoint.y);
+			});
+
+			// Line is now click-to-place by default. Multi-drag remains the legacy shortcut,
+			// but only after real movement: at least two path samples and >4 px total travel.
+			if (
+				effectiveToolRef.current === "line" &&
+				!currentActiveStroke &&
+				(path.length < 2 || totalPathDistance(localPath) <= LINE_DRAG_THRESHOLD_PX)
+			) {
+				return;
+			}
+
 			if (!currentActiveStroke) {
 				const currentTool = effectiveToolRef.current;
 				currentActiveStroke = createStroke(currentTool, {
@@ -532,13 +562,9 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			}
 
 			const rawTimedPoints: TimedDrawingPoint[] = [];
-			for (const pathItem of path.slice(processedPathLengthRef.current)) {
-				const sourcePoint =
-					pathItem.event?.clientX !== undefined &&
-					pathItem.event.clientY !== undefined
-						? { x: pathItem.event.clientX, y: pathItem.event.clientY }
-						: pathItem.point;
-				const localPoint = getLocalCoordinates(sourcePoint.x, sourcePoint.y);
+			for (let index = processedPathLengthRef.current; index < path.length; index++) {
+				const pathItem = path[index];
+				const localPoint = localPath[index];
 				const timedPoint: TimedDrawingPoint = {
 					...localPoint,
 					timestamp: pathItem.timestamp || pathItem.event?.timeStamp,
@@ -623,14 +649,30 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		dispatchInteraction({ type: "TOOL_CHANGE", tool: effectiveTool });
 	}, [effectiveTool]);
 
-	// When the reducer reaches a `completedStroke` (3+ distinct polygon vertices,
-	// finished via dblclick / Escape / close-loop click), commit a v2 polygon stroke
+	// When the reducer reaches a `completedStroke` (line/polygon placement finished), commit a v2 stroke
 	// and clear the completion marker so we don't double-commit on re-render.
 	useEffect(() => {
 		if (interactionState.phase !== "idle" || !interactionState.completedStroke) {
 			return;
 		}
 		const completed = interactionState.completedStroke;
+		if (completed.tool === "line" && completed.points.length >= 2) {
+			const line: LineStrokeV2 = {
+				schemaVersion: DRAWING_STROKE_SCHEMA_VERSION,
+				id: generateStrokeId(),
+				tool: "line",
+				points: completed.points.map((point) => ({ x: point.x, y: point.y })),
+				strokeColor: resolvedColorRef.current,
+				strokeWidth: resolvedOpenWidthRef.current,
+				dashArray: resolvedDashArrayRef.current
+					? [...resolvedDashArrayRef.current]
+					: undefined,
+				dashOffset: resolvedDashOffsetRef.current,
+				fillColor: resolvedFillColorRef.current,
+				fillOpacity: resolvedFillOpacityRef.current,
+			};
+			addStrokeRef.current(line as unknown as DrawingStroke);
+		}
 		if (completed.tool === "polygon" && completed.points.length >= 3) {
 			const polygon: PolygonStrokeV2 = {
 				schemaVersion: DRAWING_STROKE_SCHEMA_VERSION,
@@ -651,11 +693,11 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		dispatchInteraction({ type: "TOOL_CHANGE", tool: effectiveTool });
 	}, [interactionState, effectiveTool]);
 
-	// Click-to-place listeners are only wired when the polygon tool is active.
+	// Click-to-place listeners are only wired when the line/polygon tool is active.
 	// Re-mounting on tool change is intentional: a different tool means a different
 	// set of pointer semantics, so the listener lifetime tracks the tool.
 	useEffect(() => {
-		if (effectiveTool !== "polygon" || !isDrawingEnabled) {
+		if ((effectiveTool !== "polygon" && effectiveTool !== "line") || !isDrawingEnabled) {
 			return undefined;
 		}
 		const host = hostRef.current;
@@ -668,11 +710,17 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			return { x: clientX - rect.left, y: clientY - rect.top };
 		};
 
+		let pendingLineClick: { point: DrawingPoint; pointerId?: number } | null = null;
+
 		const handlePointerDown = (event: PointerEvent) => {
 			if (event.button !== undefined && event.button !== 0) {
 				return;
 			}
 			const point = toCanvasPoint(event.clientX, event.clientY);
+			if (effectiveTool === "line") {
+				pendingLineClick = { point, pointerId: event.pointerId };
+				return;
+			}
 			dispatchInteraction({
 				type: "POINTER_DOWN",
 				point,
@@ -683,6 +731,13 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 
 		const handlePointerMove = (event: PointerEvent) => {
 			const point = toCanvasPoint(event.clientX, event.clientY);
+			if (
+				effectiveTool === "line" &&
+				pendingLineClick &&
+				Math.hypot(point.x - pendingLineClick.point.x, point.y - pendingLineClick.point.y) > LINE_DRAG_THRESHOLD_PX
+			) {
+				pendingLineClick = null;
+			}
 			dispatchInteraction({
 				type: "POINTER_MOVE",
 				point,
@@ -690,7 +745,34 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			});
 		};
 
+		const handlePointerUp = (event: PointerEvent) => {
+			if (effectiveTool !== "line" || !pendingLineClick) {
+				return;
+			}
+			const point = toCanvasPoint(event.clientX, event.clientY);
+			const click = pendingLineClick;
+			pendingLineClick = null;
+			if (
+				event.pointerId !== undefined &&
+				click.pointerId !== undefined &&
+				event.pointerId !== click.pointerId
+			) {
+				return;
+			}
+			if (Math.hypot(point.x - click.point.x, point.y - click.point.y) > LINE_DRAG_THRESHOLD_PX) {
+				return;
+			}
+			dispatchInteraction({
+				type: "POINTER_DOWN",
+				point,
+				pointerId: event.pointerId,
+				detail: event.detail,
+				mode: "place",
+			});
+		};
+
 		const handleDoubleClick = (event: MouseEvent) => {
+			pendingLineClick = null;
 			// Forward as a POINTER_DOWN with detail=2 — the reducer recognises
 			// that as the polygon/line/bezier finish signal.
 			const point = toCanvasPoint(event.clientX, event.clientY);
@@ -708,11 +790,13 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		};
 
 		const handleBlur = () => {
+			pendingLineClick = null;
 			dispatchInteraction({ type: "BLUR" });
 		};
 
 		host.addEventListener("pointerdown", handlePointerDown);
 		host.addEventListener("pointermove", handlePointerMove);
+		host.addEventListener("pointerup", handlePointerUp);
 		host.addEventListener("dblclick", handleDoubleClick);
 		window.addEventListener("keydown", handleKeyDown);
 		window.addEventListener("blur", handleBlur);
@@ -720,11 +804,31 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		return () => {
 			host.removeEventListener("pointerdown", handlePointerDown);
 			host.removeEventListener("pointermove", handlePointerMove);
+			host.removeEventListener("pointerup", handlePointerUp);
 			host.removeEventListener("dblclick", handleDoubleClick);
 			window.removeEventListener("keydown", handleKeyDown);
 			window.removeEventListener("blur", handleBlur);
 		};
 	}, [effectiveTool, isDrawingEnabled]);
+
+	const linePreviewStroke: LineStrokeV2 | null =
+		interactionState.phase === "placingLine"
+			? {
+					schemaVersion: DRAWING_STROKE_SCHEMA_VERSION,
+					id: "line-preview",
+					tool: "line",
+					points: interactionState.cursorPoint &&
+						!verticesEndWith(interactionState.vertices, interactionState.cursorPoint)
+						? [...interactionState.vertices, interactionState.cursorPoint]
+						: [...interactionState.vertices],
+					strokeColor: resolvedColor,
+					strokeWidth: resolvedOpenWidth,
+					dashArray: resolvedDashArray ? [...resolvedDashArray] : undefined,
+					dashOffset: resolvedDashOffset,
+					fillColor,
+					fillOpacity: resolvedFillOpacity,
+				}
+			: null;
 
 	// Derive polygon preview stroke directly from reducer state. Vertices placed so far
 	// plus the cursor edge form a v2 polygon (auto-closes back to vertex 0 via SVG <polygon>).
@@ -794,6 +898,20 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				{activeStroke && (
 					<StrokeRenderer
 						stroke={activeStroke}
+						isActive={true}
+						fallbackColor={resolvedColor}
+						fallbackWidth={resolvedOpenWidth}
+						fallbackClosedWidth={resolvedClosedWidth}
+						fallbackDashArray={resolvedDashArray}
+						fallbackDashOffset={resolvedDashOffset}
+						fallbackFillColor={fillColor}
+						fallbackFillOpacity={resolvedFillOpacity}
+					/>
+				)}
+
+				{linePreviewStroke && (
+					<StrokeRenderer
+						stroke={linePreviewStroke}
 						isActive={true}
 						fallbackColor={resolvedColor}
 						fallbackWidth={resolvedOpenWidth}

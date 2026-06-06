@@ -192,7 +192,7 @@ function distanceSqPointToStroke(point: DrawingPoint, stroke: PickableStroke): n
   }
 
   if (tool === 'line' && points.length >= 2) {
-    return distanceSqPointToSegment(point, points[0], points[points.length - 1]);
+    return distanceSqPointToPolyline(point, points);
   }
 
   return distanceSqPointToPolyline(point, points);
@@ -231,7 +231,7 @@ export function clearStrokes(value: DrawingValue): DrawingValue {
  *
  * Distance semantics per tool:
  * - pen: minimum distance to polyline segments
- * - line: minimum distance to the segment between first and last point
+ * - line: minimum distance to open line segments
  * - rect: distance to axis-aligned bounding rectangle (0 when inside)
  *
  * @param maxDistance - Optional maximum distance threshold. If the closest stroke

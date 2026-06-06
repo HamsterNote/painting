@@ -514,7 +514,7 @@ Wave 5: Task 14 (Demo integration), Task 15 (regression/CI hardening) — depend
 
   **Commit**: YES | Message: `feat(tools): add polygon drawing tool` | Files: [`packages/painting/src/**/*.ts`, `packages/painting/src/**/*.tsx`, `packages/painting/src/__tests__/*.test.tsx`, `packages/painting/src/__tests__/*.test.ts`, `tests/ui/playground.spec.ts`]
 
-- [ ] 10. Continuous Line Tool: convert line into multi-segment click drawing mode
+- [x] 10. Continuous Line Tool: convert line into multi-segment click drawing mode
 
   **What to do**: Extend `line` stroke variant to support multiple ordered vertices while preserving migration of old v1 two-point line strokes. Interaction for line tool becomes continuous click-add mode: first click starts line, each subsequent click adds a segment endpoint, pointer move previews next segment, double-click/Esc/tool switch commits if at least 2 distinct points. Existing drag-to-line behavior must remain supported if tests/users perform pointerdown-move-up; implement it as a two-point line shortcut or keep compatibility path.
   **Must NOT do**: Do not add angle snapping, arrowheads, polyline editing, or automatic close.

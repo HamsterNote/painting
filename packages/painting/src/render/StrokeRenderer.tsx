@@ -1,7 +1,7 @@
 import { Fragment, type ReactElement } from "react";
 import type { DrawingStroke } from "../components/DrawingSurface";
 import { assertNever } from "../model/assertNever";
-import type { DrawingStrokeV2, DrawingPointV2 } from "../model/strokes";
+import type { DrawingPointV2, DrawingStrokeV2 } from "../model/strokes";
 import { pointsToSvgPath } from "../stroke-helpers";
 import { resolveStrokeStyle, type StrokeStyleFields } from "./resolveStrokeStyle";
 
@@ -66,6 +66,12 @@ function getBbox(points: StrokePoint[]) {
 
 function pointList(points: StrokePoint[]): string {
 	return points.map((point) => `${point.x},${point.y}`).join(" ");
+}
+
+function openLinePath(points: StrokePoint[]): string {
+	return points
+		.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
+		.join(" ");
 }
 
 function bezierPath(points: StrokePoint[]): string | undefined {
@@ -254,6 +260,22 @@ function renderV2Stroke(
 			return renderPen(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, opacity);
 		case "line": {
 			const style = styleFor(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, false);
+			if (stroke.points.length > 2) {
+				return (
+					<path
+						key={opacity ? undefined : stroke.id}
+						d={openLinePath(stroke.points)}
+						fill={style.fill}
+						stroke={style.stroke}
+						strokeWidth={style.strokeWidth}
+						strokeDasharray={style.strokeDasharray}
+						strokeDashoffset={style.strokeDashoffset}
+						strokeLinecap="round"
+						strokeLinejoin="round"
+						opacity={opacity}
+					/>
+				);
+			}
 			return (
 				<line
 					key={opacity ? undefined : stroke.id}

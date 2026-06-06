@@ -70,7 +70,30 @@ describe("StrokeRenderer", () => {
 		expect(line?.getAttribute("stroke-linejoin")).toBe("round");
 	});
 
-	it("renders lines from first to last point", () => {
+	it("renders two-point lines as line elements", () => {
+		const stroke: StyledStrokeV2 = {
+			schemaVersion: DRAWING_STROKE_SCHEMA_VERSION,
+			id: "line",
+			tool: "line",
+			points: [
+				{ x: 1, y: 2 },
+				{ x: 9, y: 10 },
+			],
+		};
+
+		const { container } = renderStroke(stroke);
+		const line = container.querySelector("line");
+
+		expect(container.querySelector("path")).toBeNull();
+		expect(line?.getAttribute("x1")).toBe("1");
+		expect(line?.getAttribute("y1")).toBe("2");
+		expect(line?.getAttribute("x2")).toBe("9");
+		expect(line?.getAttribute("y2")).toBe("10");
+		expect(line?.getAttribute("fill")).toBe("none");
+		expect(line?.getAttribute("stroke-linecap")).toBe("round");
+	});
+
+	it("renders multi-point lines as open straight paths", () => {
 		const stroke: StyledStrokeV2 = {
 			schemaVersion: DRAWING_STROKE_SCHEMA_VERSION,
 			id: "line",
@@ -83,14 +106,13 @@ describe("StrokeRenderer", () => {
 		};
 
 		const { container } = renderStroke(stroke);
-		const line = container.querySelector("line");
+		const path = container.querySelector("path");
 
-		expect(line?.getAttribute("x1")).toBe("1");
-		expect(line?.getAttribute("y1")).toBe("2");
-		expect(line?.getAttribute("x2")).toBe("9");
-		expect(line?.getAttribute("y2")).toBe("10");
-		expect(line?.getAttribute("fill")).toBe("none");
-		expect(line?.getAttribute("stroke-linecap")).toBe("round");
+		expect(container.querySelector("line")).toBeNull();
+		expect(path?.getAttribute("d")).toBe("M 1 2 L 5 6 L 9 10");
+		expect(path?.getAttribute("fill")).toBe("none");
+		expect(path?.getAttribute("stroke-linecap")).toBe("round");
+		expect(path?.getAttribute("stroke-linejoin")).toBe("round");
 	});
 
 	it("renders rectangles from first and last point bbox", () => {

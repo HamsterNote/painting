@@ -167,12 +167,20 @@ export function interactionReducer(
 ): InteractionState {
   switch (action.type) {
     case 'TOOL_CHANGE':
+      if (state.phase === 'placingLine' && isValidCompletion(state)) {
+        return completedIdle(action.tool, { tool: 'line', points: state.vertices });
+      }
       return createInitialState(action.tool);
     case 'BLUR':
       return createInitialState(state.tool);
     case 'RESET_REQUEST':
       return { phase: 'idle', tool: state.tool, shouldResetViewport: true };
     case 'KEY_DOWN':
+      if (action.key === 'Escape' && state.phase === 'placingLine') {
+        return isValidCompletion(state)
+          ? completedIdle(state.tool, { tool: 'line', points: state.vertices })
+          : createInitialState(state.tool);
+      }
       if (action.key === 'Escape' && state.phase !== 'idle') {
         return createInitialState(state.tool);
       }
@@ -436,7 +444,10 @@ function reduceLinePointerDown(
   action: PointerDownInteractionAction,
 ): InteractionState {
   if (action.detail === 2 && isValidCompletion(state)) {
-    return completedIdle(state.tool, { tool: 'line', points: state.vertices });
+    const points = action.point
+      ? appendDistinctPoint(state.vertices, clonePoint(action.point))
+      : state.vertices;
+    return completedIdle(state.tool, { tool: 'line', points });
   }
 
   if (!action.point) {

@@ -2008,6 +2008,150 @@ describe('DrawingSurface', () => {
     });
   });
 
+  describe('line click-to-place tool', () => {
+    function pointerDown(host: HTMLElement, clientX: number, clientY: number, pointerId = 1) {
+      const event = new Event('pointerdown', { bubbles: true, cancelable: true });
+      Object.assign(event, { clientX, clientY, pointerId, button: 0, detail: 1 });
+      act(() => {
+        host.dispatchEvent(event);
+      });
+    }
+
+    function pointerUp(host: HTMLElement, clientX: number, clientY: number, pointerId = 1) {
+      const event = new Event('pointerup', { bubbles: true, cancelable: true });
+      Object.assign(event, { clientX, clientY, pointerId, button: 0, detail: 1 });
+      act(() => {
+        host.dispatchEvent(event);
+      });
+    }
+
+    function pointerMove(host: HTMLElement, clientX: number, clientY: number, pointerId = 1) {
+      const event = new Event('pointermove', { bubbles: true, cancelable: true });
+      Object.assign(event, { clientX, clientY, pointerId });
+      act(() => {
+        host.dispatchEvent(event);
+      });
+    }
+
+    function clickVertex(host: HTMLElement, clientX: number, clientY: number) {
+      pointerDown(host, clientX, clientY);
+      pointerUp(host, clientX, clientY);
+    }
+
+    function doubleClick(host: HTMLElement, clientX: number, clientY: number) {
+      const event = new Event('dblclick', { bubbles: true, cancelable: true });
+      Object.assign(event, { clientX, clientY });
+      act(() => {
+        host.dispatchEvent(event);
+      });
+    }
+
+    function escapeKey() {
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      });
+    }
+
+    it('commits one v2 multi-segment line from clicks plus dblclick', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="line"
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      clickVertex(host, 20, 30);
+      clickVertex(host, 60, 30);
+      clickVertex(host, 60, 80);
+      doubleClick(host, 100, 80);
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const committed = onChange.mock.calls[0][0].strokes[0];
+      expect(committed).toMatchObject({ tool: 'line', schemaVersion: 2 });
+      expect(committed.points).toEqual([
+        { x: 10, y: 10 },
+        { x: 50, y: 10 },
+        { x: 50, y: 60 },
+        { x: 90, y: 60 },
+      ]);
+    });
+
+    it('single line click then Escape commits no stroke', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="line"
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      clickVertex(host, 20, 30);
+      escapeKey();
+
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('renders dashed continuous line preview across every segment', () => {
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          tool="line"
+          dashArray={[5, 2]}
+          dashOffset={1}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      clickVertex(host, 20, 30);
+      clickVertex(host, 60, 30);
+      pointerMove(host, 60, 80);
+
+      const path = container.querySelector('path');
+      expect(path).toBeTruthy();
+      expect(path?.getAttribute('d')).toBe('M 10 10 L 50 10 L 50 60');
+      expect(path?.getAttribute('stroke-dasharray')).toBe('5 2');
+      expect(path?.getAttribute('stroke-dashoffset')).toBe('1');
+      expect(path?.getAttribute('fill')).toBe('none');
+    });
+
+    it('ignores sub-threshold pointer movement as a click vertex', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="line"
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      pointerDown(host, 20, 30);
+      pointerMove(host, 22, 31);
+      pointerUp(host, 22, 31);
+      clickVertex(host, 60, 30);
+      doubleClick(host, 60, 30);
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
+        { x: 12, y: 11 },
+        { x: 50, y: 10 },
+      ]);
+    });
+  });
+
   describe('polygon tool', () => {
     // jsdom does not implement PointerEvent constructor; dispatch a synthetic Event
     // with pointer-shaped fields (clientX/Y, pointerId, button) — the polygon listener
