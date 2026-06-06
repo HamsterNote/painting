@@ -234,6 +234,44 @@ describe('utils', () => {
       expect(result?.id).toBe('fill-only-polygon');
     });
 
+    it('picks v2 bezier curve via 24-segment polyline sampling', () => {
+      // Symmetric S-curve: start (0,0), cp1 (50,0), cp2 (50,100), end (100,100).
+      // Midpoint B(0.5) = (50, 50). A click at (50, 50) must hit even with a small eraser radius.
+      const stroke: DrawingStrokeV2 = {
+        schemaVersion: 2,
+        id: 'bezier-stroke',
+        tool: 'bezier',
+        points: [
+          { x: 0, y: 0 },
+          { x: 50, y: 0 },
+          { x: 50, y: 100 },
+          { x: 100, y: 100 },
+        ],
+      };
+
+      const result = pick({ x: 50, y: 50 }, [stroke], 2);
+
+      expect(result?.id).toBe('bezier-stroke');
+    });
+
+    it('bezier hit-test rejects points far outside the curve', () => {
+      const stroke: DrawingStrokeV2 = {
+        schemaVersion: 2,
+        id: 'bezier-stroke',
+        tool: 'bezier',
+        points: [
+          { x: 0, y: 0 },
+          { x: 50, y: 0 },
+          { x: 50, y: 100 },
+          { x: 100, y: 100 },
+        ],
+      };
+
+      const result = pick({ x: 500, y: 500 }, [stroke], 5);
+
+      expect(result).toBeNull();
+    });
+
     it('handles stroke with empty points', () => {
       const stroke1 = createMockStroke('1', 'pen', []);
       const stroke2 = createMockStroke('2', 'pen', [{ x: 100, y: 100 }]);

@@ -2422,4 +2422,187 @@ describe('DrawingSurface', () => {
       });
     });
   });
+
+  describe('bezier tool', () => {
+    // Four clicks (start, cp1, cp2, end) commit one BezierStrokeV2.
+    // Same jsdom workaround as polygon: dispatch synthetic Event with pointer-shaped fields.
+    function pointerDown(host: HTMLElement, clientX: number, clientY: number, detail = 1) {
+      const event = new Event('pointerdown', { bubbles: true, cancelable: true });
+      Object.assign(event, { clientX, clientY, pointerId: 1, button: 0, detail });
+      act(() => {
+        host.dispatchEvent(event);
+      });
+    }
+
+    function pointerMove(host: HTMLElement, clientX: number, clientY: number) {
+      const event = new Event('pointermove', { bubbles: true, cancelable: true });
+      Object.assign(event, { clientX, clientY, pointerId: 1 });
+      act(() => {
+        host.dispatchEvent(event);
+      });
+    }
+
+    function escapeKey() {
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      });
+    }
+
+    it('commits one v2 bezier stroke from four clicks with cubic path d attribute', () => {
+      const onChange = jest.fn();
+      const { container, rerender } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="bezier"
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      // Host rect offset (10, 20). Client coords below become canvas (10,10), (30,40), (70,40), (90,10).
+      pointerDown(host, 20, 30);
+      pointerDown(host, 40, 60);
+      pointerDown(host, 80, 60);
+      pointerDown(host, 100, 30);
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const committed = onChange.mock.calls[0][0].strokes[0];
+      expect(committed).toMatchObject({ tool: 'bezier', schemaVersion: 2 });
+      expect(committed.points).toEqual([
+        { x: 10, y: 10 },
+        { x: 30, y: 40 },
+        { x: 70, y: 40 },
+        { x: 90, y: 10 },
+      ]);
+      // No fill on open tool, regardless of any fillColor fallback prop.
+      expect(committed.fillColor).toBeUndefined();
+      expect(committed.fillOpacity).toBeUndefined();
+
+      // Re-render with the committed strokes so the renderer draws the final path.
+      rerender(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [committed] }}
+          onChange={onChange}
+          tool="bezier"
+        />,
+      );
+
+      const path = container.querySelector('path');
+      expect(path).toBeTruthy();
+      expect(path?.getAttribute('d')).toBe('M 10 10 C 30 40 70 40 90 10');
+      expect(path?.getAttribute('fill')).toBe('none');
+    });
+
+    it('Escape after two bezier clicks commits no stroke', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="bezier"
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      pointerDown(host, 20, 30);
+      pointerDown(host, 40, 60);
+      escapeKey();
+
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('switching tool after one bezier click commits no stroke', () => {
+      const onChange = jest.fn();
+      const { rerender } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="bezier"
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      pointerDown(host, 20, 30);
+
+      rerender(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="pen"
+        />,
+      );
+
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('bezier stroke renders dashed when dashArray is provided', () => {
+      const onChange = jest.fn();
+      const { container, rerender } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="bezier"
+          dashArray={[6, 3]}
+          dashOffset={2}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      pointerDown(host, 20, 30);
+      pointerDown(host, 40, 60);
+      pointerDown(host, 80, 60);
+      pointerDown(host, 100, 30);
+
+      const committed = onChange.mock.calls[0][0].strokes[0];
+      expect(committed.dashArray).toEqual([6, 3]);
+      expect(committed.dashOffset).toBe(2);
+
+      rerender(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [committed] }}
+          onChange={onChange}
+          tool="bezier"
+          dashArray={[6, 3]}
+          dashOffset={2}
+        />,
+      );
+
+      const path = container.querySelector('path');
+      expect(path?.getAttribute('stroke-dasharray')).toBe('6 3');
+      expect(path?.getAttribute('stroke-dashoffset')).toBe('2');
+    });
+
+    it('renders bezier preview as control polyline while clicking', () => {
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          tool="bezier"
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      pointerDown(host, 20, 30);
+      pointerDown(host, 40, 60);
+      pointerMove(host, 80, 60);
+
+      // Preview reuses the v2 line branch — 2 placed + cursor → `M ... L ... L ...`.
+      const path = container.querySelector('path');
+      expect(path).toBeTruthy();
+      expect(path?.getAttribute('d')).toBe('M 10 10 L 30 40 L 70 40');
+      expect(path?.getAttribute('opacity')).toBe('0.7');
+    });
+  });
 });

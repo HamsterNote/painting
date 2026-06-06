@@ -121,6 +121,48 @@ function distanceSqPointToPolygon(point: DrawingPoint, points: DrawingPoint[]): 
   return min;
 }
 
+// Hit-test segment count for cubic Bezier sampling. 24 segments give visually
+// indistinguishable polyline approximation for typical stroke widths while keeping
+// the per-pick cost predictable.
+const BEZIER_HIT_TEST_SEGMENTS = 24;
+
+function sampleCubicBezierPolyline(
+  start: DrawingPoint,
+  control1: DrawingPoint,
+  control2: DrawingPoint,
+  end: DrawingPoint,
+  segments: number,
+): DrawingPoint[] {
+  const samples: DrawingPoint[] = new Array(segments + 1);
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    const oneMinusT = 1 - t;
+    const b0 = oneMinusT * oneMinusT * oneMinusT;
+    const b1 = 3 * oneMinusT * oneMinusT * t;
+    const b2 = 3 * oneMinusT * t * t;
+    const b3 = t * t * t;
+    samples[i] = {
+      x: b0 * start.x + b1 * control1.x + b2 * control2.x + b3 * end.x,
+      y: b0 * start.y + b1 * control1.y + b2 * control2.y + b3 * end.y,
+    };
+  }
+  return samples;
+}
+
+function distanceSqPointToBezier(point: DrawingPoint, points: DrawingPoint[]): number {
+  if (points.length !== 4) {
+    return distanceSqPointToPolyline(point, points);
+  }
+  const samples = sampleCubicBezierPolyline(
+    points[0],
+    points[1],
+    points[2],
+    points[3],
+    BEZIER_HIT_TEST_SEGMENTS,
+  );
+  return distanceSqPointToPolyline(point, samples);
+}
+
 function pointInPolygon(point: DrawingPoint, points: DrawingPoint[]): boolean {
   if (points.length < 3) {
     return false;
@@ -193,6 +235,10 @@ function distanceSqPointToStroke(point: DrawingPoint, stroke: PickableStroke): n
 
   if (tool === 'line' && points.length >= 2) {
     return distanceSqPointToPolyline(point, points);
+  }
+
+  if (tool === 'bezier') {
+    return distanceSqPointToBezier(point, points);
   }
 
   return distanceSqPointToPolyline(point, points);

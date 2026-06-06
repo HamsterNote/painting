@@ -557,7 +557,7 @@ Wave 5: Task 14 (Demo integration), Task 15 (regression/CI hardening) — depend
 
   **Commit**: YES | Message: `feat(tools): support continuous line drawing` | Files: [`packages/painting/src/**/*.ts`, `packages/painting/src/**/*.tsx`, `packages/painting/src/__tests__/*.test.tsx`, `packages/painting/src/__tests__/*.test.ts`, `tests/ui/playground.spec.ts`]
 
-- [ ] 11. Cubic Bezier Tool: add four-click 2-control-point curve
+- [x] 11. Cubic Bezier Tool: add four-click 2-control-point curve
 
   **What to do**: Add `bezier` stroke variant storing `start`, `control1`, `control2`, `end` in canvas-local coordinates. Interaction: click start, click cp1, click cp2, click end commits; pointer move previews current pending segment/control guide. Render as SVG `<path d="M start C cp1 cp2 end">` with open-tool style semantics (stroke only, dash allowed, no fill). Esc before four points discards. Tool switch cancels if incomplete.
   **Must NOT do**: Do not add quadratic curves, multi-segment Bezier paths, editable handles, or smoothing integration.

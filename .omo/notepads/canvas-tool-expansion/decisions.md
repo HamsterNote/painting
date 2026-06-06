@@ -39,3 +39,10 @@
 - Decision: keep dash/fill rendering centralized in `packages/painting/src/render/resolveStrokeStyle.ts` and pass component-level style as renderer fallbacks, with persisted stroke fields taking precedence.
 - Decision: model closed-shape fallback width separately from open stroke fallback width. Closed shapes default to `1` and allow explicit `0`; open tools still normalize invalid or `< 1` prop widths to the existing visual fallback.
 - Decision: treat fill-only eraser selection as geometry containment for closed shapes rather than inflating stroke distance; this makes interior clicks deterministic for filled rect/ellipse/polygon while preserving normal line/pen distance behavior.
+
+## 2026-06-07 Task: 11
+
+- Decision: introduce two distinct tool-classification helpers, `isClickToPlaceTool` and `skipsMultiDragMove`. The former includes `line` so the click effect installs pointer listeners for the line click+dblclick flow; the latter excludes `line` so the legacy drag-line continues to work in the multi-drag Move handler. Unifying them regresses line drag tests.
+- Decision: render bezier preview as a v2 `LineStrokeV2` (control polyline of placed + cursor), not as a partial cubic curve. Avoids inventing arbitrary missing control points and reuses the renderer's existing line branch with dash/opacity plumbing. The committed stroke renders as a real cubic via `bezierPath()` in `StrokeRenderer`.
+- Decision: do NOT pass `fillColor`/`fillOpacity` into committed `BezierStrokeV2`. The base type permits them, but bezier is an open tool — `resolveStrokeStyle({ isClosedShape: false })` already forces `fill="none"` regardless, and omitting at the commit site documents intent and prevents accidental future scope creep into "filled bezier path" semantics.
+- Decision: bezier hit-test samples a fixed 24-segment polyline (25 points) and reuses `distanceSqPointToPolyline`. Adaptive subdivision is overkill for typical stroke-width hit radii; static sampling keeps the per-pick cost constant and meets the plan's ≥24-segment requirement deterministically.

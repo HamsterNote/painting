@@ -5,10 +5,16 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import { useCanvas } from "../hooks/useCanvas";
 import { createPointerInputController } from "../input/pointerInputController";
 import {
+	type CanvasPoint,
 	createInitialState,
 	interactionReducer,
 } from "../interaction/reducer";
-import { DRAWING_STROKE_SCHEMA_VERSION, type LineStrokeV2, type PolygonStrokeV2 } from "../model/strokes";
+import {
+	type BezierStrokeV2,
+	DRAWING_STROKE_SCHEMA_VERSION,
+	type LineStrokeV2,
+	type PolygonStrokeV2,
+} from "../model/strokes";
 import {
 	appendPoint,
 	createStroke,
@@ -22,7 +28,14 @@ import { StrokeRenderer } from "../render/StrokeRenderer";
 import { pick as pickStroke } from "../utils";
 
 // Public drawing contract types
-export type DrawingTool = "pen" | "line" | "rect" | "ellipse" | "polygon" | "eraser";
+export type DrawingTool =
+	| "pen"
+	| "line"
+	| "rect"
+	| "ellipse"
+	| "polygon"
+	| "bezier"
+	| "eraser";
 export type DrawingInputMethod = "touch" | "mouse" | "pen";
 
 export type DrawingPoint = {
@@ -111,8 +124,25 @@ function isDrawingToolSupported(tool: unknown): tool is DrawingTool {
 		tool === "rect" ||
 		tool === "ellipse" ||
 		tool === "polygon" ||
+		tool === "bezier" ||
 		tool === "eraser"
 	);
+}
+
+// Tools that use click-to-place interaction rather than drag. Their pointer
+// events are routed through `interactionReducer` instead of multi-drag.
+// `line` is hybrid: click placement AND legacy drag both work, so it appears
+// here (to install click listeners) but NOT in `skipsMultiDragMove` below.
+function isClickToPlaceTool(tool: DrawingTool): boolean {
+	return tool === "polygon" || tool === "line" || tool === "bezier";
+}
+
+// Tools whose multi-drag Move handler should early-return — pure click tools
+// where every drag sample would be misinterpreted as a zero-distance stroke.
+// `line` is excluded: its multi-drag Move path still creates a drag-line once
+// the user moves beyond `LINE_DRAG_THRESHOLD_PX`.
+function skipsMultiDragMove(tool: DrawingTool): boolean {
+	return tool === "polygon" || tool === "bezier";
 }
 
 function isClosedShapeTool(tool: DrawingTool): boolean {
@@ -482,8 +512,9 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				return;
 			}
 
-			// Polygon uses click-to-place, not drag — handled by a separate effect below.
-			if (effectiveToolRef.current === "polygon") {
+			// Polygon/bezier use click-to-place, not drag — handled by a separate effect below.
+			// Line is hybrid: drag still creates a 2-point line once movement passes the threshold.
+			if (skipsMultiDragMove(effectiveToolRef.current)) {
 				return;
 			}
 
@@ -690,14 +721,31 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			};
 			addStrokeRef.current(polygon as unknown as DrawingStroke);
 		}
+		if (completed.tool === "bezier" && completed.points.length === 4) {
+			// Bezier is an open tool: no fill, dash applies. The reducer emits exactly four
+			// points in [start, cp1, cp2, end] order; renderer's bezierPath() draws `M ... C ...`.
+			const bezier: BezierStrokeV2 = {
+				schemaVersion: DRAWING_STROKE_SCHEMA_VERSION,
+				id: generateStrokeId(),
+				tool: "bezier",
+				points: completed.points.map((point) => ({ x: point.x, y: point.y })),
+				strokeColor: resolvedColorRef.current,
+				strokeWidth: resolvedOpenWidthRef.current,
+				dashArray: resolvedDashArrayRef.current
+					? [...resolvedDashArrayRef.current]
+					: undefined,
+				dashOffset: resolvedDashOffsetRef.current,
+			};
+			addStrokeRef.current(bezier as unknown as DrawingStroke);
+		}
 		dispatchInteraction({ type: "TOOL_CHANGE", tool: effectiveTool });
 	}, [interactionState, effectiveTool]);
 
-	// Click-to-place listeners are only wired when the line/polygon tool is active.
+	// Click-to-place listeners are only wired when the line/polygon/bezier tool is active.
 	// Re-mounting on tool change is intentional: a different tool means a different
 	// set of pointer semantics, so the listener lifetime tracks the tool.
 	useEffect(() => {
-		if ((effectiveTool !== "polygon" && effectiveTool !== "line") || !isDrawingEnabled) {
+		if (!isClickToPlaceTool(effectiveTool) || !isDrawingEnabled) {
 			return undefined;
 		}
 		const host = hostRef.current;
@@ -851,6 +899,38 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				}
 			: null;
 
+	// Bezier preview is the open control polyline of placed points + cursor. The
+	// renderer's v2 line branch draws `M ... L ... L ...` for >2 points, which is
+	// exactly the visual feedback (start → cp1 → cp2 → end skeleton) the user
+	// needs while clicking through the four points. The final committed stroke
+	// renders as a true cubic curve via `bezierPath()` once the 4th click lands.
+	const bezierPreviewStroke: LineStrokeV2 | null = (() => {
+		if (interactionState.phase !== "placingBezier") {
+			return null;
+		}
+		const placed = interactionState.points.filter(
+			(point): point is CanvasPoint => point !== undefined,
+		);
+		const cursor = interactionState.cursorPoint;
+		const previewPoints =
+			cursor && (placed.length === 0 || placed[placed.length - 1].x !== cursor.x || placed[placed.length - 1].y !== cursor.y)
+				? [...placed, cursor]
+				: [...placed];
+		if (previewPoints.length === 0) {
+			return null;
+		}
+		return {
+			schemaVersion: DRAWING_STROKE_SCHEMA_VERSION,
+			id: "bezier-preview",
+			tool: "line",
+			points: previewPoints.map((point) => ({ x: point.x, y: point.y })),
+			strokeColor: resolvedColor,
+			strokeWidth: resolvedOpenWidth,
+			dashArray: resolvedDashArray ? [...resolvedDashArray] : undefined,
+			dashOffset: resolvedDashOffset,
+		};
+	})();
+
 	return (
 		<div
 			ref={hostRef}
@@ -926,6 +1006,20 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				{polygonPreviewStroke && (
 					<StrokeRenderer
 						stroke={polygonPreviewStroke}
+						isActive={true}
+						fallbackColor={resolvedColor}
+						fallbackWidth={resolvedOpenWidth}
+						fallbackClosedWidth={resolvedClosedWidth}
+						fallbackDashArray={resolvedDashArray}
+						fallbackDashOffset={resolvedDashOffset}
+						fallbackFillColor={fillColor}
+						fallbackFillOpacity={resolvedFillOpacity}
+					/>
+				)}
+
+				{bezierPreviewStroke && (
+					<StrokeRenderer
+						stroke={bezierPreviewStroke}
 						isActive={true}
 						fallbackColor={resolvedColor}
 						fallbackWidth={resolvedOpenWidth}
