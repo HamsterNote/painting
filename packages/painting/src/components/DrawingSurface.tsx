@@ -453,6 +453,11 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			data-testid={testID}
 			data-tool={effectiveTool}
 			data-enabled={String(isDrawingEnabled)}
+			data-stroke-count={strokes.length}
+			data-active-tool={effectiveTool}
+			data-scale="1"
+			data-tx="0"
+			data-ty="0"
 			style={{
 				width: "100%",
 				height: "100%",

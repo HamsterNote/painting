@@ -9,3 +9,9 @@
 - Decision: keep `eraser` out of persisted v2 strokes. The new `DrawingStrokeV2` union includes only `pen`, `line`, `rect`, `ellipse`, `polygon`, and `bezier`; `DrawingToolModeV2` is the additive mode type that includes `eraser`.
 - Decision: represent all v2 stroke variants with cloned canvas-local `points` arrays for this task. This minimizes migration risk for existing v1 `{ id, tool, points, strokeColor?, strokeWidth? }` data while still giving later renderer/reducer tasks a strict `tool` + `schemaVersion: 2` discriminated union.
 - Decision: unknown future persisted tools are ignored by `normalizeDrawingValue` rather than throwing, matching the Task 2 safety scenario and keeping old JSON loading resilient.
+
+## 2026-06-06T15:30:00Z Task: 4
+
+- Decision: place all new testability data attributes on the root `<div>` (same element as `data-testid`) rather than on the inner `<svg>`. This keeps Playwright selectors flat — tests can query `[data-testid="drawing-surface-controlled"][data-stroke-count="1"]` without nested element traversal.
+- Decision: `data-scale`, `data-tx`, `data-ty` are static string defaults (`"1"`, `"0"`, `"0"`) rather than state-driven. Task 13 will wire these to actual viewport transform state. Using static defaults ensures the attributes exist in the DOM immediately for selector-based tests without requiring state management prematurely.
+- Decision: `data-active-tool` duplicates `data-tool` for now. The task spec required `data-active-tool`; `data-tool` was pre-existing and is preserved for backward compatibility. Both reflect `effectiveTool`.
