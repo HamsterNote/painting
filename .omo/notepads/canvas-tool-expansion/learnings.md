@@ -23,3 +23,10 @@
 - `data-stroke-count` updates reactively when strokes are added or removed since `strokes` comes from the `useCanvas` hook which responds to controlled `value` or internal state changes.
 - No existing `data-testid` attributes were removed or renamed in either `DrawingSurface.tsx` or `App.tsx`.
 - All 12 existing Playwright tests pass unchanged after adding the new attributes — zero regressions.
+
+## 2026-06-06T16:10:00Z Task: 6
+
+- `DrawingSurface` committed strokes are still v1-shaped and now flow through `StrokeRenderer` unchanged; schema-version detection happens inside the renderer, so no migration is needed during rendering.
+- Existing pen pressure behavior depends on per-segment `<line>` elements keyed by stroke id/index for committed strokes and `active-${index}` for previews; preserving this keeps the DrawingSurface pressure DOM assertions green.
+- `pointsToSvgPath` remains the path source for non-pressure pen strokes, so smoothing-path output is preserved while rect/line/ellipse/polygon/bezier geometry lives in `packages/painting/src/render/StrokeRenderer.tsx`.
+- Full Jest coverage after renderer extraction is 147 passing tests, including new render tests and unchanged DrawingSurface DOM assertions.

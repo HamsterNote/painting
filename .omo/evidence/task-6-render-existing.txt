@@ -1,0 +1,13 @@
+yarn run v1.22.22
+$ jest --runInBand --runInBand '--testPathPattern=render|DrawingSurface|stroke-helpers'
+PASS packages/painting/src/render/__tests__/StrokeRenderer.test.tsx
+PASS packages/painting/src/__tests__/DrawingSurface.test.tsx
+PASS packages/painting/src/render/__tests__/resolveStrokeStyle.test.ts
+PASS packages/painting/src/__tests__/stroke-helpers.test.ts
+
+Test Suites: 4 passed, 4 total
+Tests:       103 passed, 103 total
+Snapshots:   0 total
+Time:        1.041 s
+Ran all test suites matching /render|DrawingSurface|stroke-helpers/i.
+Done in 1.37s.

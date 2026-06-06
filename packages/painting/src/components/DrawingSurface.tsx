@@ -10,10 +10,10 @@ import {
 	createVelocityAdaptivePoints,
 	type DrawingStrokeSmoothingOptions,
 	isValidStroke,
-	pointsToSvgPath,
 	resolveStrokeSmoothingOptions,
 	type TimedDrawingPoint,
 } from "../stroke-helpers";
+import { StrokeRenderer } from "../render/StrokeRenderer";
 import { pick as pickStroke } from "../utils";
 
 // Public drawing contract types
@@ -122,13 +122,6 @@ function normalizePointPressure(pressure: number | undefined): number {
 		pressure <= 1
 		? pressure
 		: 1;
-}
-
-function hasPressureData(stroke: DrawingStroke): boolean {
-	return (
-		stroke.tool === "pen" &&
-		stroke.points.some((point) => point.pressure !== undefined)
-	);
 }
 
 export function DrawingSurface(props: DrawingSurfaceProps) {
@@ -477,153 +470,23 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				}}
 			>
 				<title>Drawing surface</title>
-				{strokes.map((stroke) => {
-					if (stroke.points.length === 0) {
-						return null;
-					}
-					const first = stroke.points[0];
-					const last = stroke.points[stroke.points.length - 1];
-					const strokeColor = stroke.strokeColor ?? resolvedColor;
-					const strokeWidth = stroke.strokeWidth ?? resolvedWidth;
-					if (stroke.tool === "rect") {
-						const x = Math.min(first.x, last.x);
-						const y = Math.min(first.y, last.y);
-						const width = Math.abs(last.x - first.x);
-						const height = Math.abs(last.y - first.y);
-						return (
-							<rect
-								key={stroke.id}
-								x={x}
-								y={y}
-								width={width}
-								height={height}
-								fill="none"
-								stroke={strokeColor}
-								strokeWidth={strokeWidth}
-							/>
-						);
-					}
-					if (stroke.tool === "line") {
-						return (
-							<line
-								key={stroke.id}
-								x1={first.x}
-								y1={first.y}
-								x2={last.x}
-								y2={last.y}
-								fill="none"
-								stroke={strokeColor}
-								strokeWidth={strokeWidth}
-								strokeLinecap="round"
-							/>
-						);
-					}
-					if (hasPressureData(stroke) && stroke.points.length >= 2) {
-						return stroke.points.slice(1).map((point, index) => {
-							const previousPoint = stroke.points[index];
-							const segmentKey = `${stroke.id}-${index}`;
-							return (
-								<line
-									key={segmentKey}
-									x1={previousPoint.x}
-									y1={previousPoint.y}
-									x2={point.x}
-									y2={point.y}
-									stroke={strokeColor}
-									strokeWidth={strokeWidth * normalizePointPressure(point.pressure)}
-									strokeLinecap="round"
-									strokeLinejoin="round"
-								/>
-							);
-						});
-					}
-					return (
-						<path
-							key={stroke.id}
-							d={pointsToSvgPath(stroke.points)}
-							fill="none"
-							stroke={strokeColor}
-							strokeWidth={strokeWidth}
-							strokeLinecap="round"
-							strokeLinejoin="round"
-						/>
-					);
-				})}
+				{strokes.map((stroke) => (
+					<StrokeRenderer
+						key={stroke.id}
+						stroke={stroke}
+						fallbackColor={resolvedColor}
+						fallbackWidth={resolvedWidth}
+					/>
+				))}
 
-				{activeStroke &&
-					activeStroke.points.length > 0 &&
-					(activeStroke.tool === "rect" ? (
-						(() => {
-							const first = activeStroke.points[0];
-							const last = activeStroke.points[activeStroke.points.length - 1];
-							const x = Math.min(first.x, last.x);
-							const y = Math.min(first.y, last.y);
-							const width = Math.abs(last.x - first.x);
-							const height = Math.abs(last.y - first.y);
-							return (
-								<rect
-									x={x}
-									y={y}
-									width={width}
-									height={height}
-									fill="none"
-									stroke={resolvedColor}
-									strokeWidth={resolvedWidth}
-									opacity="0.7"
-								/>
-							);
-						})()
-					) : activeStroke.tool === "line" ? (
-						(() => {
-							const first = activeStroke.points[0];
-							const last = activeStroke.points[activeStroke.points.length - 1];
-							return (
-								<line
-									x1={first.x}
-									y1={first.y}
-									x2={last.x}
-									y2={last.y}
-									fill="none"
-									stroke={resolvedColor}
-									strokeWidth={resolvedWidth}
-									strokeLinecap="round"
-									opacity="0.7"
-								/>
-							);
-						})()
-					) : hasPressureData(activeStroke) && activeStroke.points.length >= 2 ? (
-						activeStroke.points.slice(1).map((point, index) => {
-							const previousPoint = activeStroke.points[index];
-							const segmentKey = `active-${index}`;
-							return (
-								<line
-									key={segmentKey}
-									x1={previousPoint.x}
-									y1={previousPoint.y}
-									x2={point.x}
-									y2={point.y}
-									stroke={resolvedColor}
-									strokeWidth={
-										(activeStroke.strokeWidth ?? resolvedWidth) *
-										normalizePointPressure(point.pressure)
-									}
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									opacity="0.7"
-								/>
-							);
-						})
-					) : (
-						<path
-							d={pointsToSvgPath(activeStroke.points)}
-							fill="none"
-							stroke={resolvedColor}
-							strokeWidth={resolvedWidth}
-							strokeLinecap="round"
-							strokeLinejoin="round"
-							opacity="0.7"
-						/>
-					))}
+				{activeStroke && (
+					<StrokeRenderer
+						stroke={activeStroke}
+						isActive={true}
+						fallbackColor={resolvedColor}
+						fallbackWidth={resolvedWidth}
+					/>
+				)}
 			</svg>
 		</div>
 	);

@@ -25,6 +25,14 @@ export type {
   RectStrokeV2,
 } from "./model/strokes";
 export { DRAWING_STROKE_SCHEMA_VERSION } from "./model/strokes";
+export { StrokeRenderer } from "./render/StrokeRenderer";
+export type { RenderableStroke, StrokeRendererProps } from "./render/StrokeRenderer";
+export { resolveStrokeStyle } from "./render/resolveStrokeStyle";
+export type {
+  ResolvedStrokeStyle,
+  ResolveStrokeStyleOptions,
+  StrokeStyleFields,
+} from "./render/resolveStrokeStyle";
 export type { DrawingStrokeSmoothingOptions } from "./stroke-helpers";
 export {
 	addStroke,

@@ -21,3 +21,9 @@
 - Decision: place all new testability data attributes on the root `<div>` (same element as `data-testid`) rather than on the inner `<svg>`. This keeps Playwright selectors flat — tests can query `[data-testid="drawing-surface-controlled"][data-stroke-count="1"]` without nested element traversal.
 - Decision: `data-scale`, `data-tx`, `data-ty` are static string defaults (`"1"`, `"0"`, `"0"`) rather than state-driven. Task 13 will wire these to actual viewport transform state. Using static defaults ensures the attributes exist in the DOM immediately for selector-based tests without requiring state management prematurely.
 - Decision: `data-active-tool` duplicates `data-tool` for now. The task spec required `data-active-tool`; `data-tool` was pre-existing and is preserved for backward compatibility. Both reflect `effectiveTool`.
+
+## 2026-06-06T16:10:00Z Task: 6
+
+- Decision: keep v1 `DrawingStroke` accepted by `StrokeRenderer` via absence of `schemaVersion`, while v2 strokes use an exhaustive `switch` over the six persisted tool variants and `assertNever` in the default branch.
+- Decision: keep style normalization pure in `resolveStrokeStyle`, returning React/SVG attribute names and omitting invalid dash arrays entirely when any dash segment is non-finite or negative.
+- Decision: closed shapes opt into fill only when `fillColor` is present; open tools always render `fill="none"`, and closed shapes with `strokeWidth: 0` omit stroke attributes.
