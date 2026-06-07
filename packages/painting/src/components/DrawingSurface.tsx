@@ -114,6 +114,8 @@ export type DrawingCursorOptions = {
 	render?: (state: DrawingCursorRenderState) => ReactNode;
 };
 
+type ActivePointer = { x: number; y: number };
+
 export type DrawingSurfaceGestures = {
 	/** Enable one-pointer viewport panning when no drawing tool is active. Defaults to false. */
 	pan?: boolean;
@@ -440,6 +442,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		createInitialState,
 	);
 	const isDrawingRef = useRef(false);
+	const activePointersRef = useRef(new Map<number, ActivePointer>());
 	const processedPathLengthRef = useRef(0);
 	const effectiveToolRef = useRef(effectiveTool);
 	const isDrawingEnabledRef = useRef(isDrawingEnabled);
@@ -803,7 +806,6 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			return undefined;
 		}
 
-		type ActivePointer = { x: number; y: number };
 		type GestureMode =
 			| {
 					type: "pan";
@@ -818,7 +820,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 					startViewport: DrawingViewport;
 				};
 
-		const activePointers = new Map<number, ActivePointer>();
+		const activePointers = activePointersRef.current;
 		let gestureMode: GestureMode | null = null;
 
 		const readPointer = (event: Event) => {
@@ -1360,7 +1362,9 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			const { clientX, clientY, pointerType } = readPointer(event);
 			const { screen, canvas } = computePositions(clientX, clientY);
 			const nextVisible =
-				pointerType === "touch" ? cursorPointerDownRef.current : true;
+				pointerType === "touch"
+					? cursorPointerDownRef.current && activePointersRef.current.size < 2
+					: true;
 			setCursorState({ visible: nextVisible, screen, canvas, pointerType });
 		};
 
@@ -1373,15 +1377,41 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			cursorPointerDownRef.current = true;
 			const { clientX, clientY, pointerType } = readPointer(event);
 			const { screen, canvas } = computePositions(clientX, clientY);
-			setCursorState({ visible: true, screen, canvas, pointerType });
+			setCursorState({
+				visible: pointerType !== "touch" || activePointersRef.current.size < 2,
+				screen,
+				canvas,
+				pointerType,
+			});
 		};
 
 		const handleUp = (event: Event) => {
-			cursorPointerDownRef.current = false;
-			const { pointerType } = readPointer(event);
+			const pointer = readPointer(event);
+			const pointerLike = event as Event & { pointerId?: number };
+			const nextTouchPointer =
+				pointer.pointerType === "touch"
+					? Array.from(activePointersRef.current.entries()).find(
+							([pointerId]) => pointerId !== (pointerLike.pointerId ?? 1),
+						)?.[1]
+					: undefined;
+			cursorPointerDownRef.current = nextTouchPointer !== undefined;
 			// Touch lifts the finger off the surface — hide; mouse/pen keep hovering.
-			if (pointerType === "touch") {
-				setCursorState((prev) => ({ ...prev, visible: false, pointerType }));
+			if (pointer.pointerType === "touch") {
+				if (!nextTouchPointer) {
+					setCursorState((prev) => ({
+						...prev,
+						visible: false,
+						pointerType: pointer.pointerType,
+					}));
+					return;
+				}
+
+				setCursorState({
+					visible: true,
+					screen: nextTouchPointer,
+					canvas: screenToCanvas(nextTouchPointer, viewportRef.current),
+					pointerType: pointer.pointerType,
+				});
 			}
 		};
 

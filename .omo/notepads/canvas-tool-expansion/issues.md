@@ -13,3 +13,6 @@
 ## Task 13 — Opt-in viewport gestures
 
 - No unresolved Task 13 implementation issues. Verification passed with the existing bob package exports warnings during build; build still exited 0.
+
+## 2026-06-07 Task 15 remediation
+- Baseline `yarn lint` exited 1 with the expected 6 base `no-redeclare` overload errors plus one pre-existing `jest/expect-expect` warning in `packages/painting/src/__tests__/viewport.test.ts`; remediation targets the overload errors and keeps the warning visible as out-of-scope unless lint policy changes.

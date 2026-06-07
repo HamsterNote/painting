@@ -106,3 +106,7 @@
 - Scenarios 3 (reset-during-active-stroke) and 5 (filled-shape eraser) already covered in interaction/__tests__/reducer.test.ts line 197 and DrawingSurface.test.tsx lines 715/788 respectively.
 - IMPORT NOTE: tests must import from ../model/strokeMigration directly, NOT from ../index. The index.ts re-exports DrawingSurface which pulls in @system-ui-js/multi-drag (ESM-only, breaks Jest's CJS transform).
 - Final state: 238/238 tests pass, yarn typecheck clean.
+
+## 2026-06-07 Task 15 remediation
+- Lint blocker was ESLint config, not invalid TS: base `no-redeclare` flags overload signatures in reducer/strokeMigration/stroke-helpers, while `@typescript-eslint/no-redeclare` with `ignoreDeclarationMerge` preserves legitimate overloads and keeps Task 15 lint coverage meaningful.
+- Pinch crosshair visibility now reads the same active pointer Map used by viewport gestures; a second touch hides `[data-crosshair]`, and lifting it restores the remaining active touch crosshair without adding a parallel gesture model.

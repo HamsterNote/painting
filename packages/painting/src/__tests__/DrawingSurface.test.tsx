@@ -2761,6 +2761,55 @@ describe('DrawingSurface', () => {
       });
       expect(container.querySelector('[data-crosshair]')).toBeNull();
     });
+
+    it('touch pinch hides crosshair until the second pointer lifts', () => {
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          cursor={true}
+          gestures={{ pinchZoom: true }}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      act(() => {
+        host.dispatchEvent(
+          pointerEvent('pointerdown', {
+            clientX: 100,
+            clientY: 100,
+            pointerType: 'touch',
+            pointerId: 1,
+          }),
+        );
+      });
+      expect(container.querySelector('[data-crosshair]')).toBeTruthy();
+
+      act(() => {
+        host.dispatchEvent(
+          pointerEvent('pointerdown', {
+            clientX: 130,
+            clientY: 130,
+            pointerType: 'touch',
+            pointerId: 2,
+          }),
+        );
+      });
+      expect(container.querySelector('[data-crosshair]')).toBeNull();
+
+      act(() => {
+        host.dispatchEvent(
+          pointerEvent('pointerup', {
+            clientX: 130,
+            clientY: 130,
+            pointerType: 'touch',
+            pointerId: 2,
+          }),
+        );
+      });
+      expect(container.querySelector('[data-crosshair]')).toBeTruthy();
+    });
   });
 
   describe('viewport gestures', () => {
