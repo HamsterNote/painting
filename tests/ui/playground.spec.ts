@@ -442,4 +442,159 @@ test.describe('DrawingSurface playground', () => {
     expect(parsed.strokes[0].tool).toBe('pen');
     expect(parsed.strokes[0].points.length).toBeGreaterThan(0);
   });
+
+  // ===== Task 14: Playground Demo Integration =====
+
+  test('exposes all 7 tool buttons with data-tool selectors', async ({ page }) => {
+    for (const tool of ['pen', 'line', 'rect', 'ellipse', 'polygon', 'bezier', 'eraser']) {
+      const btn = page.locator(`button[data-tool="${tool}"]`);
+      await expect(btn).toBeVisible();
+    }
+  });
+
+  test('exposes dash / fill / cursor / gesture control panels', async ({ page }) => {
+    await expect(page.getByTestId('panel-dash')).toBeVisible();
+    await expect(page.getByTestId('panel-fill')).toBeVisible();
+    await expect(page.getByTestId('panel-cursor')).toBeVisible();
+    await expect(page.getByTestId('panel-gestures')).toBeVisible();
+
+    await expect(page.getByTestId('dash-enabled')).toBeVisible();
+    await expect(page.getByTestId('dash-length')).toBeVisible();
+    await expect(page.getByTestId('dash-gap')).toBeVisible();
+    await expect(page.getByTestId('dash-offset')).toBeVisible();
+
+    await expect(page.getByTestId('fill-enabled')).toBeVisible();
+    await expect(page.getByTestId('fill-color')).toBeVisible();
+    await expect(page.getByTestId('fill-opacity')).toBeVisible();
+    await expect(page.getByTestId('force-stroke-width-zero')).toBeVisible();
+
+    await expect(page.getByTestId('cursor-enabled')).toBeVisible();
+    await expect(page.getByTestId('cursor-custom-render-toggle')).toBeVisible();
+
+    await expect(page.getByTestId('gesture-pan-toggle')).toBeVisible();
+    await expect(page.getByTestId('gesture-pinch-zoom-toggle')).toBeVisible();
+    await expect(page.getByTestId('gesture-reset-toggle')).toBeVisible();
+  });
+
+  test('shows shift instruction for rect / ellipse', async ({ page }) => {
+    await page.locator('button[data-tool="rect"]').click();
+    await expect(page.getByTestId('tool-instruction')).toHaveText(/Hold Shift to draw square\/circle/);
+
+    await page.locator('button[data-tool="ellipse"]').click();
+    await expect(page.getByTestId('tool-instruction')).toHaveText(/Hold Shift to draw square\/circle/);
+  });
+
+  test('shows click-to-place instruction for line / polygon / bezier', async ({ page }) => {
+    for (const tool of ['line', 'polygon', 'bezier']) {
+      await page.locator(`button[data-tool="${tool}"]`).click();
+      await expect(page.getByTestId('tool-instruction')).toHaveText(/Click to add points, double-click or Esc to finish/);
+    }
+  });
+
+  test('reset button appears when gesture reset is enabled', async ({ page }) => {
+    await expect(page.getByTestId('gesture-reset-button')).toHaveCount(0);
+    await page.getByTestId('gesture-reset-toggle').check();
+    await expect(page.getByTestId('gesture-reset-button')).toBeVisible();
+  });
+
+  test('draws ellipse via drag and commits to JSON preview', async ({ page }) => {
+    await page.locator('button[data-tool="ellipse"]').click();
+
+    const surface = page.getByTestId('drawing-surface-controlled');
+    const preview = page.getByTestId('drawing-preview-controlled');
+    const box = await surface.boundingBox();
+    expect(box).not.toBeNull();
+
+    await page.mouse.move(box!.x + 80, box!.y + 80);
+    await page.mouse.down();
+    await page.mouse.move(box!.x + 220, box!.y + 200);
+    await page.mouse.up();
+
+    await expect(surface).toHaveAttribute('data-stroke-count', '1');
+    const previewText = await preview.textContent();
+    expect(previewText).toBeTruthy();
+    const parsed = JSON.parse(previewText!);
+    expect(parsed.strokes.length).toBe(1);
+    expect(parsed.strokes[0].tool).toBe('ellipse');
+  });
+
+  test('draws polygon via 4 clicks + dblclick and commits to JSON preview', async ({ page }) => {
+    await page.locator('button[data-tool="polygon"]').click();
+
+    const surface = page.getByTestId('drawing-surface-controlled');
+    const preview = page.getByTestId('drawing-preview-controlled');
+    const box = await surface.boundingBox();
+    expect(box).not.toBeNull();
+
+    const pts = [
+      { x: box!.x + 80, y: box!.y + 80 },
+      { x: box!.x + 200, y: box!.y + 80 },
+      { x: box!.x + 220, y: box!.y + 180 },
+      { x: box!.x + 100, y: box!.y + 200 },
+    ];
+    for (const p of pts) {
+      await page.mouse.click(p.x, p.y);
+    }
+    await page.mouse.dblclick(pts[pts.length - 1].x, pts[pts.length - 1].y);
+
+    await expect(surface).toHaveAttribute('data-stroke-count', '1');
+    const previewText = await preview.textContent();
+    expect(previewText).toBeTruthy();
+    const parsed = JSON.parse(previewText!);
+    expect(parsed.strokes.length).toBe(1);
+    expect(parsed.strokes[0].tool).toBe('polygon');
+  });
+
+  test('draws bezier via 4 clicks + dblclick and commits to JSON preview', async ({ page }) => {
+    await page.locator('button[data-tool="bezier"]').click();
+
+    const surface = page.getByTestId('drawing-surface-controlled');
+    const preview = page.getByTestId('drawing-preview-controlled');
+    const box = await surface.boundingBox();
+    expect(box).not.toBeNull();
+
+    const pts = [
+      { x: box!.x + 70, y: box!.y + 70 },
+      { x: box!.x + 130, y: box!.y + 50 },
+      { x: box!.x + 200, y: box!.y + 150 },
+      { x: box!.x + 260, y: box!.y + 200 },
+    ];
+    for (const p of pts) {
+      await page.mouse.click(p.x, p.y);
+    }
+    await page.mouse.dblclick(pts[pts.length - 1].x, pts[pts.length - 1].y);
+
+    await expect(surface).toHaveAttribute('data-stroke-count', '1');
+    const previewText = await preview.textContent();
+    expect(previewText).toBeTruthy();
+    const parsed = JSON.parse(previewText!);
+    expect(parsed.strokes.length).toBe(1);
+    expect(parsed.strokes[0].tool).toBe('bezier');
+  });
+
+  test('draws continuous line via 3 clicks + dblclick and commits to JSON preview', async ({ page }) => {
+    await page.locator('button[data-tool="line"]').click();
+
+    const surface = page.getByTestId('drawing-surface-controlled');
+    const preview = page.getByTestId('drawing-preview-controlled');
+    const box = await surface.boundingBox();
+    expect(box).not.toBeNull();
+
+    const pts = [
+      { x: box!.x + 60, y: box!.y + 60 },
+      { x: box!.x + 160, y: box!.y + 60 },
+      { x: box!.x + 220, y: box!.y + 160 },
+    ];
+    for (const p of pts) {
+      await page.mouse.click(p.x, p.y);
+    }
+    await page.mouse.dblclick(pts[pts.length - 1].x, pts[pts.length - 1].y);
+
+    await expect(surface).toHaveAttribute('data-stroke-count', '1');
+    const previewText = await preview.textContent();
+    expect(previewText).toBeTruthy();
+    const parsed = JSON.parse(previewText!);
+    expect(parsed.strokes.length).toBe(1);
+    expect(parsed.strokes[0].tool).toBe('line');
+  });
 });

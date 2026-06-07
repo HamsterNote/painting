@@ -687,7 +687,7 @@ Wave 5: Task 14 (Demo integration), Task 15 (regression/CI hardening) — depend
 
   **Commit**: YES | Message: `feat(viewport): add opt-in pan and pinch zoom` | Files: [`packages/painting/src/components/DrawingSurface.tsx`, `packages/painting/src/**/*.ts`, `packages/painting/src/__tests__/*.test.tsx`, `packages/painting/src/__tests__/*.test.ts`, `tests/ui/playground.spec.ts`]
 
-- [ ] 14. Playground Demo Integration: expose every requested feature without breaking existing E2E
+- [x] 14. Playground Demo Integration: expose every requested feature without breaking existing E2E
 
   **What to do**: Update `apps/playground/src/App.tsx` to expose all features: tool selector includes pen/line/rect/ellipse/polygon/bezier/eraser; dash controls for dash length/gap/offset; closed-shape fill color/opacity/strokeWidth 0 control; Shift instruction text; continuous line/Polygon/Bezier instructions; crosshair enable/custom demo; gestures panel with independent pan/pinch/reset toggles and reset button. Group controls by feature panels to avoid Demo bloat. Preserve existing controlled/uncontrolled demo and JSON previews.
   **Must NOT do**: Do not remove current controls for color/width/pressure/input methods/sampling/smoothing. Do not rename existing labels/selectors used by tests. Do not add Storybook.

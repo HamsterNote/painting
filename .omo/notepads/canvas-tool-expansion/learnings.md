@@ -92,3 +92,10 @@
 - DrawingSurface now owns real DrawingViewport state and keeps persisted stroke coordinates canvas-local; only the SVG render path applies the single translate/scale group transform.
 - jsdom gesture tests can use plain Event objects on host/document with pointer-shaped fields; document-level pointermove is needed because the gesture listener tracks active pointers outside the host after pointerdown.
 - Eraser hit testing at zoom must convert screen coordinates through screenToCanvas and divide the hit radius by viewport.scale so screen-space eraser size remains stable.
+
+## 2026-06-07T00:27:45Z Task 14 playground demo
+- Playground viewport is 1280x720 (Playwright default); stacking many vertical fieldsets pushes the DrawingSurface below the fold and breaks page.mouse-based draws because coordinates outside the viewport never dispatch to the surface element. Fix: wrap the new feature panels (Dash / Fill / Cursor / Gestures) in a flex-wrap row with flex: 1 1 320px so they tile 2-3 per row and the surface remains in viewport.
+- DrawingSurface host div already exposes data-tool="<active tool>" for state introspection. A button with data-tool="pen" will collide under Playwright strict mode (3 matching elements: button + 2 surfaces). Scope to button[data-tool="..."] in spec selectors; do not rename the surface attribute.
+- Preserved data-testid="drawing-tool-select" so the existing selectOption('rect'/'line') tests still pass while also providing per-tool buttons.
+- Used a key={`controlled-${viewportResetCounter}`} remount pattern for the gesture-reset button; avoids adding a new imperative ref API to the package while still demoing reset behavior end-to-end.
+- Custom-render cursor demo returns an SVG <g> with a circle + text label; DrawingSurface mounts it inside the overlay SVG so absolute screen coords come straight from state.screen.
