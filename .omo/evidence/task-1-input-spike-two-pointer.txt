@@ -1,0 +1,17 @@
+Task 1 Two-Pointer Boundary Evidence
+Timestamp: 2026-06-06T14:45:50Z
+
+Boundary encoded in tests
+- `DrawingSurface` test name includes required keywords: `pinch feasibility two pointer default-off gesture ignores second pointer while preserving one pointer drawing`.
+- The test simulates a one-pointer pen stroke, then emits a two-finger `Move`, then resumes one-pointer movement and commits.
+- Expected boundary: default-off gesture behavior means the second pointer does not start pan/pinch work and does not erase or commit drawing data from the first pointer.
+- Final asserted committed points: [{ x: 5, y: 5 }, { x: 10, y: 15 }, { x: 20, y: 25 }].
+
+Pointer Events replacement structure
+- `packages/painting/src/input/pointerInputController.ts` exposes internal `createPointerInputController(element, { gesturesEnabled })`.
+- Default gesture state is off (`gesturesEnabled !== true`).
+- Controller test name includes required keywords: `pinch feasibility two pointer controller defaults gestures off while tracking active pointers`.
+- Controller tracks two active pointer IDs with native pointer events and clears state on pointerup/pointercancel/destroy.
+
+Regression note
+- Existing one-pointer drawing remains driven by `@system-ui-js/multi-drag` for this task; full pan/zoom is not implemented here and remains Task 13.

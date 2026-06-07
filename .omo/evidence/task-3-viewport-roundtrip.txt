@@ -1,0 +1,12 @@
+Command:
+yarn test --testPathPattern='utils|viewport' --runInBand
+
+Result:
+- PASS packages/painting/src/__tests__/viewport.test.ts
+- PASS packages/painting/src/__tests__/utils.test.ts
+- Test Suites: 2 passed, 2 total
+- Tests: 43 passed, 43 total
+
+Coverage evidence:
+- `screenToCanvas(canvasToScreen(point, viewport), viewport)` round-trips within 0.001 for default, translated, scaled, and translated+scaled viewports.
+- `zoomViewportAroundScreenPoint` keeps the pinch midpoint stable in screen space within 0.5px.

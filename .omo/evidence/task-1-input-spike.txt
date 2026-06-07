@@ -1,0 +1,22 @@
+Task 1 Input Feasibility Spike
+Timestamp: 2026-06-06T14:45:50Z
+
+Decision
+- Selected path: replace input internals with Pointer Events.
+- Implementation path: `packages/painting/src/input/pointerInputController.ts` is the thin internal controller stub for Task 13 gesture work. `DrawingSurface` creates it with `gesturesEnabled: false` and still preserves existing public exports from `packages/painting/src/index.ts`.
+
+Why not reuse @system-ui-js/multi-drag for gestures
+- Current `packages/painting/src/multi-drag.d.ts` only describes `Drag`, `DragOperationType.Move`, `DragOperationType.AllEnd`, options, and `Finger.getPath()`.
+- Installed `node_modules/@system-ui-js/multi-drag/dist/drag/finger.d.ts` exposes `Finger.pointerId`, but `node_modules/@system-ui-js/multi-drag/dist/drag/drag.js` constructs `DragBase` with `{ ...options, maxFingerCount: -1 }`, overriding caller `maxFingerCount: 1`.
+- Installed `DragBase` mutates pose during pointer move via `setPose`, while drawing needs default-off gesture behavior and one-pointer drawing unchanged.
+
+TDD evidence
+- Added failing-first DrawingSurface test: `pinch feasibility two pointer default-off gesture ignores second pointer while preserving one pointer drawing`.
+- First meaningful failure after isolating smoothing: expected active path to remain after second pointer, received undefined because current `fingers.length > 1` branch cleared the active stroke.
+- Fix: multi-finger `Move` now returns without clearing one-pointer active drawing; Pointer Events controller stub tracks active pointer count separately.
+
+Command evidence
+- Initial required command attempt: `yarn workspace @hamster-note/painting test -- DrawingSurface.test.tsx --runInBand` failed because package `@hamster-note/painting` had no `test` script.
+- Added package-scoped `test` script delegating to the repo-root Jest config (`yarn --cwd ../.. test`) so the required workspace command is runnable without using the package-local React Native Babel config.
+- Required command final result: `yarn workspace @hamster-note/painting test -- DrawingSurface.test.tsx --runInBand` PASS, 47 tests passed in `packages/painting/src/__tests__/DrawingSurface.test.tsx`.
+- Controller focused test: `yarn test pointerInputController.test.ts --runInBand` PASS, 1 test passed.

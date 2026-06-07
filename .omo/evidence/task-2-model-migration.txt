@@ -1,0 +1,20 @@
+Task 2 model migration evidence
+Timestamp: 2026-06-06T15:00:07Z
+
+Scenario: Old JSON loads into v2 model
+Command run from repo root:
+  yarn test --testPathPattern='utils|stroke-helpers' --runInBand
+
+Relevant assertions:
+  - frozen v1 pen/line/rect fixture value normalizes exactly to frozen v2 golden fixture value
+  - normalizeDrawingValue returns a new value object, new strokes array, new stroke objects, new point arrays, and new point objects
+  - original frozen v1 fixture remains deeply equal to its pre-call JSON snapshot
+
+Result:
+  PASS packages/painting/src/__tests__/stroke-helpers.test.ts
+  PASS packages/painting/src/__tests__/utils.test.ts
+  Test Suites: 2 passed, 2 total
+  Tests: 66 passed, 66 total
+
+Typecheck:
+  yarn typecheck exited 0

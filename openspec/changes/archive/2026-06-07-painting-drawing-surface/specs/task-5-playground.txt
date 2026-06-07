@@ -1,0 +1,6 @@
+Task 5: Build controlled and uncontrolled playground fixtures
+- yarn build: PASS
+- yarn test:ui: PASS (3/3 tests)
+- Uncontrolled demo with defaultValue seeding and JSON preview
+- Controlled demo with value/onChange, reset button, JSON preview
+- Playwright tests: uncontrolled draw, controlled draw, controlled reset

@@ -1,0 +1,20 @@
+Task 2 unknown future tool evidence
+Timestamp: 2026-06-06T15:00:07Z
+
+Scenario: Unknown future tool is safe
+Command run from repo root:
+  yarn test --testPathPattern='utils|stroke-helpers' --runInBand
+
+Relevant assertions:
+  - normalizeDrawingValue does not throw for a frozen stroke with tool: 'future-tool'
+  - the unknown future tool stroke is skipped
+  - remaining valid v1 pen stroke migrates to the expected v2 pen fixture
+
+Result:
+  PASS packages/painting/src/__tests__/stroke-helpers.test.ts
+  PASS packages/painting/src/__tests__/utils.test.ts
+  Test Suites: 2 passed, 2 total
+  Tests: 66 passed, 66 total
+
+Typecheck:
+  yarn typecheck exited 0

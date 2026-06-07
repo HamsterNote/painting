@@ -1,0 +1,44 @@
+Task 4: Testability Selectors - Existing E2E Tests
+===================================================
+
+## Test Run: yarn test:ui -- tests/ui/playground.spec.ts
+Date: 2026-06-06
+
+Result: 12 passed (6.4s)
+
+  ✓  1 uncontrolled demo shows committed stroke data after drawing (507ms)
+  ✓  2 controlled demo shows committed stroke data after drawing (434ms)
+  ✓  3 controlled demo resets from parent state (460ms)
+  ✓  4 tap without move does not create new stroke (402ms)
+  ✓  5 second pointer is rejected during drawing (567ms)
+  ✓  6 switches drawing tools (446ms)
+  ✓  7 applies stroke props (471ms)
+  ✓  8 pressure toggle enables variable-width pen stroke (458ms)
+  ✓  9 pressure toggle off keeps base width (424ms)
+  ✓ 10 draws normalized rectangle (439ms)
+  ✓ 11 sampling rate input is visible and defaults to 0 (367ms)
+  ✓ 12 drawing works with fixed sampling rate (618ms)
+
+## Selectors Used in Tests (all preserved)
+- drawing-surface-uncontrolled
+- drawing-surface-controlled
+- drawing-preview-uncontrolled
+- drawing-preview-controlled
+- drawing-reset-controlled
+- drawing-tool-select
+- drawing-stroke-color-input
+- drawing-stroke-width-input
+- drawing-pressure-toggle
+- drawing-sampling-rate-input
+
+## New Data Attributes Added to DrawingSurface Root Div
+- data-stroke-count={strokes.length} (dynamic, reflects committed strokes)
+- data-active-tool={effectiveTool} (dynamic, reflects current tool)
+- data-scale="1" (static default, to be updated by Task 13)
+- data-tx="0" (static default, to be updated by Task 13)
+- data-ty="0" (static default, to be updated by Task 13)
+
+## Pre-existing Attributes (preserved)
+- data-testid={testID}
+- data-tool={effectiveTool}
+- data-enabled={String(isDrawingEnabled)}
