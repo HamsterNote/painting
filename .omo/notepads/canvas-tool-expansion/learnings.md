@@ -117,3 +117,10 @@
 - **Finding B (task15-regression.test.ts header):** Original header claimed coverage of crosshair-pinch behavior (scenario 3) and v1/v2 render equivalence, neither of which is tested in this file. Rewrote header to honestly list only dashArray normalization (scenario 1) and v1→v2 migration without input mutation (scenario 2), with pointers to the actual covering files.
 - **Finding C (App.tsx trailing whitespace):** Stripped trailing whitespace on lines 204, 839, 921. No other lines affected.
 - **Deferred F2 findings (NOT in scope):** as-unknown casts (DrawingSurface:1060/1077/1094), pointerInputController half-abstraction, assertNever export leak, viewport.test.ts ESLint warning.
+
+## 2026-06-07T01:44Z Final Wave checkboxes marked
+- F1 oracle APPROVE (bg_789f74d6 re-audit at HEAD=ff0dc37)
+- F2 quality APPROVE after 715131d remediation (3 in-scope nits fixed; 4 pre-existing items D1-D4 deferred to problems.md)
+- F3 manual QA APPROVE (bg_fa34747c playwright sweep, zero console errors)
+- F4 scope fidelity APPROVE on corrected e06ac6e..HEAD range (bg_c805b93c)
+- DoD: lint 0, typecheck 0, test 239/239, test:ui 21/21, build 0, pack:dry 0
