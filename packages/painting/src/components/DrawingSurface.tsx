@@ -82,10 +82,8 @@ export type DrawingValue = {
  * State passed to the cursor `render` callback. `screen` is in CSS pixels
  * relative to the host div's top-left corner (same as the pointer event
  * `clientX/Y` minus the host bounding rect). `canvas` is the same point
- * expressed in canvas-local coordinates — currently identical to `screen`
- * because viewport transform is not yet wired into DrawingSurface (Task 13
- * will wire it; once viewport state lives here, use `screenToCanvas` from
- * `../viewport` to derive canvas coords).
+ * expressed in canvas-local coordinates, derived via `screenToCanvas` so
+ * it reflects the current viewport pan/zoom state.
  */
 export type DrawingCursorRenderState = {
 	/** Pointer position in screen (CSS) pixels relative to the host element. */

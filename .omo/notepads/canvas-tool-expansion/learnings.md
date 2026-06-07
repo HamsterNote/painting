@@ -110,3 +110,10 @@
 ## 2026-06-07 Task 15 remediation
 - Lint blocker was ESLint config, not invalid TS: base `no-redeclare` flags overload signatures in reducer/strokeMigration/stroke-helpers, while `@typescript-eslint/no-redeclare` with `ignoreDeclarationMerge` preserves legitimate overloads and keeps Task 15 lint coverage meaningful.
 - Pinch crosshair visibility now reads the same active pointer Map used by viewport gestures; a second touch hides `[data-crosshair]`, and lifting it restores the remaining active touch crosshair without adding a parallel gesture model.
+
+## 2026-06-07 F2 in-scope code-quality fixes
+
+- **Finding A (DrawingSurface.tsx JSDoc):** Removed stale Task-13 reference from `DrawingCursorRenderState` type doc. The comment claimed canvas coords were "currently identical to screen" — inaccurate since Task 13 wired viewport transforms. Updated to state canvas coords are derived via `screenToCanvas` and reflect pan/zoom.
+- **Finding B (task15-regression.test.ts header):** Original header claimed coverage of crosshair-pinch behavior (scenario 3) and v1/v2 render equivalence, neither of which is tested in this file. Rewrote header to honestly list only dashArray normalization (scenario 1) and v1→v2 migration without input mutation (scenario 2), with pointers to the actual covering files.
+- **Finding C (App.tsx trailing whitespace):** Stripped trailing whitespace on lines 204, 839, 921. No other lines affected.
+- **Deferred F2 findings (NOT in scope):** as-unknown casts (DrawingSurface:1060/1077/1094), pointerInputController half-abstraction, assertNever export leak, viewport.test.ts ESLint warning.

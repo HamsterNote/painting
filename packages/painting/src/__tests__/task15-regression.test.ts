@@ -2,15 +2,14 @@
  * Task 15 regression hardening tests. Edge cases distilled from Metis review:
  *
  *  1. `dashArray={[]}` normalizes to a solid stroke (no `stroke-dasharray` attr).
- *  2. v1 strokes loaded as `defaultValue` render via `StrokeRenderer`'s v1
- *     compatibility branch — same visual output as their migrated v2 form.
- *  3. Crosshair overlay hides during a two-pointer pinch when pinch-zoom is on
- *     (the pointer position is undefined during pinch by design).
+ *  2. v1 strokes loaded as `defaultValue` migrate without mutating the input
+ *     and render correctly via `StrokeRenderer`'s v1 compatibility branch.
  *
- * Scenarios 4 (reset-during-active-stroke) and 5 (filled-shape eraser) are
- * already covered in `interaction/__tests__/reducer.test.ts` and the main
- * `DrawingSurface.test.tsx` respectively; see the notepad learnings for the
- * full mapping.
+ * Other Task 15 scenarios live in different files:
+ *  - Render equivalence (v1 vs migrated v2): covered by StrokeRenderer tests.
+ *  - Crosshair hides during pinch: `DrawingSurface.test.tsx` (~line 2765).
+ *  - Reset-during-active-stroke: `interaction/__tests__/reducer.test.ts`.
+ *  - Filled-shape eraser: `DrawingSurface.test.tsx`.
  */
 // NOTE: import directly from model/* (not `../index`) — index.ts re-exports
 // `DrawingSurface`, which pulls in the ESM-only `@system-ui-js/multi-drag` and

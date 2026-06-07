@@ -201,7 +201,7 @@ export default function App() {
     const totalTime = e.timeStamp - ref.startTime;
     const boundaryCount = 2; // down + up
     const moveRate = totalTime > 0 ? (ref.moveCount / totalTime) * 1000 : 0;
-    
+
     // 计算平均 move 间隔
     let avgMoveInterval = 0;
     if (ref.moveTimestamps.length > 1) {
@@ -836,7 +836,7 @@ export default function App() {
           {/* 结果面板 */}
           <div style={{ flex: 1, minWidth: '300px' }}>
             <h3 style={{ marginBottom: '12px' }}>事件统计（最近 {samplingDemoResults.length} 次）</h3>
-            
+
             {samplingDemoResults.length === 0 ? (
               <p style={{ color: '#999' }}>尚无数据，请在左侧区域绘制</p>
             ) : (
@@ -918,7 +918,7 @@ export default function App() {
 
           <div style={{ flex: 1, minWidth: '300px' }}>
             <h3 style={{ marginBottom: '12px' }}>事件统计（最近 {rawSamplingDemoResults.length} 次）</h3>
-            
+
             {rawSamplingDemoResults.length === 0 ? (
               <p style={{ color: '#999' }}>尚无数据，请在左侧区域绘制</p>
             ) : (
