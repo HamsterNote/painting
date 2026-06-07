@@ -99,3 +99,10 @@
 - Preserved data-testid="drawing-tool-select" so the existing selectOption('rect'/'line') tests still pass while also providing per-tool buttons.
 - Used a key={`controlled-${viewportResetCounter}`} remount pattern for the gesture-reset button; avoids adding a new imperative ref API to the package while still demoing reset behavior end-to-end.
 - Custom-render cursor demo returns an SVG <g> with a circle + text label; DrawingSurface mounts it inside the overlay SVG so absolute screen coords come straight from state.screen.
+
+## 2026-06-07T00:36Z Task 15: regression hardening
+- Atlas wrote packages/painting/src/__tests__/task15-regression.test.ts directly after 3 silent subagent dispatches (T15a/b/c).
+- 5 new tests cover scenarios 1 (dashArray normalization: empty/undefined/all-zero/negative/NaN/Infinity → solid stroke) and 2 (v1→v2 migration: pen/line/rect, no input mutation, new arrays returned).
+- Scenarios 3 (reset-during-active-stroke) and 5 (filled-shape eraser) already covered in interaction/__tests__/reducer.test.ts line 197 and DrawingSurface.test.tsx lines 715/788 respectively.
+- IMPORT NOTE: tests must import from ../model/strokeMigration directly, NOT from ../index. The index.ts re-exports DrawingSurface which pulls in @system-ui-js/multi-drag (ESM-only, breaks Jest's CJS transform).
+- Final state: 238/238 tests pass, yarn typecheck clean.

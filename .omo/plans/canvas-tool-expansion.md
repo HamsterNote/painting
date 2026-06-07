@@ -729,7 +729,7 @@ Wave 5: Task 14 (Demo integration), Task 15 (regression/CI hardening) — depend
 
   **Commit**: YES | Message: `feat(playground): demo expanded drawing tools` | Files: [`apps/playground/src/App.tsx`, `tests/ui/playground.spec.ts`]
 
-- [ ] 15. Regression and CI Hardening: full suite, docs comments, RN smoke non-breakage
+- [x] 15. Regression and CI Hardening: full suite, docs comments, RN smoke non-breakage
 
   **What to do**: Run full local verification, tighten tests that were too broad, add concise API comments for new public props/types, ensure package build emits declarations, and verify existing RN smoke app still imports/mounts with unchanged basics. Add any missing edge-case tests from Metis: dash normalization, reset during active stroke, crosshair hidden during pinch, old value rendering equivalence, and filled-shape eraser behavior.
   **Must NOT do**: Do not add new features in hardening. Do not weaken tests to make CI pass. Do not commit generated reports unless repo already tracks them.
