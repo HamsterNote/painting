@@ -1,16 +1,17 @@
-/// <reference path="../multi-drag.d.ts" />
-
-import { Drag, DragOperationType } from "@system-ui-js/multi-drag";
 import {
 	type ReactNode,
 	useCallback,
 	useEffect,
+	useMemo,
 	useReducer,
 	useRef,
 	useState,
 } from "react";
 import { useCanvas } from "../hooks/useCanvas";
-import { createPointerInputController } from "../input/pointerInputController";
+import {
+	createGestureAdapter,
+	type GestureAdapterInput,
+} from "../input/gestureAdapter";
 import {
 	type CanvasPoint,
 	createInitialState,
@@ -22,6 +23,7 @@ import {
 	type LineStrokeV2,
 	type PolygonStrokeV2,
 } from "../model/strokes";
+import { StrokeRenderer } from "../render/StrokeRenderer";
 import {
 	appendPoint,
 	createStroke,
@@ -31,8 +33,7 @@ import {
 	resolveStrokeSmoothingOptions,
 	type TimedDrawingPoint,
 } from "../stroke-helpers";
-import { StrokeRenderer } from "../render/StrokeRenderer";
-import { pick as pickStroke } from "../utils";
+import { pick as pickStroke, pickStrokeIntersectingSegment } from "../utils";
 import {
 	type DrawingViewport,
 	resetViewport as createResetViewport,
@@ -50,6 +51,18 @@ export type DrawingTool =
 	| "bezier"
 	| "eraser";
 export type DrawingInputMethod = "touch" | "mouse" | "pen";
+
+/**
+ * Eraser commit mode controls when stroke deletions are applied during an
+ * eraser gesture.
+ *
+ * - `"while-sliding"` (default): each stroke hit during the gesture is
+ *   deleted immediately while the pointer is moving.
+ * - `"on-release"`: stroke hits accumulate in a queue and are deleted
+ *   atomically on normal pointerup. Cancel / multi-start / tool change /
+ *   value-prop replacement / component cleanup all DISCARD the queue.
+ */
+export type DrawingEraserCommitMode = "while-sliding" | "on-release";
 
 export type DrawingPoint = {
 	x: number;
@@ -96,6 +109,13 @@ export type DrawingCursorRenderState = {
 	activeTool: DrawingTool;
 	/** Whether the crosshair should be visible (hover for mouse/pen; down for touch). */
 	visible: boolean;
+	/**
+	 * Eraser pickup radius in CSS pixels (screen-space). Defined ONLY when the
+	 * active tool is `eraser`; `undefined` for every other tool. The default
+	 * cursor renderer reads this to draw the eraser hover circle; custom
+	 * `render` callbacks may also consult it to visualise the same radius.
+	 */
+	eraserRadius?: number;
 };
 
 /**
@@ -110,6 +130,19 @@ export type DrawingCursorOptions = {
 	color?: string;
 	/** Override the rendered crosshair entirely. Receives current pointer state. */
 	render?: (state: DrawingCursorRenderState) => ReactNode;
+};
+
+/**
+ * Eraser trajectory polyline rendered inside the canvas-transformed `<g>`
+ * during an active eraser gesture. Off by default. The polyline is cleared
+ * on every gesture terminator (end / cancel / multi-start / tool change /
+ * value replacement / unmount). Color and lineWidth default to
+ * `"currentColor"` and the resolved open-stroke width respectively.
+ */
+export type DrawingEraserTrajectoryOptions = {
+	visible?: boolean;
+	color?: string;
+	lineWidth?: number;
 };
 
 type ActivePointer = { x: number; y: number };
@@ -164,27 +197,31 @@ export type DrawingSurfaceProps = {
 	cursor?: false | DrawingCursorOptions;
 	/** Opt-in viewport gestures. Pan, pinch zoom, and reset all default to disabled. */
 	gestures?: DrawingSurfaceGestures;
+	/**
+	 * Controls when eraser deletions are committed. Defaults to `"while-sliding"`
+	 * (delete each hit stroke immediately during the gesture). `"on-release"`
+	 * queues hits and deletes them atomically on pointerup; interruptions
+	 * (cancel, second pointer, tool change, value replacement, unmount)
+	 * discard the queue.
+	 */
+	eraserCommitMode?: DrawingEraserCommitMode;
+	/**
+	 * Show a live polyline of the current eraser gesture path inside the
+	 * transformed canvas group (so it pans/zooms with strokes). Off by
+	 * default. Cleared on every gesture terminator. Color defaults to
+	 * `"currentColor"` and lineWidth to the resolved stroke width.
+	 */
+	eraserTrajectory?: DrawingEraserTrajectoryOptions;
 	/** Test identifier. */
 	testID?: string;
 };
 
-type DragInputEvent = {
+type PointerInputEvent = {
 	pointerType?: string;
 	button?: number;
 	clientX?: number;
 	clientY?: number;
 	timeStamp?: number;
-};
-
-type DragPathItem = {
-	point: DrawingPoint;
-	event?: DragInputEvent;
-	timestamp?: number;
-	pressure?: number;
-};
-
-type DragFinger = {
-	getPath: () => DragPathItem[];
 };
 
 function isDrawingToolSupported(tool: unknown): tool is DrawingTool {
@@ -200,19 +237,11 @@ function isDrawingToolSupported(tool: unknown): tool is DrawingTool {
 }
 
 // Tools that use click-to-place interaction rather than drag. Their pointer
-// events are routed through `interactionReducer` instead of multi-drag.
-// `line` is hybrid: click placement AND legacy drag both work, so it appears
-// here (to install click listeners) but NOT in `skipsMultiDragMove` below.
+// events are routed through `interactionReducer` instead of stroke sampling.
+// `line` is hybrid: click placement AND drag both work, so it appears here
+// to install click listeners while still allowing drag-line creation.
 function isClickToPlaceTool(tool: DrawingTool): boolean {
 	return tool === "polygon" || tool === "line" || tool === "bezier";
-}
-
-// Tools whose multi-drag Move handler should early-return — pure click tools
-// where every drag sample would be misinterpreted as a zero-distance stroke.
-// `line` is excluded: its multi-drag Move path still creates a drag-line once
-// the user moves beyond `LINE_DRAG_THRESHOLD_PX`.
-function skipsMultiDragMove(tool: DrawingTool): boolean {
-	return tool === "polygon" || tool === "bezier";
 }
 
 function isClosedShapeTool(tool: DrawingTool): boolean {
@@ -279,7 +308,7 @@ function totalPathDistance(points: DrawingPoint[]): number {
 }
 
 function isDrawingInput(
-	event: DragInputEvent | undefined,
+	event: PointerInputEvent | undefined,
 	allowedMethods: DrawingInputMethod[],
 ): boolean {
 	if (!event) {
@@ -357,6 +386,8 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		samplingRate,
 		cursor,
 		gestures,
+		eraserCommitMode,
+		eraserTrajectory,
 		testID,
 	} = props;
 	const hostRef = useRef<HTMLDivElement>(null);
@@ -403,6 +434,26 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		samplingRate > 0
 			? samplingRate
 			: 0;
+
+	const resolvedEraserCommitMode: DrawingEraserCommitMode =
+		eraserCommitMode === "on-release" ? "on-release" : "while-sliding";
+
+	const resolvedEraserTrajectory = useMemo(() => {
+		const visible = eraserTrajectory?.visible ?? false;
+		const rawColor = eraserTrajectory?.color;
+		const color =
+			typeof rawColor === "string" && rawColor.trim().length > 0
+				? rawColor
+				: "currentColor";
+		const rawLineWidth = eraserTrajectory?.lineWidth;
+		const lineWidth =
+			typeof rawLineWidth === "number" &&
+			Number.isFinite(rawLineWidth) &&
+			rawLineWidth > 0
+				? rawLineWidth
+				: resolvedOpenWidth;
+		return { visible, color, lineWidth };
+	}, [eraserTrajectory, resolvedOpenWidth]);
 
 	const hasCapturedDefaultValueRef = useRef(false);
 	const initialDefaultValueRef = useRef<DrawingValue | undefined>(undefined);
@@ -467,8 +518,39 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 	// 跟踪最后一个被保留的采样点的时间戳，用于按采样率降采样
 	const lastSampledTimestampRef = useRef(0);
 	// Shift 键按下状态：用于 rect/ellipse 工具的正方形/正圆约束。
-	// 不依赖 DragInputEvent（multi-drag 未透传 shiftKey），改用 window 监听。
+	// PointerEvent 不保证每个采样都带可用 shiftKey，改用 window 监听。
 	const shiftPressedRef = useRef(false);
+	// eraserCommitMode 解析后值，pointer 管线通过 ref 读取避免重建监听
+	const eraserCommitModeRef = useRef<DrawingEraserCommitMode>(resolvedEraserCommitMode);
+	// on-release 模式累计命中的 stroke id；正常 pointerup 时统一删除，
+	// cancel/multi-start/tool-change/value 替换/卸载时丢弃。
+	const eraserQueuedHitsRef = useRef<Set<string>>(new Set());
+	const eraserProcessedHitsRef = useRef<Set<string>>(new Set());
+
+	// 当前橡皮手势在 canvas 坐标系下的轨迹点；空数组表示当前无活动手势。
+	// 每次 single-move 追加一个点；single-end / cancel / multi-start /
+	// 切换工具 / value prop 替换 / 卸载 都重置为空数组。
+	const [eraserTrajectoryPoints, setEraserTrajectoryPoints] = useState<
+		DrawingPoint[]
+	>([]);
+	// 轨迹 state 负责渲染 polyline；ref 负责 pointermove 中的同步碰撞检测。
+	// React state 会滞后一帧，所以橡皮段扫必须以 ref 作为实时数据源。
+	const eraserTrajectoryPointsRef = useRef<DrawingPoint[]>([]);
+	const eraserGestureStartCanvasPointRef = useRef<DrawingPoint | null>(null);
+	const clearEraserTrajectory = useCallback(() => {
+		eraserTrajectoryPointsRef.current = [];
+		eraserGestureStartCanvasPointRef.current = null;
+		eraserProcessedHitsRef.current.clear();
+		setEraserTrajectoryPoints((prev) => (prev.length === 0 ? prev : []));
+	}, []);
+	const clearEraserTrajectoryRef = useRef(clearEraserTrajectory);
+	clearEraserTrajectoryRef.current = clearEraserTrajectory;
+	const appendEraserTrajectoryPoint = useCallback((point: DrawingPoint) => {
+		eraserTrajectoryPointsRef.current.push(point);
+		setEraserTrajectoryPoints((prev) => [...prev, point]);
+	}, []);
+	const appendEraserTrajectoryPointRef = useRef(appendEraserTrajectoryPoint);
+	appendEraserTrajectoryPointRef.current = appendEraserTrajectoryPoint;
 
 	effectiveToolRef.current = effectiveTool;
 	isDrawingEnabledRef.current = isDrawingEnabled;
@@ -486,6 +568,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 	inputMethodsRef.current = inputMethods ?? DEFAULT_INPUT_METHODS;
 	smoothingOptionsRef.current = resolveStrokeSmoothingOptions(strokeSmoothing);
 	samplingRateRef.current = resolvedSamplingRate;
+	eraserCommitModeRef.current = resolvedEraserCommitMode;
 
 	const getLocalCoordinates = useCallback(
 		(clientX: number, clientY: number): DrawingPoint => {
@@ -499,16 +582,6 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			};
 		},
 		[],
-	);
-
-	const getCanvasCoordinates = useCallback(
-		(clientX: number, clientY: number): DrawingPoint => {
-			return screenToCanvas(
-				getLocalCoordinates(clientX, clientY),
-				viewportRef.current,
-			);
-		},
-		[getLocalCoordinates],
 	);
 
 	const resetViewportToDefault = useCallback(() => {
@@ -532,6 +605,13 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		) {
 			clearActiveStroke();
 		}
+		// Value-prop replacement is treated as an external truth-source change:
+		// any queued (uncommitted) eraser hits become stale and must be dropped
+		// without deletion. The new strokes array is now authoritative.
+		if (previousValueRef.current !== value && value !== undefined) {
+			eraserQueuedHitsRef.current.clear();
+			clearEraserTrajectoryRef.current();
+		}
 		previousValueRef.current = value;
 	}, [clearActiveStroke, value]);
 
@@ -541,22 +621,31 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			return undefined;
 		}
 
+		const adapter = createGestureAdapter({ initialScale: viewportRef.current.scale });
+		const activePointers = activePointersRef.current;
+		const pointerStartEvents = new Map<number, PointerInputEvent>();
+		const capturedPointerIds = new Set<number>();
 		let currentActiveStroke: DrawingStroke | null = null;
+		let multiStartViewport: DrawingViewport | null = null;
+		let multiStartCenter: DrawingPoint | null = null;
+		let accumulatedCenterDelta: DrawingPoint = { x: 0, y: 0 };
+		let singlePan:
+			| { pointerId: number; startPoint: DrawingPoint; startViewport: DrawingViewport }
+			| null = null;
+
 		const clearCurrentActiveStroke = () => {
 			currentActiveStroke = null;
 		};
 		clearActiveStrokeRef.current = clearCurrentActiveStroke;
 
-		const drag = new Drag(host, {
-			maxFingerCount: 1,
-			getPose: () => ({ position: { x: 0, y: 0 }, width: 0, height: 0 }),
-			setPose: () => {},
-		});
-		const pointerInputController = createPointerInputController(host, {
-			gesturesEnabled:
-				gesturesRef.current?.pan === true ||
-				gesturesRef.current?.pinchZoom === true,
-		});
+		const clearStrokeState = () => {
+			currentActiveStroke = null;
+			isDrawingRef.current = false;
+			processedPathLengthRef.current = 0;
+			pendingPointsRef.current = [];
+			lastSampledTimestampRef.current = 0;
+			setActiveStroke(null);
+		};
 
 		const processPoints = (points: TimedDrawingPoint[]) => {
 			if (!currentActiveStroke || points.length === 0) return;
@@ -629,68 +718,248 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			pendingPointsRef.current = [];
 		};
 
-		drag.addEventListener(DragOperationType.Move, (fingers: DragFinger[]) => {
-			if (!isDrawingEnabledRef.current) {
-				clearActiveStroke();
+		const commitCurrentActiveStroke = () => {
+			flushPendingPoints();
+			const stroke = currentActiveStroke;
+			if (stroke && stroke.tool !== "eraser" && isValidStroke(stroke)) {
+				const committed =
+					shiftPressedRef.current && isBboxShapeTool(stroke.tool)
+						? applyShiftConstraintToShape(stroke)
+						: stroke;
+				addStrokeRef.current(committed);
+			}
+			clearStrokeState();
+		};
+
+		// Eraser hit-test helpers: callers pass canvas-space points so point-pick
+		// fallback and segment-sweep share the exact same coordinate semantics.
+		const getPickableStrokes = () =>
+			strokesRef.current
+				.filter(
+					(stroke) =>
+						!eraserQueuedHitsRef.current.has(stroke.id) &&
+						!eraserProcessedHitsRef.current.has(stroke.id),
+				)
+				.map((stroke) => ({
+					...stroke,
+					fillColor: stroke.fillColor ?? resolvedFillColorRef.current,
+				}));
+
+		const getCanvasEraserRadius = () =>
+			resolvedOpenWidthRef.current / 2 / viewportRef.current.scale;
+
+		const pickEraserStrokeIdAtPoint = (canvasPoint: DrawingPoint): string | null => {
+			const eraserRadius = getCanvasEraserRadius();
+			const hitStroke = pickStroke(
+				canvasPoint,
+				getPickableStrokes(),
+				eraserRadius,
+			);
+			return hitStroke ? hitStroke.id : null;
+		};
+
+		const pickEraserStrokeIdOnSegment = (
+			startCanvasPoint: DrawingPoint,
+			endCanvasPoint: DrawingPoint,
+		): string | null => {
+			const eraserRadius = getCanvasEraserRadius();
+			const hitStroke = pickStrokeIntersectingSegment(
+				startCanvasPoint,
+				endCanvasPoint,
+				getPickableStrokes(),
+				eraserRadius,
+			);
+			return hitStroke ? hitStroke.id : null;
+		};
+
+		const routeEraserHit = (hitId: string | null) => {
+			if (!hitId) {
 				return;
 			}
+			if (eraserCommitModeRef.current === "on-release") {
+				eraserQueuedHitsRef.current.add(hitId);
+			} else {
+				eraserProcessedHitsRef.current.add(hitId);
+				removeStrokeRef.current(hitId);
+			}
+		};
 
-			// Polygon/bezier use click-to-place, not drag — handled by a separate effect below.
-			// Line is hybrid: drag still creates a 2-point line once movement passes the threshold.
-			if (skipsMultiDragMove(effectiveToolRef.current)) {
+		const commitQueuedEraserHits = () => {
+			const queue = eraserQueuedHitsRef.current;
+			if (queue.size === 0) {
 				return;
 			}
+			for (const strokeId of queue) {
+				removeStrokeRef.current(strokeId);
+			}
+			queue.clear();
+		};
 
-			if (fingers.length !== 1) {
+		const readPointerEvent = (event: PointerEvent): PointerInputEvent => ({
+			pointerType: event.pointerType,
+			button: event.button,
+			clientX: event.clientX,
+			clientY: event.clientY,
+			timeStamp: event.timeStamp,
+		});
+
+		const toAdapterInput = (
+			event: PointerEvent,
+			phase: GestureAdapterInput["phase"],
+		): GestureAdapterInput => ({
+			pointerId: event.pointerId ?? 1,
+			phase,
+			point: getLocalCoordinates(event.clientX ?? 0, event.clientY ?? 0),
+			timestamp: event.timeStamp ?? 0,
+			pointerType: event.pointerType,
+			pressure: event.pressure,
+			isPrimary: event.isPrimary,
+		});
+
+		const releasePointerCapture = (pointerId: number) => {
+			if (!capturedPointerIds.has(pointerId)) {
 				return;
 			}
-
-			const finger = fingers[0];
-			const path = finger.getPath();
-			const firstPathItem = path[0];
-
 			if (
-				!firstPathItem ||
-				!isDrawingInput(firstPathItem.event, inputMethodsRef.current)
+				typeof host.releasePointerCapture === "function" &&
+				(typeof host.hasPointerCapture !== "function" || host.hasPointerCapture(pointerId))
 			) {
-				clearActiveStroke();
+				host.releasePointerCapture(pointerId);
+			}
+			capturedPointerIds.delete(pointerId);
+		};
+
+		const capturePointer = (event: PointerEvent) => {
+			if (typeof host.setPointerCapture !== "function") {
+				return;
+			}
+			host.setPointerCapture(event.pointerId);
+			capturedPointerIds.add(event.pointerId);
+		};
+
+		const updateActivePointers = (input: GestureAdapterInput) => {
+			if (input.phase === "start") {
+				activePointers.set(input.pointerId, input.point);
+				return;
+			}
+
+			if (input.phase === "move") {
+				if (activePointers.has(input.pointerId)) {
+					activePointers.set(input.pointerId, input.point);
+				}
+				return;
+			}
+
+			activePointers.delete(input.pointerId);
+		};
+
+		const startSinglePan = (input: GestureAdapterInput) => {
+			if (
+				gesturesRef.current?.pan !== true ||
+				isDrawingEnabledRef.current ||
+				isDrawingRef.current
+			) {
+				return;
+			}
+
+			singlePan = {
+				pointerId: input.pointerId,
+				startPoint: input.point,
+				startViewport: viewportRef.current,
+			};
+			dispatchInteraction({
+				type: "POINTER_DOWN",
+				gesture: "pan",
+				viewport: viewportRef.current,
+				pointerId: input.pointerId,
+				point: input.point,
+			});
+		};
+
+		const handleSingleMove = (
+			input: GestureAdapterInput,
+			event: PointerEvent,
+			path: GestureAdapterInput[],
+		) => {
+			if (singlePan && singlePan.pointerId === input.pointerId) {
+				const dx = input.point.x - singlePan.startPoint.x;
+				const dy = input.point.y - singlePan.startPoint.y;
+				const nextViewport = {
+					scale: singlePan.startViewport.scale,
+					tx: singlePan.startViewport.tx + dx,
+					ty: singlePan.startViewport.ty + dy,
+				};
+				viewportRef.current = nextViewport;
+				setViewport(nextViewport);
+				dispatchInteraction({
+					type: "POINTER_MOVE",
+					viewport: nextViewport,
+					pointerId: input.pointerId,
+					point: input.point,
+				});
+				return;
+			}
+
+			if (!isDrawingEnabledRef.current) {
+				clearStrokeState();
+				return;
+			}
+
+			if (effectiveToolRef.current === "polygon" || effectiveToolRef.current === "bezier") {
+				return;
+			}
+
+			const startEvent = pointerStartEvents.get(input.pointerId) ?? readPointerEvent(event);
+			if (!isDrawingInput(startEvent, inputMethodsRef.current)) {
+				clearStrokeState();
 				return;
 			}
 
 			if (effectiveToolRef.current === "eraser") {
-				for (const pathItem of path.slice(processedPathLengthRef.current)) {
-					const sourcePoint =
-						pathItem.event?.clientX !== undefined &&
-						pathItem.event.clientY !== undefined
-							? { x: pathItem.event.clientX, y: pathItem.event.clientY }
-							: pathItem.point;
-					const localPoint = getCanvasCoordinates(sourcePoint.x, sourcePoint.y);
-					const eraserRadius =
-						resolvedOpenWidthRef.current / 2 / viewportRef.current.scale;
-					const pickableStrokes = strokesRef.current.map((stroke) => ({
-						...stroke,
-						fillColor: stroke.fillColor ?? resolvedFillColorRef.current,
-					}));
-					const hitStroke = pickStroke(localPoint, pickableStrokes, eraserRadius);
-					if (hitStroke) {
-						removeStrokeRef.current(hitStroke.id);
+				for (let index = processedPathLengthRef.current; index < path.length; index++) {
+					const pathItem = path[index];
+					if (!pathItem) {
+						continue;
 					}
+
+					// 每个新输入点先沿用既有 screen→canvas 转换；后续所有碰撞半径
+					// 和 helper 都在 canvas 坐标系中运算，避免缩放时混用屏幕坐标。
+					const canvasPoint = screenToCanvas(pathItem.point, viewportRef.current);
+					const trajectoryPoints = eraserTrajectoryPointsRef.current;
+					const gestureStartCanvasPoint = eraserGestureStartCanvasPointRef.current;
+					const previousCanvasPoint =
+						trajectoryPoints[trajectoryPoints.length - 1] ?? gestureStartCanvasPoint;
+					const shouldSeedGestureStart =
+						trajectoryPoints.length === 0 &&
+						gestureStartCanvasPoint !== null &&
+						(gestureStartCanvasPoint.x !== canvasPoint.x ||
+							gestureStartCanvasPoint.y !== canvasPoint.y);
+
+					// 首个 move 优先从 pointerdown 起点做段扫；没有起点时才保留
+					// point-pick fallback，确保 tap/零长度橡皮不回退。
+					const hitId = previousCanvasPoint
+						? pickEraserStrokeIdOnSegment(previousCanvasPoint, canvasPoint)
+						: pickEraserStrokeIdAtPoint(canvasPoint);
+					routeEraserHit(hitId);
+
+					if (shouldSeedGestureStart && gestureStartCanvasPoint) {
+						appendEraserTrajectoryPointRef.current(gestureStartCanvasPoint);
+					}
+
+					// 同一个 canvas 点必须同时进入 ref 与 state：ref 立即成为下一段
+					// sweep 的起点，state 只用于渲染可见轨迹 polyline。
+					appendEraserTrajectoryPointRef.current(canvasPoint);
 				}
 				processedPathLengthRef.current = path.length;
 				return;
 			}
 
-			const localPath = path.map((pathItem) => {
-				const sourcePoint =
-					pathItem.event?.clientX !== undefined &&
-					pathItem.event.clientY !== undefined
-						? { x: pathItem.event.clientX, y: pathItem.event.clientY }
-						: pathItem.point;
-				return getCanvasCoordinates(sourcePoint.x, sourcePoint.y);
-			});
+			const localPath = path.map((pathItem) =>
+				screenToCanvas(pathItem.point, viewportRef.current),
+			);
 
-			// Line is now click-to-place by default. Multi-drag remains the legacy shortcut,
-			// but only after real movement: at least two path samples and >4 px total travel.
+			// Line is click-to-place by default. Drag remains the shortcut, but only
+			// after real movement: at least two path samples and >4 px total travel.
 			if (
 				effectiveToolRef.current === "line" &&
 				!currentActiveStroke &&
@@ -722,7 +991,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				const localPoint = localPath[index];
 				const timedPoint: TimedDrawingPoint = {
 					...localPoint,
-					timestamp: pathItem.timestamp || pathItem.event?.timeStamp,
+					timestamp: pathItem.timestamp || undefined,
 				};
 
 				if (
@@ -739,29 +1008,212 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			pendingPointsRef.current.push(...rawTimedPoints);
 			processedPathLengthRef.current = path.length;
 			flushPendingPoints();
-		});
+		};
 
-		drag.addEventListener(DragOperationType.AllEnd, (fingers: DragFinger[]) => {
-			if (fingers.length > 1) {
-				clearActiveStroke();
+		const handleMultiStart = (input: GestureAdapterInput, center: DrawingPoint) => {
+			if (singlePan) {
+				dispatchInteraction({ type: "POINTER_UP", pointerId: singlePan.pointerId });
+				singlePan = null;
+			}
+			if (currentActiveStroke?.tool !== "eraser") {
+				commitCurrentActiveStroke();
+			} else {
+				clearStrokeState();
+			}
+
+			const firstPointerId = activePointers.keys().next().value as number | undefined;
+			if (firstPointerId !== undefined) {
+				releasePointerCapture(firstPointerId);
+			}
+
+			multiStartViewport = { ...viewportRef.current };
+			multiStartCenter = { ...center };
+			accumulatedCenterDelta = { x: 0, y: 0 };
+			const pointerIds = Array.from(activePointers.keys()).slice(0, 2) as [number, number];
+			dispatchInteraction({
+				type: "POINTER_DOWN",
+				gesture: "pinch",
+				viewport: viewportRef.current,
+				pointerIds,
+				centroid: center,
+				pointerId: input.pointerId,
+			});
+		};
+
+		const handleMultiMove = (
+			input: GestureAdapterInput,
+			center: DrawingPoint | undefined,
+			centerDelta: DrawingPoint | undefined,
+			requestedScaleValue: number | undefined,
+		) => {
+			if (!multiStartViewport || !multiStartCenter) {
+				multiStartViewport = { ...viewportRef.current };
+				multiStartCenter = center ? { ...center } : { x: 0, y: 0 };
+			}
+
+			const startViewport = multiStartViewport;
+			const startCenter = multiStartCenter;
+			const bounds = resolveGestureScaleBounds(gesturesRef.current);
+			const requestedScale = clampGestureScale(
+				requestedScaleValue ?? startViewport.scale,
+				bounds,
+			);
+			const scaleOnly = zoomViewportAroundScreenPoint(
+				startViewport,
+				startCenter,
+				requestedScale,
+			);
+			const deltaStep = centerDelta ?? { x: 0, y: 0 };
+			accumulatedCenterDelta = {
+				x: accumulatedCenterDelta.x + deltaStep.x,
+				y: accumulatedCenterDelta.y + deltaStep.y,
+			};
+			const delta = accumulatedCenterDelta;
+			const panEnabled = gesturesRef.current?.pan === true;
+			const pinchEnabled = gesturesRef.current?.pinchZoom === true;
+			let nextViewport: DrawingViewport = {
+				scale: scaleOnly.scale,
+				tx: scaleOnly.tx + delta.x,
+				ty: scaleOnly.ty + delta.y,
+			};
+
+			if (!pinchEnabled) {
+				nextViewport = {
+					scale: startViewport.scale,
+					tx: startViewport.tx + delta.x,
+					ty: startViewport.ty + delta.y,
+				};
+			}
+			if (!panEnabled) {
+				nextViewport = {
+					...nextViewport,
+					tx: nextViewport.tx - delta.x,
+					ty: nextViewport.ty - delta.y,
+				};
+			}
+			if (!panEnabled && !pinchEnabled) {
+				nextViewport = startViewport;
+			}
+
+			viewportRef.current = nextViewport;
+			setViewport(nextViewport);
+			dispatchInteraction({
+				type: "POINTER_MOVE",
+				viewport: nextViewport,
+				centroid: center,
+				pointerId: input.pointerId,
+			});
+		};
+
+		const handleAdapterResult = (input: GestureAdapterInput, event: PointerEvent) => {
+			const result = adapter.process(input);
+
+			switch (result.kind) {
+				case "single-move":
+					handleSingleMove(input, event, result.path ?? []);
+					break;
+				case "single-end":
+					if (singlePan?.pointerId === input.pointerId) {
+						dispatchInteraction({ type: "POINTER_UP", pointerId: input.pointerId });
+						singlePan = null;
+					} else {
+						// Eraser on-release: flush queued hits as a single atomic batch
+						// before the generic commit path. Other tools/modes no-op here.
+						if (effectiveToolRef.current === "eraser") {
+							commitQueuedEraserHits();
+							clearEraserTrajectoryRef.current();
+						}
+						commitCurrentActiveStroke();
+						dispatchInteraction({
+							type: "POINTER_UP",
+							pointerId: input.pointerId,
+							point: screenToCanvas(input.point, viewportRef.current),
+						});
+					}
+					multiStartViewport = null;
+					multiStartCenter = null;
+					accumulatedCenterDelta = { x: 0, y: 0 };
+					if (result.activePointerCount === 0) {
+						adapter.reset();
+					}
+					break;
+				case "multi-start":
+					// Multi-finger interrupt: drop queued eraser hits before
+					// transitioning to viewport gesture.
+					eraserQueuedHitsRef.current.clear();
+					clearEraserTrajectoryRef.current();
+					handleMultiStart(input, result.center ?? input.point);
+					break;
+				case "multi-move":
+					handleMultiMove(
+						input,
+						result.center,
+						result.centerDelta,
+						result.requestedScale,
+					);
+					break;
+				case "cancel":
+					// pointercancel discards any uncommitted eraser hits.
+					eraserQueuedHitsRef.current.clear();
+					clearEraserTrajectoryRef.current();
+					clearStrokeState();
+					singlePan = null;
+					multiStartViewport = null;
+					multiStartCenter = null;
+					accumulatedCenterDelta = { x: 0, y: 0 };
+					dispatchInteraction({ type: "POINTER_UP", pointerId: input.pointerId });
+					break;
+				case "idle":
+					break;
+				default:
+					break;
+			}
+		};
+
+		const handlePointerDown = (event: PointerEvent) => {
+			if (event.button !== undefined && event.button !== 0) {
 				return;
 			}
-
-			flushPendingPoints();
-
-			if (effectiveToolRef.current !== "eraser") {
-				const stroke = currentActiveStroke;
-				if (stroke && isValidStroke(stroke)) {
-					const committed =
-						shiftPressedRef.current && isBboxShapeTool(stroke.tool)
-							? applyShiftConstraintToShape(stroke)
-							: stroke;
-					addStrokeRef.current(committed);
-				}
+			capturePointer(event);
+			const input = toAdapterInput(event, "start");
+			const pointerEvent = readPointerEvent(event);
+			pointerStartEvents.set(input.pointerId, pointerEvent);
+			if (
+				effectiveToolRef.current === "eraser" &&
+				isDrawingEnabledRef.current &&
+				isDrawingInput(pointerEvent, inputMethodsRef.current)
+			) {
+				eraserGestureStartCanvasPointRef.current = screenToCanvas(
+					input.point,
+					viewportRef.current,
+				);
 			}
+			updateActivePointers(input);
+			startSinglePan(input);
+			handleAdapterResult(input, event);
+		};
 
-			clearActiveStroke();
-		});
+		const handlePointerMove = (event: PointerEvent) => {
+			const input = toAdapterInput(event, "move");
+			updateActivePointers(input);
+			handleAdapterResult(input, event);
+		};
+
+		const handlePointerEnd = (event: PointerEvent) => {
+			const input = toAdapterInput(event, "end");
+			updateActivePointers(input);
+			releasePointerCapture(input.pointerId);
+			handleAdapterResult(input, event);
+			pointerStartEvents.delete(input.pointerId);
+		};
+
+		const handlePointerCancel = (event: PointerEvent) => {
+			const input = toAdapterInput(event, "cancel");
+			updateActivePointers(input);
+			releasePointerCapture(input.pointerId);
+			handleAdapterResult(input, event);
+			pointerStartEvents.delete(input.pointerId);
+		};
 
 		const handleKeyChange = (event: KeyboardEvent) => {
 			if (event.key !== "Shift") return;
@@ -782,6 +1234,11 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		const handleBlur = () => {
 			shiftPressedRef.current = false;
 		};
+
+		host.addEventListener("pointerdown", handlePointerDown);
+		host.addEventListener("pointermove", handlePointerMove);
+		host.addEventListener("pointerup", handlePointerEnd);
+		host.addEventListener("pointercancel", handlePointerCancel);
 		window.addEventListener("keydown", handleKeyChange);
 		window.addEventListener("keyup", handleKeyChange);
 		window.addEventListener("blur", handleBlur);
@@ -790,227 +1247,23 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			if (clearActiveStrokeRef.current === clearCurrentActiveStroke) {
 				clearActiveStrokeRef.current = null;
 			}
+			host.removeEventListener("pointerdown", handlePointerDown);
+			host.removeEventListener("pointermove", handlePointerMove);
+			host.removeEventListener("pointerup", handlePointerEnd);
+			host.removeEventListener("pointercancel", handlePointerCancel);
 			window.removeEventListener("keydown", handleKeyChange);
 			window.removeEventListener("keyup", handleKeyChange);
 			window.removeEventListener("blur", handleBlur);
-			drag.destroy();
-			pointerInputController.destroy();
-		};
-	}, [clearActiveStroke, getCanvasCoordinates, setActiveStroke]);
-
-	useEffect(() => {
-		const host = hostRef.current;
-		if (!host) {
-			return undefined;
-		}
-
-		type GestureMode =
-			| {
-					type: "pan";
-					pointerId: number;
-					startPoint: ActivePointer;
-					startViewport: DrawingViewport;
-				}
-			| {
-					type: "pinch";
-					pointerIds: readonly [number, number];
-					startDistance: number;
-					startViewport: DrawingViewport;
-				};
-
-		const activePointers = activePointersRef.current;
-		let gestureMode: GestureMode | null = null;
-
-		const readPointer = (event: Event) => {
-			const pointerLike = event as Event & {
-				clientX?: number;
-				clientY?: number;
-				pointerId?: number;
-				button?: number;
-			};
-			return {
-				clientX: pointerLike.clientX ?? 0,
-				clientY: pointerLike.clientY ?? 0,
-				pointerId: pointerLike.pointerId ?? 1,
-				button: pointerLike.button ?? 0,
-			};
-		};
-
-		const distance = (a: ActivePointer, b: ActivePointer) =>
-			Math.hypot(a.x - b.x, a.y - b.y);
-
-		const centroid = (a: ActivePointer, b: ActivePointer): ActivePointer => ({
-			x: (a.x + b.x) / 2,
-			y: (a.y + b.y) / 2,
-		});
-
-		const tryStartPinch = () => {
-			if (gesturesRef.current?.pinchZoom !== true || activePointers.size < 2) {
-				return;
+			for (const pointerId of capturedPointerIds) {
+				releasePointerCapture(pointerId);
 			}
-
-			const pointerIds = Array.from(activePointers.keys()).slice(0, 2) as [
-				number,
-				number,
-			];
-			const first = activePointers.get(pointerIds[0]);
-			const second = activePointers.get(pointerIds[1]);
-			if (!first || !second) {
-				return;
-			}
-
-			const startDistance = distance(first, second);
-			if (startDistance === 0) {
-				return;
-			}
-
-			const midpoint = centroid(first, second);
-			gestureMode = {
-				type: "pinch",
-				pointerIds,
-				startDistance,
-				startViewport: viewportRef.current,
-			};
-			dispatchInteraction({
-				type: "POINTER_DOWN",
-				gesture: "pinch",
-				viewport: viewportRef.current,
-				pointerIds,
-				centroid: midpoint,
-			});
-		};
-
-		const handlePointerDown = (event: Event) => {
-			const pointer = readPointer(event);
-			if (pointer.button !== 0) {
-				return;
-			}
-
-			const point = getLocalCoordinates(pointer.clientX, pointer.clientY);
-			activePointers.set(pointer.pointerId, point);
-
-			if (activePointers.size >= 2) {
-				tryStartPinch();
-				return;
-			}
-
-			if (
-				gesturesRef.current?.pan === true &&
-				!isDrawingEnabledRef.current &&
-				!isDrawingRef.current
-			) {
-				gestureMode = {
-					type: "pan",
-					pointerId: pointer.pointerId,
-					startPoint: point,
-					startViewport: viewportRef.current,
-				};
-				dispatchInteraction({
-					type: "POINTER_DOWN",
-					gesture: "pan",
-					viewport: viewportRef.current,
-					pointerId: pointer.pointerId,
-					point,
-				});
-			}
-		};
-
-		const handlePointerMove = (event: Event) => {
-			const pointer = readPointer(event);
-			if (!activePointers.has(pointer.pointerId)) {
-				return;
-			}
-
-			const point = getLocalCoordinates(pointer.clientX, pointer.clientY);
-			activePointers.set(pointer.pointerId, point);
-
-			if (gestureMode?.type === "pan") {
-				if (gestureMode.pointerId !== pointer.pointerId || isDrawingRef.current) {
-					return;
-				}
-				const dx = point.x - gestureMode.startPoint.x;
-				const dy = point.y - gestureMode.startPoint.y;
-				const nextViewport = {
-					scale: gestureMode.startViewport.scale,
-					tx: gestureMode.startViewport.tx + dx,
-					ty: gestureMode.startViewport.ty + dy,
-				};
-				setViewport(nextViewport);
-				dispatchInteraction({
-					type: "POINTER_MOVE",
-					viewport: nextViewport,
-					pointerId: pointer.pointerId,
-					point,
-				});
-				return;
-			}
-
-			if (activePointers.size >= 2 && gestureMode?.type !== "pinch") {
-				tryStartPinch();
-			}
-
-			if (gestureMode?.type === "pinch") {
-				const [firstId, secondId] = gestureMode.pointerIds;
-				const first = activePointers.get(firstId);
-				const second = activePointers.get(secondId);
-				if (!first || !second) {
-					return;
-				}
-
-				const bounds = resolveGestureScaleBounds(gesturesRef.current);
-				const requestedScale = clampGestureScale(
-					gestureMode.startViewport.scale *
-						(distance(first, second) / gestureMode.startDistance),
-					bounds,
-				);
-				const midpoint = centroid(first, second);
-				const nextViewport = zoomViewportAroundScreenPoint(
-					gestureMode.startViewport,
-					midpoint,
-					requestedScale,
-				);
-				setViewport(nextViewport);
-				dispatchInteraction({
-					type: "POINTER_MOVE",
-					viewport: nextViewport,
-					centroid: midpoint,
-					pointerId: pointer.pointerId,
-				});
-			}
-		};
-
-		const handlePointerEnd = (event: Event) => {
-			const pointer = readPointer(event);
-			activePointers.delete(pointer.pointerId);
-			if (gestureMode?.type === "pan" && gestureMode.pointerId === pointer.pointerId) {
-				gestureMode = null;
-				dispatchInteraction({ type: "POINTER_UP", pointerId: pointer.pointerId });
-				return;
-			}
-
-			if (
-				gestureMode?.type === "pinch" &&
-				gestureMode.pointerIds.includes(pointer.pointerId)
-			) {
-				gestureMode = null;
-				dispatchInteraction({ type: "POINTER_UP", pointerId: pointer.pointerId });
-			}
-		};
-
-		host.addEventListener("pointerdown", handlePointerDown);
-		document.addEventListener("pointermove", handlePointerMove);
-		document.addEventListener("pointerup", handlePointerEnd);
-		document.addEventListener("pointercancel", handlePointerEnd);
-
-		return () => {
-			host.removeEventListener("pointerdown", handlePointerDown);
-			document.removeEventListener("pointermove", handlePointerMove);
-			document.removeEventListener("pointerup", handlePointerEnd);
-			document.removeEventListener("pointercancel", handlePointerEnd);
 			activePointers.clear();
-			gestureMode = null;
+			pointerStartEvents.clear();
+			eraserQueuedHitsRef.current.clear();
+			clearEraserTrajectoryRef.current();
+			adapter.reset();
 		};
-	}, [getLocalCoordinates]);
+	}, [getLocalCoordinates, setActiveStroke]);
 
 	useEffect(() => {
 		const host = hostRef.current;
@@ -1031,7 +1284,17 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 	// when user picks a different tool mid-draw (or vice versa).
 	useEffect(() => {
 		dispatchInteraction({ type: "TOOL_CHANGE", tool: effectiveTool });
+		// Switching tool discards any in-flight on-release eraser queue —
+		// hits collected before the switch were never committed.
+		if (effectiveTool !== "eraser") {
+			eraserQueuedHitsRef.current.clear();
+			clearEraserTrajectoryRef.current();
+		}
 	}, [effectiveTool]);
+
+	useEffect(() => {
+		eraserCommitModeRef.current = resolvedEraserCommitMode;
+	}, [resolvedEraserCommitMode]);
 
 	// When the reducer reaches a `completedStroke` (line/polygon placement finished), commit a v2 stroke
 	// and clear the completion marker so we don't double-commit on re-render.
@@ -1441,6 +1704,8 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		pointerType: cursorState.pointerType,
 		activeTool: effectiveTool,
 		visible: cursorState.visible,
+		eraserRadius:
+			effectiveTool === "eraser" ? resolvedOpenWidth / 2 : undefined,
 	};
 
 	return (
@@ -1543,6 +1808,23 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 							fallbackFillOpacity={resolvedFillOpacity}
 						/>
 					)}
+
+					{resolvedEraserTrajectory.visible &&
+						effectiveTool === "eraser" &&
+						eraserTrajectoryPoints.length > 0 && (
+							<polyline
+								data-testid="eraser-trajectory"
+								points={eraserTrajectoryPoints
+									.map((point) => `${point.x},${point.y}`)
+									.join(" ")}
+								stroke={resolvedEraserTrajectory.color}
+								strokeWidth={resolvedEraserTrajectory.lineWidth}
+								fill="none"
+								pointerEvents="none"
+								strokeLinecap="round"
+								strokeLinejoin="round"
+							/>
+						)}
 				</g>
 			</svg>
 			{cursorEnabled && cursorState.visible && (
@@ -1565,6 +1847,33 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 					>
 						{cursorRender ? (
 							cursorRender(cursorRenderState)
+						) : effectiveTool === "eraser" &&
+							cursorRenderState.eraserRadius !== undefined ? (
+							(() => {
+								// 屏幕坐标系下的圆形橡皮指示器。viewBox 取直径+2px 余量
+								// 防止 stroke=1 时被裁切；用 overflow="visible" 双保险。
+								const radius = cursorRenderState.eraserRadius;
+								const size = radius * 2 + 2;
+								return (
+									<svg
+										data-testid="eraser-cursor"
+										width={size}
+										height={size}
+										viewBox={`-${radius + 1} -${radius + 1} ${size} ${size}`}
+										style={{ display: "block", overflow: "visible" }}
+									>
+										<title>Eraser cursor</title>
+										<circle
+											cx={0}
+											cy={0}
+											r={radius}
+											fill="none"
+											stroke={cursorColor}
+											strokeWidth={1}
+										/>
+									</svg>
+								);
+							})()
 						) : (
 							<svg
 								data-crosshair

@@ -2,79 +2,117 @@ import { DrawingSurface as DrawingSurfaceFromIndex } from '@hamster-note/paintin
 import { act, render, screen } from '@testing-library/react';
 import { type DrawingInputMethod, DrawingSurface, type DrawingTool } from '../components/DrawingSurface';
 
-jest.mock(
-  '@system-ui-js/multi-drag',
-  () => {
-    const DragOperationType = {
-      Move: 'Move',
-      AllEnd: 'AllEnd',
-    };
-    const mockDragInstances: Array<{
-      element: Element;
-      options: Record<string, unknown>;
-      listeners: Record<string, Array<(fingers: unknown[]) => void>>;
-      addEventListener: jest.Mock;
-      destroy: jest.Mock;
-      emit: (type: string, fingers: unknown[]) => void;
-    }> = [];
-    const Drag = jest.fn((element: Element, options: Record<string, unknown>) => {
-      const listeners: Record<string, Array<(fingers: unknown[]) => void>> = {};
-      const instance = {
-        element,
-        options,
-        listeners,
-        addEventListener: jest.fn((type: string, listener: (fingers: unknown[]) => void) => {
-          listeners[type] = [...(listeners[type] ?? []), listener];
-        }),
-        destroy: jest.fn(),
-        emit: (type: string, fingers: unknown[]) => {
-          for (const listener of listeners[type] ?? []) {
-            listener(fingers);
-          }
-        },
-      };
-
-      mockDragInstances.push(instance);
-      return instance;
-    });
-
-    return { Drag, DragOperationType, __mockDragInstances: mockDragInstances };
-  },
-  { virtual: true }
-);
-
-type MockDragInstance = {
-  element: Element;
-  options: {
-    maxFingerCount?: number;
-    getPose?: () => unknown;
-    setPose?: () => void;
-  };
-  destroy: jest.Mock;
-  emit: (type: string, fingers: MockFinger[]) => void;
+type MockInputEvent = {
+  pointerType?: string;
+  button?: number;
+  clientX?: number;
+  clientY?: number;
+  pointerId?: number;
+  isPrimary?: boolean;
 };
 
-type MockFinger = {
-  getPath: () => Array<{
-    point: { x: number; y: number };
-    event?: { pointerType?: string; button?: number; clientX?: number; clientY?: number };
-    pressure?: number;
-    timestamp?: number;
-  }>;
+type PointerPathItem = {
+  point: { x: number; y: number };
+  event?: MockInputEvent;
+  pressure?: number;
+  timestamp?: number;
 };
 
-const multiDragMock = jest.requireMock('@system-ui-js/multi-drag') as {
-  Drag: jest.Mock;
-  DragOperationType: { Move: string; AllEnd: string };
-  __mockDragInstances: MockDragInstance[];
-};
+const activePointerIdsByHost = new WeakMap<HTMLElement, Set<number>>();
+const dispatchedPathLengthByHost = new WeakMap<HTMLElement, Map<number, number>>();
 
-function latestDragInstance(): MockDragInstance {
-  return multiDragMock.__mockDragInstances[multiDragMock.__mockDragInstances.length - 1];
+function finger(path: PointerPathItem[]): PointerPathItem[] {
+  return path;
 }
 
-function finger(path: ReturnType<MockFinger['getPath']>): MockFinger {
-  return { getPath: () => path };
+function activePointerIds(host: HTMLElement): Set<number> {
+  const existing = activePointerIdsByHost.get(host);
+  if (existing) {
+    return existing;
+  }
+  const created = new Set<number>();
+  activePointerIdsByHost.set(host, created);
+  return created;
+}
+
+function dispatchedPathLengths(host: HTMLElement): Map<number, number> {
+  const existing = dispatchedPathLengthByHost.get(host);
+  if (existing) {
+    return existing;
+  }
+  const created = new Map<number, number>();
+  dispatchedPathLengthByHost.set(host, created);
+  return created;
+}
+
+function pointerIdForPath(path: PointerPathItem[], fallback: number): number {
+  return path.find((item) => item.event?.pointerId !== undefined)?.event?.pointerId ?? fallback;
+}
+
+function createPointerEvent(
+  type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel' | 'pointerleave',
+  item: PointerPathItem,
+  pointerId: number,
+): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  const source = item.event ?? {};
+  Object.assign(event, {
+    clientX: source.clientX ?? item.point.x,
+    clientY: source.clientY ?? item.point.y,
+    pointerId,
+    pointerType: source.pointerType,
+    button: source.button ?? 0,
+    pressure: item.pressure,
+    isPrimary: source.isPrimary ?? pointerId === 1,
+  });
+  Object.defineProperty(event, 'timeStamp', { value: item.timestamp ?? 0 });
+  return event;
+}
+
+function dispatchDragMove(host: HTMLElement, paths: PointerPathItem[][]) {
+  const activeIds = activePointerIds(host);
+  const pathLengths = dispatchedPathLengths(host);
+
+  act(() => {
+    paths.forEach((path, index) => {
+      const firstItem = path[0];
+      if (!firstItem) {
+        return;
+      }
+
+      const pointerId = pointerIdForPath(path, index + 1);
+      if (!activeIds.has(pointerId)) {
+        host.dispatchEvent(createPointerEvent('pointerdown', firstItem, pointerId));
+        activeIds.add(pointerId);
+        pathLengths.set(pointerId, 1);
+      }
+
+      const previousLength = pathLengths.get(pointerId) ?? 0;
+      const nextItems = path.slice(Math.max(previousLength, 1));
+      const itemsToMove = nextItems.length > 0 ? nextItems : path.length === 1 ? [firstItem] : [];
+      for (const item of itemsToMove) {
+        host.dispatchEvent(createPointerEvent('pointermove', item, pointerId));
+      }
+      pathLengths.set(pointerId, Math.max(previousLength, path.length));
+    });
+    host.dispatchEvent(createPointerEvent('pointerleave', { point: { x: 0, y: 0 } }, 1));
+  });
+}
+
+function dispatchDragEnd(host: HTMLElement, pointerId?: number) {
+  const activeIds = activePointerIds(host);
+  const pathLengths = dispatchedPathLengths(host);
+  const pointerIds = pointerId !== undefined ? [pointerId] : Array.from(activeIds);
+
+  act(() => {
+    for (const activePointerId of pointerIds.length > 0 ? pointerIds : [1]) {
+      host.dispatchEvent(
+        createPointerEvent('pointerup', { point: { x: 0, y: 0 } }, activePointerId),
+      );
+      activeIds.delete(activePointerId);
+      pathLengths.delete(activePointerId);
+    }
+  });
 }
 
 function mockHostRect(element: HTMLElement) {
@@ -91,18 +129,14 @@ function mockHostRect(element: HTMLElement) {
   }));
 }
 
-type MockInputEvent = { pointerType?: string; button?: number; clientX?: number; clientY?: number };
-
-function emitCompletedStroke(instance: MockDragInstance, event: MockInputEvent) {
-  act(() => {
-    instance.emit(multiDragMock.DragOperationType.Move, [
-      finger([
-        { point: { x: 15, y: 25 }, event },
-        { point: { x: 20, y: 35 }, event },
-      ]),
-    ]);
-    instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
-  });
+function emitCompletedStroke(host: HTMLElement, event: MockInputEvent) {
+  dispatchDragMove(host, [
+    finger([
+      { point: { x: 15, y: 25 }, event },
+      { point: { x: 20, y: 35 }, event },
+    ]),
+  ]);
+  dispatchDragEnd(host);
 }
 
 function renderForInputMethods(inputMethods?: DrawingInputMethod[]) {
@@ -118,31 +152,26 @@ function renderForInputMethods(inputMethods?: DrawingInputMethod[]) {
   const host = screen.getByTestId('drawing-surface-host');
   mockHostRect(host);
 
-  return { instance: latestDragInstance(), onChange, unmount };
+  return { host, onChange, unmount };
 }
 
 function expectInputAccepted(inputMethods: DrawingInputMethod[] | undefined, event: MockInputEvent) {
-  const { instance, onChange, unmount } = renderForInputMethods(inputMethods);
+  const { host, onChange, unmount } = renderForInputMethods(inputMethods);
 
-  emitCompletedStroke(instance, event);
+  emitCompletedStroke(host, event);
 
   expect(onChange).toHaveBeenCalledTimes(1);
   unmount();
 }
 
 function expectInputRejected(inputMethods: DrawingInputMethod[] | undefined, event: MockInputEvent) {
-  const { instance, onChange, unmount } = renderForInputMethods(inputMethods);
+  const { host, onChange, unmount } = renderForInputMethods(inputMethods);
 
-  emitCompletedStroke(instance, event);
+  emitCompletedStroke(host, event);
 
   expect(onChange).not.toHaveBeenCalled();
   unmount();
 }
-
-beforeEach(() => {
-  multiDragMock.Drag.mockClear();
-  multiDragMock.__mockDragInstances.splice(0, multiDragMock.__mockDragInstances.length);
-});
 
 describe('DrawingSurface', () => {
   it('renders host container with data-testid', () => {
@@ -162,25 +191,19 @@ describe('DrawingSurface', () => {
     expect(svg).toBeTruthy();
   });
 
-  it('creates drag instance on mount', () => {
+  it('mounts native pointer input without legacy drag setup', () => {
     render(<DrawingSurface testID="drawing-surface-host" />);
     const host = screen.getByTestId('drawing-surface-host');
-    const instance = latestDragInstance();
 
-    expect(multiDragMock.Drag).toHaveBeenCalledWith(host, expect.any(Object));
-    expect(instance.element).toBe(host);
-    expect(instance.options.maxFingerCount).toBe(1);
-    expect(instance.options.getPose?.()).toEqual({ position: { x: 0, y: 0 }, width: 0, height: 0 });
-    expect(instance.options.setPose?.()).toBeUndefined();
+    expect(host.getAttribute('data-scale')).toBe('1');
+    expect(host.getAttribute('data-tx')).toBe('0');
+    expect(host.getAttribute('data-ty')).toBe('0');
   });
 
-  it('destroys drag instance on unmount', () => {
+  it('unmounts after native pointer input setup', () => {
     const { unmount } = render(<DrawingSurface />);
-    const instance = latestDragInstance();
 
-    unmount();
-
-    expect(instance.destroy).toHaveBeenCalledTimes(1);
+    expect(() => unmount()).not.toThrow();
   });
 
   it('commits completed pen stroke on drag all-end', () => {
@@ -188,10 +211,9 @@ describe('DrawingSurface', () => {
     const { container } = render(<DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} onChange={onChange} />);
     const host = screen.getByTestId('drawing-surface-host');
     mockHostRect(host);
-    const instance = latestDragInstance();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
           { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 } },
@@ -203,7 +225,7 @@ describe('DrawingSurface', () => {
     expect(onChange).not.toHaveBeenCalled();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      dispatchDragEnd(host);
     });
 
     expect(onChange).toHaveBeenCalledTimes(1);
@@ -215,7 +237,7 @@ describe('DrawingSurface', () => {
     expect(container.querySelector('path')).toBeNull();
   });
 
-  it('pinch feasibility two pointer default-off gesture ignores second pointer while preserving one pointer drawing', () => {
+  it('two pointer default-off gesture commits current stroke and prevents resume', () => {
     const onChange = jest.fn();
     const { container } = render(
       <DrawingSurface
@@ -227,10 +249,9 @@ describe('DrawingSurface', () => {
     );
     const host = screen.getByTestId('drawing-surface-host');
     mockHostRect(host);
-    const instance = latestDragInstance();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
           { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 } },
@@ -239,9 +260,10 @@ describe('DrawingSurface', () => {
     });
 
     expect(container.querySelector('path')?.getAttribute('d')).toBe('M 5 5 L 10 15');
+    expect(onChange).not.toHaveBeenCalled();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
           { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 } },
@@ -253,10 +275,15 @@ describe('DrawingSurface', () => {
       ]);
     });
 
-    expect(container.querySelector('path')?.getAttribute('d')).toBe('M 5 5 L 10 15');
+    expect(container.querySelector('path')).toBeNull();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
+      { x: 5, y: 5 },
+      { x: 10, y: 15 },
+    ]);
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
           { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 } },
@@ -265,17 +292,16 @@ describe('DrawingSurface', () => {
       ]);
     });
 
-    expect(container.querySelector('path')).toBeTruthy();
+    expect(container.querySelector('path')).toBeNull();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      dispatchDragEnd(host);
     });
 
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
       { x: 5, y: 5 },
       { x: 10, y: 15 },
-      { x: 20, y: 25 },
     ]);
   });
 
@@ -312,16 +338,15 @@ describe('DrawingSurface', () => {
     );
     const host = screen.getByTestId('drawing-surface-host');
     mockHostRect(host);
-    const instance = latestDragInstance();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
           { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 } },
         ]),
       ]);
-      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      dispatchDragEnd(host);
     });
 
     const committed = onChange.mock.calls[0][0];
@@ -356,10 +381,9 @@ describe('DrawingSurface', () => {
     );
     const host = screen.getByTestId('drawing-surface-host');
     mockHostRect(host);
-    const instance = latestDragInstance();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, pressure: 0.2 },
           { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, pressure: 0.8 },
@@ -371,7 +395,7 @@ describe('DrawingSurface', () => {
     expect(container.querySelector('line')?.getAttribute('stroke-width')).toBe('8');
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      dispatchDragEnd(host);
     });
 
     expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
@@ -410,10 +434,9 @@ describe('DrawingSurface', () => {
     );
     const host = screen.getByTestId('drawing-surface-host');
     mockHostRect(host);
-    const instance = latestDragInstance();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, pressure: 0.2 },
           { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, pressure: 0.8 },
@@ -424,7 +447,7 @@ describe('DrawingSurface', () => {
     expect(container.querySelector('path')?.getAttribute('stroke-width')).toBe('10');
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      dispatchDragEnd(host);
     });
 
     expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
@@ -447,10 +470,9 @@ describe('DrawingSurface', () => {
     );
     const host = screen.getByTestId('drawing-surface-host');
     mockHostRect(host);
-    const instance = latestDragInstance();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, pressure: 0.2 },
           { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, pressure: 0.8 },
@@ -462,7 +484,7 @@ describe('DrawingSurface', () => {
     expect(container.querySelector('line')).toBeNull();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      dispatchDragEnd(host);
     });
 
     expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
@@ -485,10 +507,9 @@ describe('DrawingSurface', () => {
     );
     const host = screen.getByTestId('drawing-surface-host');
     mockHostRect(host);
-    const instance = latestDragInstance();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, pressure: 0.2 },
           { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, pressure: 0.8 },
@@ -499,7 +520,7 @@ describe('DrawingSurface', () => {
     expect(container.querySelector('line')?.getAttribute('stroke-width')).toBe('10');
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      dispatchDragEnd(host);
     });
 
     expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
@@ -572,10 +593,9 @@ describe('DrawingSurface', () => {
     );
     const host = screen.getByTestId('drawing-surface-host');
     mockHostRect(host);
-    const instance = latestDragInstance();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
           { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 } },
@@ -588,7 +608,7 @@ describe('DrawingSurface', () => {
     expect(container.querySelector('line')).toBeNull();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      dispatchDragEnd(host);
     });
 
     expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
@@ -636,10 +656,9 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId(hostTestId);
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
             { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 } },
@@ -677,16 +696,15 @@ describe('DrawingSurface', () => {
     );
     const host = screen.getByTestId('drawing-surface-host');
     mockHostRect(host);
-    const instance = latestDragInstance();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
           { point: { x: 40, y: 55 }, event: { pointerType: 'pen', button: 0 } },
         ]),
       ]);
-      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      dispatchDragEnd(host);
     });
 
     expect(onChange).toHaveBeenCalledTimes(1);
@@ -810,10 +828,9 @@ describe('DrawingSurface', () => {
     );
     const host = screen.getByTestId('drawing-surface-host');
     mockHostRect(host);
-    const instance = latestDragInstance();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           {
             point: { x: 30, y: 40 },
@@ -937,10 +954,9 @@ describe('DrawingSurface', () => {
     );
     const host = screen.getByTestId('drawing-surface-host');
     mockHostRect(host);
-    const instance = latestDragInstance();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
           { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 } },
@@ -951,7 +967,7 @@ describe('DrawingSurface', () => {
     expect(onChange).not.toHaveBeenCalled();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      dispatchDragEnd(host);
     });
 
     expect(onChange).toHaveBeenCalledTimes(1);
@@ -1041,10 +1057,9 @@ describe('DrawingSurface', () => {
     const { container } = render(<DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} onChange={onChange} tool="rect" />);
     const host = screen.getByTestId('drawing-surface-host');
     mockHostRect(host);
-    const instance = latestDragInstance();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
           { point: { x: 40, y: 55 }, event: { pointerType: 'pen', button: 0 } },
@@ -1062,7 +1077,7 @@ describe('DrawingSurface', () => {
     expect(onChange).not.toHaveBeenCalled();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      dispatchDragEnd(host);
     });
 
     expect(onChange).toHaveBeenCalledTimes(1);
@@ -1076,10 +1091,9 @@ describe('DrawingSurface', () => {
     const { container } = render(<DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} onChange={onChange} tool="rect" />);
     const host = screen.getByTestId('drawing-surface-host');
     mockHostRect(host);
-    const instance = latestDragInstance();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           { point: { x: 60, y: 70 }, event: { pointerType: 'pen', button: 0 } },
           { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
@@ -1101,10 +1115,9 @@ describe('DrawingSurface', () => {
     const { container } = render(<DrawingSurface testID="drawing-surface-host" tool="rect" />);
     const host = screen.getByTestId('drawing-surface-host');
     mockHostRect(host);
-    const instance = latestDragInstance();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
           { point: { x: 40, y: 55 }, event: { pointerType: 'pen', button: 0 } },
@@ -1123,10 +1136,9 @@ describe('DrawingSurface', () => {
     const { container } = render(<DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} onChange={onChange} tool="line" />);
     const host = screen.getByTestId('drawing-surface-host');
     mockHostRect(host);
-    const instance = latestDragInstance();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
           { point: { x: 40, y: 55 }, event: { pointerType: 'pen', button: 0 } },
@@ -1145,7 +1157,7 @@ describe('DrawingSurface', () => {
     expect(onChange).not.toHaveBeenCalled();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      dispatchDragEnd(host);
     });
 
     expect(onChange).toHaveBeenCalledTimes(1);
@@ -1163,10 +1175,9 @@ describe('DrawingSurface', () => {
     const { container } = render(<DrawingSurface testID="drawing-surface-host" tool="line" />);
     const host = screen.getByTestId('drawing-surface-host');
     mockHostRect(host);
-    const instance = latestDragInstance();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
           { point: { x: 40, y: 55 }, event: { pointerType: 'pen', button: 0 } },
@@ -1186,10 +1197,9 @@ describe('DrawingSurface', () => {
     render(<DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} onChange={onChange} tool="line" />);
     const host = screen.getByTestId('drawing-surface-host');
     mockHostRect(host);
-    const instance = latestDragInstance();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      dispatchDragEnd(host);
     });
 
     expect(onChange).not.toHaveBeenCalled();
@@ -1209,16 +1219,15 @@ describe('DrawingSurface', () => {
     );
     const host = screen.getByTestId('drawing-surface-host');
     mockHostRect(host);
-    const instance = latestDragInstance();
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
           { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 } },
         ]),
       ]);
-      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      dispatchDragEnd(host);
     });
 
     const firstStroke = onChange.mock.calls[0][0].strokes[0];
@@ -1237,13 +1246,13 @@ describe('DrawingSurface', () => {
     );
 
     act(() => {
-      instance.emit(multiDragMock.DragOperationType.Move, [
+      dispatchDragMove(host, [
         finger([
           { point: { x: 50, y: 60 }, event: { pointerType: 'pen', button: 0 } },
           { point: { x: 55, y: 70 }, event: { pointerType: 'pen', button: 0 } },
         ]),
       ]);
-      instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+      dispatchDragEnd(host);
     });
 
     const secondStroke = onChange.mock.calls[1][0].strokes[1];
@@ -1323,22 +1332,21 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       // Emit multiple rapid move events
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
           ]),
         ]);
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
             { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
           ]),
         ]);
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
             { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
@@ -1368,11 +1376,10 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       // Emit rapid move events with timestamps 50ms apart ( > 33ms threshold for 30fps)
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
           ]),
@@ -1380,7 +1387,7 @@ describe('DrawingSurface', () => {
       });
 
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
             { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, timestamp: 150 },
@@ -1394,7 +1401,7 @@ describe('DrawingSurface', () => {
 
       // Complete the stroke
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+        dispatchDragEnd(host);
       });
 
       expect(onChange).toHaveBeenCalledTimes(1);
@@ -1416,11 +1423,10 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       // Emit move events with timestamps far enough apart for samplingRate=10 (100ms interval)
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
             { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, timestamp: 200 },
@@ -1430,7 +1436,7 @@ describe('DrawingSurface', () => {
 
       // End immediately
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+        dispatchDragEnd(host);
       });
 
       // Should commit the stroke with downsampled points
@@ -1455,11 +1461,10 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       // Start drawing with samplingRate=30 (33ms interval)
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
           ]),
@@ -1479,7 +1484,7 @@ describe('DrawingSurface', () => {
 
       // Continue drawing with timestamps 150ms apart ( > 100ms threshold)
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
             { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, timestamp: 250 },
@@ -1493,7 +1498,7 @@ describe('DrawingSurface', () => {
 
       // Complete stroke
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+        dispatchDragEnd(host);
       });
 
       expect(onChange).toHaveBeenCalledTimes(1);
@@ -1515,11 +1520,10 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       // Start drawing with samplingRate=0 (auto mode, keep all points)
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
           ]),
@@ -1543,7 +1547,7 @@ describe('DrawingSurface', () => {
 
       // Continue drawing with timestamps 150ms apart ( > 100ms threshold)
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
             { point: { x: 30, y: 45 }, event: { pointerType: 'pen', button: 0 }, timestamp: 250 },
@@ -1557,7 +1561,7 @@ describe('DrawingSurface', () => {
 
       // Complete stroke
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+        dispatchDragEnd(host);
       });
 
       expect(onChange).toHaveBeenCalledTimes(1);
@@ -1579,11 +1583,10 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       // Should behave like samplingRate=0 (immediate processing)
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
             { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, timestamp: 110 },
@@ -1609,11 +1612,10 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       // Should behave like samplingRate=0 (immediate processing)
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, timestamp: 100 },
             { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, timestamp: 110 },
@@ -1630,14 +1632,14 @@ describe('DrawingSurface', () => {
 
   describe('ellipse tool', () => {
     function emitEllipseDrag(
-      instance: MockDragInstance,
+      host: HTMLElement,
       startX: number,
       startY: number,
       endX: number,
       endY: number,
     ) {
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: startX, y: startY }, event: { pointerType: 'pen', button: 0 } },
             { point: { x: endX, y: endY }, event: { pointerType: 'pen', button: 0 } },
@@ -1650,9 +1652,8 @@ describe('DrawingSurface', () => {
       const { container } = render(<DrawingSurface testID="drawing-surface-host" tool="ellipse" />);
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
-      emitEllipseDrag(instance, 20, 40, 120, 90);
+  
+      emitEllipseDrag(host, 20, 40, 120, 90);
 
       const ellipseEl = container.querySelector('ellipse');
       expect(ellipseEl).toBeTruthy();
@@ -1667,15 +1668,14 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
-      emitEllipseDrag(instance, 20, 40, 120, 90);
+  
+      emitEllipseDrag(host, 20, 40, 120, 90);
 
       expect(container.querySelector('ellipse')).toBeTruthy();
       expect(onChange).not.toHaveBeenCalled();
 
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+        dispatchDragEnd(host);
       });
 
       expect(onChange).toHaveBeenCalledTimes(1);
@@ -1691,10 +1691,9 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       // local (10,20) -> (110,70) after subtracting host rect (left=10, top=20)
-      emitEllipseDrag(instance, 20, 40, 120, 90);
+      emitEllipseDrag(host, 20, 40, 120, 90);
 
       const ellipseEl = container.querySelector('ellipse');
       expect(ellipseEl).toBeTruthy();
@@ -1708,10 +1707,9 @@ describe('DrawingSurface', () => {
       const { container } = render(<DrawingSurface testID="drawing-surface-host" tool="ellipse" />);
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       // drag from bottom-right to top-left
-      emitEllipseDrag(instance, 120, 90, 20, 40);
+      emitEllipseDrag(host, 120, 90, 20, 40);
 
       const ellipseEl = container.querySelector('ellipse');
       expect(ellipseEl).toBeTruthy();
@@ -1732,9 +1730,8 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
-      emitEllipseDrag(instance, 20, 40, 120, 90);
+  
+      emitEllipseDrag(host, 20, 40, 120, 90);
 
       const ellipseEl = container.querySelector('ellipse');
       expect(ellipseEl).toBeTruthy();
@@ -1749,12 +1746,11 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
-      emitEllipseDrag(instance, 20, 40, 120, 90);
+  
+      emitEllipseDrag(host, 20, 40, 120, 90);
 
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+        dispatchDragEnd(host);
       });
 
       expect(onChange.mock.calls[0][0].strokes[0].strokeWidth).toBe(1);
@@ -1785,10 +1781,9 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             {
               point: { x: 30, y: 40 },
@@ -1819,11 +1814,10 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       shiftDown();
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 20, y: 40 }, event: { pointerType: 'pen', button: 0 } },
             // drag 100x50 -> constrained to 100x100 (max abs delta preserves sign)
@@ -1850,11 +1844,10 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       shiftDown();
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 20, y: 40 }, event: { pointerType: 'pen', button: 0 } },
             // drag 100x50 -> constrained to 100x100
@@ -1878,10 +1871,9 @@ describe('DrawingSurface', () => {
       const { container } = render(<DrawingSurface testID="drawing-surface-host" tool="rect" />);
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 20, y: 40 }, event: { pointerType: 'pen', button: 0 } },
             { point: { x: 120, y: 90 }, event: { pointerType: 'pen', button: 0 } },
@@ -1901,11 +1893,10 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       shiftDown();
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 20, y: 40 }, event: { pointerType: 'pen', button: 0 } },
             { point: { x: 120, y: 90 }, event: { pointerType: 'pen', button: 0 } },
@@ -1913,7 +1904,7 @@ describe('DrawingSurface', () => {
         ]);
       });
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+        dispatchDragEnd(host);
       });
       shiftUp();
 
@@ -1932,11 +1923,10 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       shiftDown();
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 20, y: 40 }, event: { pointerType: 'pen', button: 0 } },
             { point: { x: 120, y: 90 }, event: { pointerType: 'pen', button: 0 } },
@@ -1944,7 +1934,7 @@ describe('DrawingSurface', () => {
         ]);
       });
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
+        dispatchDragEnd(host);
       });
       shiftUp();
 
@@ -1963,15 +1953,14 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       shiftDown();
       act(() => {
         window.dispatchEvent(new Event('blur'));
       });
 
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 20, y: 40 }, event: { pointerType: 'pen', button: 0 } },
             { point: { x: 120, y: 90 }, event: { pointerType: 'pen', button: 0 } },
@@ -1991,11 +1980,10 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       shiftDown();
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             { point: { x: 20, y: 40 }, event: { pointerType: 'pen', button: 0 } },
             { point: { x: 120, y: 90 }, event: { pointerType: 'pen', button: 0 } },
@@ -2374,10 +2362,9 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
+        dispatchDragMove(host, [
           finger([
             {
               point: { x: 30, y: 40 },
@@ -2837,15 +2824,6 @@ describe('DrawingSurface', () => {
       });
     }
 
-    function dispatchDocumentPointer(
-      type: 'pointermove' | 'pointerup' | 'pointercancel',
-      props: { clientX: number; clientY: number; pointerId?: number; pointerType?: string; button?: number },
-    ) {
-      act(() => {
-        document.dispatchEvent(pointerEvent(type, props));
-      });
-    }
-
     it('default props ignore a two-pointer pinch attempt', () => {
       render(<DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} />);
       const host = screen.getByTestId('drawing-surface-host');
@@ -2853,8 +2831,8 @@ describe('DrawingSurface', () => {
 
       dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 60, clientY: 80 });
       dispatchHostPointer(host, 'pointerdown', { pointerId: 2, clientX: 80, clientY: 80 });
-      dispatchDocumentPointer('pointermove', { pointerId: 1, clientX: 40, clientY: 80 });
-      dispatchDocumentPointer('pointermove', { pointerId: 2, clientX: 100, clientY: 80 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 1, clientX: 40, clientY: 80 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 2, clientX: 100, clientY: 80 });
 
       expect(host.getAttribute('data-scale')).toBe('1');
       expect(host.getAttribute('data-tx')).toBe('0');
@@ -2874,8 +2852,8 @@ describe('DrawingSurface', () => {
 
       dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 60, clientY: 80 });
       dispatchHostPointer(host, 'pointerdown', { pointerId: 2, clientX: 80, clientY: 80 });
-      dispatchDocumentPointer('pointermove', { pointerId: 1, clientX: -40, clientY: 80 });
-      dispatchDocumentPointer('pointermove', { pointerId: 2, clientX: 180, clientY: 80 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 1, clientX: -40, clientY: 80 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 2, clientX: 180, clientY: 80 });
 
       expect(host.getAttribute('data-scale')).toBe('2');
       expect(host.getAttribute('data-tx')).toBe('-60');
@@ -2895,10 +2873,98 @@ describe('DrawingSurface', () => {
 
       dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 20, clientY: 80 });
       dispatchHostPointer(host, 'pointerdown', { pointerId: 2, clientX: 120, clientY: 80 });
-      dispatchDocumentPointer('pointermove', { pointerId: 1, clientX: 68, clientY: 80 });
-      dispatchDocumentPointer('pointermove', { pointerId: 2, clientX: 72, clientY: 80 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 1, clientX: 68, clientY: 80 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 2, clientX: 72, clientY: 80 });
 
       expect(host.getAttribute('data-scale')).toBe('0.5');
+    });
+
+    it('two-finger drag plus scale updates viewport exactly', () => {
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          gestures={{ pinchZoom: true, pan: true }}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 100, clientY: 100 });
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 2, clientX: 200, clientY: 100 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 1, clientX: 90, clientY: 110 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 2, clientX: 230, clientY: 110 });
+
+      const expectedScale = 1.4;
+      const expectedTx = 140 - 140 * expectedScale + 10;
+      const expectedTy = 80 - 80 * expectedScale + 10;
+      const actualScale = Number(host.getAttribute('data-scale'));
+      const actualTx = Number(host.getAttribute('data-tx'));
+      const actualTy = Number(host.getAttribute('data-ty'));
+
+      expect(actualScale).toBeCloseTo(expectedScale, 3);
+      expect(Math.abs(actualTx - expectedTx)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(actualTy - expectedTy)).toBeLessThanOrEqual(0.5);
+    });
+
+    it('eraser does not delete during two-finger gesture', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{
+            strokes: [
+              {
+                id: 'eraser-two-finger-a',
+                tool: 'pen' as const,
+                points: [
+                  { x: 20, y: 20 },
+                  { x: 30, y: 20 },
+                ],
+                strokeWidth: 6,
+              },
+              {
+                id: 'eraser-two-finger-b',
+                tool: 'pen' as const,
+                points: [
+                  { x: 60, y: 20 },
+                  { x: 70, y: 20 },
+                ],
+                strokeWidth: 6,
+              },
+              {
+                id: 'eraser-two-finger-c',
+                tool: 'pen' as const,
+                points: [
+                  { x: 100, y: 20 },
+                  { x: 110, y: 20 },
+                ],
+                strokeWidth: 6,
+              },
+            ],
+          }}
+          onChange={onChange}
+          tool="eraser"
+          strokeWidth={12}
+          gestures={{ pan: true }}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 30, clientY: 40 });
+      expect(onChange).not.toHaveBeenCalled();
+
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 2, clientX: 80, clientY: 40 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 1, clientX: 70, clientY: 40 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 2, clientX: 120, clientY: 40 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 1, clientX: 110, clientY: 40 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 2, clientX: 150, clientY: 40 });
+      dispatchHostPointer(host, 'pointerup', { pointerId: 1, clientX: 110, clientY: 40 });
+      dispatchHostPointer(host, 'pointerup', { pointerId: 2, clientX: 150, clientY: 40 });
+
+      expect(host.getAttribute('data-stroke-count')).toBe('3');
+      expect(onChange).not.toHaveBeenCalled();
     });
 
     it('pan moves tx and ty when no drawing tool is active', () => {
@@ -2914,7 +2980,7 @@ describe('DrawingSurface', () => {
       mockHostRect(host);
 
       dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 30, clientY: 50 });
-      dispatchDocumentPointer('pointermove', { pointerId: 1, clientX: 55, clientY: 85 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 1, clientX: 55, clientY: 85 });
 
       expect(host.getAttribute('data-tx')).toBe('25');
       expect(host.getAttribute('data-ty')).toBe('35');
@@ -2935,20 +3001,14 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
-      dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 30, clientY: 50, pointerType: 'pen' });
-      dispatchDocumentPointer('pointermove', { pointerId: 1, clientX: 55, clientY: 85, pointerType: 'pen' });
-
-      act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
-          finger([
-            { point: { x: 30, y: 50 }, event: { pointerType: 'pen', button: 0 } },
-            { point: { x: 55, y: 85 }, event: { pointerType: 'pen', button: 0 } },
-          ]),
-        ]);
-        instance.emit(multiDragMock.DragOperationType.AllEnd, [finger([])]);
-      });
+  
+      dispatchDragMove(host, [
+        finger([
+          { point: { x: 30, y: 50 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 55, y: 85 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+      dispatchDragEnd(host);
 
       expect(host.getAttribute('data-tx')).toBe('0');
       expect(host.getAttribute('data-ty')).toBe('0');
@@ -2985,8 +3045,8 @@ describe('DrawingSurface', () => {
 
       dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 60, clientY: 80 });
       dispatchHostPointer(host, 'pointerdown', { pointerId: 2, clientX: 80, clientY: 80 });
-      dispatchDocumentPointer('pointermove', { pointerId: 1, clientX: 40, clientY: 80 });
-      dispatchDocumentPointer('pointermove', { pointerId: 2, clientX: 100, clientY: 80 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 1, clientX: 40, clientY: 80 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 2, clientX: 100, clientY: 80 });
       expect(Number(host.getAttribute('data-scale'))).toBeGreaterThan(1);
 
       act(() => {
@@ -3001,6 +3061,44 @@ describe('DrawingSurface', () => {
       expect(value.strokes[0].points).toEqual([
         { x: 0, y: 0 },
         { x: 20, y: 20 },
+      ]);
+    });
+
+    // Behavior-lock test: single-finger pen draw commits a stroke with
+    // canvas-local coordinates derived from mockHostRect (clientX - left, clientY - top).
+    // This locks the native pointer Draw→commit path after the gesture adapter migration.
+    it('single-finger draw commits a pen stroke (behavior lock)', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="pen"
+          strokeSmoothing={false}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+  
+      // mockHostRect has left=10, top=20 → canvas-local = client - offset
+      // clientX:30,clientY:50 → {x:20,y:30}  clientX:60,clientY:90 → {x:50,y:70}
+      act(() => {
+        dispatchDragMove(host, [
+          finger([
+            { point: { x: 30, y: 50 }, event: { pointerType: 'pen', button: 0, clientX: 30, clientY: 50 } },
+            { point: { x: 60, y: 90 }, event: { pointerType: 'pen', button: 0, clientX: 60, clientY: 90 } },
+          ]),
+        ]);
+        dispatchDragEnd(host);
+      });
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const lastStroke = onChange.mock.calls[0][0].strokes.at(-1);
+      expect(lastStroke).toMatchObject({ tool: 'pen' });
+      expect(lastStroke.points).toEqual([
+        { x: 20, y: 30 },
+        { x: 50, y: 70 },
       ]);
     });
 
@@ -3030,27 +3128,453 @@ describe('DrawingSurface', () => {
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
-      const instance = latestDragInstance();
-
+  
       dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 10, clientY: 20 });
       dispatchHostPointer(host, 'pointerdown', { pointerId: 2, clientX: 30, clientY: 20 });
-      dispatchDocumentPointer('pointermove', { pointerId: 1, clientX: 0, clientY: 20 });
-      dispatchDocumentPointer('pointermove', { pointerId: 2, clientX: 50, clientY: 20 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 1, clientX: 0, clientY: 20 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 2, clientX: 50, clientY: 20 });
       expect(host.getAttribute('data-scale')).toBe('2');
+      dispatchHostPointer(host, 'pointerup', { pointerId: 1, clientX: 0, clientY: 20 });
+      dispatchHostPointer(host, 'pointerup', { pointerId: 2, clientX: 50, clientY: 20 });
 
-      act(() => {
-        instance.emit(multiDragMock.DragOperationType.Move, [
-          finger([
-            {
-              point: { x: 40, y: 40 },
-              event: { pointerType: 'pen', button: 0, clientX: 40, clientY: 40 },
-            },
-          ]),
-        ]);
-      });
+      dispatchDragMove(host, [
+        finger([
+          {
+            point: { x: 40, y: 40 },
+            event: { pointerType: 'pen', button: 0, clientX: 40, clientY: 40 },
+          },
+        ]),
+      ]);
 
       expect(onChange).toHaveBeenCalledTimes(1);
       expect(onChange.mock.calls[0][0].strokes).toEqual([]);
     });
+  });
+});
+
+describe('eraserCommitMode', () => {
+  // 三笔位于不同 y 带的水平短线，每条 pen 笔画长度 10px。
+  // strokeWidth=20 → 橡皮半径 = 20/2/1 = 10，足够覆盖采样落点；
+  // 各笔画 y 间距 50px，确保单个落点只可能命中唯一笔画。
+  const buildFixtureStrokes = () => ({
+    strokes: [
+      {
+        id: 'stroke-A',
+        tool: 'pen' as const,
+        points: [
+          { x: 50, y: 30 },
+          { x: 60, y: 30 },
+        ],
+        strokeColor: 'black',
+        strokeWidth: 20,
+      },
+      {
+        id: 'stroke-B',
+        tool: 'pen' as const,
+        points: [
+          { x: 50, y: 80 },
+          { x: 60, y: 80 },
+        ],
+        strokeColor: 'black',
+        strokeWidth: 20,
+      },
+      {
+        id: 'stroke-C',
+        tool: 'pen' as const,
+        points: [
+          { x: 50, y: 130 },
+          { x: 60, y: 130 },
+        ],
+        strokeColor: 'black',
+        strokeWidth: 20,
+      },
+    ],
+  });
+
+  // 起点 (10,10) 不落在任何笔画上：adapter 在 start 阶段返回 idle，
+  // 后续 3 个 move 各自把 latest 落到 A/B/C 上，分别触发命中。
+  const eraserSweepPath = (): PointerPathItem[] => [
+    { point: { x: 10, y: 10 }, event: { pointerType: 'pen', button: 0, clientX: 10, clientY: 10 } },
+    { point: { x: 55, y: 30 }, event: { pointerType: 'pen', button: 0, clientX: 55, clientY: 30 } },
+    { point: { x: 55, y: 80 }, event: { pointerType: 'pen', button: 0, clientX: 55, clientY: 80 } },
+    { point: { x: 55, y: 130 }, event: { pointerType: 'pen', button: 0, clientX: 55, clientY: 130 } },
+  ];
+
+  // 不通过 mockHostRect 偏移：橡皮坐标系与笔画坐标系直接对齐到 (0,0)。
+  const mountWithFixture = (commitMode?: 'while-sliding' | 'on-release') => {
+    const onChange = jest.fn();
+    const { unmount } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        defaultValue={buildFixtureStrokes()}
+        onChange={onChange}
+        tool="eraser"
+        strokeWidth={20}
+        eraserCommitMode={commitMode}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    host.getBoundingClientRect = jest.fn(() => ({
+      x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200,
+      width: 200, height: 200, toJSON: () => ({}),
+    }));
+    return { host, onChange, unmount };
+  };
+
+  const buildSparseTargetStroke = () => ({
+    strokes: [
+      {
+        id: 'sparse-sweep-target',
+        tool: 'pen' as const,
+        points: [
+          { x: 90, y: 100 },
+          { x: 110, y: 100 },
+        ],
+        strokeColor: 'black',
+        strokeWidth: 2,
+      },
+    ],
+  });
+
+  const sparseCrossingPath = (): PointerPathItem[] => [
+    { point: { x: 100, y: 70 }, event: { pointerType: 'pen', button: 0, clientX: 100, clientY: 70 } },
+    { point: { x: 100, y: 130 }, event: { pointerType: 'pen', button: 0, clientX: 100, clientY: 130 } },
+  ];
+
+  const nearParallelSweepPath = (): PointerPathItem[] => [
+    { point: { x: 80, y: 112 }, event: { pointerType: 'pen', button: 0, clientX: 80, clientY: 112 } },
+    { point: { x: 120, y: 112 }, event: { pointerType: 'pen', button: 0, clientX: 120, clientY: 112 } },
+  ];
+
+  const mountWithSparseTarget = (
+    strokeWidth: number,
+    commitMode: 'while-sliding' | 'on-release' = 'while-sliding',
+  ) => {
+    const onChange = jest.fn();
+    const { unmount } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        defaultValue={buildSparseTargetStroke()}
+        onChange={onChange}
+        tool="eraser"
+        strokeWidth={strokeWidth}
+        eraserCommitMode={commitMode}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    host.getBoundingClientRect = jest.fn(() => ({
+      x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200,
+      width: 200, height: 200, toJSON: () => ({}),
+    }));
+    return { host, onChange, unmount };
+  };
+
+  it('AC-E1 while-sliding: deletes hit strokes immediately during pointer moves', () => {
+    const { host, onChange, unmount } = mountWithFixture('while-sliding');
+
+    dispatchDragMove(host, [finger(eraserSweepPath())]);
+
+    // 每个 move 触发一次 onChange，三次删除后内部 strokes 应为空。
+    expect(onChange).toHaveBeenCalledTimes(3);
+    const finalCall = onChange.mock.calls[onChange.mock.calls.length - 1][0];
+    expect(finalCall.strokes).toHaveLength(0);
+    // 验证每次调用都比上一次少一笔（while-sliding 的核心契约）。
+    expect(onChange.mock.calls[0][0].strokes).toHaveLength(2);
+    expect(onChange.mock.calls[1][0].strokes).toHaveLength(1);
+    expect(onChange.mock.calls[2][0].strokes).toHaveLength(0);
+
+    dispatchDragEnd(host);
+    expect(onChange).toHaveBeenCalledTimes(3);
+    unmount();
+  });
+
+  it('AC-E2 on-release: queues hits during moves, deletes all on pointerup', () => {
+    const { host, onChange, unmount } = mountWithFixture('on-release');
+
+    dispatchDragMove(host, [finger(eraserSweepPath())]);
+
+    // 关键断言：滑动过程中不能有任何 onChange（队列还未提交）。
+    expect(onChange).not.toHaveBeenCalled();
+
+    dispatchDragEnd(host);
+
+    // pointerup 后队列一次性 flush，最终状态应当少 3 笔。
+    expect(onChange).toHaveBeenCalled();
+    const finalCall = onChange.mock.calls[onChange.mock.calls.length - 1][0];
+    expect(finalCall.strokes).toHaveLength(0);
+    unmount();
+  });
+
+  // 稀疏移动的两个端点都离目标 30px，但连线穿过目标；while-sliding 必须在 pointerup 前删除。
+  it('while-sliding sparse sweep deletes a target before pointerup when only the segment crosses it', () => {
+    const { host, onChange, unmount } = mountWithSparseTarget(10, 'while-sliding');
+
+    dispatchDragMove(host, [finger(sparseCrossingPath())]);
+
+    expect(host.getAttribute('data-stroke-count')).toBe('0');
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].strokes).toHaveLength(0);
+
+    dispatchDragEnd(host);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  // 同样的稀疏穿越在 on-release 下只能排队：移动中保留目标，pointerup 后再统一删除。
+  it('on-release sparse sweep keeps the target mid-gesture and deletes it after pointerup', () => {
+    const { host, onChange, unmount } = mountWithSparseTarget(10, 'on-release');
+
+    dispatchDragMove(host, [finger(sparseCrossingPath())]);
+
+    expect(host.getAttribute('data-stroke-count')).toBe('1');
+    expect(onChange).not.toHaveBeenCalled();
+
+    dispatchDragEnd(host);
+
+    expect(host.getAttribute('data-stroke-count')).toBe('0');
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].strokes).toHaveLength(0);
+    unmount();
+  });
+
+  // 同一条平行擦除轨迹距离目标 12px；窄橡皮半径 5px，不应误删。
+  it('narrow eraser width does not delete a nearby target outside the hit radius', () => {
+    const { host, onChange, unmount } = mountWithSparseTarget(10, 'while-sliding');
+
+    dispatchDragMove(host, [finger(nearParallelSweepPath())]);
+    dispatchDragEnd(host);
+
+    expect(host.getAttribute('data-stroke-count')).toBe('1');
+    expect(onChange).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  // 同一条平行擦除轨迹配合宽橡皮半径 15px，应因 lineWidth 扩大判定面积而删除目标。
+  it('wide eraser width deletes the same nearby target by expanding the hit radius', () => {
+    const { host, onChange, unmount } = mountWithSparseTarget(30, 'while-sliding');
+
+    dispatchDragMove(host, [finger(nearParallelSweepPath())]);
+
+    expect(host.getAttribute('data-stroke-count')).toBe('0');
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].strokes).toHaveLength(0);
+
+    dispatchDragEnd(host);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  it('AC-E3 on-release + pointercancel: queue is dropped without deletion', () => {
+    const { host, onChange, unmount } = mountWithFixture('on-release');
+
+    dispatchDragMove(host, [finger(eraserSweepPath())]);
+    expect(onChange).not.toHaveBeenCalled();
+
+    // 中途 pointercancel：清空队列且不调用 onChange。
+    act(() => {
+      const cancelEvent = createPointerEvent(
+        'pointercancel',
+        { point: { x: 55, y: 130 }, event: { pointerType: 'pen', button: 0, clientX: 55, clientY: 130 } },
+        1,
+      );
+      host.dispatchEvent(cancelEvent);
+    });
+
+    expect(onChange).not.toHaveBeenCalled();
+    // 内部 stroke 数仍是初始 3。
+    expect(host.getAttribute('data-stroke-count')).toBe('3');
+    unmount();
+  });
+
+  it('AC-E4 on-release + second pointer mid-path: multi-start drops the queue', () => {
+    const { host, onChange, unmount } = mountWithFixture('on-release');
+
+    dispatchDragMove(host, [finger(eraserSweepPath())]);
+    expect(onChange).not.toHaveBeenCalled();
+
+    // 第二根手指按下：adapter 升级到 multi-start，应丢弃队列。
+    act(() => {
+      const secondDown = createPointerEvent(
+        'pointerdown',
+        { point: { x: 150, y: 150 }, event: { pointerType: 'touch', button: 0, clientX: 150, clientY: 150, pointerId: 2 } },
+        2,
+      );
+      host.dispatchEvent(secondDown);
+    });
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(host.getAttribute('data-stroke-count')).toBe('3');
+
+    // 收尾：抬起两根手指避免泄漏。
+    act(() => {
+      host.dispatchEvent(createPointerEvent('pointerup', { point: { x: 55, y: 130 } }, 1));
+      host.dispatchEvent(createPointerEvent('pointerup', { point: { x: 150, y: 150 } }, 2));
+    });
+    // multi-start → multi-end → single-end 序列不应产生 onChange（队列已清）。
+    expect(onChange).not.toHaveBeenCalled();
+    unmount();
+  });
+});
+
+describe('eraserCursorAndTrajectory', () => {
+  // 与 eraserCommitMode 套件相同的 fixture/sweep，方便复用既有时序假设：
+  // 起点 (10,10) 不命中任何笔画 → 后续 3 个 move 各产生 1 个 single-move。
+  const buildFixtureStrokes = () => ({
+    strokes: [
+      {
+        id: 'traj-stroke-A',
+        tool: 'pen' as const,
+        points: [
+          { x: 50, y: 30 },
+          { x: 60, y: 30 },
+        ],
+        strokeColor: 'black',
+        strokeWidth: 20,
+      },
+      {
+        id: 'traj-stroke-B',
+        tool: 'pen' as const,
+        points: [
+          { x: 50, y: 80 },
+          { x: 60, y: 80 },
+        ],
+        strokeColor: 'black',
+        strokeWidth: 20,
+      },
+      {
+        id: 'traj-stroke-C',
+        tool: 'pen' as const,
+        points: [
+          { x: 50, y: 130 },
+          { x: 60, y: 130 },
+        ],
+        strokeColor: 'black',
+        strokeWidth: 20,
+      },
+    ],
+  });
+
+  const eraserSweepPath = (): PointerPathItem[] => [
+    { point: { x: 10, y: 10 }, event: { pointerType: 'pen', button: 0, clientX: 10, clientY: 10 } },
+    { point: { x: 55, y: 30 }, event: { pointerType: 'pen', button: 0, clientX: 55, clientY: 30 } },
+    { point: { x: 55, y: 80 }, event: { pointerType: 'pen', button: 0, clientX: 55, clientY: 80 } },
+    { point: { x: 55, y: 130 }, event: { pointerType: 'pen', button: 0, clientX: 55, clientY: 130 } },
+  ];
+
+  // jsdom 没有 PointerEvent；用普通 Event + 字段赋值的方式构造（与 cursor crosshair overlay 套件同源）。
+  function rawPointerEvent(
+    type: 'pointerenter' | 'pointermove' | 'pointerleave' | 'pointerdown' | 'pointerup',
+    props: { clientX?: number; clientY?: number; pointerType?: string; pointerId?: number } = {},
+  ): Event {
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.assign(event, {
+      clientX: 0,
+      clientY: 0,
+      pointerType: 'mouse',
+      pointerId: 1,
+      button: 0,
+      isPrimary: true,
+      ...props,
+    });
+    return event;
+  }
+
+  // AC-E5 — default eraser cursor renders an SVG with r = strokeWidth/2.
+  it('AC-E5 default cursor renders [data-testid="eraser-cursor"] with circle r = strokeWidth/2 when tool=eraser', () => {
+    const { container } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        tool="eraser"
+        strokeWidth={20}
+      />,
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+
+    // 鼠标 hover 前 cursor 不可见，因此 SVG 不应被渲染。
+    expect(container.querySelector('[data-testid="eraser-cursor"]')).toBeNull();
+
+    act(() => {
+      host.dispatchEvent(
+        rawPointerEvent('pointerenter', { clientX: 50, clientY: 60, pointerType: 'mouse' }),
+      );
+    });
+
+    const eraserCursor = container.querySelector('[data-testid="eraser-cursor"]') as SVGSVGElement | null;
+    expect(eraserCursor).toBeTruthy();
+    // 默认 crosshair 不应同时存在；eraser 工具走专属分支。
+    expect(container.querySelector('[data-crosshair]')).toBeNull();
+
+    const circle = eraserCursor?.querySelector('circle');
+    expect(circle).toBeTruthy();
+    // strokeWidth=20 → resolvedOpenWidth=20 → eraserRadius=10
+    expect(circle?.getAttribute('r')).toBe(String(20 / 2));
+    expect(circle?.getAttribute('fill')).toBe('none');
+  });
+
+  // AC-E6 — trajectory polyline is OFF by default; never appears during eraser gesture.
+  it('AC-E6 trajectory polyline absent during eraser gesture when eraserTrajectory is undefined', () => {
+    const onChange = jest.fn();
+    const { container, unmount } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        defaultValue={buildFixtureStrokes()}
+        onChange={onChange}
+        tool="eraser"
+        strokeWidth={20}
+      />,
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    host.getBoundingClientRect = jest.fn(() => ({
+      x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200,
+      width: 200, height: 200, toJSON: () => ({}),
+    }));
+
+    expect(container.querySelector('[data-testid="eraser-trajectory"]')).toBeNull();
+
+    dispatchDragMove(host, [finger(eraserSweepPath())]);
+    // 关键断言：手势进行中 polyline 仍然为 null（visible 默认 false）。
+    expect(container.querySelector('[data-testid="eraser-trajectory"]')).toBeNull();
+
+    dispatchDragEnd(host);
+    expect(container.querySelector('[data-testid="eraser-trajectory"]')).toBeNull();
+    unmount();
+  });
+
+  // AC-E7 — trajectory polyline renders with custom color/width during gesture,
+  // and is cleared on pointerup.
+  it('AC-E7 trajectory polyline renders with custom color/lineWidth during gesture, disappears on pointerup', () => {
+    const onChange = jest.fn();
+    const { container, unmount } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        defaultValue={buildFixtureStrokes()}
+        onChange={onChange}
+        tool="eraser"
+        strokeWidth={20}
+        eraserTrajectory={{ visible: true, color: '#ff0000', lineWidth: 3 }}
+      />,
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    host.getBoundingClientRect = jest.fn(() => ({
+      x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200,
+      width: 200, height: 200, toJSON: () => ({}),
+    }));
+
+    dispatchDragMove(host, [finger(eraserSweepPath())]);
+
+    const polyline = container.querySelector('polyline[data-testid="eraser-trajectory"]') as SVGPolylineElement | null;
+    expect(polyline).toBeTruthy();
+    expect(polyline?.getAttribute('stroke')).toBe('#ff0000');
+    expect(polyline?.getAttribute('stroke-width')).toBe('3');
+    // 至少 3 个点（3 次 single-move 各推一个 canvas 点）。
+    const pointsAttr = polyline?.getAttribute('points') ?? '';
+    expect(pointsAttr.trim().split(/\s+/).length).toBeGreaterThanOrEqual(3);
+
+    dispatchDragEnd(host);
+    // 单 pointerup → single-end 清空轨迹。
+    expect(container.querySelector('[data-testid="eraser-trajectory"]')).toBeNull();
+    unmount();
   });
 });

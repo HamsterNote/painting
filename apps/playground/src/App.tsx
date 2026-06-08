@@ -1,5 +1,13 @@
 import { DrawingSurface, type DrawingTool, type DrawingInputMethod, type DrawingValue, type DrawingStrokeSmoothingOptions } from '@hamster-note/painting';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+
+/**
+ * Task 7: Eraser commit mode union literal — mirrors `DrawingEraserCommitMode`
+ * exported from DrawingSurface (not re-exported via the package barrel; using
+ * the literal union here keeps the Playground scope-clean without touching
+ * `packages/painting/src/index.ts`).
+ */
+type EraserCommitMode = 'while-sliding' | 'on-release';
 
 /** 所有可用工具 (Tasks 7-13 完成后的完整工具集) */
 const ALL_TOOLS: { value: DrawingTool; label: string }[] = [
@@ -110,6 +118,13 @@ export default function App() {
   // ===== Cursor 控制状态 (Task 12) =====
   const [cursorEnabled, setCursorEnabled] = useState(true);
   const [cursorCustomRender, setCursorCustomRender] = useState(false);
+
+  // ===== Eraser 控制状态 (Task 7) =====
+  // commitMode 默认 while-sliding（滑动即清除）；trajectory 默认隐藏。
+  const [eraserCommitMode, setEraserCommitMode] = useState<EraserCommitMode>('while-sliding');
+  const [eraserTrajectoryVisible, setEraserTrajectoryVisible] = useState(false);
+  const [eraserTrajectoryColor, setEraserTrajectoryColor] = useState('#ff0000');
+  const [eraserTrajectoryLineWidth, setEraserTrajectoryLineWidth] = useState(3);
 
   // ===== Gestures 控制状态 (Task 13: pan / pinchZoom / reset 独立开关) =====
   const [gesturePan, setGesturePan] = useState(false);
@@ -352,6 +367,16 @@ export default function App() {
     pinchZoom: gesturePinchZoom,
     reset: gestureReset,
   };
+
+  // Memoize so DrawingSurface 不会因为父组件 re-render 而频繁触发 eraserTrajectory 副作用。
+  const eraserTrajectoryProp = useMemo(
+    () => ({
+      visible: eraserTrajectoryVisible,
+      color: eraserTrajectoryColor,
+      lineWidth: eraserTrajectoryLineWidth,
+    }),
+    [eraserTrajectoryVisible, eraserTrajectoryColor, eraserTrajectoryLineWidth],
+  );
 
   const handleViewportReset = useCallback(() => {
     setViewportResetCounter((n) => n + 1);
@@ -664,6 +689,55 @@ export default function App() {
         </div>
       </fieldset>
 
+      <fieldset data-testid="panel-eraser" style={{ margin: 0, border: '1px solid #ccc', borderRadius: '4px', padding: '8px 12px', flex: '1 1 320px' }}>
+        <legend><strong>Eraser (commit mode / trajectory)</strong></legend>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <label>
+            Commit{' '}
+            <select
+              data-testid="eraser-commit-mode"
+              value={eraserCommitMode}
+              onChange={(e) => setEraserCommitMode(e.target.value as EraserCommitMode)}
+            >
+              <option value="while-sliding">while-sliding</option>
+              <option value="on-release">on-release</option>
+            </select>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              data-testid="eraser-trajectory-visible"
+              checked={eraserTrajectoryVisible}
+              onChange={(e) => setEraserTrajectoryVisible(e.target.checked)}
+            />
+            {' '}Trajectory visible
+          </label>
+          <label>
+            Color{' '}
+            <input
+              type="color"
+              data-testid="eraser-trajectory-color"
+              value={eraserTrajectoryColor}
+              onChange={(e) => setEraserTrajectoryColor(e.target.value)}
+            />
+          </label>
+          <label>
+            Line width{' '}
+            <input
+              type="number"
+              data-testid="eraser-trajectory-line-width"
+              min={1}
+              step={1}
+              value={eraserTrajectoryLineWidth}
+              onChange={(e) =>
+                setEraserTrajectoryLineWidth(Math.max(1, parseInt(e.target.value, 10) || 1))
+              }
+              style={{ width: '60px' }}
+            />
+          </label>
+        </div>
+      </fieldset>
+
       <fieldset data-testid="panel-gestures" style={{ margin: 0, border: '1px solid #ccc', borderRadius: '4px', padding: '8px 12px', flex: '1 1 320px' }}>
         <legend><strong>Gestures (viewport pan / pinch zoom / reset)</strong></legend>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -729,6 +803,8 @@ export default function App() {
               fillOpacity={resolvedFillOpacity}
               cursor={cursorProp}
               gestures={gesturesProp}
+              eraserCommitMode={eraserCommitMode}
+              eraserTrajectory={eraserTrajectoryProp}
               testID="drawing-surface-uncontrolled"
             />
           </div>
@@ -768,6 +844,8 @@ export default function App() {
               fillOpacity={resolvedFillOpacity}
               cursor={cursorProp}
               gestures={gesturesProp}
+              eraserCommitMode={eraserCommitMode}
+              eraserTrajectory={eraserTrajectoryProp}
               testID="drawing-surface-controlled"
             />
           </div>

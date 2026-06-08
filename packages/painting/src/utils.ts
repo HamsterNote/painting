@@ -309,3 +309,98 @@ export function pick<TStroke extends PickableStroke>(point: DrawingPoint, stroke
 
   return bestStroke;
 }
+
+/**
+ * Samples along the eraser sweep so hit testing can reuse `distanceSqPointToStroke`,
+ * including per-tool dispatch, fill short-circuiting, and Bezier sampling, without
+ * duplicating that logic for each tool. `pickStep = max(0.5, radius / 4)` keeps
+ * samples at most about a quarter radius apart so intersecting objects cannot slip
+ * between samples. Equal-distance hits prefer the earlier stroke index across the
+ * whole sweep, matching `pick()` even when that stroke is sampled later.
+ */
+export function pickStrokeIntersectingSegment<TStroke extends PickableStroke>(
+  start: DrawingPoint,
+  end: DrawingPoint,
+  strokes: TStroke[],
+  radius: number,
+): TStroke | null {
+  if (strokes.length === 0) {
+    return null;
+  }
+
+  const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
+  const safeRadius = Math.max(0, radius);
+  const pickStep = Math.max(0.5, safeRadius / 4);
+  const sampleCount = Math.max(1, Math.ceil(segmentLength / pickStep));
+
+  let bestStroke: TStroke | null = null;
+  let bestDistSq = Infinity;
+  let bestStrokeIndex = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i <= sampleCount; i++) {
+    const t = sampleCount === 0 ? 0 : i / sampleCount;
+    const sample = {
+      x: start.x + t * (end.x - start.x),
+      y: start.y + t * (end.y - start.y),
+    };
+
+    for (let strokeIndex = 0; strokeIndex < strokes.length; strokeIndex++) {
+      const stroke = strokes[strokeIndex];
+      const d = distanceSqPointToStroke(sample, stroke);
+      if (d < bestDistSq || (d === bestDistSq && strokeIndex < bestStrokeIndex)) {
+        bestDistSq = d;
+        bestStrokeIndex = strokeIndex;
+        bestStroke = stroke;
+      }
+    }
+  }
+
+  return bestDistSq <= safeRadius * safeRadius ? bestStroke : null;
+}
+
+export function pickStrokeIntersectingPolyline<TStroke extends PickableStroke>(
+  points: DrawingPoint[],
+  strokes: TStroke[],
+  radius: number,
+): TStroke | null {
+  if (points.length === 0) {
+    return null;
+  }
+
+  if (points.length === 1) {
+    return pick(points[0], strokes, radius);
+  }
+
+  const safeRadius = Math.max(0, radius);
+  const pickStep = Math.max(0.5, safeRadius / 4);
+  let bestStroke: TStroke | null = null;
+  let bestDistSq = Infinity;
+  let bestStrokeIndex = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const start = points[i];
+    const end = points[i + 1];
+    const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
+    const sampleCount = Math.max(1, Math.ceil(segmentLength / pickStep));
+
+    for (let j = 0; j <= sampleCount; j++) {
+      const t = sampleCount === 0 ? 0 : j / sampleCount;
+      const sample = {
+        x: start.x + t * (end.x - start.x),
+        y: start.y + t * (end.y - start.y),
+      };
+
+      for (let strokeIndex = 0; strokeIndex < strokes.length; strokeIndex++) {
+        const stroke = strokes[strokeIndex];
+        const d = distanceSqPointToStroke(sample, stroke);
+        if (d < bestDistSq || (d === bestDistSq && strokeIndex < bestStrokeIndex)) {
+          bestDistSq = d;
+          bestStrokeIndex = strokeIndex;
+          bestStroke = stroke;
+        }
+      }
+    }
+  }
+
+  return bestDistSq <= safeRadius * safeRadius ? bestStroke : null;
+}

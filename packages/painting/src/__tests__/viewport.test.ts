@@ -120,4 +120,46 @@ describe('viewport', () => {
       expectPointClose(nextScreenMidpoint, midpoint, 0);
     });
   });
+
+  describe('zoomViewportAroundScreenPoint regression tuples', () => {
+    it('default viewport midpoint {100,80} scale 2', () => {
+      expect(
+        zoomViewportAroundScreenPoint({ scale: 1, tx: 0, ty: 0 }, { x: 100, y: 80 }, 2),
+      ).toEqual({ scale: 2, tx: -100, ty: -80 });
+    });
+
+    it('translated viewport midpoint {80,120} scale 4', () => {
+      expect(
+        zoomViewportAroundScreenPoint({ scale: 1, tx: 20, ty: -10 }, { x: 80, y: 120 }, 4),
+      ).toEqual({ scale: 4, tx: -160, ty: -400 });
+    });
+
+    it('scaled viewport midpoint {150,90} scale 4', () => {
+      expect(
+        zoomViewportAroundScreenPoint({ scale: 2, tx: -40, ty: 25 }, { x: 150, y: 90 }, 4),
+      ).toEqual({ scale: 4, tx: -230, ty: -40 });
+    });
+
+    it('min clamp viewport midpoint {50,50} scale 0.1', () => {
+      expect(
+        zoomViewportAroundScreenPoint({ scale: 1, tx: 0, ty: 0 }, { x: 50, y: 50 }, 0.1),
+      ).toEqual({ scale: 0.25, tx: 37.5, ty: 37.5 });
+    });
+
+    it('max clamp viewport midpoint {30,70} scale 99', () => {
+      expect(
+        zoomViewportAroundScreenPoint({ scale: 1, tx: 10, ty: 10 }, { x: 30, y: 70 }, 99),
+      ).toEqual({ scale: 8, tx: -130, ty: -410 });
+    });
+
+    it('invalid viewport NaN/Infinity midpoint {10,20} scale 2', () => {
+      expect(
+        zoomViewportAroundScreenPoint(
+          { scale: Number.NaN, tx: Number.NaN, ty: Infinity },
+          { x: 10, y: 20 },
+          2,
+        ),
+      ).toEqual({ scale: 2, tx: -10, ty: -20 });
+    });
+  });
 });
