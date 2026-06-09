@@ -1,8 +1,0 @@
-Task 3: Replace placeholder with Web drawing shell
-- yarn typecheck: PASS
-- yarn test -- DrawingSurface: PASS (7/7 tests)
-- yarn build: PASS
-- Component renders as div host with data-testid
-- SVG layer with polylines for committed strokes
-- Controlled and uncontrolled modes working
-- getLocalCoordinates ready for pointer events

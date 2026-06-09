@@ -23,5 +23,8 @@ test-results/
 # Package output
 packages/painting/lib/
 
+# OpenCode
+.omo/
+
 # Misc
 .DS_Store

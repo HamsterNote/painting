@@ -1,5 +1,0 @@
-Task 6: Align package and runtime wiring
-- yarn build: PASS
-- yarn pack:dry: PASS
-- @system-ui-js/multi-drag added to dependencies
-- Package exports expected build artifacts
