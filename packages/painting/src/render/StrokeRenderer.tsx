@@ -19,6 +19,7 @@ export type StrokeRendererProps = {
 	fallbackDashOffset?: number;
 	fallbackFillColor?: string;
 	fallbackFillOpacity?: number;
+	pressureMultiplier?: number;
 };
 
 type StyledRenderableStroke = RenderableStroke & StrokeStyleFields;
@@ -33,6 +34,14 @@ function normalizePointPressure(pressure: number | undefined): number {
 		pressure >= 0 &&
 		pressure <= 1
 		? pressure
+		: 1;
+}
+
+function normalizePressureMultiplier(pressureMultiplier: number | undefined): number {
+	return typeof pressureMultiplier === "number" &&
+		Number.isFinite(pressureMultiplier) &&
+		pressureMultiplier > 0
+		? pressureMultiplier
 		: 1;
 }
 
@@ -111,6 +120,7 @@ function renderPen(
 	fallbackClosedWidth: number | undefined,
 	fallbackStyle: StrokeStyleFields,
 	opacity: "0.7" | undefined,
+	resolvedPressureMultiplier: number,
 ): ReactElement | ReactElement[] | null {
 	const style = styleFor(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, false);
 
@@ -127,7 +137,7 @@ function renderPen(
 					y2={point.y}
 					fill={style.fill}
 					stroke={style.stroke}
-					strokeWidth={(style.strokeWidth ?? fallbackWidth) * normalizePointPressure(point.pressure)}
+					strokeWidth={(style.strokeWidth ?? fallbackWidth) * normalizePointPressure(point.pressure) * resolvedPressureMultiplier}
 					strokeDasharray={style.strokeDasharray}
 					strokeDashoffset={style.strokeDashoffset}
 					strokeLinecap="round"
@@ -161,6 +171,7 @@ function renderV1Stroke(
 	fallbackClosedWidth: number | undefined,
 	fallbackStyle: StrokeStyleFields,
 	opacity: "0.7" | undefined,
+	resolvedPressureMultiplier: number,
 ): ReactElement | ReactElement[] | null {
 	const endpoints = firstAndLast(stroke.points);
 	if (!endpoints) {
@@ -237,7 +248,7 @@ function renderV1Stroke(
 		);
 	}
 
-	return renderPen(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, opacity);
+	return renderPen(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, opacity, resolvedPressureMultiplier);
 }
 
 function renderV2Stroke(
@@ -247,6 +258,7 @@ function renderV2Stroke(
 	fallbackClosedWidth: number | undefined,
 	fallbackStyle: StrokeStyleFields,
 	opacity: "0.7" | undefined,
+	resolvedPressureMultiplier: number,
 ): ReactElement | ReactElement[] | null {
 	const endpoints = firstAndLast(stroke.points);
 	if (!endpoints) {
@@ -257,7 +269,7 @@ function renderV2Stroke(
 
 	switch (stroke.tool) {
 		case "pen":
-			return renderPen(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, opacity);
+			return renderPen(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, opacity, resolvedPressureMultiplier);
 		case "line": {
 			const style = styleFor(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, false);
 			if (stroke.points.length > 2) {
@@ -395,6 +407,7 @@ export function StrokeRenderer({
 	fallbackDashOffset,
 	fallbackFillColor,
 	fallbackFillOpacity,
+	pressureMultiplier,
 }: StrokeRendererProps): ReactElement | null {
 	if (stroke.points.length === 0) {
 		return null;
@@ -407,9 +420,10 @@ export function StrokeRenderer({
 		fillColor: fallbackFillColor,
 		fillOpacity: fallbackFillOpacity,
 	};
+	const resolvedPressureMultiplier = normalizePressureMultiplier(pressureMultiplier);
 	const rendered = isV2Stroke(stroke)
-		? renderV2Stroke(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, opacity)
-		: renderV1Stroke(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, opacity);
+		? renderV2Stroke(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, opacity, resolvedPressureMultiplier)
+		: renderV1Stroke(stroke, fallbackColor, fallbackWidth, fallbackClosedWidth, fallbackStyle, opacity, resolvedPressureMultiplier);
 
 	if (Array.isArray(rendered)) {
 		return <Fragment>{rendered}</Fragment>;

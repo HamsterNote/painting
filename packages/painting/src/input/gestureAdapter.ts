@@ -84,15 +84,17 @@ const createIdleResult = (activePointerCount: number): GestureAdapterResult => (
 
 export function createGestureAdapter({ initialScale }: { initialScale: number }): {
 	process(input: GestureAdapterInput): GestureAdapterResult;
+	setScale(scale: number): void;
 	reset(): void;
 } {
 	let controller = new GestureController({ features });
 	const activePointers = new Map<number, TrackedPointer>();
+	let baseScale = initialScale;
 	let currentPose = {
 		position: clonePoint(zeroPoint),
 		width: 0,
 		height: 0,
-		scale: initialScale,
+		scale: baseScale,
 	};
 	let multiStartCenter: { x: number; y: number } | undefined;
 	let lastMultiCenter: { x: number; y: number } | undefined;
@@ -106,7 +108,7 @@ export function createGestureAdapter({ initialScale }: { initialScale: number })
 			position: clonePoint(zeroPoint),
 			width: 0,
 			height: 0,
-			scale: initialScale,
+			scale: baseScale,
 		};
 		multiStartCenter = undefined;
 		lastMultiCenter = undefined;
@@ -228,6 +230,19 @@ export function createGestureAdapter({ initialScale }: { initialScale: number })
 			}
 
 			return createIdleResult(activePointers.size);
+		},
+		setScale(scale) {
+			if (!Number.isFinite(scale) || scale <= 0) {
+				return;
+			}
+
+			baseScale = scale;
+			// 新一轮双指缩放开始时，同步到外部视口的当前缩放，
+			// 避免控制器继续沿用创建/上次 reset 时的 scale=1 作为基准。
+			currentPose = {
+				...currentPose,
+				scale,
+			};
 		},
 		reset() {
 			resetState();

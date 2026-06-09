@@ -1,6 +1,13 @@
 import { DrawingSurface as DrawingSurfaceFromIndex } from '@hamster-note/painting';
+import { useState } from 'react';
 import { act, render, screen } from '@testing-library/react';
-import { type DrawingInputMethod, DrawingSurface, type DrawingTool } from '../components/DrawingSurface';
+import {
+  type DrawingInputMethod,
+  DrawingSurface,
+  type DrawingStroke,
+  type DrawingTool,
+  type DrawingValue,
+} from '../components/DrawingSurface';
 
 type MockInputEvent = {
   pointerType?: string;
@@ -417,6 +424,61 @@ describe('DrawingSurface', () => {
 
     expect(container.querySelector('path')).toBeNull();
     expect(container.querySelector('line')?.getAttribute('stroke-width')).toBe('8');
+  });
+
+  it('pressureMultiplier doubles active and committed pressure widths while stored pressure stays raw', () => {
+    const onChange = jest.fn();
+    const { container, rerender } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange}
+        tool="pen"
+        strokeWidth={10}
+        strokeSmoothing={false}
+        pressure={true}
+        pressureMultiplier={2}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+
+    act(() => {
+      dispatchDragMove(host, [
+        finger([
+          { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 }, pressure: 0.2 },
+          { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 }, pressure: 0.8 },
+        ]),
+      ]);
+    });
+
+    expect(container.querySelector('path')).toBeNull();
+    expect(container.querySelector('line')?.getAttribute('stroke-width')).toBe('16');
+
+    act(() => {
+      dispatchDragEnd(host);
+    });
+
+    expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
+      { x: 5, y: 5, pressure: 0.2 },
+      { x: 10, y: 15, pressure: 0.8 },
+    ]);
+
+    rerender(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={onChange.mock.calls[0][0]}
+        onChange={onChange}
+        tool="pen"
+        strokeWidth={10}
+        strokeSmoothing={false}
+        pressure={true}
+        pressureMultiplier={2}
+      />
+    );
+
+    expect(container.querySelector('path')).toBeNull();
+    expect(container.querySelector('line')?.getAttribute('stroke-width')).toBe('16');
   });
 
   it('ignores pressure input when pressure prop is false', () => {
@@ -981,6 +1043,69 @@ describe('DrawingSurface', () => {
     expect(paths.length).toBe(2);
     expect(paths[0].getAttribute('d')).toBe('M 1 2');
     expect(paths[1].getAttribute('d')).toBe('M 5 5 L 10 15');
+  });
+
+  it('uncontrolled eraser deletion can notify a parent state update without render-phase warnings', () => {
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const observedValues: DrawingStroke[][] = [];
+    const defaultValue = {
+      strokes: [
+        {
+          id: 'seed-1',
+          tool: 'pen' as const,
+          points: [
+            { x: 10, y: 10 },
+            { x: 100, y: 100 },
+          ],
+          strokeWidth: 20,
+        },
+      ],
+    };
+
+    function Parent() {
+      const [, setLatestValue] = useState<DrawingValue>(defaultValue);
+
+      return (
+        <DrawingSurface
+          testID="drawing-surface-host"
+          defaultValue={defaultValue}
+          onChange={(nextValue) => {
+            observedValues.push(nextValue.strokes);
+            setLatestValue(nextValue);
+          }}
+          tool="eraser"
+          strokeWidth={20}
+          eraserTrajectory={{ visible: true }}
+        />
+      );
+    }
+
+    const { container } = render(<Parent />);
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+
+    act(() => {
+      dispatchDragMove(host, [
+        finger([
+          {
+            point: { x: 20, y: 30 },
+            event: { pointerType: 'pen', button: 0, clientX: 20, clientY: 30 },
+          },
+          {
+            point: { x: 110, y: 120 },
+            event: { pointerType: 'pen', button: 0, clientX: 110, clientY: 120 },
+          },
+        ]),
+      ]);
+    });
+
+    expect(observedValues).toEqual([[]]);
+    expect(container.querySelectorAll('path')).toHaveLength(0);
+    const errorMessages = consoleErrorSpy.mock.calls.map((call) => call.join(' '));
+    expect(errorMessages).not.toEqual(
+      expect.arrayContaining([expect.stringContaining('Cannot update a component')]),
+    );
+    consoleErrorSpy.mockRestore();
   });
 
   it('module import does not crash in jsdom', () => {
@@ -2413,22 +2538,39 @@ describe('DrawingSurface', () => {
   });
 
   describe('bezier tool', () => {
-    // Four clicks (start, cp1, cp2, end) commit one BezierStrokeV2.
-    // Same jsdom workaround as polygon: dispatch synthetic Event with pointer-shaped fields.
-    function pointerDown(host: HTMLElement, clientX: number, clientY: number, detail = 1) {
+    function pointerDown(host: HTMLElement, clientX: number, clientY: number, pointerId = 1) {
       const event = new Event('pointerdown', { bubbles: true, cancelable: true });
-      Object.assign(event, { clientX, clientY, pointerId: 1, button: 0, detail });
+      Object.assign(event, { clientX, clientY, pointerId, button: 0, detail: 1, pointerType: 'pen' });
       act(() => {
         host.dispatchEvent(event);
       });
     }
 
-    function pointerMove(host: HTMLElement, clientX: number, clientY: number) {
+    function pointerMove(host: HTMLElement, clientX: number, clientY: number, pointerId = 1) {
       const event = new Event('pointermove', { bubbles: true, cancelable: true });
-      Object.assign(event, { clientX, clientY, pointerId: 1 });
+      Object.assign(event, { clientX, clientY, pointerId, pointerType: 'pen' });
       act(() => {
         host.dispatchEvent(event);
       });
+    }
+
+    function pointerUp(host: HTMLElement, clientX: number, clientY: number, pointerId = 1) {
+      const event = new Event('pointerup', { bubbles: true, cancelable: true });
+      Object.assign(event, { clientX, clientY, pointerId, button: 0, detail: 1, pointerType: 'pen' });
+      act(() => {
+        host.dispatchEvent(event);
+      });
+    }
+
+    function dragBezierPoint(
+      host: HTMLElement,
+      from: { x: number; y: number },
+      to: { x: number; y: number },
+      pointerId = 1,
+    ) {
+      pointerDown(host, from.x, from.y, pointerId);
+      pointerMove(host, to.x, to.y, pointerId);
+      pointerUp(host, to.x, to.y, pointerId);
     }
 
     function escapeKey() {
@@ -2437,9 +2579,9 @@ describe('DrawingSurface', () => {
       });
     }
 
-    it('commits one v2 bezier stroke from four clicks with cubic path d attribute', () => {
+    it('renders drag 1 preview as the start to end line', () => {
       const onChange = jest.fn();
-      const { container, rerender } = render(
+      const { container } = render(
         <DrawingSurface
           testID="drawing-surface-host"
           value={{ strokes: [] }}
@@ -2450,11 +2592,37 @@ describe('DrawingSurface', () => {
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
 
-      // Host rect offset (10, 20). Client coords below become canvas (10,10), (30,40), (70,40), (90,10).
       pointerDown(host, 20, 30);
-      pointerDown(host, 40, 60);
-      pointerDown(host, 80, 60);
-      pointerDown(host, 100, 30);
+      pointerMove(host, 100, 30);
+
+      const line = container.querySelector('line');
+      expect(line).toBeTruthy();
+      expect(line?.getAttribute('x1')).toBe('10');
+      expect(line?.getAttribute('y1')).toBe('10');
+      expect(line?.getAttribute('x2')).toBe('90');
+      expect(line?.getAttribute('y2')).toBe('10');
+      expect(line?.getAttribute('opacity')).toBe('0.7');
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('commits one v2 bezier stroke from three drags with cubic path and keeps bezier active', () => {
+      const onChange = jest.fn();
+      const { container, rerender } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="bezier"
+          fillColor="#aabbcc"
+          fillOpacity={0.4}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      dragBezierPoint(host, { x: 20, y: 30 }, { x: 100, y: 30 });
+      dragBezierPoint(host, { x: 35, y: 55 }, { x: 40, y: 60 });
+      dragBezierPoint(host, { x: 75, y: 55 }, { x: 80, y: 60 });
 
       expect(onChange).toHaveBeenCalledTimes(1);
       const committed = onChange.mock.calls[0][0].strokes[0];
@@ -2465,17 +2633,18 @@ describe('DrawingSurface', () => {
         { x: 70, y: 40 },
         { x: 90, y: 10 },
       ]);
-      // No fill on open tool, regardless of any fillColor fallback prop.
       expect(committed.fillColor).toBeUndefined();
       expect(committed.fillOpacity).toBeUndefined();
+      expect(host.getAttribute('data-active-tool')).toBe('bezier');
 
-      // Re-render with the committed strokes so the renderer draws the final path.
       rerender(
         <DrawingSurface
           testID="drawing-surface-host"
           value={{ strokes: [committed] }}
           onChange={onChange}
           tool="bezier"
+          fillColor="#aabbcc"
+          fillOpacity={0.4}
         />,
       );
 
@@ -2483,9 +2652,13 @@ describe('DrawingSurface', () => {
       expect(path).toBeTruthy();
       expect(path?.getAttribute('d')).toBe('M 10 10 C 30 40 70 40 90 10');
       expect(path?.getAttribute('fill')).toBe('none');
+
+      dragBezierPoint(host, { x: 120, y: 120 }, { x: 140, y: 140 });
+      expect(container.querySelector('line')).toBeTruthy();
+      expect(onChange).toHaveBeenCalledTimes(1);
     });
 
-    it('Escape after two bezier clicks commits no stroke', () => {
+    it('Escape after partial bezier drags commits no stroke', () => {
       const onChange = jest.fn();
       render(
         <DrawingSurface
@@ -2498,14 +2671,15 @@ describe('DrawingSurface', () => {
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
 
-      pointerDown(host, 20, 30);
-      pointerDown(host, 40, 60);
+      dragBezierPoint(host, { x: 20, y: 30 }, { x: 100, y: 30 });
+      pointerDown(host, 35, 55);
+      pointerMove(host, 40, 60);
       escapeKey();
 
       expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('switching tool after one bezier click commits no stroke', () => {
+    it('switching tool after one bezier drag commits no stroke', () => {
       const onChange = jest.fn();
       const { rerender } = render(
         <DrawingSurface
@@ -2518,7 +2692,7 @@ describe('DrawingSurface', () => {
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
 
-      pointerDown(host, 20, 30);
+      dragBezierPoint(host, { x: 20, y: 30 }, { x: 100, y: 30 });
 
       rerender(
         <DrawingSurface
@@ -2547,10 +2721,9 @@ describe('DrawingSurface', () => {
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
 
-      pointerDown(host, 20, 30);
-      pointerDown(host, 40, 60);
-      pointerDown(host, 80, 60);
-      pointerDown(host, 100, 30);
+      dragBezierPoint(host, { x: 20, y: 30 }, { x: 100, y: 30 });
+      dragBezierPoint(host, { x: 35, y: 55 }, { x: 40, y: 60 });
+      dragBezierPoint(host, { x: 75, y: 55 }, { x: 80, y: 60 });
 
       const committed = onChange.mock.calls[0][0].strokes[0];
       expect(committed.dashArray).toEqual([6, 3]);
@@ -2572,26 +2745,60 @@ describe('DrawingSurface', () => {
       expect(path?.getAttribute('stroke-dashoffset')).toBe('2');
     });
 
-    it('renders bezier preview as control polyline while clicking', () => {
+    it('renders drag 2 preview with transient cp2=end and updates while dragging', () => {
+      const onChange = jest.fn();
       const { container } = render(
         <DrawingSurface
           testID="drawing-surface-host"
           value={{ strokes: [] }}
+          onChange={onChange}
           tool="bezier"
         />,
       );
       const host = screen.getByTestId('drawing-surface-host');
       mockHostRect(host);
 
-      pointerDown(host, 20, 30);
-      pointerDown(host, 40, 60);
+      dragBezierPoint(host, { x: 20, y: 30 }, { x: 100, y: 30 });
+      pointerDown(host, 30, 50);
+      pointerMove(host, 40, 60);
+
+      let path = container.querySelector('path');
+      expect(path).toBeTruthy();
+      expect(path?.getAttribute('d')).toBe('M 10 10 C 30 40 90 10 90 10');
+      expect(path?.getAttribute('opacity')).toBe('0.7');
+
+      pointerMove(host, 50, 70);
+      path = container.querySelector('path');
+      expect(path?.getAttribute('d')).toBe('M 10 10 C 40 50 90 10 90 10');
+      expect(onChange).not.toHaveBeenCalled();
+
+      pointerUp(host, 50, 70);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('renders drag 3 preview with full cubic control order before final commit', () => {
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="bezier"
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      dragBezierPoint(host, { x: 20, y: 30 }, { x: 100, y: 30 });
+      dragBezierPoint(host, { x: 35, y: 55 }, { x: 40, y: 60 });
+      pointerDown(host, 75, 55);
       pointerMove(host, 80, 60);
 
-      // Preview reuses the v2 line branch — 2 placed + cursor → `M ... L ... L ...`.
       const path = container.querySelector('path');
       expect(path).toBeTruthy();
-      expect(path?.getAttribute('d')).toBe('M 10 10 L 30 40 L 70 40');
+      expect(path?.getAttribute('d')).toBe('M 10 10 C 30 40 70 40 90 10');
       expect(path?.getAttribute('opacity')).toBe('0.7');
+      expect(onChange).not.toHaveBeenCalled();
     });
   });
 
@@ -2755,7 +2962,7 @@ describe('DrawingSurface', () => {
           testID="drawing-surface-host"
           value={{ strokes: [] }}
           cursor={true}
-          gestures={{ pinchZoom: true }}
+          gestures={["TouchDoubleZoom"]}
         />,
       );
       const host = screen.getByTestId('drawing-surface-host');
@@ -2824,6 +3031,20 @@ describe('DrawingSurface', () => {
       });
     }
 
+    function wheelEvent(props: { clientX: number; clientY: number; deltaY: number }): Event {
+      const event = new Event('wheel', { bubbles: true, cancelable: true });
+      Object.assign(event, props);
+      return event;
+    }
+
+    function dispatchWheel(host: HTMLElement, props: { clientX: number; clientY: number; deltaY: number }) {
+      const event = wheelEvent(props);
+      act(() => {
+        host.dispatchEvent(event);
+      });
+      return event;
+    }
+
     it('default props ignore a two-pointer pinch attempt', () => {
       render(<DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} />);
       const host = screen.getByTestId('drawing-surface-host');
@@ -2837,6 +3058,71 @@ describe('DrawingSurface', () => {
       expect(host.getAttribute('data-scale')).toBe('1');
       expect(host.getAttribute('data-tx')).toBe('0');
       expect(host.getAttribute('data-ty')).toBe('0');
+      expect((host as HTMLElement & { resetViewport?: () => void }).resetViewport).toBeUndefined();
+    });
+
+    it('explicit empty gestures disables pan and zoom while drawing still works', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="pen"
+          gestures={[]}
+          strokeSmoothing={false}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 60, clientY: 80 });
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 2, clientX: 80, clientY: 80 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 1, clientX: 40, clientY: 80 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 2, clientX: 100, clientY: 80 });
+      dispatchHostPointer(host, 'pointerup', { pointerId: 1, clientX: 40, clientY: 80 });
+      dispatchHostPointer(host, 'pointerup', { pointerId: 2, clientX: 100, clientY: 80 });
+
+      expect(host.getAttribute('data-scale')).toBe('1');
+      expect(host.getAttribute('data-tx')).toBe('0');
+      expect(host.getAttribute('data-ty')).toBe('0');
+
+      dispatchDragMove(host, [
+        finger([
+          { point: { x: 30, y: 50 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 55, y: 85 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+      dispatchDragEnd(host);
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
+        { x: 20, y: 30 },
+        { x: 45, y: 65 },
+      ]);
+    });
+
+    it('runtime non-array gestures are treated like omitted enum routing', () => {
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          gestures={{ pan: true, pinchZoom: true } as unknown as readonly []}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 60, clientY: 80 });
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 2, clientX: 80, clientY: 80 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 1, clientX: 40, clientY: 80 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 2, clientX: 100, clientY: 80 });
+      const wheel = dispatchWheel(host, { clientX: 70, clientY: 90, deltaY: -120 });
+
+      expect(host.getAttribute('data-scale')).toBe('1');
+      expect(host.getAttribute('data-tx')).toBe('0');
+      expect(host.getAttribute('data-ty')).toBe('0');
+      expect(wheel.defaultPrevented).toBe(false);
     });
 
     it('pinchZoom increases scale and clamps to maxScale', () => {
@@ -2844,7 +3130,8 @@ describe('DrawingSurface', () => {
         <DrawingSurface
           testID="drawing-surface-host"
           value={{ strokes: [] }}
-          gestures={{ pinchZoom: true, maxScale: 2 }}
+          gestures={["TouchDoubleZoom"]}
+          gestureScaleBounds={{ maxScale: 2 }}
         />,
       );
       const host = screen.getByTestId('drawing-surface-host');
@@ -2860,12 +3147,40 @@ describe('DrawingSurface', () => {
       expect(host.getAttribute('data-ty')).toBe('-60');
     });
 
+    it('TouchDoubleZoom starts each pinch from the current viewport scale', () => {
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          gestures={["TouchDoubleZoom"]}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 100, clientY: 100 });
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 2, clientX: 200, clientY: 100 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 1, clientX: 50, clientY: 100 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 2, clientX: 250, clientY: 100 });
+      expect(Number(host.getAttribute('data-scale'))).toBeCloseTo(2, 3);
+
+      dispatchHostPointer(host, 'pointerup', { pointerId: 1, clientX: 50, clientY: 100 });
+      dispatchHostPointer(host, 'pointerup', { pointerId: 2, clientX: 250, clientY: 100 });
+
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 3, clientX: 100, clientY: 100 });
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 4, clientX: 200, clientY: 100 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 4, clientX: 250, clientY: 100 });
+
+      expect(Number(host.getAttribute('data-scale'))).toBeCloseTo(3, 3);
+    });
+
     it('pinchZoom clamps scale to minScale', () => {
       render(
         <DrawingSurface
           testID="drawing-surface-host"
           value={{ strokes: [] }}
-          gestures={{ pinchZoom: true, minScale: 0.5 }}
+          gestures={["TouchDoubleZoom"]}
+          gestureScaleBounds={{ minScale: 0.5 }}
         />,
       );
       const host = screen.getByTestId('drawing-surface-host');
@@ -2884,7 +3199,7 @@ describe('DrawingSurface', () => {
         <DrawingSurface
           testID="drawing-surface-host"
           value={{ strokes: [] }}
-          gestures={{ pinchZoom: true, pan: true }}
+          gestures={["TouchDoubleZoom", "TouchDoublePan"]}
         />,
       );
       const host = screen.getByTestId('drawing-surface-host');
@@ -2905,6 +3220,48 @@ describe('DrawingSurface', () => {
       expect(actualScale).toBeCloseTo(expectedScale, 3);
       expect(Math.abs(actualTx - expectedTx)).toBeLessThanOrEqual(0.5);
       expect(Math.abs(actualTy - expectedTy)).toBeLessThanOrEqual(0.5);
+    });
+
+    it('TouchDoublePan applies centroid translation without scaling', () => {
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          gestures={["TouchDoublePan"]}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 100, clientY: 100 });
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 2, clientX: 200, clientY: 100 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 1, clientX: 90, clientY: 110 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 2, clientX: 230, clientY: 110 });
+
+      expect(Number(host.getAttribute('data-scale'))).toBeCloseTo(1, 3);
+      expect(Number(host.getAttribute('data-tx'))).toBeCloseTo(10, 3);
+      expect(Number(host.getAttribute('data-ty'))).toBeCloseTo(10, 3);
+    });
+
+    it('TouchDoubleZoom applies scale without centroid translation', () => {
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          gestures={["TouchDoubleZoom"]}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 100, clientY: 100 });
+      dispatchHostPointer(host, 'pointerdown', { pointerId: 2, clientX: 200, clientY: 100 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 1, clientX: 90, clientY: 110 });
+      dispatchHostPointer(host, 'pointermove', { pointerId: 2, clientX: 230, clientY: 110 });
+
+      expect(Number(host.getAttribute('data-scale'))).toBeCloseTo(1.4, 3);
+      expect(Number(host.getAttribute('data-tx'))).toBeCloseTo(-56, 3);
+      expect(Number(host.getAttribute('data-ty'))).toBeCloseTo(-32, 3);
     });
 
     it('eraser does not delete during two-finger gesture', () => {
@@ -2946,7 +3303,7 @@ describe('DrawingSurface', () => {
           onChange={onChange}
           tool="eraser"
           strokeWidth={12}
-          gestures={{ pan: true }}
+          gestures={["TouchSinglePan"]}
         />,
       );
       const host = screen.getByTestId('drawing-surface-host');
@@ -2967,13 +3324,13 @@ describe('DrawingSurface', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('pan moves tx and ty when no drawing tool is active', () => {
+    it('TouchSinglePan moves tx and ty even when a drawing tool is active', () => {
       render(
         <DrawingSurface
           testID="drawing-surface-host"
           value={{ strokes: [] }}
-          tool={'none' as unknown as DrawingTool}
-          gestures={{ pan: true }}
+          tool="pen"
+          gestures={["TouchSinglePan"]}
         />,
       );
       const host = screen.getByTestId('drawing-surface-host');
@@ -2987,7 +3344,40 @@ describe('DrawingSurface', () => {
       expect(host.getAttribute('data-scale')).toBe('1');
     });
 
-    it('pan with a drawing tool lets drawing win and commits without panning', () => {
+    it('MousePan and PenPan preempt drawing for matching pointer types', () => {
+      const cases = [
+        { gesture: "MousePan" as const, pointerType: 'mouse' },
+        { gesture: "PenPan" as const, pointerType: 'pen' },
+      ];
+
+      for (const { gesture, pointerType } of cases) {
+        const onChange = jest.fn();
+        const { unmount } = render(
+          <DrawingSurface
+            testID="drawing-surface-host"
+            value={{ strokes: [] }}
+            onChange={onChange}
+            tool="pen"
+            gestures={[gesture]}
+            strokeSmoothing={false}
+          />,
+        );
+        const host = screen.getByTestId('drawing-surface-host');
+        mockHostRect(host);
+
+        dispatchHostPointer(host, 'pointerdown', { pointerId: 1, clientX: 30, clientY: 50, pointerType });
+        dispatchHostPointer(host, 'pointermove', { pointerId: 1, clientX: 55, clientY: 85, pointerType });
+        dispatchHostPointer(host, 'pointerup', { pointerId: 1, clientX: 55, clientY: 85, pointerType });
+
+        expect(host.getAttribute('data-tx')).toBe('25');
+        expect(host.getAttribute('data-ty')).toBe('35');
+        expect(host.getAttribute('data-scale')).toBe('1');
+        expect(onChange).not.toHaveBeenCalled();
+        unmount();
+      }
+    });
+
+    it('non-matching single pan enum preserves drawing for other pointer types', () => {
       const onChange = jest.fn();
       render(
         <DrawingSurface
@@ -2995,7 +3385,7 @@ describe('DrawingSurface', () => {
           value={{ strokes: [] }}
           onChange={onChange}
           tool="pen"
-          gestures={{ pan: true }}
+          gestures={["TouchSinglePan"]}
           strokeSmoothing={false}
         />,
       );
@@ -3019,6 +3409,39 @@ describe('DrawingSurface', () => {
       ]);
     });
 
+    it('MouseWheelZoom is opt-in and zooms around the wheel cursor within bounds', () => {
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          gestures={["MouseWheelZoom"]}
+          gestureScaleBounds={{ maxScale: 1.1 }}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      const wheel = dispatchWheel(host, { clientX: 110, clientY: 120, deltaY: -1000 });
+
+      expect(wheel.defaultPrevented).toBe(true);
+      expect(host.getAttribute('data-scale')).toBe('1.1');
+      expect(Number(host.getAttribute('data-tx'))).toBeCloseTo(-10, 3);
+      expect(Number(host.getAttribute('data-ty'))).toBeCloseTo(-10, 3);
+    });
+
+    it('omitted MouseWheelZoom does not prevent default and does not zoom', () => {
+      render(<DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} />);
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      const wheel = dispatchWheel(host, { clientX: 110, clientY: 120, deltaY: -1000 });
+
+      expect(wheel.defaultPrevented).toBe(false);
+      expect(host.getAttribute('data-scale')).toBe('1');
+      expect(host.getAttribute('data-tx')).toBe('0');
+      expect(host.getAttribute('data-ty')).toBe('0');
+    });
+
     it('resetViewport callable restores viewport and preserves strokes', () => {
       const value = {
         strokes: [
@@ -3037,7 +3460,8 @@ describe('DrawingSurface', () => {
           testID="drawing-surface-host"
           value={value}
           tool={'none' as unknown as DrawingTool}
-          gestures={{ pan: true, pinchZoom: true, reset: true }}
+          gestures={["TouchSinglePan", "TouchDoubleZoom"]}
+          gestureReset={true}
         />,
       );
       const host = screen.getByTestId('drawing-surface-host') as HTMLElement & { resetViewport?: () => void };
@@ -3123,7 +3547,8 @@ describe('DrawingSurface', () => {
           onChange={onChange}
           tool="eraser"
           strokeWidth={10}
-          gestures={{ pinchZoom: true, maxScale: 2 }}
+          gestures={["TouchDoubleZoom"]}
+          gestureScaleBounds={{ maxScale: 2 }}
         />,
       );
       const host = screen.getByTestId('drawing-surface-host');
@@ -3416,6 +3841,211 @@ describe('eraserCommitMode', () => {
   });
 });
 
+describe('rendered-width eraser collision', () => {
+  const zeroHostRect = (host: HTMLElement) => {
+    host.getBoundingClientRect = jest.fn(() => ({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 200,
+      width: 200,
+      height: 200,
+      toJSON: () => ({}),
+    }));
+  };
+
+  const eraserPathNearRenderedStroke = (y: number): PointerPathItem[] => [
+    { point: { x: 20, y }, event: { pointerType: 'pen', button: 0, clientX: 20, clientY: y } },
+    { point: { x: 80, y }, event: { pointerType: 'pen', button: 0, clientX: 80, clientY: y } },
+  ];
+
+  const eraseWithRenderedCollision = (
+    stroke: DrawingStroke,
+    options: { y?: number; pressureMultiplier?: number } = {},
+  ) => {
+    const onChange = jest.fn();
+    const { unmount } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        defaultValue={{ strokes: [stroke] }}
+        onChange={onChange}
+        tool="eraser"
+        strokeWidth={2}
+        pressureMultiplier={options.pressureMultiplier}
+      />,
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    zeroHostRect(host);
+
+    dispatchDragMove(host, [finger(eraserPathNearRenderedStroke(options.y ?? 59))]);
+    dispatchDragEnd(host);
+
+    return { host, onChange, unmount };
+  };
+
+  const renderedWidthTargets: Array<{ name: string; stroke: DrawingStroke; y?: number }> = [
+    {
+      name: 'pen',
+      stroke: {
+        id: 'rendered-eraser-pen',
+        tool: 'pen',
+        points: [
+          { x: 20, y: 50 },
+          { x: 80, y: 50 },
+        ],
+        strokeWidth: 20,
+      },
+    },
+    {
+      name: 'line',
+      stroke: {
+        id: 'rendered-eraser-line',
+        tool: 'line',
+        points: [
+          { x: 20, y: 50 },
+          { x: 80, y: 50 },
+        ],
+        strokeWidth: 20,
+      },
+    },
+    {
+      name: 'rect',
+      y: 11,
+      stroke: {
+        id: 'rendered-eraser-rect',
+        tool: 'rect',
+        points: [
+          { x: 20, y: 20 },
+          { x: 80, y: 80 },
+        ],
+        strokeWidth: 20,
+      },
+    },
+    {
+      name: 'ellipse',
+      y: 11,
+      stroke: {
+        id: 'rendered-eraser-ellipse',
+        tool: 'ellipse',
+        points: [
+          { x: 20, y: 20 },
+          { x: 80, y: 80 },
+        ],
+        strokeWidth: 20,
+      },
+    },
+    {
+      name: 'polygon',
+      y: 11,
+      stroke: {
+        id: 'rendered-eraser-polygon',
+        tool: 'polygon',
+        points: [
+          { x: 20, y: 20 },
+          { x: 80, y: 20 },
+          { x: 80, y: 80 },
+          { x: 20, y: 80 },
+        ],
+        strokeWidth: 20,
+      },
+    },
+    {
+      name: 'bezier',
+      stroke: {
+        id: 'rendered-eraser-bezier',
+        tool: 'bezier',
+        points: [
+          { x: 20, y: 50 },
+          { x: 40, y: 50 },
+          { x: 60, y: 50 },
+          { x: 80, y: 50 },
+        ],
+        strokeWidth: 20,
+      },
+    },
+  ];
+
+  it.each(renderedWidthTargets)(
+    'deletes $name by rendered-width intersection without persisting an eraser stroke',
+    ({ stroke, y }) => {
+      const { host, onChange, unmount } = eraseWithRenderedCollision(stroke, { y });
+
+      expect(host.getAttribute('data-stroke-count')).toBe('0');
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0][0].strokes).toEqual([]);
+
+      unmount();
+    },
+  );
+
+  it('deletes a centerline miss when the eraser intersects the rendered stroke width', () => {
+    const { host, onChange, unmount } = eraseWithRenderedCollision({
+      id: 'centerline-miss-rendered-hit',
+      tool: 'pen',
+      points: [
+        { x: 20, y: 50 },
+        { x: 80, y: 50 },
+      ],
+      strokeWidth: 20,
+    });
+
+    expect(host.getAttribute('data-stroke-count')).toBe('0');
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].strokes).toEqual([]);
+    unmount();
+  });
+
+  it('keeps a stroke when the eraser misses the rendered stroke width', () => {
+    const { host, onChange, unmount } = eraseWithRenderedCollision(
+      {
+        id: 'rendered-width-miss',
+        tool: 'pen',
+        points: [
+          { x: 20, y: 50 },
+          { x: 80, y: 50 },
+        ],
+        strokeWidth: 20,
+      },
+      { y: 62 },
+    );
+
+    expect(host.getAttribute('data-stroke-count')).toBe('1');
+    expect(onChange).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  it('uses pressureMultiplier when hit-testing pressure pen rendered widths', () => {
+    const pressureStroke: DrawingStroke = {
+      id: 'pressure-rendered-threshold',
+      tool: 'pen',
+      points: [
+        { x: 20, y: 50, pressure: 0.8 },
+        { x: 80, y: 50, pressure: 0.8 },
+      ],
+      strokeWidth: 10,
+    };
+
+    const miss = eraseWithRenderedCollision(pressureStroke, {
+      y: 57,
+      pressureMultiplier: 1,
+    });
+    expect(miss.host.getAttribute('data-stroke-count')).toBe('1');
+    expect(miss.onChange).not.toHaveBeenCalled();
+    miss.unmount();
+
+    const hit = eraseWithRenderedCollision(pressureStroke, {
+      y: 57,
+      pressureMultiplier: 2,
+    });
+    expect(hit.host.getAttribute('data-stroke-count')).toBe('0');
+    expect(hit.onChange).toHaveBeenCalledTimes(1);
+    expect(hit.onChange.mock.calls[0][0].strokes).toEqual([]);
+    hit.unmount();
+  });
+});
+
 describe('eraserCursorAndTrajectory', () => {
   // 与 eraserCommitMode 套件相同的 fixture/sweep，方便复用既有时序假设：
   // 起点 (10,10) 不命中任何笔画 → 后续 3 个 move 各产生 1 个 single-move。
@@ -3576,5 +4206,198 @@ describe('eraserCursorAndTrajectory', () => {
     // 单 pointerup → single-end 清空轨迹。
     expect(container.querySelector('[data-testid="eraser-trajectory"]')).toBeNull();
     unmount();
+  });
+
+  describe('eraser trajectory defaults', () => {
+    function eraserSweepPath(): PointerPathItem[] {
+      return [
+        { point: { x: 20, y: 30 }, event: { pointerType: 'pen', button: 0 } },
+        { point: { x: 40, y: 30 }, event: { pointerType: 'pen', button: 0 } },
+        { point: { x: 60, y: 30 }, event: { pointerType: 'pen', button: 0 } },
+      ];
+    }
+
+    function buildFixtureStrokes() {
+      return {
+        strokes: [
+          {
+            id: 'eraser-defaults-target',
+            tool: 'pen' as const,
+            points: [
+              { x: 0, y: 30 },
+              { x: 100, y: 30 },
+            ],
+            strokeWidth: 2,
+          },
+        ],
+      };
+    }
+
+    it('default rendered eraser trajectory has stroke="#ccc" and opacity="0.5" when visible is true', () => {
+      const { container, unmount } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          defaultValue={buildFixtureStrokes()}
+          tool="eraser"
+          strokeWidth={20}
+          eraserTrajectory={{ visible: true }}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      host.getBoundingClientRect = jest.fn(() => ({
+        x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200,
+        width: 200, height: 200, toJSON: () => ({}),
+      }));
+
+      dispatchDragMove(host, [finger(eraserSweepPath())]);
+
+      const polyline = container.querySelector('polyline[data-testid="eraser-trajectory"]') as SVGPolylineElement | null;
+      expect(polyline).toBeTruthy();
+      expect(polyline?.getAttribute('stroke')).toBe('#ccc');
+      expect(polyline?.getAttribute('opacity')).toBe('0.5');
+
+      dispatchDragEnd(host);
+      unmount();
+    });
+
+    it('eraserTrajectory color and opacity overrides defaults', () => {
+      const { container, unmount } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          defaultValue={buildFixtureStrokes()}
+          tool="eraser"
+          strokeWidth={20}
+          eraserTrajectory={{ visible: true, color: '#f00', opacity: 1 }}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      host.getBoundingClientRect = jest.fn(() => ({
+        x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200,
+        width: 200, height: 200, toJSON: () => ({}),
+      }));
+
+      dispatchDragMove(host, [finger(eraserSweepPath())]);
+
+      const polyline = container.querySelector('polyline[data-testid="eraser-trajectory"]') as SVGPolylineElement | null;
+      expect(polyline).toBeTruthy();
+      expect(polyline?.getAttribute('stroke')).toBe('#f00');
+      expect(polyline?.getAttribute('opacity')).toBe('1');
+
+      dispatchDragEnd(host);
+      unmount();
+    });
+
+    it('while-sliding deletion keeps eraser trajectory points monotonic until pointerup', () => {
+      const onChange = jest.fn();
+      const { container, unmount } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          defaultValue={buildFixtureStrokes()}
+          onChange={onChange}
+          tool="eraser"
+          strokeWidth={10}
+          eraserCommitMode="while-sliding"
+          eraserTrajectory={{ visible: true }}
+        />,
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      host.getBoundingClientRect = jest.fn(() => ({
+        x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200,
+        width: 200, height: 200, toJSON: () => ({}),
+      }));
+      const crossingPath: PointerPathItem[] = [
+        { point: { x: 100, y: 10 }, event: { pointerType: 'pen', button: 0, clientX: 100, clientY: 10 } },
+        { point: { x: 100, y: 20 }, event: { pointerType: 'pen', button: 0, clientX: 100, clientY: 20 } },
+        { point: { x: 100, y: 30 }, event: { pointerType: 'pen', button: 0, clientX: 100, clientY: 30 } },
+        { point: { x: 100, y: 40 }, event: { pointerType: 'pen', button: 0, clientX: 100, clientY: 40 } },
+      ];
+      const pointTokenCount = () => {
+        const points = container
+          .querySelector('polyline[data-testid="eraser-trajectory"]')
+          ?.getAttribute('points')
+          ?.trim();
+        return points ? points.split(/\s+/).length : 0;
+      };
+
+      dispatchDragMove(host, [finger(crossingPath.slice(0, 2))]);
+      const beforeDeletionCount = pointTokenCount();
+      expect(beforeDeletionCount).toBeGreaterThanOrEqual(2);
+      expect(onChange).not.toHaveBeenCalled();
+
+      dispatchDragMove(host, [finger(crossingPath.slice(0, 3))]);
+      const afterDeletionCount = pointTokenCount();
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(host.getAttribute('data-stroke-count')).toBe('0');
+      expect(afterDeletionCount).toBeGreaterThan(beforeDeletionCount);
+      expect(afterDeletionCount).toBeGreaterThan(1);
+
+      dispatchDragMove(host, [finger(crossingPath)]);
+      const afterContinuationCount = pointTokenCount();
+      expect(afterContinuationCount).toBeGreaterThan(afterDeletionCount);
+      expect(afterContinuationCount).toBeGreaterThan(1);
+
+      dispatchDragEnd(host);
+      expect(container.querySelector('[data-testid="eraser-trajectory"]')).toBeNull();
+      unmount();
+    });
+  });
+
+  describe('pressureMultiplier normalization', () => {
+    it('invalid pressureMultiplier values (0, -1, NaN, Infinity) resolve to multiplier 1', () => {
+      const invalidValues = [0, -1, NaN, Infinity];
+      for (const value of invalidValues) {
+        const { container, unmount } = render(
+          <DrawingSurface
+            testID="drawing-surface-host"
+            value={{ strokes: [] }}
+            tool="pen"
+            pressureMultiplier={value}
+          />,
+        );
+        const svg = container.querySelector('svg');
+        expect(svg?.getAttribute('data-pressure-multiplier')).toBe('1');
+        unmount();
+      }
+    });
+
+    it('omitted pressureMultiplier matches pressureMultiplier={1}', () => {
+      const { container: containerOmitted, unmount: unmountOmitted } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          tool="pen"
+        />,
+      );
+      const { container: containerExplicit, unmount: unmountExplicit } = render(
+        <DrawingSurface
+          testID="drawing-surface-host-2"
+          value={{ strokes: [] }}
+          tool="pen"
+          pressureMultiplier={1}
+        />,
+      );
+
+      const svgOmitted = containerOmitted.querySelector('svg');
+      const svgExplicit = containerExplicit.querySelector('svg');
+      expect(svgOmitted?.getAttribute('data-pressure-multiplier')).toBe('1');
+      expect(svgExplicit?.getAttribute('data-pressure-multiplier')).toBe('1');
+
+      unmountOmitted();
+      unmountExplicit();
+    });
+
+    it('valid pressureMultiplier passes through', () => {
+      const { container, unmount } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          tool="pen"
+          pressureMultiplier={2.5}
+        />,
+      );
+      const svg = container.querySelector('svg');
+      expect(svg?.getAttribute('data-pressure-multiplier')).toBe('2.5');
+      unmount();
+    });
   });
 });

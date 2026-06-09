@@ -225,47 +225,88 @@ describe('interactionReducer', () => {
     expect(state).toEqual({ phase: 'idle', tool: 'line' });
   });
 
-  it('commits Bezier after four canvas-local clicks in start/cp1/cp2/end order', () => {
-    const first = enterFromIdle('bezier', point(0, 0));
-    const second = interactionReducer(first, { type: 'POINTER_DOWN', point: point(10, 0) });
-    const third = interactionReducer(second, { type: 'POINTER_DOWN', point: point(20, 10) });
+  it('Bezier drag 1 commits start/end line state without completed stroke', () => {
+    const started = enterFromIdle('bezier', point(0, 0));
+    const preview = interactionReducer(started, { type: 'POINTER_MOVE', point: point(30, 30) });
 
-    const state = interactionReducer(third, { type: 'POINTER_DOWN', point: point(30, 30) });
+    const state = interactionReducer(preview, { type: 'POINTER_UP', point: point(30, 30) });
+
+    expect(state).toEqual({
+      phase: 'placingBezier',
+      tool: 'bezier',
+      creationPhase: 'control1',
+      points: [point(0, 0), undefined, undefined, point(30, 30)],
+      cursorPoint: point(30, 30),
+      pointerId: undefined,
+      dragging: false,
+      shiftHeld: false,
+    });
+    expect(state).not.toHaveProperty('completedStroke');
+  });
+
+  it('Bezier drag 2 commits cp1 while cp2 remains unknown without completed stroke', () => {
+    const lineCommitted = interactionReducer(
+      interactionReducer(enterFromIdle('bezier', point(0, 0)), { type: 'POINTER_MOVE', point: point(30, 30) }),
+      { type: 'POINTER_UP', point: point(30, 30) },
+    );
+    const controlStarted = interactionReducer(lineCommitted, { type: 'POINTER_DOWN', point: point(10, 0) });
+    const controlPreview = interactionReducer(controlStarted, { type: 'POINTER_MOVE', point: point(12, 2) });
+
+    const state = interactionReducer(controlPreview, { type: 'POINTER_UP', point: point(12, 2) });
+
+    expect(state).toEqual({
+      phase: 'placingBezier',
+      tool: 'bezier',
+      creationPhase: 'control2',
+      points: [point(0, 0), point(12, 2), undefined, point(30, 30)],
+      cursorPoint: point(12, 2),
+      pointerId: undefined,
+      dragging: false,
+      shiftHeld: false,
+    });
+    expect(state).not.toHaveProperty('completedStroke');
+  });
+
+  it('Bezier drag 3 completes with start/cp1/cp2/end order and keeps bezier active', () => {
+    const lineCommitted = interactionReducer(
+      interactionReducer(enterFromIdle('bezier', point(0, 0)), { type: 'POINTER_MOVE', point: point(30, 30) }),
+      { type: 'POINTER_UP', point: point(30, 30) },
+    );
+    const control1Committed = interactionReducer(
+      interactionReducer(lineCommitted, { type: 'POINTER_DOWN', point: point(10, 0) }),
+      { type: 'POINTER_UP', point: point(10, 0) },
+    );
+    const control2Preview = interactionReducer(
+      interactionReducer(control1Committed, { type: 'POINTER_DOWN', point: point(20, 10) }),
+      { type: 'POINTER_MOVE', point: point(22, 12) },
+    );
+
+    const state = interactionReducer(control2Preview, { type: 'POINTER_UP', point: point(22, 12) });
 
     expect(state).toEqual({
       phase: 'idle',
       tool: 'bezier',
       completedStroke: {
         tool: 'bezier',
-        points: [point(0, 0), point(10, 0), point(20, 10), point(30, 30)],
+        points: [point(0, 0), point(10, 0), point(22, 12), point(30, 30)],
       },
     });
   });
 
-  it('stores partial Bezier points in a four-slot tuple before completion', () => {
-    const first = enterFromIdle('bezier', point(0, 0));
-    const second = interactionReducer(first, { type: 'POINTER_DOWN', point: point(10, 0) });
-    const third = interactionReducer(second, { type: 'POINTER_DOWN', point: point(20, 10) });
+  it.each([
+    ['Escape', { type: 'KEY_DOWN', key: 'Escape' }],
+    ['blur', { type: 'BLUR' }],
+    ['tool change', { type: 'TOOL_CHANGE', tool: 'pen' }],
+    ['pointer cancel', { type: 'POINTER_CANCEL' }],
+  ] as const)('cancels partial Bezier on %s with no commit', (_label, action) => {
+    const partial = interactionReducer(
+      interactionReducer(enterFromIdle('bezier', point(0, 0)), { type: 'POINTER_MOVE', point: point(30, 30) }),
+      { type: 'POINTER_UP', point: point(30, 30) },
+    );
 
-    expect(third).toEqual({
-      phase: 'placingBezier',
-      tool: 'bezier',
-      points: [point(0, 0), point(10, 0), point(20, 10), undefined],
-      pendingPointIndex: 3,
-      cursorPoint: point(20, 10),
-      shiftHeld: false,
-    });
-  });
+    const state = interactionReducer(partial, action);
 
-  it('cancels partial Bezier on Escape with no commit', () => {
-    const partial = interactionReducer(enterFromIdle('bezier', point(0, 0)), {
-      type: 'POINTER_DOWN',
-      point: point(10, 0),
-    });
-
-    const state = interactionReducer(partial, { type: 'KEY_DOWN', key: 'Escape' });
-
-    expect(state).toEqual({ phase: 'idle', tool: 'bezier' });
+    expect(state).toEqual({ phase: 'idle', tool: action.type === 'TOOL_CHANGE' ? 'pen' : 'bezier' });
   });
 
   it('updates and clears shiftHeld on drawable in-progress states', () => {
@@ -307,15 +348,17 @@ describe('interactionReducer', () => {
     const validBezier: InteractionState = {
       phase: 'placingBezier',
       tool: 'bezier',
+      creationPhase: 'control2',
       points: [point(0, 0), point(10, 0), point(20, 10), point(30, 30)],
-      pendingPointIndex: 4,
+      dragging: false,
       shiftHeld: false,
     };
     const invalidBezier: InteractionState = {
       phase: 'placingBezier',
       tool: 'bezier',
+      creationPhase: 'control2',
       points: [point(0, 0), point(10, 0), undefined, undefined],
-      pendingPointIndex: 2,
+      dragging: false,
       shiftHeld: false,
     };
 

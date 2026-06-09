@@ -1,6 +1,16 @@
 import type { DrawingPoint, DrawingStroke, DrawingValue } from '../components/DrawingSurface';
 import type { DrawingStrokeV2 } from '../model/strokes';
-import { addStroke, clearStrokes, pick, pickStrokeIntersectingPolyline, pickStrokeIntersectingSegment, removeStroke, updateStroke } from '../utils';
+import {
+  addStroke,
+  clearStrokes,
+  pick,
+  pickRenderedStrokeIntersectingPolyline,
+  pickRenderedStrokeIntersectingSegment,
+  pickStrokeIntersectingPolyline,
+  pickStrokeIntersectingSegment,
+  removeStroke,
+  updateStroke,
+} from '../utils';
 
 describe('utils', () => {
   const createMockStroke = (id: string, tool: DrawingStroke['tool'] = 'pen', points: DrawingPoint[] = []): DrawingStroke => ({
@@ -636,6 +646,236 @@ describe('utils', () => {
       );
 
       expect(result?.id).toBe('stroke-A');
+    });
+  });
+
+  describe('pickRenderedStrokeIntersectingSegment', () => {
+    const renderedOptions = {
+      eraserRadius: 2,
+      openFallbackWidth: 1,
+      closedFallbackWidth: 1,
+      pressureMultiplier: 2,
+    };
+
+    const expectSegmentBoundary = (stroke: DrawingStrokeV2, y: number, expectedId: string | null) => {
+      const result = pickRenderedStrokeIntersectingSegment(
+        { x: 0, y },
+        { x: 30, y },
+        [stroke],
+        renderedOptions,
+      );
+
+      expect(result?.id ?? null).toBe(expectedId);
+    };
+
+    const expectPointSweep = (stroke: DrawingStrokeV2, point: DrawingPoint, expectedId: string | null) => {
+      const result = pickRenderedStrokeIntersectingSegment(point, point, [stroke], renderedOptions);
+
+      expect(result?.id ?? null).toBe(expectedId);
+    };
+
+    it('uses rendered pen width at exact, inside, outside, and required example distances', () => {
+      const stroke: DrawingStrokeV2 = {
+        schemaVersion: 2,
+        id: 'wide-pen',
+        tool: 'pen',
+        points: [
+          { x: 0, y: 0 },
+          { x: 30, y: 0 },
+        ],
+        strokeWidth: 10,
+      };
+
+      expectSegmentBoundary(stroke, 7, 'wide-pen');
+      expectSegmentBoundary(stroke, 6.99, 'wide-pen');
+      expectSegmentBoundary(stroke, 7.01, null);
+      expectSegmentBoundary(stroke, 6, 'wide-pen');
+      expectSegmentBoundary(stroke, 8, null);
+    });
+
+    it('uses pressure-adjusted pen segment width at exact, inside, and outside distances', () => {
+      const stroke: DrawingStrokeV2 = {
+        schemaVersion: 2,
+        id: 'pressure-pen',
+        tool: 'pen',
+        points: [
+          { x: 0, y: 0, pressure: 0.5 },
+          { x: 30, y: 0, pressure: 0.5 },
+        ],
+        strokeWidth: 10,
+      };
+
+      expectSegmentBoundary(stroke, 7, 'pressure-pen');
+      expectSegmentBoundary(stroke, 6.99, 'pressure-pen');
+      expectSegmentBoundary(stroke, 7.01, null);
+      expectSegmentBoundary(stroke, 6, 'pressure-pen');
+      expectSegmentBoundary(stroke, 8, null);
+    });
+
+    it('uses rendered line width at exact, inside, and outside distances', () => {
+      const stroke: DrawingStrokeV2 = {
+        schemaVersion: 2,
+        id: 'wide-line',
+        tool: 'line',
+        points: [
+          { x: 0, y: 0 },
+          { x: 30, y: 0 },
+        ],
+        strokeWidth: 10,
+      };
+
+      expectSegmentBoundary(stroke, 7, 'wide-line');
+      expectSegmentBoundary(stroke, 6.99, 'wide-line');
+      expectSegmentBoundary(stroke, 7.01, null);
+    });
+
+    it('uses rendered rect outline width and keeps filled interior hittable', () => {
+      const outlineRect: DrawingStrokeV2 = {
+        schemaVersion: 2,
+        id: 'outline-rect',
+        tool: 'rect',
+        points: [
+          { x: 0, y: 0 },
+          { x: 20, y: 20 },
+        ],
+        strokeWidth: 10,
+      };
+      const fillRect: DrawingStrokeV2 = {
+        ...outlineRect,
+        id: 'fill-rect-rendered',
+        strokeWidth: 0,
+        fillColor: '#ff0000',
+      };
+
+      expectSegmentBoundary(outlineRect, -7, 'outline-rect');
+      expectSegmentBoundary(outlineRect, -6.99, 'outline-rect');
+      expectSegmentBoundary(outlineRect, -7.01, null);
+      expectPointSweep(outlineRect, { x: 10, y: 10 }, null);
+      expectPointSweep(fillRect, { x: 10, y: 10 }, 'fill-rect-rendered');
+    });
+
+    it('uses rendered ellipse outline width and keeps filled interior hittable', () => {
+      const outlineEllipse: DrawingStrokeV2 = {
+        schemaVersion: 2,
+        id: 'outline-ellipse',
+        tool: 'ellipse',
+        points: [
+          { x: 0, y: 0 },
+          { x: 20, y: 20 },
+        ],
+        strokeWidth: 10,
+      };
+      const fillEllipse: DrawingStrokeV2 = {
+        ...outlineEllipse,
+        id: 'fill-ellipse-rendered',
+        strokeWidth: 0,
+        fillColor: '#00ff00',
+      };
+
+      expectSegmentBoundary(outlineEllipse, -7, 'outline-ellipse');
+      expectSegmentBoundary(outlineEllipse, -6.99, 'outline-ellipse');
+      expectSegmentBoundary(outlineEllipse, -7.01, null);
+      expectPointSweep(outlineEllipse, { x: 10, y: 10 }, null);
+      expectPointSweep(fillEllipse, { x: 10, y: 10 }, 'fill-ellipse-rendered');
+    });
+
+    it('uses rendered polygon outline width and keeps filled interior hittable', () => {
+      const outlinePolygon: DrawingStrokeV2 = {
+        schemaVersion: 2,
+        id: 'outline-polygon',
+        tool: 'polygon',
+        points: [
+          { x: 0, y: 0 },
+          { x: 20, y: 0 },
+          { x: 20, y: 20 },
+          { x: 0, y: 20 },
+        ],
+        strokeWidth: 10,
+      };
+      const fillPolygon: DrawingStrokeV2 = {
+        ...outlinePolygon,
+        id: 'fill-polygon-rendered',
+        strokeWidth: 0,
+        fillColor: '#0000ff',
+      };
+
+      expectSegmentBoundary(outlinePolygon, -7, 'outline-polygon');
+      expectSegmentBoundary(outlinePolygon, -6.99, 'outline-polygon');
+      expectSegmentBoundary(outlinePolygon, -7.01, null);
+      expectPointSweep(outlinePolygon, { x: 10, y: 10 }, null);
+      expectPointSweep(fillPolygon, { x: 10, y: 10 }, 'fill-polygon-rendered');
+    });
+
+    it('uses rendered bezier width with existing 24-segment sampling', () => {
+      const stroke: DrawingStrokeV2 = {
+        schemaVersion: 2,
+        id: 'wide-bezier',
+        tool: 'bezier',
+        points: [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+          { x: 20, y: 0 },
+          { x: 30, y: 0 },
+        ],
+        strokeWidth: 10,
+      };
+
+      expectSegmentBoundary(stroke, 7, 'wide-bezier');
+      expectSegmentBoundary(stroke, 6.99, 'wide-bezier');
+      expectSegmentBoundary(stroke, 7.01, null);
+    });
+  });
+
+  describe('pickRenderedStrokeIntersectingPolyline', () => {
+    it('sweeps every eraser polyline segment with rendered stroke width thresholds', () => {
+      const stroke: DrawingStrokeV2 = {
+        schemaVersion: 2,
+        id: 'polyline-target',
+        tool: 'line',
+        points: [
+          { x: 10, y: 20 },
+          { x: 30, y: 20 },
+        ],
+        strokeWidth: 10,
+      };
+      const options = {
+        eraserRadius: 2,
+        openFallbackWidth: 1,
+        closedFallbackWidth: 1,
+        pressureMultiplier: 2,
+      };
+
+      const exactResult = pickRenderedStrokeIntersectingPolyline(
+        [
+          { x: 0, y: 0 },
+          { x: 30, y: 0 },
+          { x: 30, y: 13 },
+        ],
+        [stroke],
+        options,
+      );
+      const insideResult = pickRenderedStrokeIntersectingPolyline(
+        [
+          { x: 0, y: 0 },
+          { x: 30, y: 0 },
+          { x: 30, y: 13.01 },
+        ],
+        [stroke],
+        options,
+      );
+      const outsideResult = pickRenderedStrokeIntersectingPolyline(
+        [
+          { x: 0, y: 0 },
+          { x: 30, y: 0 },
+          { x: 30, y: 12.99 },
+        ],
+        [stroke],
+        options,
+      );
+
+      expect(exactResult?.id).toBe('polyline-target');
+      expect(insideResult?.id).toBe('polyline-target');
+      expect(outsideResult).toBeNull();
     });
   });
 });

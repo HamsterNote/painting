@@ -1,11 +1,11 @@
 import {
-	type ReactNode,
 	useCallback,
 	useEffect,
 	useMemo,
 	useReducer,
 	useRef,
 	useState,
+	type ReactNode,
 } from "react";
 import { useCanvas } from "../hooks/useCanvas";
 import {
@@ -33,7 +33,11 @@ import {
 	resolveStrokeSmoothingOptions,
 	type TimedDrawingPoint,
 } from "../stroke-helpers";
-import { pick as pickStroke, pickStrokeIntersectingSegment } from "../utils";
+import {
+	pickRenderedStrokeIntersectingPolyline,
+	pickRenderedStrokeIntersectingSegment,
+	type RenderedStrokeHitTestOptions,
+} from "../utils";
 import {
 	type DrawingViewport,
 	resetViewport as createResetViewport,
@@ -136,29 +140,38 @@ export type DrawingCursorOptions = {
  * Eraser trajectory polyline rendered inside the canvas-transformed `<g>`
  * during an active eraser gesture. Off by default. The polyline is cleared
  * on every gesture terminator (end / cancel / multi-start / tool change /
- * value replacement / unmount). Color and lineWidth default to
- * `"currentColor"` and the resolved open-stroke width respectively.
+ * value replacement / unmount). Color and opacity default to `"#ccc"` and
+ * `0.5` respectively; lineWidth defaults to the resolved open-stroke width.
  */
 export type DrawingEraserTrajectoryOptions = {
 	visible?: boolean;
 	color?: string;
+	opacity?: number;
 	lineWidth?: number;
 };
 
 type ActivePointer = { x: number; y: number };
 
-export type DrawingSurfaceGestures = {
-	/** Enable one-pointer viewport panning when no drawing tool is active. Defaults to false. */
-	pan?: boolean;
-	/** Enable two-pointer pinch zoom around the active pointers' centroid. Defaults to false. */
-	pinchZoom?: boolean;
-	/** Enable imperative viewport reset controls. Defaults to false. */
-	reset?: boolean;
-	/** Minimum viewport scale for pinch zoom. Defaults to 0.25. */
-	minScale?: number;
-	/** Maximum viewport scale for pinch zoom. Defaults to 8. */
-	maxScale?: number;
-};
+/**
+ * Gesture enum values that control viewport pan/zoom interactions.
+ * When `gestures` is omitted, all pan/zoom gestures are disabled (legacy default).
+ * When `gestures` is an explicit empty array `[]`, all pan/zoom gestures are disabled
+ * while drawing remains available. Individual enum values opt-in specific behaviors.
+ *
+ * - `TouchSinglePan`: single-touch drag routes to viewport pan before drawing; non-touch pointers can still draw.
+ * - `TouchDoublePan`: two-finger drag translates viewport centroid.
+ * - `TouchDoubleZoom`: two-finger pinch scales viewport.
+ * - `MousePan`: mouse drag routes to viewport pan before drawing; non-mouse pointers can still draw.
+ * - `MouseWheelZoom`: mouse wheel zooms viewport around cursor.
+ * - `PenPan`: pen drag routes to viewport pan before drawing; non-pen pointers can still draw.
+ */
+export type DrawingGesture =
+	| "TouchSinglePan"
+	| "TouchDoublePan"
+	| "TouchDoubleZoom"
+	| "MousePan"
+	| "MouseWheelZoom"
+	| "PenPan";
 
 export type DrawingSurfaceProps = {
 	/** The drawing tool to use. Defaults to 'pen'. */
@@ -195,8 +208,6 @@ export type DrawingSurfaceProps = {
 	 * options object to customize size/color or fully override rendering.
 	 */
 	cursor?: false | DrawingCursorOptions;
-	/** Opt-in viewport gestures. Pan, pinch zoom, and reset all default to disabled. */
-	gestures?: DrawingSurfaceGestures;
 	/**
 	 * Controls when eraser deletions are committed. Defaults to `"while-sliding"`
 	 * (delete each hit stroke immediately during the gesture). `"on-release"`
@@ -209,9 +220,31 @@ export type DrawingSurfaceProps = {
 	 * Show a live polyline of the current eraser gesture path inside the
 	 * transformed canvas group (so it pans/zooms with strokes). Off by
 	 * default. Cleared on every gesture terminator. Color defaults to
-	 * `"currentColor"` and lineWidth to the resolved stroke width.
+	 * `"#ccc"`, opacity to `0.5`, and lineWidth to the resolved stroke width.
 	 */
 	eraserTrajectory?: DrawingEraserTrajectoryOptions;
+	/**
+	 * Opt-in viewport gesture list. Omitted preserves current default behavior
+	 * (no pan/pinch/wheel gestures). Explicit empty array `[]` disables all
+	 * pan/zoom gestures while drawing remains available.
+	 */
+	gestures?: readonly DrawingGesture[];
+	/**
+	 * Viewport scale bounds for pinch zoom and wheel zoom. Replaces old
+	 * `gestures.minScale/maxScale` after the gesture enum migration.
+	 */
+	gestureScaleBounds?: { minScale?: number; maxScale?: number };
+	/**
+	 * When true, installs `host.resetViewport()` for imperative viewport reset.
+	 * Replaces old `gestures.reset` after the gesture enum migration.
+	 */
+	gestureReset?: boolean;
+	/**
+	 * Pressure multiplier applied at render time. Default `1`. Invalid values
+	 * (NaN, Infinity, non-finite, <=0, non-number) resolve to `1`. Does NOT
+	 * mutate stored `point.pressure`; only scales rendered width.
+	 */
+	pressureMultiplier?: number;
 	/** Test identifier. */
 	testID?: string;
 };
@@ -241,7 +274,11 @@ function isDrawingToolSupported(tool: unknown): tool is DrawingTool {
 // `line` is hybrid: click placement AND drag both work, so it appears here
 // to install click listeners while still allowing drag-line creation.
 function isClickToPlaceTool(tool: DrawingTool): boolean {
-	return tool === "polygon" || tool === "line" || tool === "bezier";
+	return tool === "polygon" || tool === "line";
+}
+
+function isPlacementReducerTool(tool: DrawingTool): boolean {
+	return isClickToPlaceTool(tool) || tool === "bezier";
 }
 
 function isClosedShapeTool(tool: DrawingTool): boolean {
@@ -284,6 +321,50 @@ const DEFAULT_INPUT_METHODS: DrawingInputMethod[] = ["touch", "mouse", "pen"];
 const LINE_DRAG_THRESHOLD_PX = 4;
 const DEFAULT_MIN_VIEWPORT_SCALE = 0.25;
 const DEFAULT_MAX_VIEWPORT_SCALE = 8;
+const WHEEL_ZOOM_DELTA_SCALE = 0.002;
+
+function normalizeGestureList(
+	gestures: readonly DrawingGesture[] | undefined,
+): Set<DrawingGesture> | undefined {
+	// Runtime JS callers can still pass the removed object shape. Treat any
+	// non-array value as omitted enum routing, without reintroducing compatibility.
+	if (!Array.isArray(gestures)) {
+		return undefined;
+	}
+
+	return new Set(gestures);
+}
+
+function isSinglePanEnabled(
+	pointerType: string | undefined,
+	gestureSet: Set<DrawingGesture> | undefined,
+): boolean {
+	if (!gestureSet) {
+		return false;
+	}
+	if (pointerType === "touch" || pointerType === undefined) {
+		return gestureSet.has("TouchSinglePan");
+	}
+	if (pointerType === "mouse") {
+		return gestureSet.has("MousePan");
+	}
+	if (pointerType === "pen") {
+		return gestureSet.has("PenPan");
+	}
+	return false;
+}
+
+function isTouchDoublePanEnabled(
+	gestureSet: Set<DrawingGesture> | undefined,
+): boolean {
+	return gestureSet?.has("TouchDoublePan") ?? false;
+}
+
+function isTouchDoubleZoomEnabled(
+	gestureSet: Set<DrawingGesture> | undefined,
+): boolean {
+	return gestureSet?.has("TouchDoubleZoom") ?? false;
+}
 
 function generateStrokeId(): string {
 	return Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -343,14 +424,14 @@ function normalizePointPressure(pressure: number | undefined): number {
 		: 1;
 }
 
-function resolveGestureScaleBounds(gestures: DrawingSurfaceGestures | undefined) {
+function resolveGestureScaleBounds(scaleBounds: { minScale?: number; maxScale?: number } | undefined) {
 	const rawMin =
-		typeof gestures?.minScale === "number" && Number.isFinite(gestures.minScale)
-			? gestures.minScale
+		typeof scaleBounds?.minScale === "number" && Number.isFinite(scaleBounds.minScale)
+			? scaleBounds.minScale
 			: DEFAULT_MIN_VIEWPORT_SCALE;
 	const rawMax =
-		typeof gestures?.maxScale === "number" && Number.isFinite(gestures.maxScale)
-			? gestures.maxScale
+		typeof scaleBounds?.maxScale === "number" && Number.isFinite(scaleBounds.maxScale)
+			? scaleBounds.maxScale
 			: DEFAULT_MAX_VIEWPORT_SCALE;
 	const minScale = Math.max(DEFAULT_MIN_VIEWPORT_SCALE, Math.min(rawMin, rawMax));
 	const maxScale = Math.min(DEFAULT_MAX_VIEWPORT_SCALE, Math.max(rawMin, rawMax));
@@ -386,6 +467,9 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		samplingRate,
 		cursor,
 		gestures,
+		gestureScaleBounds,
+		gestureReset,
+		pressureMultiplier,
 		eraserCommitMode,
 		eraserTrajectory,
 		testID,
@@ -396,8 +480,12 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 	);
 	const viewportRef = useRef<DrawingViewport>(viewport);
 	viewportRef.current = viewport;
-	const gesturesRef = useRef<DrawingSurfaceGestures | undefined>(gestures);
-	gesturesRef.current = gestures;
+	const normalizedGestureSet = useMemo(
+		() => normalizeGestureList(gestures),
+		[gestures],
+	);
+	const gestureSetRef = useRef<Set<DrawingGesture> | undefined>(normalizedGestureSet);
+	gestureSetRef.current = normalizedGestureSet;
 
 	const effectiveTool: DrawingTool = isDrawingToolSupported(tool)
 		? tool
@@ -435,6 +523,14 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			? samplingRate
 			: 0;
 
+	// Pressure multiplier: invalid (NaN, Infinity, non-finite, <=0, non-number) → 1.
+	const resolvedPressureMultiplier =
+		typeof pressureMultiplier === "number" &&
+		Number.isFinite(pressureMultiplier) &&
+		pressureMultiplier > 0
+			? pressureMultiplier
+			: 1;
+
 	const resolvedEraserCommitMode: DrawingEraserCommitMode =
 		eraserCommitMode === "on-release" ? "on-release" : "while-sliding";
 
@@ -444,7 +540,12 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		const color =
 			typeof rawColor === "string" && rawColor.trim().length > 0
 				? rawColor
-				: "currentColor";
+				: "#ccc";
+		const rawOpacity = eraserTrajectory?.opacity;
+		const opacity =
+			typeof rawOpacity === "number" && Number.isFinite(rawOpacity)
+				? Math.max(0, Math.min(1, rawOpacity))
+				: 0.5;
 		const rawLineWidth = eraserTrajectory?.lineWidth;
 		const lineWidth =
 			typeof rawLineWidth === "number" &&
@@ -452,7 +553,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			rawLineWidth > 0
 				? rawLineWidth
 				: resolvedOpenWidth;
-		return { visible, color, lineWidth };
+		return { visible, color, opacity, lineWidth };
 	}, [eraserTrajectory, resolvedOpenWidth]);
 
 	const hasCapturedDefaultValueRef = useRef(false);
@@ -502,11 +603,14 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 	const resolvedColorRef = useRef(resolvedColor);
 	const resolvedOpenWidthRef = useRef(resolvedOpenWidth);
 	const resolvedClosedWidthRef = useRef(resolvedClosedWidth);
+	const resolvedPressureMultiplierRef = useRef(resolvedPressureMultiplier);
 	const resolvedDashArrayRef = useRef(resolvedDashArray);
 	const resolvedDashOffsetRef = useRef(resolvedDashOffset);
 	const resolvedFillColorRef = useRef(fillColor);
 	const resolvedFillOpacityRef = useRef(resolvedFillOpacity);
 	const strokesRef = useRef(strokes);
+	const gestureScaleBoundsRef = useRef(gestureScaleBounds);
+	gestureScaleBoundsRef.current = gestureScaleBounds;
 	const pressureRef = useRef(pressure);
 	const inputMethodsRef = useRef<DrawingInputMethod[]>(DEFAULT_INPUT_METHODS);
 	const smoothingOptionsRef = useRef(
@@ -560,6 +664,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 	resolvedColorRef.current = resolvedColor;
 	resolvedOpenWidthRef.current = resolvedOpenWidth;
 	resolvedClosedWidthRef.current = resolvedClosedWidth;
+	resolvedPressureMultiplierRef.current = resolvedPressureMultiplier;
 	resolvedDashArrayRef.current = resolvedDashArray;
 	resolvedDashOffsetRef.current = resolvedDashOffset;
 	resolvedFillColorRef.current = fillColor;
@@ -748,12 +853,18 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		const getCanvasEraserRadius = () =>
 			resolvedOpenWidthRef.current / 2 / viewportRef.current.scale;
 
+		const getRenderedEraserHitTestOptions = (): RenderedStrokeHitTestOptions => ({
+			eraserRadius: getCanvasEraserRadius(),
+			openFallbackWidth: resolvedOpenWidthRef.current,
+			closedFallbackWidth: resolvedClosedWidthRef.current,
+			pressureMultiplier: resolvedPressureMultiplierRef.current,
+		});
+
 		const pickEraserStrokeIdAtPoint = (canvasPoint: DrawingPoint): string | null => {
-			const eraserRadius = getCanvasEraserRadius();
-			const hitStroke = pickStroke(
-				canvasPoint,
+			const hitStroke = pickRenderedStrokeIntersectingPolyline(
+				[canvasPoint],
 				getPickableStrokes(),
-				eraserRadius,
+				getRenderedEraserHitTestOptions(),
 			);
 			return hitStroke ? hitStroke.id : null;
 		};
@@ -762,12 +873,11 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			startCanvasPoint: DrawingPoint,
 			endCanvasPoint: DrawingPoint,
 		): string | null => {
-			const eraserRadius = getCanvasEraserRadius();
-			const hitStroke = pickStrokeIntersectingSegment(
+			const hitStroke = pickRenderedStrokeIntersectingSegment(
 				startCanvasPoint,
 				endCanvasPoint,
 				getPickableStrokes(),
-				eraserRadius,
+				getRenderedEraserHitTestOptions(),
 			);
 			return hitStroke ? hitStroke.id : null;
 		};
@@ -855,8 +965,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 
 		const startSinglePan = (input: GestureAdapterInput) => {
 			if (
-				gesturesRef.current?.pan !== true ||
-				isDrawingEnabledRef.current ||
+				!isSinglePanEnabled(input.pointerType, gestureSetRef.current) ||
 				isDrawingRef.current
 			) {
 				return;
@@ -1053,7 +1162,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 
 			const startViewport = multiStartViewport;
 			const startCenter = multiStartCenter;
-			const bounds = resolveGestureScaleBounds(gesturesRef.current);
+			const bounds = resolveGestureScaleBounds(gestureScaleBoundsRef.current);
 			const requestedScale = clampGestureScale(
 				requestedScaleValue ?? startViewport.scale,
 				bounds,
@@ -1069,8 +1178,9 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				y: accumulatedCenterDelta.y + deltaStep.y,
 			};
 			const delta = accumulatedCenterDelta;
-			const panEnabled = gesturesRef.current?.pan === true;
-			const pinchEnabled = gesturesRef.current?.pinchZoom === true;
+			const gestureSet = gestureSetRef.current;
+			const panEnabled = isTouchDoublePanEnabled(gestureSet);
+			const pinchEnabled = isTouchDoubleZoomEnabled(gestureSet);
 			let nextViewport: DrawingViewport = {
 				scale: scaleOnly.scale,
 				tx: scaleOnly.tx + delta.x,
@@ -1124,11 +1234,13 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 							clearEraserTrajectoryRef.current();
 						}
 						commitCurrentActiveStroke();
-						dispatchInteraction({
-							type: "POINTER_UP",
-							pointerId: input.pointerId,
-							point: screenToCanvas(input.point, viewportRef.current),
-						});
+						if (!isPlacementReducerTool(effectiveToolRef.current)) {
+							dispatchInteraction({
+								type: "POINTER_UP",
+								pointerId: input.pointerId,
+								point: screenToCanvas(input.point, viewportRef.current),
+							});
+						}
 					}
 					multiStartViewport = null;
 					multiStartCenter = null;
@@ -1161,7 +1273,11 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 					multiStartViewport = null;
 					multiStartCenter = null;
 					accumulatedCenterDelta = { x: 0, y: 0 };
-					dispatchInteraction({ type: "POINTER_UP", pointerId: input.pointerId });
+					dispatchInteraction(
+						isPlacementReducerTool(effectiveToolRef.current)
+							? { type: "POINTER_CANCEL", pointerId: input.pointerId }
+							: { type: "POINTER_UP", pointerId: input.pointerId },
+					);
 					break;
 				case "idle":
 					break;
@@ -1189,6 +1305,9 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				);
 			}
 			updateActivePointers(input);
+			if (activePointers.size === 2) {
+				adapter.setScale(viewportRef.current.scale);
+			}
 			startSinglePan(input);
 			handleAdapterResult(input, event);
 		};
@@ -1267,7 +1386,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 
 	useEffect(() => {
 		const host = hostRef.current;
-		if (!host || gestures?.reset !== true) {
+		if (!host || gestureReset !== true) {
 			return undefined;
 		}
 
@@ -1278,7 +1397,37 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				delete resettableHost.resetViewport;
 			}
 		};
-	}, [gestures?.reset, resetViewportToDefault]);
+	}, [gestureReset, resetViewportToDefault]);
+
+	useEffect(() => {
+		const host = hostRef.current;
+		if (!host || !normalizedGestureSet?.has("MouseWheelZoom")) {
+			return undefined;
+		}
+
+		const handleWheel = (event: WheelEvent) => {
+			event.preventDefault();
+			const localPoint = getLocalCoordinates(event.clientX, event.clientY);
+			const bounds = resolveGestureScaleBounds(gestureScaleBoundsRef.current);
+			const zoomFactor = Math.exp(-event.deltaY * WHEEL_ZOOM_DELTA_SCALE);
+			const nextScale = clampGestureScale(
+				viewportRef.current.scale * zoomFactor,
+				bounds,
+			);
+			const nextViewport = zoomViewportAroundScreenPoint(
+				viewportRef.current,
+				localPoint,
+				nextScale,
+			);
+			viewportRef.current = nextViewport;
+			setViewport(nextViewport);
+		};
+
+		host.addEventListener("wheel", handleWheel, { passive: false });
+		return () => {
+			host.removeEventListener("wheel", handleWheel);
+		};
+	}, [getLocalCoordinates, normalizedGestureSet]);
 
 	// Tool switch: reset reducer state. Cancels any in-progress polygon placement
 	// when user picks a different tool mid-draw (or vice versa).
@@ -1357,11 +1506,11 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		dispatchInteraction({ type: "TOOL_CHANGE", tool: effectiveTool });
 	}, [interactionState, effectiveTool]);
 
-	// Click-to-place listeners are only wired when the line/polygon/bezier tool is active.
-	// Re-mounting on tool change is intentional: a different tool means a different
-	// set of pointer semantics, so the listener lifetime tracks the tool.
+	// Placement reducer listeners are wired only for line/polygon/Bezier. Line and
+	// polygon keep click/dblclick placement; Bezier uses three drag gestures whose
+	// phase bookkeeping lives in interactionReducer.
 	useEffect(() => {
-		if (!isClickToPlaceTool(effectiveTool) || !isDrawingEnabled) {
+		if (!isPlacementReducerTool(effectiveTool) || !isDrawingEnabled) {
 			return undefined;
 		}
 		const host = hostRef.current;
@@ -1409,6 +1558,15 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		};
 
 		const handlePointerUp = (event: PointerEvent) => {
+			if (effectiveTool === "bezier") {
+				dispatchInteraction({
+					type: "POINTER_UP",
+					point: toCanvasPoint(event.clientX, event.clientY),
+					pointerId: event.pointerId,
+					detail: event.detail,
+				});
+				return;
+			}
 			if (effectiveTool !== "line" || !pendingLineClick) {
 				return;
 			}
@@ -1435,9 +1593,12 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 		};
 
 		const handleDoubleClick = (event: MouseEvent) => {
+			if (!isClickToPlaceTool(effectiveTool)) {
+				return;
+			}
 			pendingLineClick = null;
 			// Forward as a POINTER_DOWN with detail=2 — the reducer recognises
-			// that as the polygon/line/bezier finish signal.
+			// that as the polygon/line finish signal.
 			const point = toCanvasPoint(event.clientX, event.clientY);
 			dispatchInteraction({
 				type: "POINTER_DOWN",
@@ -1514,30 +1675,38 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 				}
 			: null;
 
-	// Bezier preview is the open control polyline of placed points + cursor. The
-	// renderer's v2 line branch draws `M ... L ... L ...` for >2 points, which is
-	// exactly the visual feedback (start → cp1 → cp2 → end skeleton) the user
-	// needs while clicking through the four points. The final committed stroke
-	// renders as a true cubic curve via `bezierPath()` once the 4th click lands.
-	const bezierPreviewStroke: LineStrokeV2 | null = (() => {
+	// Bezier preview mirrors the reducer's three-drag state without storing derived
+	// control points: drag 1 shows start→end, drag 2 renders cubic cp2=end for
+	// preview only, and drag 3 renders the full [start, cp1, cp2, end] cubic.
+	const bezierPreviewStroke: LineStrokeV2 | BezierStrokeV2 | null = (() => {
 		if (interactionState.phase !== "placingBezier") {
 			return null;
 		}
-		const placed = interactionState.points.filter(
-			(point): point is CanvasPoint => point !== undefined,
-		);
+		const [start, cp1, , end] = interactionState.points;
 		const cursor = interactionState.cursorPoint;
-		const previewPoints =
-			cursor && (placed.length === 0 || placed[placed.length - 1].x !== cursor.x || placed[placed.length - 1].y !== cursor.y)
-				? [...placed, cursor]
-				: [...placed];
+		let previewPoints: CanvasPoint[] = [];
+
+		if (interactionState.creationPhase === "line" && start) {
+			const previewEnd = cursor ?? end;
+			previewPoints = previewEnd ? [start, previewEnd] : [start];
+		} else if (interactionState.creationPhase === "control1" && start && end) {
+			const previewCp1 = cursor ?? cp1 ?? end;
+			previewPoints = [start, previewCp1, end, end];
+		} else if (interactionState.creationPhase === "control2" && start && cp1 && end) {
+			const previewCp2 = cursor ?? end;
+			previewPoints = [start, cp1, previewCp2, end];
+		}
+
 		if (previewPoints.length === 0) {
 			return null;
 		}
+		// Drag 1 has only start and end — render as a straight line. Drag 2 and 3
+		// have four points in Bezier order and render as transient cubic curves.
+		const isCubic = previewPoints.length === 4;
 		return {
 			schemaVersion: DRAWING_STROKE_SCHEMA_VERSION,
 			id: "bezier-preview",
-			tool: "line",
+			tool: isCubic ? "bezier" : ("line" as const),
 			points: previewPoints.map((point) => ({ x: point.x, y: point.y })),
 			strokeColor: resolvedColor,
 			strokeWidth: resolvedOpenWidth,
@@ -1729,6 +1898,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 			}}
 		>
 			<svg
+				data-pressure-multiplier={String(resolvedPressureMultiplier)}
 				style={{
 					position: "absolute",
 					top: 0,
@@ -1750,6 +1920,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 							fallbackDashOffset={resolvedDashOffset}
 							fallbackFillColor={fillColor}
 							fallbackFillOpacity={resolvedFillOpacity}
+							pressureMultiplier={resolvedPressureMultiplier}
 						/>
 					))}
 
@@ -1764,6 +1935,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 							fallbackDashOffset={resolvedDashOffset}
 							fallbackFillColor={fillColor}
 							fallbackFillOpacity={resolvedFillOpacity}
+							pressureMultiplier={resolvedPressureMultiplier}
 						/>
 					)}
 
@@ -1778,6 +1950,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 							fallbackDashOffset={resolvedDashOffset}
 							fallbackFillColor={fillColor}
 							fallbackFillOpacity={resolvedFillOpacity}
+							pressureMultiplier={resolvedPressureMultiplier}
 						/>
 					)}
 
@@ -1792,6 +1965,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 							fallbackDashOffset={resolvedDashOffset}
 							fallbackFillColor={fillColor}
 							fallbackFillOpacity={resolvedFillOpacity}
+							pressureMultiplier={resolvedPressureMultiplier}
 						/>
 					)}
 
@@ -1806,25 +1980,29 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
 							fallbackDashOffset={resolvedDashOffset}
 							fallbackFillColor={fillColor}
 							fallbackFillOpacity={resolvedFillOpacity}
+							pressureMultiplier={resolvedPressureMultiplier}
 						/>
 					)}
 
-					{resolvedEraserTrajectory.visible &&
-						effectiveTool === "eraser" &&
-						eraserTrajectoryPoints.length > 0 && (
-							<polyline
-								data-testid="eraser-trajectory"
-								points={eraserTrajectoryPoints
-									.map((point) => `${point.x},${point.y}`)
-									.join(" ")}
-								stroke={resolvedEraserTrajectory.color}
-								strokeWidth={resolvedEraserTrajectory.lineWidth}
-								fill="none"
-								pointerEvents="none"
-								strokeLinecap="round"
-								strokeLinejoin="round"
-							/>
-						)}
+					<g data-testid="eraser-trajectory-layer">
+						{resolvedEraserTrajectory.visible &&
+							effectiveTool === "eraser" &&
+							eraserTrajectoryPoints.length > 0 && (
+								<polyline
+									data-testid="eraser-trajectory"
+									points={eraserTrajectoryPoints
+										.map((point) => `${point.x},${point.y}`)
+										.join(" ")}
+									stroke={resolvedEraserTrajectory.color}
+									strokeWidth={resolvedEraserTrajectory.lineWidth}
+									opacity={resolvedEraserTrajectory.opacity}
+									fill="none"
+									pointerEvents="none"
+									strokeLinecap="round"
+									strokeLinejoin="round"
+								/>
+							)}
+					</g>
 				</g>
 			</svg>
 			{cursorEnabled && cursorState.visible && (

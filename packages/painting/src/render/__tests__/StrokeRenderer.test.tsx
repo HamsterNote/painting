@@ -6,7 +6,11 @@ import type { StrokeStyleFields } from "../resolveStrokeStyle";
 
 type StyledStrokeV2 = DrawingStrokeV2 & StrokeStyleFields;
 
-function renderStroke(stroke: DrawingStroke | StyledStrokeV2, isActive = false) {
+function renderStroke(
+	stroke: DrawingStroke | StyledStrokeV2,
+	isActive = false,
+	pressureMultiplier?: number,
+) {
 	return render(
 		<svg>
 			<title>Test stroke</title>
@@ -15,6 +19,7 @@ function renderStroke(stroke: DrawingStroke | StyledStrokeV2, isActive = false) 
 				isActive={isActive}
 				fallbackColor="black"
 				fallbackWidth={2}
+				pressureMultiplier={pressureMultiplier}
 			/>
 		</svg>,
 	);
@@ -68,6 +73,65 @@ describe("StrokeRenderer", () => {
 		expect(line?.getAttribute("stroke-width")).toBe("8");
 		expect(line?.getAttribute("stroke-linecap")).toBe("round");
 		expect(line?.getAttribute("stroke-linejoin")).toBe("round");
+	});
+
+	it("keeps omitted, multiplier 1, and invalid pressure multipliers at current pressure widths", () => {
+		const stroke: StyledStrokeV2 = {
+			schemaVersion: DRAWING_STROKE_SCHEMA_VERSION,
+			id: "pressure-defaults",
+			tool: "pen",
+			strokeWidth: 10,
+			points: [
+				{ x: 0, y: 0, pressure: 0.2 },
+				{ x: 10, y: 10, pressure: 0.5 },
+				{ x: 20, y: 20, pressure: 0.8 },
+			],
+		};
+
+		const omitted = renderStroke(stroke);
+		const explicitOne = renderStroke(stroke, false, 1);
+		const invalid = renderStroke(stroke, false, Number.NaN);
+		const widthValues = (container: HTMLElement) =>
+			Array.from(container.querySelectorAll("line"), (line) => line.getAttribute("stroke-width"));
+
+		expect(widthValues(omitted.container)).toEqual(["5", "8"]);
+		expect(widthValues(explicitOne.container)).toEqual(widthValues(omitted.container));
+		expect(widthValues(invalid.container)).toEqual(widthValues(omitted.container));
+	});
+
+	it("doubles only pressure-driven segment widths when pressureMultiplier is 2", () => {
+		const pressureStroke: StyledStrokeV2 = {
+			schemaVersion: DRAWING_STROKE_SCHEMA_VERSION,
+			id: "pressure-scaled",
+			tool: "pen",
+			strokeWidth: 10,
+			points: [
+				{ x: 0, y: 0, pressure: 0.2 },
+				{ x: 10, y: 10, pressure: 0.5 },
+				{ x: 20, y: 20, pressure: 0.8 },
+			],
+		};
+		const nonPressureStroke: StyledStrokeV2 = {
+			schemaVersion: DRAWING_STROKE_SCHEMA_VERSION,
+			id: "non-pressure",
+			tool: "pen",
+			strokeWidth: 10,
+			points: [
+				{ x: 0, y: 0 },
+				{ x: 10, y: 10 },
+			],
+		};
+
+		const pressure = renderStroke(pressureStroke, false, 2);
+		const nonPressure = renderStroke(nonPressureStroke, false, 2);
+		const pressureWidths = Array.from(
+			pressure.container.querySelectorAll("line"),
+			(line) => line.getAttribute("stroke-width"),
+		);
+
+		expect(pressureWidths).toEqual(["10", "16"]);
+		expect(nonPressure.container.querySelector("path")?.getAttribute("stroke-width")).toBe("10");
+		expect(nonPressure.container.querySelector("line")).toBeNull();
 	});
 
 	it("renders two-point lines as line elements", () => {

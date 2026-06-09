@@ -1,11 +1,10 @@
-import { DrawingSurface, type DrawingTool, type DrawingInputMethod, type DrawingValue, type DrawingStrokeSmoothingOptions } from '@hamster-note/painting';
+import { DrawingSurface, type DrawingTool, type DrawingInputMethod, type DrawingValue, type DrawingStrokeSmoothingOptions, type DrawingGesture } from '@hamster-note/painting';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 /**
- * Task 7: Eraser commit mode union literal — mirrors `DrawingEraserCommitMode`
- * exported from DrawingSurface (not re-exported via the package barrel; using
- * the literal union here keeps the Playground scope-clean without touching
- * `packages/painting/src/index.ts`).
+ * Eraser commit mode union literal — mirrors the exported
+ * `DrawingEraserCommitMode` contract while keeping the Playground local state
+ * independent from package type imports.
  */
 type EraserCommitMode = 'while-sliding' | 'on-release';
 
@@ -31,8 +30,9 @@ function getToolInstruction(tool: DrawingTool): string | null {
       return 'Hold Shift to draw square/circle';
     case 'line':
     case 'polygon':
-    case 'bezier':
       return 'Click to add points, double-click or Esc to finish';
+    case 'bezier':
+      return 'Drag 1 sets the start/end line, drag 2 sets the first control point, drag 3 sets the second control point and commits';
     default:
       return null;
   }
@@ -93,6 +93,7 @@ export default function App() {
   const [color, setColor] = useState('#000000');
   const [width, setWidth] = useState(2);
   const [pressure, setPressure] = useState(false);
+  const [pressureMultiplier, setPressureMultiplier] = useState(1);
   const [inputMethods, setInputMethods] = useState<DrawingInputMethod[]>(['touch', 'mouse', 'pen']);
   const [samplingRate, setSamplingRate] = useState(0);
   const [smoothingEnabled, setSmoothingEnabled] = useState(true);
@@ -120,15 +121,16 @@ export default function App() {
   const [cursorCustomRender, setCursorCustomRender] = useState(false);
 
   // ===== Eraser 控制状态 (Task 7) =====
-  // commitMode 默认 while-sliding（滑动即清除）；trajectory 默认隐藏。
   const [eraserCommitMode, setEraserCommitMode] = useState<EraserCommitMode>('while-sliding');
   const [eraserTrajectoryVisible, setEraserTrajectoryVisible] = useState(false);
-  const [eraserTrajectoryColor, setEraserTrajectoryColor] = useState('#ff0000');
+  const [eraserTrajectoryColor, setEraserTrajectoryColor] = useState('#ccc');
+  const [eraserTrajectoryOpacity, setEraserTrajectoryOpacity] = useState(0.5);
   const [eraserTrajectoryLineWidth, setEraserTrajectoryLineWidth] = useState(3);
 
-  // ===== Gestures 控制状态 (Task 13: pan / pinchZoom / reset 独立开关) =====
-  const [gesturePan, setGesturePan] = useState(false);
-  const [gesturePinchZoom, setGesturePinchZoom] = useState(false);
+  // ===== Gestures 控制状态 (Task 3: gesture enum list + scale bounds + reset) =====
+  const [gestureList, setGestureList] = useState<DrawingGesture[]>([]);
+  const [gestureMinScale, setGestureMinScale] = useState(0.25);
+  const [gestureMaxScale, setGestureMaxScale] = useState(4);
   const [gestureReset, setGestureReset] = useState(false);
   // 当 reset 启用时显示 reset 按钮；按钮点击触发 viewportResetCounter 自增，
   // 通过 key 重挂载子组件来命令式重置（避免引入 imperative ref 接口）
@@ -362,20 +364,21 @@ export default function App() {
         }
       : undefined;
 
-  const gesturesProp = {
-    pan: gesturePan,
-    pinchZoom: gesturePinchZoom,
-    reset: gestureReset,
-  };
+  const gesturesProp = gestureList;
+  const gestureScaleBounds = useMemo(
+    () => ({ minScale: gestureMinScale, maxScale: gestureMaxScale }),
+    [gestureMinScale, gestureMaxScale],
+  );
 
   // Memoize so DrawingSurface 不会因为父组件 re-render 而频繁触发 eraserTrajectory 副作用。
   const eraserTrajectoryProp = useMemo(
     () => ({
       visible: eraserTrajectoryVisible,
       color: eraserTrajectoryColor,
+      opacity: eraserTrajectoryOpacity,
       lineWidth: eraserTrajectoryLineWidth,
     }),
-    [eraserTrajectoryVisible, eraserTrajectoryColor, eraserTrajectoryLineWidth],
+    [eraserTrajectoryVisible, eraserTrajectoryColor, eraserTrajectoryOpacity, eraserTrajectoryLineWidth],
   );
 
   const handleViewportReset = useCallback(() => {
@@ -457,6 +460,19 @@ export default function App() {
             data-testid="drawing-pressure-toggle"
             checked={pressure}
             onChange={(e) => setPressure(e.target.checked)}
+          />
+        </label>
+
+        <label>
+          Pressure multiplier{' '}
+          <input
+            type="number"
+            data-testid="drawing-pressure-multiplier-input"
+            min={0.1}
+            step={0.1}
+            value={pressureMultiplier}
+            onChange={(e) => setPressureMultiplier(Math.max(0.1, parseFloat(e.target.value) || 1))}
+            style={{ width: '60px' }}
           />
         </label>
 
@@ -715,10 +731,24 @@ export default function App() {
           <label>
             Color{' '}
             <input
-              type="color"
+              type="text"
               data-testid="eraser-trajectory-color"
               value={eraserTrajectoryColor}
               onChange={(e) => setEraserTrajectoryColor(e.target.value)}
+              style={{ width: '70px' }}
+            />
+          </label>
+          <label>
+            Opacity{' '}
+            <input
+              type="number"
+              data-testid="eraser-trajectory-opacity"
+              min={0}
+              max={1}
+              step={0.05}
+              value={eraserTrajectoryOpacity}
+              onChange={(e) => setEraserTrajectoryOpacity(Math.min(1, Math.max(0, parseFloat(e.target.value) || 0)))}
+              style={{ width: '60px' }}
             />
           </label>
           <label>
@@ -741,23 +771,47 @@ export default function App() {
       <fieldset data-testid="panel-gestures" style={{ margin: 0, border: '1px solid #ccc', borderRadius: '4px', padding: '8px 12px', flex: '1 1 320px' }}>
         <legend><strong>Gestures (viewport pan / pinch zoom / reset)</strong></legend>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {(['TouchSinglePan', 'TouchDoublePan', 'TouchDoubleZoom', 'MousePan', 'MouseWheelZoom', 'PenPan'] as DrawingGesture[]).map((gesture) => (
+            <label key={gesture} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <input
+                type="checkbox"
+                data-testid={`gesture-${gesture.toLowerCase()}-toggle`}
+                checked={gestureList.includes(gesture)}
+                onChange={(e) => {
+                  setGestureList((prev) =>
+                    e.target.checked
+                      ? [...prev, gesture]
+                      : prev.filter((g) => g !== gesture)
+                  );
+                }}
+              />
+              {' '}{gesture}
+            </label>
+          ))}
           <label>
+            Min scale{' '}
             <input
-              type="checkbox"
-              data-testid="gesture-pan-toggle"
-              checked={gesturePan}
-              onChange={(e) => setGesturePan(e.target.checked)}
+              type="number"
+              data-testid="gesture-min-scale-input"
+              min={0.1}
+              max={gestureMaxScale}
+              step={0.05}
+              value={gestureMinScale}
+              onChange={(e) => setGestureMinScale(Math.max(0.1, parseFloat(e.target.value) || 0.1))}
+              style={{ width: '70px' }}
             />
-            {' '}Pan
           </label>
           <label>
+            Max scale{' '}
             <input
-              type="checkbox"
-              data-testid="gesture-pinch-zoom-toggle"
-              checked={gesturePinchZoom}
-              onChange={(e) => setGesturePinchZoom(e.target.checked)}
+              type="number"
+              data-testid="gesture-max-scale-input"
+              min={gestureMinScale}
+              step={0.05}
+              value={gestureMaxScale}
+              onChange={(e) => setGestureMaxScale(Math.max(gestureMinScale, parseFloat(e.target.value) || gestureMinScale))}
+              style={{ width: '70px' }}
             />
-            {' '}Pinch Zoom
           </label>
           <label>
             <input
@@ -794,6 +848,7 @@ export default function App() {
               strokeColor={color}
               strokeWidth={effectiveStrokeWidth}
               pressure={pressure}
+              pressureMultiplier={pressureMultiplier}
               inputMethods={inputMethods}
               samplingRate={samplingRate}
               strokeSmoothing={strokeSmoothing}
@@ -803,6 +858,8 @@ export default function App() {
               fillOpacity={resolvedFillOpacity}
               cursor={cursorProp}
               gestures={gesturesProp}
+              gestureScaleBounds={gestureScaleBounds}
+              gestureReset={gestureReset}
               eraserCommitMode={eraserCommitMode}
               eraserTrajectory={eraserTrajectoryProp}
               testID="drawing-surface-uncontrolled"
@@ -835,6 +892,7 @@ export default function App() {
               strokeColor={color}
               strokeWidth={effectiveStrokeWidth}
               pressure={pressure}
+              pressureMultiplier={pressureMultiplier}
               inputMethods={inputMethods}
               samplingRate={samplingRate}
               strokeSmoothing={strokeSmoothing}
@@ -844,6 +902,8 @@ export default function App() {
               fillOpacity={resolvedFillOpacity}
               cursor={cursorProp}
               gestures={gesturesProp}
+              gestureScaleBounds={gestureScaleBounds}
+              gestureReset={gestureReset}
               eraserCommitMode={eraserCommitMode}
               eraserTrajectory={eraserTrajectoryProp}
               testID="drawing-surface-controlled"

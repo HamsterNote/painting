@@ -1,4 +1,7 @@
 export type {
+	DrawingEraserCommitMode,
+	DrawingEraserTrajectoryOptions,
+	DrawingGesture,
 	DrawingInputMethod,
 	DrawingPoint,
 	DrawingStroke,

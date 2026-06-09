@@ -5,8 +5,6 @@ import type { DrawingViewport } from '../viewport';
 export type CanvasPoint = Pick<DrawingPointV2, 'x' | 'y'>;
 export type InteractionTool = DrawingToolModeV2;
 export type DragShapeTool = 'line' | 'rect' | 'ellipse';
-export type BezierPointIndex = 0 | 1 | 2 | 3;
-export type BezierPendingPointIndex = BezierPointIndex | 4;
 export type BezierControlPoints = [
   start?: CanvasPoint,
   cp1?: CanvasPoint,
@@ -60,12 +58,16 @@ export type PlacingLineInteractionState = {
   shiftHeld: boolean;
 };
 
+export type BezierCreationPhase = 'line' | 'control1' | 'control2';
+
 export type PlacingBezierInteractionState = {
   phase: 'placingBezier';
   tool: 'bezier';
+  creationPhase: BezierCreationPhase;
   points: BezierControlPoints;
-  pendingPointIndex: BezierPendingPointIndex;
   cursorPoint?: CanvasPoint;
+  pointerId?: number;
+  dragging: boolean;
   shiftHeld: boolean;
 };
 
@@ -152,7 +154,7 @@ export function isValidCompletion(state: InteractionState): boolean {
     case 'placingLine':
       return hasDistinctPointCount(state.vertices, 2);
     case 'placingBezier':
-      return state.points.every((point) => point !== undefined);
+      return isCompleteBezierPoints(state.points);
     case 'panning':
     case 'pinching':
       return false;
@@ -315,9 +317,11 @@ function enterFromIdle(
       return {
         phase: 'placingBezier',
         tool: 'bezier',
+        creationPhase: 'line',
         points: [point, undefined, undefined, undefined],
-        pendingPointIndex: 1,
         cursorPoint: point,
+        pointerId: action.pointerId,
+        dragging: true,
         shiftHeld: false,
       };
     case 'eraser':
@@ -355,9 +359,7 @@ function reducePointerMove(
     case 'placingLine':
       return action.point ? { ...state, cursorPoint: clonePoint(action.point) } : state;
     case 'placingBezier':
-      return action.point && state.pendingPointIndex < 4
-        ? { ...state, cursorPoint: clonePoint(action.point) }
-        : state;
+      return reduceBezierPointerMove(state, action);
     case 'panning':
       return {
         ...state,
@@ -383,8 +385,9 @@ function reducePointerUp(
     case 'idle':
     case 'placingPolygon':
     case 'placingLine':
-    case 'placingBezier':
       return state;
+    case 'placingBezier':
+      return reduceBezierPointerUp(state, action);
     case 'drawingPen': {
       if (!isSamePointer(state.pointerId, action.pointerId)) {
         return state;
@@ -466,29 +469,90 @@ function reduceBezierPointerDown(
   state: PlacingBezierInteractionState,
   action: PointerDownInteractionAction,
 ): InteractionState {
-  if (action.detail === 2 && isValidCompletion(state)) {
-    return completedIdle(state.tool, { tool: 'bezier', points: compactBezierPoints(state.points) });
-  }
-
-  if (!action.point || state.pendingPointIndex === 4) {
+  if (!action.point || state.dragging) {
     return state;
-  }
-
-  const point = clonePoint(action.point);
-  const points = [...state.points] as BezierControlPoints;
-  points[state.pendingPointIndex] = point;
-  const pendingPointIndex = nextBezierPointIndex(state.pendingPointIndex);
-
-  if (pendingPointIndex === 4) {
-    return completedIdle(state.tool, { tool: 'bezier', points: compactBezierPoints(points) });
   }
 
   return {
     ...state,
-    points,
-    pendingPointIndex,
-    cursorPoint: point,
+    cursorPoint: clonePoint(action.point),
+    pointerId: action.pointerId,
+    dragging: true,
   };
+}
+
+function reduceBezierPointerMove(
+  state: PlacingBezierInteractionState,
+  action: PointerMoveInteractionAction,
+): InteractionState {
+  if (!state.dragging || !isSamePointer(state.pointerId, action.pointerId) || !action.point) {
+    return state;
+  }
+
+  return { ...state, cursorPoint: clonePoint(action.point) };
+}
+
+function reduceBezierPointerUp(
+  state: PlacingBezierInteractionState,
+  action: PointerUpInteractionAction,
+): InteractionState {
+  if (!state.dragging || !isSamePointer(state.pointerId, action.pointerId)) {
+    return state;
+  }
+
+  const committedPoint = clonePoint(action.point ?? state.cursorPoint);
+  if (!committedPoint) {
+    return state;
+  }
+
+  switch (state.creationPhase) {
+    case 'line': {
+      const start = state.points[0];
+      if (!start) {
+        return state;
+      }
+
+      return {
+        ...state,
+        creationPhase: 'control1',
+        points: [clonePoint(start), undefined, undefined, committedPoint],
+        cursorPoint: committedPoint,
+        pointerId: undefined,
+        dragging: false,
+      };
+    }
+    case 'control1': {
+      const start = state.points[0];
+      const end = state.points[3];
+      if (!start || !end) {
+        return state;
+      }
+
+      return {
+        ...state,
+        creationPhase: 'control2',
+        points: [clonePoint(start), committedPoint, undefined, clonePoint(end)],
+        cursorPoint: committedPoint,
+        pointerId: undefined,
+        dragging: false,
+      };
+    }
+    case 'control2': {
+      const start = state.points[0];
+      const cp1 = state.points[1];
+      const end = state.points[3];
+      if (!start || !cp1 || !end) {
+        return state;
+      }
+
+      return completedIdle(state.tool, {
+        tool: 'bezier',
+        points: [clonePoint(start), clonePoint(cp1), committedPoint, clonePoint(end)],
+      });
+    }
+    default:
+      return assertNever(state.creationPhase);
+  }
 }
 
 function completeIfValid(
@@ -559,12 +623,6 @@ function distance(a: CanvasPoint, b: CanvasPoint): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-function compactBezierPoints(points: BezierControlPoints): CanvasPoint[] {
-  return points
-    .filter((point): point is CanvasPoint => point !== undefined)
-    .map((point) => clonePoint(point));
-}
-
-function nextBezierPointIndex(index: BezierPendingPointIndex): BezierPendingPointIndex {
-  return index < 4 ? ((index + 1) as BezierPendingPointIndex) : 4;
+function isCompleteBezierPoints(points: BezierControlPoints): points is [CanvasPoint, CanvasPoint, CanvasPoint, CanvasPoint] {
+  return points.every((point) => point !== undefined);
 }
