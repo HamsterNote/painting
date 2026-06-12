@@ -1,5 +1,42 @@
-import { DrawingSurface, type DrawingTool, type DrawingInputMethod, type DrawingValue, type DrawingStrokeSmoothingOptions } from '@hamster-note/painting';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { DrawingSurface, type DrawingTool, type DrawingInputMethod, type DrawingValue, type DrawingStrokeSmoothingOptions, type DrawingGesture } from '@hamster-note/painting';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+
+/**
+ * Eraser commit mode union literal — mirrors the exported
+ * `DrawingEraserCommitMode` contract while keeping the Playground local state
+ * independent from package type imports.
+ */
+type EraserCommitMode = 'while-sliding' | 'on-release';
+
+/** 所有可用工具 (Tasks 7-13 完成后的完整工具集) */
+const ALL_TOOLS: { value: DrawingTool; label: string }[] = [
+  { value: 'pen', label: 'Pen' },
+  { value: 'line', label: 'Line' },
+  { value: 'rect', label: 'Rect' },
+  { value: 'ellipse', label: 'Ellipse' },
+  { value: 'polygon', label: 'Polygon' },
+  { value: 'bezier', label: 'Bezier' },
+  { value: 'eraser', label: 'Eraser' },
+];
+
+/**
+ * 工具使用说明映射 — Playwright 可断言这些文本以验证说明可见。
+ * rect/ellipse 支持 Shift 约束；line/polygon/bezier 是 click-to-place 工具。
+ */
+function getToolInstruction(tool: DrawingTool): string | null {
+  switch (tool) {
+    case 'rect':
+    case 'ellipse':
+      return 'Hold Shift to draw square/circle';
+    case 'line':
+    case 'polygon':
+      return 'Click to add points, double-click or Esc to finish';
+    case 'bezier':
+      return 'Drag 1 sets the start/end line, drag 2 sets the first control point, drag 3 sets the second control point and commits';
+    default:
+      return null;
+  }
+}
 
 /**
  * 采样率测试 Demo 统计数据
@@ -56,6 +93,7 @@ export default function App() {
   const [color, setColor] = useState('#000000');
   const [width, setWidth] = useState(2);
   const [pressure, setPressure] = useState(false);
+  const [pressureMultiplier, setPressureMultiplier] = useState(1);
   const [inputMethods, setInputMethods] = useState<DrawingInputMethod[]>(['touch', 'mouse', 'pen']);
   const [samplingRate, setSamplingRate] = useState(0);
   const [smoothingEnabled, setSmoothingEnabled] = useState(true);
@@ -64,6 +102,39 @@ export default function App() {
   const [smoothingVelocityThreshold, setSmoothingVelocityThreshold] = useState(0.5);
   const [controlledValue, setControlledValue] = useState<DrawingValue>({ strokes: [] });
   const [uncontrolledStrokes, setUncontrolledStrokes] = useState<DrawingValue>(SEED_VALUE);
+
+  // ===== Dash 控制状态 (Task 8/9 dashArray + dashOffset) =====
+  const [dashEnabled, setDashEnabled] = useState(false);
+  const [dashLength, setDashLength] = useState(10);
+  const [dashGap, setDashGap] = useState(5);
+  const [dashOffset, setDashOffset] = useState(0);
+
+  // ===== Fill 控制状态 (closed shapes: rect/ellipse/polygon) =====
+  const [fillEnabled, setFillEnabled] = useState(false);
+  const [fillColor, setFillColor] = useState('#4a90d9');
+  const [fillOpacity, setFillOpacity] = useState(0.5);
+  // 闭合形状允许 strokeWidth=0（纯填充无描边），此 toggle 强制 strokeWidth=0
+  const [forceStrokeWidthZero, setForceStrokeWidthZero] = useState(false);
+
+  // ===== Cursor 控制状态 (Task 12) =====
+  const [cursorEnabled, setCursorEnabled] = useState(true);
+  const [cursorCustomRender, setCursorCustomRender] = useState(false);
+
+  // ===== Eraser 控制状态 (Task 7) =====
+  const [eraserCommitMode, setEraserCommitMode] = useState<EraserCommitMode>('while-sliding');
+  const [eraserTrajectoryVisible, setEraserTrajectoryVisible] = useState(false);
+  const [eraserTrajectoryColor, setEraserTrajectoryColor] = useState('#ccc');
+  const [eraserTrajectoryOpacity, setEraserTrajectoryOpacity] = useState(0.5);
+  const [eraserTrajectoryLineWidth, setEraserTrajectoryLineWidth] = useState(3);
+
+  // ===== Gestures 控制状态 (Task 3: gesture enum list + scale bounds + reset) =====
+  const [gestureList, setGestureList] = useState<DrawingGesture[]>([]);
+  const [gestureMinScale, setGestureMinScale] = useState(0.25);
+  const [gestureMaxScale, setGestureMaxScale] = useState(4);
+  const [gestureReset, setGestureReset] = useState(false);
+  // 当 reset 启用时显示 reset 按钮；按钮点击触发 viewportResetCounter 自增，
+  // 通过 key 重挂载子组件来命令式重置（避免引入 imperative ref 接口）
+  const [viewportResetCounter, setViewportResetCounter] = useState(0);
 
   // ===== 采样率测试 Demo 状态 =====
   const [samplingDemoResults, setSamplingDemoResults] = useState<SamplingDemoResult[]>([]);
@@ -147,7 +218,7 @@ export default function App() {
     const totalTime = e.timeStamp - ref.startTime;
     const boundaryCount = 2; // down + up
     const moveRate = totalTime > 0 ? (ref.moveCount / totalTime) * 1000 : 0;
-    
+
     // 计算平均 move 间隔
     let avgMoveInterval = 0;
     if (ref.moveTimestamps.length > 1) {
@@ -258,6 +329,64 @@ export default function App() {
 
   const controlledStrokes = controlledValue;
 
+  // dashArray: [length, gap] when enabled; undefined for solid stroke
+  const dashArray = dashEnabled ? [dashLength, dashGap] : undefined;
+  const resolvedDashOffset = dashEnabled ? dashOffset : undefined;
+
+  // strokeWidth=0 toggle allows fill-only closed shapes
+  const effectiveStrokeWidth = forceStrokeWidthZero ? 0 : width;
+
+  // fill props only applied when fillEnabled
+  const resolvedFillColor = fillEnabled ? fillColor : undefined;
+  const resolvedFillOpacity = fillEnabled ? fillOpacity : undefined;
+
+  // cursor: false disables overlay; object enables custom render demo; undefined uses default crosshair
+  const cursorProp: false | { size?: number; color?: string; render?: (state: { screen: { x: number; y: number }; visible: boolean; activeTool: DrawingTool }) => ReactNode } | undefined =
+    !cursorEnabled
+      ? false
+      : cursorCustomRender
+      ? {
+          size: 20,
+          color: '#ff6600',
+          render: (state) => {
+            if (!state.visible) return null;
+            const s = state.screen;
+            // 自定义渲染示例：橘色小圆点 + 工具名标签
+            return (
+              <g data-testid="cursor-custom-render">
+                <circle cx={s.x} cy={s.y} r={4} fill="#ff6600" opacity={0.7} />
+                <text x={s.x + 10} y={s.y - 6} fontSize={10} fill="#ff6600">
+                  {state.activeTool}
+                </text>
+              </g>
+            );
+          },
+        }
+      : undefined;
+
+  const gesturesProp = gestureList;
+  const gestureScaleBounds = useMemo(
+    () => ({ minScale: gestureMinScale, maxScale: gestureMaxScale }),
+    [gestureMinScale, gestureMaxScale],
+  );
+
+  // Memoize so DrawingSurface 不会因为父组件 re-render 而频繁触发 eraserTrajectory 副作用。
+  const eraserTrajectoryProp = useMemo(
+    () => ({
+      visible: eraserTrajectoryVisible,
+      color: eraserTrajectoryColor,
+      opacity: eraserTrajectoryOpacity,
+      lineWidth: eraserTrajectoryLineWidth,
+    }),
+    [eraserTrajectoryVisible, eraserTrajectoryColor, eraserTrajectoryOpacity, eraserTrajectoryLineWidth],
+  );
+
+  const handleViewportReset = useCallback(() => {
+    setViewportResetCounter((n) => n + 1);
+  }, []);
+
+  const toolInstruction = getToolInstruction(tool);
+
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       <h1 style={{ marginBottom: '20px' }}>DrawingSurface Playground</h1>
@@ -270,12 +399,35 @@ export default function App() {
             value={tool}
             onChange={(e) => setTool(e.target.value as DrawingTool)}
           >
-            <option value="pen">Pen</option>
-            <option value="line">Line</option>
-            <option value="rect">Rect</option>
-            <option value="eraser">Eraser</option>
+            {ALL_TOOLS.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
           </select>
         </label>
+
+        {ALL_TOOLS.map((t) => (
+          <button
+            key={t.value}
+            type="button"
+            data-tool={t.value}
+            onClick={() => setTool(t.value)}
+            style={{
+              padding: '4px 10px',
+              cursor: 'pointer',
+              border: tool === t.value ? '2px solid #333' : '1px solid #aaa',
+              background: tool === t.value ? '#e0e0e0' : '#fff',
+              borderRadius: '3px',
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+
+        {toolInstruction && (
+          <span data-testid="tool-instruction" style={{ fontSize: '12px', color: '#666', fontStyle: 'italic' }}>
+            {toolInstruction}
+          </span>
+        )}
 
         <label>
           Color{' '}
@@ -308,6 +460,19 @@ export default function App() {
             data-testid="drawing-pressure-toggle"
             checked={pressure}
             onChange={(e) => setPressure(e.target.checked)}
+          />
+        </label>
+
+        <label>
+          Pressure multiplier{' '}
+          <input
+            type="number"
+            data-testid="drawing-pressure-multiplier-input"
+            min={0.1}
+            step={0.1}
+            value={pressureMultiplier}
+            onChange={(e) => setPressureMultiplier(Math.max(0.1, parseFloat(e.target.value) || 1))}
+            style={{ width: '60px' }}
           />
         </label>
 
@@ -416,20 +581,287 @@ export default function App() {
         )}
       </div>
 
+      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' }}>
+      <fieldset data-testid="panel-dash" style={{ margin: 0, border: '1px solid #ccc', borderRadius: '4px', padding: '8px 12px', flex: '1 1 320px' }}>
+        <legend><strong>Dash</strong></legend>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <label>
+            <input
+              type="checkbox"
+              data-testid="dash-enabled"
+              checked={dashEnabled}
+              onChange={(e) => setDashEnabled(e.target.checked)}
+            />
+            {' '}Enable
+          </label>
+          <label>
+            Length{' '}
+            <input
+              type="number"
+              data-testid="dash-length"
+              min={0}
+              max={100}
+              value={dashLength}
+              onChange={(e) => setDashLength(Math.max(0, parseInt(e.target.value, 10) || 0))}
+              style={{ width: '60px' }}
+            />
+          </label>
+          <label>
+            Gap{' '}
+            <input
+              type="number"
+              data-testid="dash-gap"
+              min={0}
+              max={100}
+              value={dashGap}
+              onChange={(e) => setDashGap(Math.max(0, parseInt(e.target.value, 10) || 0))}
+              style={{ width: '60px' }}
+            />
+          </label>
+          <label>
+            Offset{' '}
+            <input
+              type="number"
+              data-testid="dash-offset"
+              min={-100}
+              max={100}
+              value={dashOffset}
+              onChange={(e) => setDashOffset(parseInt(e.target.value, 10) || 0)}
+              style={{ width: '60px' }}
+            />
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset data-testid="panel-fill" style={{ margin: 0, border: '1px solid #ccc', borderRadius: '4px', padding: '8px 12px', flex: '1 1 320px' }}>
+        <legend><strong>Fill (closed shapes: rect / ellipse / polygon)</strong></legend>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <label>
+            <input
+              type="checkbox"
+              data-testid="fill-enabled"
+              checked={fillEnabled}
+              onChange={(e) => setFillEnabled(e.target.checked)}
+            />
+            {' '}Enable
+          </label>
+          <label>
+            Color{' '}
+            <input
+              type="color"
+              data-testid="fill-color"
+              value={fillColor}
+              onChange={(e) => setFillColor(e.target.value)}
+            />
+          </label>
+          <label>
+            Opacity{' '}
+            <input
+              type="range"
+              data-testid="fill-opacity"
+              min={0}
+              max={1}
+              step={0.05}
+              value={fillOpacity}
+              onChange={(e) => setFillOpacity(parseFloat(e.target.value))}
+              style={{ width: '80px' }}
+            />
+            <span style={{ fontSize: '12px', color: '#666' }}>{fillOpacity.toFixed(2)}</span>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              data-testid="force-stroke-width-zero"
+              checked={forceStrokeWidthZero}
+              onChange={(e) => setForceStrokeWidthZero(e.target.checked)}
+            />
+            {' '}strokeWidth = 0 (fill only)
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset data-testid="panel-cursor" style={{ margin: 0, border: '1px solid #ccc', borderRadius: '4px', padding: '8px 12px', flex: '1 1 320px' }}>
+        <legend><strong>Cursor / Crosshair</strong></legend>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <label>
+            <input
+              type="checkbox"
+              data-testid="cursor-enabled"
+              checked={cursorEnabled}
+              onChange={(e) => setCursorEnabled(e.target.checked)}
+            />
+            {' '}Enable crosshair
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              data-testid="cursor-custom-render-toggle"
+              checked={cursorCustomRender}
+              onChange={(e) => setCursorCustomRender(e.target.checked)}
+              disabled={!cursorEnabled}
+            />
+            {' '}Use custom render (orange dot + tool label)
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset data-testid="panel-eraser" style={{ margin: 0, border: '1px solid #ccc', borderRadius: '4px', padding: '8px 12px', flex: '1 1 320px' }}>
+        <legend><strong>Eraser (commit mode / trajectory)</strong></legend>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <label>
+            Commit{' '}
+            <select
+              data-testid="eraser-commit-mode"
+              value={eraserCommitMode}
+              onChange={(e) => setEraserCommitMode(e.target.value as EraserCommitMode)}
+            >
+              <option value="while-sliding">while-sliding</option>
+              <option value="on-release">on-release</option>
+            </select>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              data-testid="eraser-trajectory-visible"
+              checked={eraserTrajectoryVisible}
+              onChange={(e) => setEraserTrajectoryVisible(e.target.checked)}
+            />
+            {' '}Trajectory visible
+          </label>
+          <label>
+            Color{' '}
+            <input
+              type="text"
+              data-testid="eraser-trajectory-color"
+              value={eraserTrajectoryColor}
+              onChange={(e) => setEraserTrajectoryColor(e.target.value)}
+              style={{ width: '70px' }}
+            />
+          </label>
+          <label>
+            Opacity{' '}
+            <input
+              type="number"
+              data-testid="eraser-trajectory-opacity"
+              min={0}
+              max={1}
+              step={0.05}
+              value={eraserTrajectoryOpacity}
+              onChange={(e) => setEraserTrajectoryOpacity(Math.min(1, Math.max(0, parseFloat(e.target.value) || 0)))}
+              style={{ width: '60px' }}
+            />
+          </label>
+          <label>
+            Line width{' '}
+            <input
+              type="number"
+              data-testid="eraser-trajectory-line-width"
+              min={1}
+              step={1}
+              value={eraserTrajectoryLineWidth}
+              onChange={(e) =>
+                setEraserTrajectoryLineWidth(Math.max(1, parseInt(e.target.value, 10) || 1))
+              }
+              style={{ width: '60px' }}
+            />
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset data-testid="panel-gestures" style={{ margin: 0, border: '1px solid #ccc', borderRadius: '4px', padding: '8px 12px', flex: '1 1 320px' }}>
+        <legend><strong>Gestures (viewport pan / pinch zoom / reset)</strong></legend>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {(['TouchSinglePan', 'TouchDoublePan', 'TouchDoubleZoom', 'MousePan', 'MouseWheelZoom', 'PenPan'] as DrawingGesture[]).map((gesture) => (
+            <label key={gesture} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <input
+                type="checkbox"
+                data-testid={`gesture-${gesture.toLowerCase()}-toggle`}
+                checked={gestureList.includes(gesture)}
+                onChange={(e) => {
+                  setGestureList((prev) =>
+                    e.target.checked
+                      ? [...prev, gesture]
+                      : prev.filter((g) => g !== gesture)
+                  );
+                }}
+              />
+              {' '}{gesture}
+            </label>
+          ))}
+          <label>
+            Min scale{' '}
+            <input
+              type="number"
+              data-testid="gesture-min-scale-input"
+              min={0.1}
+              max={gestureMaxScale}
+              step={0.05}
+              value={gestureMinScale}
+              onChange={(e) => setGestureMinScale(Math.max(0.1, parseFloat(e.target.value) || 0.1))}
+              style={{ width: '70px' }}
+            />
+          </label>
+          <label>
+            Max scale{' '}
+            <input
+              type="number"
+              data-testid="gesture-max-scale-input"
+              min={gestureMinScale}
+              step={0.05}
+              value={gestureMaxScale}
+              onChange={(e) => setGestureMaxScale(Math.max(gestureMinScale, parseFloat(e.target.value) || gestureMinScale))}
+              style={{ width: '70px' }}
+            />
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              data-testid="gesture-reset-toggle"
+              checked={gestureReset}
+              onChange={(e) => setGestureReset(e.target.checked)}
+            />
+            {' '}Reset
+          </label>
+          {gestureReset && (
+            <button
+              type="button"
+              data-testid="gesture-reset-button"
+              onClick={handleViewportReset}
+              style={{ padding: '4px 10px', cursor: 'pointer' }}
+            >
+              Reset viewport
+            </button>
+          )}
+        </div>
+      </fieldset>
+      </div>
+
       <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: '400px' }}>
           <h2>Uncontrolled (defaultValue)</h2>
           <div style={{ width: '400px', height: '300px', marginBottom: '10px' }}>
             <DrawingSurface
+              key={`uncontrolled-${viewportResetCounter}`}
               defaultValue={uncontrolledStrokes}
               onChange={handleUncontrolledChange}
               tool={tool}
               strokeColor={color}
-              strokeWidth={width}
+              strokeWidth={effectiveStrokeWidth}
               pressure={pressure}
+              pressureMultiplier={pressureMultiplier}
               inputMethods={inputMethods}
               samplingRate={samplingRate}
               strokeSmoothing={strokeSmoothing}
+              dashArray={dashArray}
+              dashOffset={resolvedDashOffset}
+              fillColor={resolvedFillColor}
+              fillOpacity={resolvedFillOpacity}
+              cursor={cursorProp}
+              gestures={gesturesProp}
+              gestureScaleBounds={gestureScaleBounds}
+              gestureReset={gestureReset}
+              eraserCommitMode={eraserCommitMode}
+              eraserTrajectory={eraserTrajectoryProp}
               testID="drawing-surface-uncontrolled"
             />
           </div>
@@ -453,15 +885,27 @@ export default function App() {
           <h2>Controlled (value + onChange)</h2>
           <div style={{ width: '400px', height: '300px', marginBottom: '10px' }}>
             <DrawingSurface
+              key={`controlled-${viewportResetCounter}`}
               value={controlledStrokes}
               onChange={handleControlledChange}
               tool={tool}
               strokeColor={color}
-              strokeWidth={width}
+              strokeWidth={effectiveStrokeWidth}
               pressure={pressure}
+              pressureMultiplier={pressureMultiplier}
               inputMethods={inputMethods}
               samplingRate={samplingRate}
               strokeSmoothing={strokeSmoothing}
+              dashArray={dashArray}
+              dashOffset={resolvedDashOffset}
+              fillColor={resolvedFillColor}
+              fillOpacity={resolvedFillOpacity}
+              cursor={cursorProp}
+              gestures={gesturesProp}
+              gestureScaleBounds={gestureScaleBounds}
+              gestureReset={gestureReset}
+              eraserCommitMode={eraserCommitMode}
+              eraserTrajectory={eraserTrajectoryProp}
               testID="drawing-surface-controlled"
             />
           </div>
@@ -530,7 +974,7 @@ export default function App() {
           {/* 结果面板 */}
           <div style={{ flex: 1, minWidth: '300px' }}>
             <h3 style={{ marginBottom: '12px' }}>事件统计（最近 {samplingDemoResults.length} 次）</h3>
-            
+
             {samplingDemoResults.length === 0 ? (
               <p style={{ color: '#999' }}>尚无数据，请在左侧区域绘制</p>
             ) : (
@@ -612,7 +1056,7 @@ export default function App() {
 
           <div style={{ flex: 1, minWidth: '300px' }}>
             <h3 style={{ marginBottom: '12px' }}>事件统计（最近 {rawSamplingDemoResults.length} 次）</h3>
-            
+
             {rawSamplingDemoResults.length === 0 ? (
               <p style={{ color: '#999' }}>尚无数据，请在左侧区域绘制</p>
             ) : (

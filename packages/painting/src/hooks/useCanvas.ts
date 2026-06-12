@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type {
 	DrawingPoint,
 	DrawingStroke,
@@ -37,6 +37,7 @@ export function useCanvas(options: UseCanvasOptions = {}): UseCanvasReturn {
 	const [internalStrokes, setInternalStrokes] = useState<DrawingStroke[]>(
 		() => defaultValue?.strokes ?? [],
 	);
+	const internalStrokesRef = useRef(internalStrokes);
 	const [activeStroke, setActiveStroke] = useState<DrawingStroke | null>(null);
 
 	const strokes = useMemo(
@@ -51,11 +52,10 @@ export function useCanvas(options: UseCanvasOptions = {}): UseCanvasReturn {
 				return;
 			}
 
-			setInternalStrokes((currentStrokes) => {
-				const nextValue = getNextValue({ strokes: currentStrokes });
-				onChange?.(nextValue);
-				return nextValue.strokes;
-			});
+			const nextValue = getNextValue({ strokes: internalStrokesRef.current });
+			internalStrokesRef.current = nextValue.strokes;
+			setInternalStrokes(nextValue.strokes);
+			onChange?.(nextValue);
 		},
 		[isControlled, onChange, value],
 	);

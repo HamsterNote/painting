@@ -109,7 +109,9 @@ export default [
       ...prettier.rules,
       // TypeScript handles these — base ESLint rules produce false positives on TS type annotations
       'no-undef': 'off',
+      'no-redeclare': 'off',
       'no-unused-vars': 'off',
+      '@typescript-eslint/no-redeclare': ['error', { ignoreDeclarationMerge: true }],
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },

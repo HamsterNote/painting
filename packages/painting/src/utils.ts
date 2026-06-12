@@ -1,4 +1,16 @@
 import type { DrawingPoint, DrawingStroke, DrawingValue } from './components/DrawingSurface';
+import type { DrawingStrokeV2 } from './model/strokes';
+
+type PickableStroke = DrawingStroke | DrawingStrokeV2;
+
+export type RenderedStrokeHitTestOptions = {
+  eraserRadius: number;
+  openFallbackWidth: number;
+  closedFallbackWidth: number;
+  pressureMultiplier: number;
+};
+
+const RENDERED_HIT_EPSILON = 1e-9;
 
 function distanceSqPointToSegment(point: DrawingPoint, a: DrawingPoint, b: DrawingPoint): number {
   const dx = b.x - a.x;
@@ -59,7 +71,218 @@ function distanceSqPointToRect(point: DrawingPoint, first: DrawingPoint, last: D
   return dx * dx + dy * dy;
 }
 
-function distanceSqPointToStroke(point: DrawingPoint, stroke: DrawingStroke): number {
+function distanceSqPointToRectOutline(point: DrawingPoint, first: DrawingPoint, last: DrawingPoint): number {
+  if (!pointInRect(point, first, last)) {
+    return distanceSqPointToRect(point, first, last);
+  }
+
+  const minX = Math.min(first.x, last.x);
+  const maxX = Math.max(first.x, last.x);
+  const minY = Math.min(first.y, last.y);
+  const maxY = Math.max(first.y, last.y);
+  const nearestSideDistance = Math.min(
+    point.x - minX,
+    maxX - point.x,
+    point.y - minY,
+    maxY - point.y,
+  );
+
+  return nearestSideDistance * nearestSideDistance;
+}
+
+function pointInRect(point: DrawingPoint, first: DrawingPoint, last: DrawingPoint): boolean {
+  const minX = Math.min(first.x, last.x);
+  const maxX = Math.max(first.x, last.x);
+  const minY = Math.min(first.y, last.y);
+  const maxY = Math.max(first.y, last.y);
+
+  return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY;
+}
+
+function distanceSqPointToEllipse(point: DrawingPoint, first: DrawingPoint, last: DrawingPoint): number {
+  const centerX = (first.x + last.x) / 2;
+  const centerY = (first.y + last.y) / 2;
+  const rx = Math.abs(last.x - first.x) / 2;
+  const ry = Math.abs(last.y - first.y) / 2;
+
+  if (rx === 0 || ry === 0) {
+    return distanceSqPointToSegment(point, first, last);
+  }
+
+  const normalizedX = (point.x - centerX) / rx;
+  const normalizedY = (point.y - centerY) / ry;
+  const angle = Math.atan2(normalizedY, normalizedX);
+  const closestX = centerX + rx * Math.cos(angle);
+  const closestY = centerY + ry * Math.sin(angle);
+  const dx = point.x - closestX;
+  const dy = point.y - closestY;
+
+  return dx * dx + dy * dy;
+}
+
+function pointInEllipse(point: DrawingPoint, first: DrawingPoint, last: DrawingPoint): boolean {
+  const centerX = (first.x + last.x) / 2;
+  const centerY = (first.y + last.y) / 2;
+  const rx = Math.abs(last.x - first.x) / 2;
+  const ry = Math.abs(last.y - first.y) / 2;
+
+  if (rx === 0 || ry === 0) {
+    return false;
+  }
+
+  const normalizedX = (point.x - centerX) / rx;
+  const normalizedY = (point.y - centerY) / ry;
+  return normalizedX * normalizedX + normalizedY * normalizedY <= 1;
+}
+
+function distanceSqPointToPolygon(point: DrawingPoint, points: DrawingPoint[]): number {
+  if (points.length < 2) {
+    return distanceSqPointToPolyline(point, points);
+  }
+
+  let min = distanceSqPointToPolyline(point, points);
+  const closingDistance = distanceSqPointToSegment(point, points[points.length - 1], points[0]);
+  if (closingDistance < min) {
+    min = closingDistance;
+  }
+
+  return min;
+}
+
+// Hit-test segment count for cubic Bezier sampling. 24 segments give visually
+// indistinguishable polyline approximation for typical stroke widths while keeping
+// the per-pick cost predictable.
+const BEZIER_HIT_TEST_SEGMENTS = 24;
+
+function sampleCubicBezierPolyline(
+  start: DrawingPoint,
+  control1: DrawingPoint,
+  control2: DrawingPoint,
+  end: DrawingPoint,
+  segments: number,
+): DrawingPoint[] {
+  const samples: DrawingPoint[] = new Array(segments + 1);
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    const oneMinusT = 1 - t;
+    const b0 = oneMinusT * oneMinusT * oneMinusT;
+    const b1 = 3 * oneMinusT * oneMinusT * t;
+    const b2 = 3 * oneMinusT * t * t;
+    const b3 = t * t * t;
+    samples[i] = {
+      x: b0 * start.x + b1 * control1.x + b2 * control2.x + b3 * end.x,
+      y: b0 * start.y + b1 * control1.y + b2 * control2.y + b3 * end.y,
+    };
+  }
+  return samples;
+}
+
+function distanceSqPointToBezier(point: DrawingPoint, points: DrawingPoint[]): number {
+  if (points.length !== 4) {
+    return distanceSqPointToPolyline(point, points);
+  }
+  const samples = sampleCubicBezierPolyline(
+    points[0],
+    points[1],
+    points[2],
+    points[3],
+    BEZIER_HIT_TEST_SEGMENTS,
+  );
+  return distanceSqPointToPolyline(point, samples);
+}
+
+function pointInPolygon(point: DrawingPoint, points: DrawingPoint[]): boolean {
+  if (points.length < 3) {
+    return false;
+  }
+
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const a = points[i];
+    const b = points[j];
+    const intersects =
+      a.y > point.y !== b.y > point.y &&
+      point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x;
+
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+}
+
+function hasRenderedFill(stroke: PickableStroke): boolean {
+  return stroke.fillColor !== undefined && stroke.fillColor !== 'none';
+}
+
+function isClosedStrokeTool(tool: PickableStroke['tool'] | string): boolean {
+  return tool === 'rect' || tool === 'ellipse' || tool === 'polygon';
+}
+
+function normalizePointPressure(pressure: number | undefined): number {
+  if (pressure === 0) {
+    return 0;
+  }
+
+  return typeof pressure === 'number' && Number.isFinite(pressure) && pressure >= 0 && pressure <= 1 ? pressure : 1;
+}
+
+function normalizePressureMultiplier(pressureMultiplier: number): number {
+  return typeof pressureMultiplier === 'number' && Number.isFinite(pressureMultiplier) && pressureMultiplier > 0
+    ? pressureMultiplier
+    : 1;
+}
+
+function hasPressureData(stroke: PickableStroke): boolean {
+  return stroke.tool === 'pen' && stroke.points.some((point) => point.pressure !== undefined);
+}
+
+function resolveRenderedStrokeWidth(stroke: PickableStroke, options: RenderedStrokeHitTestOptions): number {
+  const fallbackWidth = isClosedStrokeTool(stroke.tool) ? options.closedFallbackWidth : options.openFallbackWidth;
+  const resolvedWidth = stroke.strokeWidth ?? fallbackWidth;
+  return Number.isFinite(resolvedWidth) ? Math.max(0, resolvedWidth) : 0;
+}
+
+function targetHalfWidthForStroke(stroke: PickableStroke, options: RenderedStrokeHitTestOptions): number {
+  return resolveRenderedStrokeWidth(stroke, options) / 2;
+}
+
+function targetHalfWidthForPressureSegment(
+  stroke: PickableStroke,
+  a: DrawingPoint,
+  b: DrawingPoint,
+  options: RenderedStrokeHitTestOptions,
+): number {
+  const baseWidth = resolveRenderedStrokeWidth(stroke, options);
+  const pressure = Math.max(normalizePointPressure(a.pressure), normalizePointPressure(b.pressure));
+  const segmentWidth = baseWidth * pressure * normalizePressureMultiplier(options.pressureMultiplier);
+  return Math.max(0, segmentWidth) / 2;
+}
+
+function pointInClosedShape(point: DrawingPoint, stroke: PickableStroke): boolean {
+  const { points, tool } = stroke;
+
+  if (points.length < 2) {
+    return false;
+  }
+
+  if (tool === 'rect') {
+    return pointInRect(point, points[0], points[points.length - 1]);
+  }
+
+  if (tool === 'ellipse') {
+    return pointInEllipse(point, points[0], points[points.length - 1]);
+  }
+
+  if (tool === 'polygon') {
+    return pointInPolygon(point, points);
+  }
+
+  return false;
+}
+
+function distanceSqPointToStroke(point: DrawingPoint, stroke: PickableStroke): number {
   const { points, tool } = stroke;
 
   if (points.length === 0) {
@@ -70,11 +293,127 @@ function distanceSqPointToStroke(point: DrawingPoint, stroke: DrawingStroke): nu
     return distanceSqPointToRect(point, points[0], points[points.length - 1]);
   }
 
+  if (hasRenderedFill(stroke) && pointInClosedShape(point, stroke)) {
+    return 0;
+  }
+
+  if (tool === 'ellipse' && points.length >= 2) {
+    return distanceSqPointToEllipse(point, points[0], points[points.length - 1]);
+  }
+
+  if (tool === 'polygon' && points.length >= 2) {
+    return distanceSqPointToPolygon(point, points);
+  }
+
   if (tool === 'line' && points.length >= 2) {
-    return distanceSqPointToSegment(point, points[0], points[points.length - 1]);
+    return distanceSqPointToPolyline(point, points);
+  }
+
+  if (tool === 'bezier') {
+    return distanceSqPointToBezier(point, points);
   }
 
   return distanceSqPointToPolyline(point, points);
+}
+
+function renderedOutlineDistanceSqPointToStroke(point: DrawingPoint, stroke: PickableStroke): number {
+  const { points, tool } = stroke;
+
+  if (points.length === 0) {
+    return Infinity;
+  }
+
+  if (hasRenderedFill(stroke) && pointInClosedShape(point, stroke)) {
+    return 0;
+  }
+
+  if (tool === 'rect' && points.length >= 2) {
+    return distanceSqPointToRectOutline(point, points[0], points[points.length - 1]);
+  }
+
+  if (tool === 'ellipse' && points.length >= 2) {
+    return distanceSqPointToEllipse(point, points[0], points[points.length - 1]);
+  }
+
+  if (tool === 'polygon' && points.length >= 2) {
+    return distanceSqPointToPolygon(point, points);
+  }
+
+  if (tool === 'line' && points.length >= 2) {
+    return distanceSqPointToPolyline(point, points);
+  }
+
+  if (tool === 'bezier') {
+    return distanceSqPointToBezier(point, points);
+  }
+
+  return distanceSqPointToPolyline(point, points);
+}
+
+function renderedDistanceToPressurePen(point: DrawingPoint, stroke: PickableStroke, options: RenderedStrokeHitTestOptions): number {
+  const { points } = stroke;
+
+  if (points.length === 0) {
+    return Infinity;
+  }
+
+  if (points.length === 1) {
+    const dx = point.x - points[0].x;
+    const dy = point.y - points[0].y;
+    const pointWidth = resolveRenderedStrokeWidth(stroke, options) * normalizePointPressure(points[0].pressure) * normalizePressureMultiplier(options.pressureMultiplier);
+    return Math.hypot(dx, dy) - Math.max(0, pointWidth) / 2;
+  }
+
+  let minDistance = Infinity;
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const centerDistance = Math.sqrt(distanceSqPointToSegment(point, points[i], points[i + 1]));
+    const targetHalfWidth = targetHalfWidthForPressureSegment(stroke, points[i], points[i + 1], options);
+    const renderedDistance = centerDistance - targetHalfWidth;
+    if (renderedDistance < minDistance) {
+      minDistance = renderedDistance;
+    }
+  }
+
+  return minDistance;
+}
+
+function renderedDistanceToStroke(point: DrawingPoint, stroke: PickableStroke, options: RenderedStrokeHitTestOptions): number {
+  if (hasPressureData(stroke)) {
+    return renderedDistanceToPressurePen(point, stroke, options);
+  }
+
+  if (hasRenderedFill(stroke) && pointInClosedShape(point, stroke)) {
+    return 0;
+  }
+
+  return Math.sqrt(renderedOutlineDistanceSqPointToStroke(point, stroke)) - targetHalfWidthForStroke(stroke, options);
+}
+
+function safeEraserRadius(eraserRadius: number): number {
+  return typeof eraserRadius === 'number' && Number.isFinite(eraserRadius) ? Math.max(0, eraserRadius) : 0;
+}
+
+function pickRenderedStrokeAtPoint<TStroke extends PickableStroke>(
+  point: DrawingPoint,
+  strokes: TStroke[],
+  options: RenderedStrokeHitTestOptions,
+  currentBest: { stroke: TStroke | null; distance: number; strokeIndex: number },
+): { stroke: TStroke | null; distance: number; strokeIndex: number } {
+  let best = currentBest;
+
+  for (let strokeIndex = 0; strokeIndex < strokes.length; strokeIndex++) {
+    const stroke = strokes[strokeIndex];
+    const distance = renderedDistanceToStroke(point, stroke, options);
+    if (
+      distance < best.distance - RENDERED_HIT_EPSILON ||
+      (Math.abs(distance - best.distance) <= RENDERED_HIT_EPSILON && strokeIndex < best.strokeIndex)
+    ) {
+      best = { stroke, distance, strokeIndex };
+    }
+  }
+
+  return best;
 }
 
 export function addStroke(value: DrawingValue, stroke: DrawingStroke): DrawingValue {
@@ -110,18 +449,18 @@ export function clearStrokes(value: DrawingValue): DrawingValue {
  *
  * Distance semantics per tool:
  * - pen: minimum distance to polyline segments
- * - line: minimum distance to the segment between first and last point
+ * - line: minimum distance to open line segments
  * - rect: distance to axis-aligned bounding rectangle (0 when inside)
  *
  * @param maxDistance - Optional maximum distance threshold. If the closest stroke
  *   is farther than this distance, returns `null`. Used for object eraser radius.
  */
-export function pick(point: DrawingPoint, strokes: DrawingStroke[], maxDistance?: number): DrawingStroke | null {
+export function pick<TStroke extends PickableStroke>(point: DrawingPoint, strokes: TStroke[], maxDistance?: number): TStroke | null {
   if (strokes.length === 0) {
     return null;
   }
 
-  let bestStroke: DrawingStroke = strokes[0];
+  let bestStroke: TStroke = strokes[0];
   let bestDistSq: number = distanceSqPointToStroke(point, strokes[0]);
 
   for (let i = 1; i < strokes.length; i++) {
@@ -141,4 +480,197 @@ export function pick(point: DrawingPoint, strokes: DrawingStroke[], maxDistance?
   }
 
   return bestStroke;
+}
+
+/**
+ * Samples along the eraser sweep so hit testing can reuse `distanceSqPointToStroke`,
+ * including per-tool dispatch, fill short-circuiting, and Bezier sampling, without
+ * duplicating that logic for each tool. `pickStep = max(0.5, radius / 4)` keeps
+ * samples at most about a quarter radius apart so intersecting objects cannot slip
+ * between samples. Equal-distance hits prefer the earlier stroke index across the
+ * whole sweep, matching `pick()` even when that stroke is sampled later.
+ */
+export function pickStrokeIntersectingSegment<TStroke extends PickableStroke>(
+  start: DrawingPoint,
+  end: DrawingPoint,
+  strokes: TStroke[],
+  radius: number,
+): TStroke | null {
+  if (strokes.length === 0) {
+    return null;
+  }
+
+  const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
+  const safeRadius = Math.max(0, radius);
+  const pickStep = Math.max(0.5, safeRadius / 4);
+  const sampleCount = Math.max(1, Math.ceil(segmentLength / pickStep));
+
+  let bestStroke: TStroke | null = null;
+  let bestDistSq = Infinity;
+  let bestStrokeIndex = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i <= sampleCount; i++) {
+    const t = sampleCount === 0 ? 0 : i / sampleCount;
+    const sample = {
+      x: start.x + t * (end.x - start.x),
+      y: start.y + t * (end.y - start.y),
+    };
+
+    for (let strokeIndex = 0; strokeIndex < strokes.length; strokeIndex++) {
+      const stroke = strokes[strokeIndex];
+      const d = distanceSqPointToStroke(sample, stroke);
+      if (d < bestDistSq || (d === bestDistSq && strokeIndex < bestStrokeIndex)) {
+        bestDistSq = d;
+        bestStrokeIndex = strokeIndex;
+        bestStroke = stroke;
+      }
+    }
+  }
+
+  return bestDistSq <= safeRadius * safeRadius ? bestStroke : null;
+}
+
+/**
+ * Returns the first/closest stroke intersected by an eraser sweep while accounting
+ * for the target's rendered stroke width. `targetHalfWidth` means half of the
+ * width actually painted for the target stroke: non-pressure strokes use
+ * `max(0, stroke.strokeWidth ?? fallbackWidth) / 2`; pressure pen segments use
+ * `baseWidth * max(normalizePointPressure(a), normalizePointPressure(b)) *
+ * pressureMultiplier / 2`. A hit occurs when the centerline/outline distance is
+ * `<= eraserRadius + targetHalfWidth`; filled rect/ellipse/polygon interiors
+ * keep distance 0 so fill-aware erasing is preserved.
+ */
+export function pickRenderedStrokeIntersectingSegment<TStroke extends PickableStroke>(
+  start: DrawingPoint,
+  end: DrawingPoint,
+  strokes: TStroke[],
+  options: RenderedStrokeHitTestOptions,
+): TStroke | null {
+  if (strokes.length === 0) {
+    return null;
+  }
+
+  const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
+  const eraserRadius = safeEraserRadius(options.eraserRadius);
+  const pickStep = Math.max(0.5, eraserRadius / 4);
+  const sampleCount = Math.max(1, Math.ceil(segmentLength / pickStep));
+  let best = {
+    stroke: null as TStroke | null,
+    distance: Infinity,
+    strokeIndex: Number.POSITIVE_INFINITY,
+  };
+
+  for (let i = 0; i <= sampleCount; i++) {
+    const t = sampleCount === 0 ? 0 : i / sampleCount;
+    const sample = {
+      x: start.x + t * (end.x - start.x),
+      y: start.y + t * (end.y - start.y),
+    };
+
+    best = pickRenderedStrokeAtPoint(sample, strokes, options, best);
+  }
+
+  return best.distance <= eraserRadius + RENDERED_HIT_EPSILON ? best.stroke : null;
+}
+
+export function pickStrokeIntersectingPolyline<TStroke extends PickableStroke>(
+  points: DrawingPoint[],
+  strokes: TStroke[],
+  radius: number,
+): TStroke | null {
+  if (points.length === 0) {
+    return null;
+  }
+
+  if (points.length === 1) {
+    return pick(points[0], strokes, radius);
+  }
+
+  const safeRadius = Math.max(0, radius);
+  const pickStep = Math.max(0.5, safeRadius / 4);
+  let bestStroke: TStroke | null = null;
+  let bestDistSq = Infinity;
+  let bestStrokeIndex = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const start = points[i];
+    const end = points[i + 1];
+    const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
+    const sampleCount = Math.max(1, Math.ceil(segmentLength / pickStep));
+
+    for (let j = 0; j <= sampleCount; j++) {
+      const t = sampleCount === 0 ? 0 : j / sampleCount;
+      const sample = {
+        x: start.x + t * (end.x - start.x),
+        y: start.y + t * (end.y - start.y),
+      };
+
+      for (let strokeIndex = 0; strokeIndex < strokes.length; strokeIndex++) {
+        const stroke = strokes[strokeIndex];
+        const d = distanceSqPointToStroke(sample, stroke);
+        if (d < bestDistSq || (d === bestDistSq && strokeIndex < bestStrokeIndex)) {
+          bestDistSq = d;
+          bestStrokeIndex = strokeIndex;
+          bestStroke = stroke;
+        }
+      }
+    }
+  }
+
+  return bestDistSq <= safeRadius * safeRadius ? bestStroke : null;
+}
+
+/**
+ * Sweeps an eraser polyline using rendered-width-aware thresholds. For each
+ * sampled eraser point, `targetHalfWidth` is added to `eraserRadius`; for
+ * pressure pen segments, `targetHalfWidth` is recalculated per target segment
+ * from the rendered formula `baseWidth * max(segment endpoint pressure) *
+ * pressureMultiplier / 2`. Filled closed-shape interiors remain distance 0;
+ * unfilled closed shapes use outline distance plus their rendered half-width.
+ */
+export function pickRenderedStrokeIntersectingPolyline<TStroke extends PickableStroke>(
+  points: DrawingPoint[],
+  strokes: TStroke[],
+  options: RenderedStrokeHitTestOptions,
+): TStroke | null {
+  if (points.length === 0 || strokes.length === 0) {
+    return null;
+  }
+
+  const eraserRadius = safeEraserRadius(options.eraserRadius);
+
+  if (points.length === 1) {
+    const best = pickRenderedStrokeAtPoint(points[0], strokes, options, {
+      stroke: null as TStroke | null,
+      distance: Infinity,
+      strokeIndex: Number.POSITIVE_INFINITY,
+    });
+    return best.distance <= eraserRadius + RENDERED_HIT_EPSILON ? best.stroke : null;
+  }
+
+  const pickStep = Math.max(0.5, eraserRadius / 4);
+  let best = {
+    stroke: null as TStroke | null,
+    distance: Infinity,
+    strokeIndex: Number.POSITIVE_INFINITY,
+  };
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const start = points[i];
+    const end = points[i + 1];
+    const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
+    const sampleCount = Math.max(1, Math.ceil(segmentLength / pickStep));
+
+    for (let j = 0; j <= sampleCount; j++) {
+      const t = sampleCount === 0 ? 0 : j / sampleCount;
+      const sample = {
+        x: start.x + t * (end.x - start.x),
+        y: start.y + t * (end.y - start.y),
+      };
+
+      best = pickRenderedStrokeAtPoint(sample, strokes, options, best);
+    }
+  }
+
+  return best.distance <= eraserRadius + RENDERED_HIT_EPSILON ? best.stroke : null;
 }

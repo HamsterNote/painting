@@ -2084,13 +2084,10 @@
   resolved "https://registry.yarnpkg.com/@system-ui-js/multi-drag-core/-/multi-drag-core-0.3.0.tgz#66b2c1f1d66641a35b8f005317e15a0dd4706f19"
   integrity sha512-1BTm2ds1rfK4BCAMAwk7unF41xti5BHErnepceEda6kqcFL0fa/brvHHTa4sN42dWSZH63xxXyB3nRatg0KSdQ==
 
-"@system-ui-js/multi-drag@0.4.0":
+"@system-ui-js/multi-drag-core@0.4.0":
   version "0.4.0"
-  resolved "https://registry.yarnpkg.com/@system-ui-js/multi-drag/-/multi-drag-0.4.0.tgz#0404192470eaa84a1afbe9ed01cf1ea1a2a12097"
-  integrity sha512-gZwFJ2hrpq8CCmJhdoViIQAFd1cD+o8uWJUP/+Myo2xuqvamIuZdDsd9rIaD+JV6otA9+JF2O9XV0vozmqafOg==
-  dependencies:
-    "@system-ui-js/multi-drag-core" "*"
-    loglevel "^1.9.2"
+  resolved "https://registry.yarnpkg.com/@system-ui-js/multi-drag-core/-/multi-drag-core-0.4.0.tgz#68dd401af22691ca55f840e0fd4b7818794473d6"
+  integrity sha512-7V366jAmK8hUjPJi9yYngabhuE+ixnRxZS7lw/1uNbxEYLaR/Mh5XtxMvY/gGHcL7tdJtYzE5lF1i786jKbKIA==
 
 "@testing-library/dom@^10.0.0":
   version "10.4.1"
