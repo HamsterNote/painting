@@ -2079,11 +2079,6 @@
   dependencies:
     "@sinonjs/commons" "^3.0.1"
 
-"@system-ui-js/multi-drag-core@*":
-  version "0.3.0"
-  resolved "https://registry.yarnpkg.com/@system-ui-js/multi-drag-core/-/multi-drag-core-0.3.0.tgz#66b2c1f1d66641a35b8f005317e15a0dd4706f19"
-  integrity sha512-1BTm2ds1rfK4BCAMAwk7unF41xti5BHErnepceEda6kqcFL0fa/brvHHTa4sN42dWSZH63xxXyB3nRatg0KSdQ==
-
 "@system-ui-js/multi-drag-core@0.4.0":
   version "0.4.0"
   resolved "https://registry.yarnpkg.com/@system-ui-js/multi-drag-core/-/multi-drag-core-0.4.0.tgz#68dd401af22691ca55f840e0fd4b7818794473d6"
@@ -5354,11 +5349,6 @@ lodash.throttle@^4.1.1:
   version "4.1.1"
   resolved "https://registry.yarnpkg.com/lodash.throttle/-/lodash.throttle-4.1.1.tgz#c23e91b710242ac70c37f1e1cda9274cc39bf2f4"
   integrity sha512-wIkUCfVKpVsWo3JSZlc+8MB5it+2AN5W8J7YVMST30UrvcQNZ1Okbj+rbVniijTWE6FGYy4XJq/rHkas8qJMLQ==
-
-loglevel@^1.9.2:
-  version "1.9.2"
-  resolved "https://registry.yarnpkg.com/loglevel/-/loglevel-1.9.2.tgz#c2e028d6c757720107df4e64508530db6621ba08"
-  integrity sha512-HgMmCqIJSAKqo68l0rS2AanEWfkxaZ5wNiEFb5ggm08lDs9Xl2KxBlX3PTcaD2chBM1gXAYf491/M2Rv8Jwayg==
 
 loose-envify@^1.0.0, loose-envify@^1.1.0, loose-envify@^1.4.0:
   version "1.4.0"
