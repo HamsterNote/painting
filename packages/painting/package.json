@@ -1,6 +1,6 @@
 {
   "name": "@hamster-note/painting",
-  "version": "0.1.1-beta.1",
+  "version": "0.1.1-beta.2",
   "private": false,
   "main": "lib/commonjs/index.js",
   "module": "lib/module/index.js",
