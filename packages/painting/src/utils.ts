@@ -291,34 +291,23 @@ function rectCornerPoints(first: DrawingPoint, last: DrawingPoint): DrawingPoint
   ];
 }
 
-function sampleEllipseFromCenter(center: DrawingPoint, radiusPoint: DrawingPoint, segments: number): DrawingPoint[] {
-  const rx = Math.abs(radiusPoint.x - center.x);
-  const ry = Math.abs(radiusPoint.y - center.y);
+function sampleEllipseFromBoundingBox(first: DrawingPoint, last: DrawingPoint, segments: number): DrawingPoint[] {
+  const centerX = (first.x + last.x) / 2;
+  const centerY = (first.y + last.y) / 2;
+  const rx = Math.abs(last.x - first.x) / 2;
+  const ry = Math.abs(last.y - first.y) / 2;
   const safeSegments = Math.max(4, Math.floor(segments));
   const samples: DrawingPoint[] = new Array(safeSegments);
 
   for (let i = 0; i < safeSegments; i++) {
     const angle = (Math.PI * 2 * i) / safeSegments;
     samples[i] = {
-      x: center.x + rx * Math.cos(angle),
-      y: center.y + ry * Math.sin(angle),
+      x: centerX + rx * Math.cos(angle),
+      y: centerY + ry * Math.sin(angle),
     };
   }
 
   return samples;
-}
-
-function pointInEllipseFromCenter(point: DrawingPoint, center: DrawingPoint, radiusPoint: DrawingPoint): boolean {
-  const rx = Math.abs(radiusPoint.x - center.x);
-  const ry = Math.abs(radiusPoint.y - center.y);
-
-  if (rx === 0 || ry === 0) {
-    return false;
-  }
-
-  const normalizedX = (point.x - center.x) / rx;
-  const normalizedY = (point.y - center.y) / ry;
-  return normalizedX * normalizedX + normalizedY * normalizedY <= 1;
 }
 
 function closedSegments(points: readonly DrawingPoint[]): Array<readonly [DrawingPoint, DrawingPoint]> {
@@ -409,7 +398,7 @@ function buildStrokeSelectionGeometry(stroke: DrawingStroke, options: Required<L
   }
 
   if (tool === 'ellipse' && points.length >= 2) {
-    const samples = sampleEllipseFromCenter(points[0], points[points.length - 1], options.ellipseSegments);
+    const samples = sampleEllipseFromBoundingBox(points[0], points[points.length - 1], options.ellipseSegments);
     return {
       samples,
       segments: closedSegments(samples),
@@ -456,7 +445,7 @@ function lassoPointInsideClosedStroke(point: DrawingPoint, stroke: DrawingStroke
   }
 
   if (stroke.tool === 'ellipse') {
-    return pointInEllipseFromCenter(point, stroke.points[0], stroke.points[stroke.points.length - 1]);
+    return pointInEllipse(point, stroke.points[0], stroke.points[stroke.points.length - 1]);
   }
 
   if (stroke.tool === 'polygon') {
@@ -739,9 +728,9 @@ export function selectStrokesIntersectingLasso(
       continue;
     }
 
-    // 粗开放笔触可能只因 strokeWidth 与套索边“擦到”而命中，bbox 需要按半宽外扩避免误剔除。
-    const isOpenStroke = stroke.tool === 'pen' || stroke.tool === 'line' || stroke.tool === 'bezier';
-    const strokeHalfWidth = isOpenStroke ? Math.max(0, stroke.strokeWidth ?? 0) / 2 : 0;
+    // 粗描边（包含 rect/ellipse/polygon 的轮廓）可能只因 strokeWidth 与套索边“擦到”而命中，
+    // bbox 需要按半宽外扩避免误剔除。
+    const strokeHalfWidth = Math.max(0, stroke.strokeWidth ?? 0) / 2;
     const strokeBBox = expandBoundingBox(geometry.bbox, strokeHalfWidth);
 
     if (strokeBBox === null || !boundingBoxesOverlap(lassoBBox, strokeBBox)) {
@@ -754,9 +743,11 @@ export function selectStrokesIntersectingLasso(
       continue;
     }
 
-    // 条件 B：套索顶点落在闭合图形内部，覆盖“套索完全在填充形状里”的情况。
+    // 条件 B：套索顶点落在有填充的闭合图形内部，覆盖“套索完全在填充形状里”的情况。
+    // 空心图形的内部不可视，不能因内部套索而被误选。
     if (
       geometry.closedShapePoints !== null &&
+      hasRenderedFill(stroke) &&
       lassoPolygon.some((point) => lassoPointInsideClosedStroke(point, stroke, geometry.closedShapePoints ?? []))
     ) {
       selectedIds.push(stroke.id);
@@ -772,9 +763,8 @@ export function selectStrokesIntersectingLasso(
           break;
         }
 
-        // 条件 D：开放笔触按 strokeWidth 半径与套索边做距离命中。
+        // 条件 D：所有可见描边按 strokeWidth 半径与套索边做距离命中。
         if (
-          isOpenStroke &&
           strokeHalfWidth > 0 &&
           distanceSqSegmentToSegment(strokeStart, strokeEnd, lassoStart, lassoEnd) < strokeHalfWidth * strokeHalfWidth
         ) {

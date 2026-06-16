@@ -1022,6 +1022,40 @@ describe('utils', () => {
       expect(result).toEqual(['ellipse-edge']);
     });
 
+    it('uses first and last ellipse points as bounding-box corners for lasso selection', () => {
+      const stroke = createMockStroke('ellipse-bbox-edge', 'ellipse', [
+        { x: 0, y: 10 },
+        { x: 20, y: 30 },
+      ]);
+      const lasso = [
+        { x: 18, y: 18 },
+        { x: 22, y: 18 },
+        { x: 22, y: 22 },
+        { x: 18, y: 22 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual(['ellipse-bbox-edge']);
+    });
+
+    it('does not use the first ellipse point as a center for lasso selection', () => {
+      const stroke = createMockStroke('ellipse-wrong-center-region', 'ellipse', [
+        { x: 0, y: 10 },
+        { x: 20, y: 30 },
+      ]);
+      const lasso = [
+        { x: -18, y: 8 },
+        { x: -12, y: 8 },
+        { x: -12, y: 12 },
+        { x: -18, y: 12 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual([]);
+    });
+
     it('selects a filled ellipse when a lasso vertex is inside it', () => {
       const stroke: DrawingStroke = {
         ...createMockStroke('ellipse-filled', 'ellipse', [
@@ -1040,6 +1074,43 @@ describe('utils', () => {
       const result = selectStrokesIntersectingLasso([stroke], lasso);
 
       expect(result).toEqual(['ellipse-filled']);
+    });
+
+    it('does not select an unfilled closed shape when the lasso is only inside its empty interior', () => {
+      const stroke = createMockStroke('rect-outline-only', 'rect', [
+        { x: 0, y: 0 },
+        { x: 100, y: 100 },
+      ]);
+      const lasso = [
+        { x: 40, y: 40 },
+        { x: 60, y: 40 },
+        { x: 60, y: 60 },
+        { x: 40, y: 60 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual([]);
+    });
+
+    it('selects a thick closed outline when the lasso overlaps only the rendered stroke width', () => {
+      const stroke: DrawingStroke = {
+        ...createMockStroke('wide-rect-outline', 'rect', [
+          { x: 0, y: 0 },
+          { x: 20, y: 20 },
+        ]),
+        strokeWidth: 20,
+      };
+      const lasso = [
+        { x: 5, y: -9 },
+        { x: 15, y: -9 },
+        { x: 15, y: -7 },
+        { x: 5, y: -7 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual(['wide-rect-outline']);
     });
 
     it('selects a polygon with one corner inside the lasso', () => {
