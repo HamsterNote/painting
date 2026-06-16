@@ -24,7 +24,6 @@ describe('utils', () => {
 
   const createMockValue = (strokes: DrawingStroke[] = []): DrawingValue => ({
     strokes,
-    selectedId: null,
   });
 
   describe('addStroke', () => {
@@ -53,11 +52,11 @@ describe('utils', () => {
       expect(result).not.toBe(value);
     });
 
-    it('preserves other value properties', () => {
-      const value: DrawingValue = { strokes: [], selectedId: 'test' };
+    it('does not mutate the original value', () => {
+      const value: DrawingValue = { strokes: [] };
       const stroke = createMockStroke('1');
-      const result = addStroke(value, stroke);
-      expect(result.selectedId).toBe('test');
+      addStroke(value, stroke);
+      expect(value.strokes).toEqual([]);
     });
   });
 
@@ -152,10 +151,11 @@ describe('utils', () => {
       expect(result).not.toBe(value);
     });
 
-    it('preserves other value properties', () => {
-      const value: DrawingValue = { strokes: [createMockStroke('1')], selectedId: 'test' };
-      const result = clearStrokes(value);
-      expect(result.selectedId).toBe('test');
+    it('does not mutate the original value', () => {
+      const stroke = createMockStroke('1');
+      const value: DrawingValue = { strokes: [stroke] };
+      clearStrokes(value);
+      expect(value.strokes).toEqual([stroke]);
     });
   });
 
@@ -678,6 +678,8 @@ describe('utils', () => {
     };
 
     it('uses rendered pen width at exact, inside, outside, and required example distances', () => {
+      expect.hasAssertions();
+
       const stroke: DrawingStrokeV2 = {
         schemaVersion: 2,
         id: 'wide-pen',
@@ -697,6 +699,8 @@ describe('utils', () => {
     });
 
     it('uses pressure-adjusted pen segment width at exact, inside, and outside distances', () => {
+      expect.hasAssertions();
+
       const stroke: DrawingStrokeV2 = {
         schemaVersion: 2,
         id: 'pressure-pen',
@@ -716,6 +720,8 @@ describe('utils', () => {
     });
 
     it('uses rendered line width at exact, inside, and outside distances', () => {
+      expect.hasAssertions();
+
       const stroke: DrawingStrokeV2 = {
         schemaVersion: 2,
         id: 'wide-line',
@@ -733,6 +739,8 @@ describe('utils', () => {
     });
 
     it('uses rendered rect outline width and keeps filled interior hittable', () => {
+      expect.hasAssertions();
+
       const outlineRect: DrawingStrokeV2 = {
         schemaVersion: 2,
         id: 'outline-rect',
@@ -758,6 +766,8 @@ describe('utils', () => {
     });
 
     it('uses rendered ellipse outline width and keeps filled interior hittable', () => {
+      expect.hasAssertions();
+
       const outlineEllipse: DrawingStrokeV2 = {
         schemaVersion: 2,
         id: 'outline-ellipse',
@@ -783,6 +793,8 @@ describe('utils', () => {
     });
 
     it('uses rendered polygon outline width and keeps filled interior hittable', () => {
+      expect.hasAssertions();
+
       const outlinePolygon: DrawingStrokeV2 = {
         schemaVersion: 2,
         id: 'outline-polygon',
@@ -810,6 +822,8 @@ describe('utils', () => {
     });
 
     it('uses rendered bezier width with existing 24-segment sampling', () => {
+      expect.hasAssertions();
+
       const stroke: DrawingStrokeV2 = {
         schemaVersion: 2,
         id: 'wide-bezier',
