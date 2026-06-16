@@ -1,9 +1,10 @@
 import { DrawingSurface as DrawingSurfaceFromIndex } from '@hamster-note/painting';
-import { useState } from 'react';
+import { createRef, useState } from 'react';
 import { act, render, screen } from '@testing-library/react';
 import {
   type DrawingInputMethod,
   DrawingSurface,
+  type DrawingSurfaceHandle,
   type DrawingStroke,
   type DrawingTool,
   type DrawingValue,
@@ -3971,6 +3972,224 @@ describe('DrawingSurface', () => {
 
       expect(onChange).toHaveBeenCalledTimes(1);
       expect(onChange.mock.calls[0][0].strokes).toEqual([]);
+    });
+
+    describe('lasso selection', () => {
+      const lassoFixture = (): DrawingValue => ({
+        strokes: [
+          {
+            id: 'lasso-target',
+            tool: 'pen',
+            points: [
+              { x: 20, y: 20 },
+              { x: 60, y: 20 },
+            ],
+            strokeWidth: 6,
+          },
+          {
+            id: 'lasso-other',
+            tool: 'pen',
+            points: [
+              { x: 130, y: 130 },
+              { x: 160, y: 130 },
+            ],
+            strokeWidth: 6,
+          },
+        ],
+      });
+
+      const zeroHostRect = (host: HTMLElement) => {
+        host.getBoundingClientRect = jest.fn(() => ({
+          x: 0,
+          y: 0,
+          left: 0,
+          top: 0,
+          right: 200,
+          bottom: 200,
+          width: 200,
+          height: 200,
+          toJSON: () => ({}),
+        }));
+      };
+
+      const lassoPathAroundTarget = (): PointerPathItem[] => [
+        { point: { x: 10, y: 10 }, event: { pointerType: 'pen', button: 0, clientX: 10, clientY: 10 } },
+        { point: { x: 70, y: 10 }, event: { pointerType: 'pen', button: 0, clientX: 70, clientY: 10 } },
+        { point: { x: 70, y: 40 }, event: { pointerType: 'pen', button: 0, clientX: 70, clientY: 40 } },
+        { point: { x: 10, y: 40 }, event: { pointerType: 'pen', button: 0, clientX: 10, clientY: 40 } },
+      ];
+
+      const lassoPathAwayFromStrokes = (): PointerPathItem[] => [
+        { point: { x: 80, y: 80 }, event: { pointerType: 'pen', button: 0, clientX: 80, clientY: 80 } },
+        { point: { x: 100, y: 80 }, event: { pointerType: 'pen', button: 0, clientX: 100, clientY: 80 } },
+        { point: { x: 100, y: 100 }, event: { pointerType: 'pen', button: 0, clientX: 100, clientY: 100 } },
+        { point: { x: 80, y: 100 }, event: { pointerType: 'pen', button: 0, clientX: 80, clientY: 100 } },
+      ];
+
+      it('selects strokes intersecting the drawn lasso', () => {
+        const onSelectionChange = jest.fn();
+        render(
+          <DrawingSurface
+            testID="drawing-surface-host"
+            value={lassoFixture()}
+            tool="lasso"
+            onSelectionChange={onSelectionChange}
+          />
+        );
+        const host = screen.getByTestId('drawing-surface-host');
+        zeroHostRect(host);
+
+        dispatchDragMove(host, [finger(lassoPathAroundTarget())]);
+        dispatchDragEnd(host);
+
+        expect(onSelectionChange).toHaveBeenCalledWith(['lasso-target']);
+      });
+
+      it('clears an existing selection when lasso hits nothing', () => {
+        const onSelectionChange = jest.fn();
+        render(
+          <DrawingSurface
+            testID="drawing-surface-host"
+            value={lassoFixture()}
+            tool="lasso"
+            defaultSelectedStrokeIds={['lasso-target']}
+            onSelectionChange={onSelectionChange}
+          />
+        );
+        const host = screen.getByTestId('drawing-surface-host');
+        zeroHostRect(host);
+
+        dispatchDragMove(host, [finger(lassoPathAwayFromStrokes())]);
+        dispatchDragEnd(host);
+
+        expect(onSelectionChange).toHaveBeenCalledWith([]);
+      });
+
+      it('moves selected strokes as one lasso selection', () => {
+        const onChange = jest.fn();
+        render(
+          <DrawingSurface
+            testID="drawing-surface-host"
+            value={lassoFixture()}
+            onChange={onChange}
+            tool="lasso"
+            selectedStrokeIds={['lasso-target']}
+          />
+        );
+        const host = screen.getByTestId('drawing-surface-host');
+        zeroHostRect(host);
+
+        dispatchDragMove(host, [
+          finger([
+            { point: { x: 25, y: 20 }, event: { pointerType: 'pen', button: 0, clientX: 25, clientY: 20 } },
+            { point: { x: 35, y: 30 }, event: { pointerType: 'pen', button: 0, clientX: 35, clientY: 30 } },
+          ]),
+        ]);
+        dispatchDragEnd(host);
+
+        expect(onChange).toHaveBeenCalled();
+        const movedStroke = onChange.mock.calls[0][0].strokes.find(
+          (stroke: DrawingStroke) => stroke.id === 'lasso-target'
+        );
+        expect(movedStroke?.points).toEqual([
+          { x: 30, y: 30 },
+          { x: 70, y: 30 },
+        ]);
+      });
+
+      it('deleteSelectedStrokes removes selected strokes and clears selection', () => {
+        const onChange = jest.fn();
+        const onSelectionChange = jest.fn();
+        const ref = createRef<DrawingSurfaceHandle>();
+        render(
+          <DrawingSurface
+            ref={ref}
+            value={lassoFixture()}
+            onChange={onChange}
+            selectedStrokeIds={['lasso-target']}
+            onSelectionChange={onSelectionChange}
+          />
+        );
+
+        act(() => {
+          ref.current?.deleteSelectedStrokes();
+        });
+
+        expect(onChange.mock.calls[0][0].strokes.map((stroke: DrawingStroke) => stroke.id)).toEqual([
+          'lasso-other',
+        ]);
+        expect(onSelectionChange).toHaveBeenCalledWith([]);
+      });
+
+      it('clearSelection clears selected ids through the imperative handle', () => {
+        const onSelectionChange = jest.fn();
+        const ref = createRef<DrawingSurfaceHandle>();
+        render(
+          <DrawingSurface
+            ref={ref}
+            value={lassoFixture()}
+            defaultSelectedStrokeIds={['lasso-target']}
+            onSelectionChange={onSelectionChange}
+          />
+        );
+
+        act(() => {
+          ref.current?.clearSelection();
+        });
+
+        expect(onSelectionChange).toHaveBeenCalledWith([]);
+      });
+
+      it('getSelectedStrokeIds returns the current selection snapshot', () => {
+        const ref = createRef<DrawingSurfaceHandle>();
+        render(
+          <DrawingSurface
+            ref={ref}
+            value={lassoFixture()}
+            defaultSelectedStrokeIds={['lasso-target']}
+          />
+        );
+
+        expect(ref.current?.getSelectedStrokeIds()).toEqual(['lasso-target']);
+      });
+
+      it('does not create a drawing stroke when completing a lasso', () => {
+        const onChange = jest.fn();
+        const onSelectionChange = jest.fn();
+        render(
+          <DrawingSurface
+            testID="drawing-surface-host"
+            value={lassoFixture()}
+            onChange={onChange}
+            tool="lasso"
+            onSelectionChange={onSelectionChange}
+          />
+        );
+        const host = screen.getByTestId('drawing-surface-host');
+        zeroHostRect(host);
+
+        dispatchDragMove(host, [finger(lassoPathAroundTarget())]);
+        dispatchDragEnd(host);
+
+        expect(onChange).not.toHaveBeenCalled();
+        expect(onSelectionChange).toHaveBeenCalledWith(['lasso-target']);
+      });
+
+      it('clears the lasso preview when switching tools mid-draw', () => {
+        const { container, rerender } = render(
+          <DrawingSurface testID="drawing-surface-host" value={lassoFixture()} tool="lasso" />
+        );
+        const host = screen.getByTestId('drawing-surface-host');
+        zeroHostRect(host);
+
+        dispatchDragMove(host, [finger(lassoPathAroundTarget().slice(0, 2))]);
+
+        expect(container.querySelector('[data-testid="lasso-preview"]')).toBeTruthy();
+
+        rerender(<DrawingSurface testID="drawing-surface-host" value={lassoFixture()} tool="pen" />);
+
+        expect(container.querySelector('[data-testid="lasso-preview"]')).toBeNull();
+      });
     });
   });
 });

@@ -10,6 +10,25 @@ export type RenderedStrokeHitTestOptions = {
   pressureMultiplier: number;
 };
 
+export type LassoSelectionOptions = {
+  ellipseSegments?: number;
+  bezierSegments?: number;
+};
+
+type BoundingBox = {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+};
+
+type StrokeSelectionGeometry = {
+  samples: DrawingPoint[];
+  segments: Array<readonly [DrawingPoint, DrawingPoint]>;
+  closedShapePoints: DrawingPoint[] | null;
+  bbox: BoundingBox | null;
+};
+
 const RENDERED_HIT_EPSILON = 1e-9;
 
 function distanceSqPointToSegment(point: DrawingPoint, a: DrawingPoint, b: DrawingPoint): number {
@@ -210,6 +229,241 @@ function pointInPolygon(point: DrawingPoint, points: DrawingPoint[]): boolean {
   }
 
   return inside;
+}
+
+function uniquePointCount(points: readonly DrawingPoint[]): number {
+  const keys = new Set<string>();
+  for (const point of points) {
+    keys.add(`${point.x}:${point.y}`);
+  }
+  return keys.size;
+}
+
+function boundingBoxForPoints(points: readonly DrawingPoint[]): BoundingBox | null {
+  if (points.length === 0) {
+    return null;
+  }
+
+  let minX = points[0].x;
+  let minY = points[0].y;
+  let maxX = points[0].x;
+  let maxY = points[0].y;
+
+  for (let i = 1; i < points.length; i++) {
+    const point = points[i];
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  }
+
+  return { minX, minY, maxX, maxY };
+}
+
+function expandBoundingBox(bbox: BoundingBox | null, amount: number): BoundingBox | null {
+  if (bbox === null) {
+    return null;
+  }
+
+  return {
+    minX: bbox.minX - amount,
+    minY: bbox.minY - amount,
+    maxX: bbox.maxX + amount,
+    maxY: bbox.maxY + amount,
+  };
+}
+
+function boundingBoxesOverlap(a: BoundingBox, b: BoundingBox): boolean {
+  return a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;
+}
+
+function rectCornerPoints(first: DrawingPoint, last: DrawingPoint): DrawingPoint[] {
+  const minX = Math.min(first.x, last.x);
+  const maxX = Math.max(first.x, last.x);
+  const minY = Math.min(first.y, last.y);
+  const maxY = Math.max(first.y, last.y);
+
+  return [
+    { x: minX, y: minY },
+    { x: maxX, y: minY },
+    { x: maxX, y: maxY },
+    { x: minX, y: maxY },
+  ];
+}
+
+function sampleEllipseFromCenter(center: DrawingPoint, radiusPoint: DrawingPoint, segments: number): DrawingPoint[] {
+  const rx = Math.abs(radiusPoint.x - center.x);
+  const ry = Math.abs(radiusPoint.y - center.y);
+  const safeSegments = Math.max(4, Math.floor(segments));
+  const samples: DrawingPoint[] = new Array(safeSegments);
+
+  for (let i = 0; i < safeSegments; i++) {
+    const angle = (Math.PI * 2 * i) / safeSegments;
+    samples[i] = {
+      x: center.x + rx * Math.cos(angle),
+      y: center.y + ry * Math.sin(angle),
+    };
+  }
+
+  return samples;
+}
+
+function pointInEllipseFromCenter(point: DrawingPoint, center: DrawingPoint, radiusPoint: DrawingPoint): boolean {
+  const rx = Math.abs(radiusPoint.x - center.x);
+  const ry = Math.abs(radiusPoint.y - center.y);
+
+  if (rx === 0 || ry === 0) {
+    return false;
+  }
+
+  const normalizedX = (point.x - center.x) / rx;
+  const normalizedY = (point.y - center.y) / ry;
+  return normalizedX * normalizedX + normalizedY * normalizedY <= 1;
+}
+
+function closedSegments(points: readonly DrawingPoint[]): Array<readonly [DrawingPoint, DrawingPoint]> {
+  const segments: Array<readonly [DrawingPoint, DrawingPoint]> = [];
+  if (points.length < 2) {
+    return segments;
+  }
+
+  for (let i = 0; i < points.length; i++) {
+    segments.push([points[i], points[(i + 1) % points.length]]);
+  }
+
+  return segments;
+}
+
+function openSegments(points: readonly DrawingPoint[]): Array<readonly [DrawingPoint, DrawingPoint]> {
+  const segments: Array<readonly [DrawingPoint, DrawingPoint]> = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    segments.push([points[i], points[i + 1]]);
+  }
+  return segments;
+}
+
+function orientation(a: DrawingPoint, b: DrawingPoint, c: DrawingPoint): number {
+  const value = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  if (Math.abs(value) <= RENDERED_HIT_EPSILON) {
+    return 0;
+  }
+  return value > 0 ? 1 : -1;
+}
+
+function pointOnSegment(point: DrawingPoint, a: DrawingPoint, b: DrawingPoint): boolean {
+  return (
+    Math.min(a.x, b.x) - RENDERED_HIT_EPSILON <= point.x &&
+    point.x <= Math.max(a.x, b.x) + RENDERED_HIT_EPSILON &&
+    Math.min(a.y, b.y) - RENDERED_HIT_EPSILON <= point.y &&
+    point.y <= Math.max(a.y, b.y) + RENDERED_HIT_EPSILON &&
+    orientation(a, b, point) === 0
+  );
+}
+
+function segmentsIntersect(a1: DrawingPoint, a2: DrawingPoint, b1: DrawingPoint, b2: DrawingPoint): boolean {
+  const o1 = orientation(a1, a2, b1);
+  const o2 = orientation(a1, a2, b2);
+  const o3 = orientation(b1, b2, a1);
+  const o4 = orientation(b1, b2, a2);
+
+  if (o1 !== o2 && o3 !== o4) {
+    return true;
+  }
+
+  return (
+    (o1 === 0 && pointOnSegment(b1, a1, a2)) ||
+    (o2 === 0 && pointOnSegment(b2, a1, a2)) ||
+    (o3 === 0 && pointOnSegment(a1, b1, b2)) ||
+    (o4 === 0 && pointOnSegment(a2, b1, b2))
+  );
+}
+
+function distanceSqSegmentToSegment(a1: DrawingPoint, a2: DrawingPoint, b1: DrawingPoint, b2: DrawingPoint): number {
+  if (segmentsIntersect(a1, a2, b1, b2)) {
+    return 0;
+  }
+
+  return Math.min(
+    distanceSqPointToSegment(a1, b1, b2),
+    distanceSqPointToSegment(a2, b1, b2),
+    distanceSqPointToSegment(b1, a1, a2),
+    distanceSqPointToSegment(b2, a1, a2),
+  );
+}
+
+function buildStrokeSelectionGeometry(stroke: DrawingStroke, options: Required<LassoSelectionOptions>): StrokeSelectionGeometry {
+  const { points, tool } = stroke;
+
+  if (points.length === 0) {
+    return { samples: [], segments: [], closedShapePoints: null, bbox: null };
+  }
+
+  if (tool === 'rect' && points.length >= 2) {
+    const corners = rectCornerPoints(points[0], points[points.length - 1]);
+    return {
+      samples: corners,
+      segments: closedSegments(corners),
+      closedShapePoints: corners,
+      bbox: boundingBoxForPoints(corners),
+    };
+  }
+
+  if (tool === 'ellipse' && points.length >= 2) {
+    const samples = sampleEllipseFromCenter(points[0], points[points.length - 1], options.ellipseSegments);
+    return {
+      samples,
+      segments: closedSegments(samples),
+      closedShapePoints: samples,
+      bbox: boundingBoxForPoints(samples),
+    };
+  }
+
+  if (tool === 'polygon') {
+    return {
+      samples: [...points],
+      segments: closedSegments(points),
+      closedShapePoints: points.length >= 3 ? [...points] : null,
+      bbox: boundingBoxForPoints(points),
+    };
+  }
+
+  if (tool === 'bezier' && points.length === 4) {
+    const samples = sampleCubicBezierPolyline(points[0], points[1], points[2], points[3], options.bezierSegments);
+    return {
+      samples,
+      segments: openSegments(samples),
+      closedShapePoints: null,
+      bbox: boundingBoxForPoints(samples),
+    };
+  }
+
+  const samples = tool === 'line' && points.length >= 2 ? points.slice(0, 2) : [...points];
+  return {
+    samples,
+    segments: openSegments(samples),
+    closedShapePoints: null,
+    bbox: boundingBoxForPoints(samples),
+  };
+}
+
+function lassoPointInsideClosedStroke(point: DrawingPoint, stroke: DrawingStroke, closedShapePoints: DrawingPoint[]): boolean {
+  if (stroke.points.length < 2) {
+    return false;
+  }
+
+  if (stroke.tool === 'rect') {
+    return pointInRect(point, stroke.points[0], stroke.points[stroke.points.length - 1]);
+  }
+
+  if (stroke.tool === 'ellipse') {
+    return pointInEllipseFromCenter(point, stroke.points[0], stroke.points[stroke.points.length - 1]);
+  }
+
+  if (stroke.tool === 'polygon') {
+    return pointInPolygon(point, closedShapePoints);
+  }
+
+  return false;
 }
 
 function hasRenderedFill(stroke: PickableStroke): boolean {
@@ -430,11 +684,116 @@ export function removeStroke(value: DrawingValue, strokeId: string): DrawingValu
   };
 }
 
+export function removeStrokes(value: DrawingValue, strokeIds: readonly string[]): DrawingValue {
+  const idsToRemove = new Set(strokeIds);
+
+  return {
+    ...value,
+    strokes: value.strokes.filter((stroke) => !idsToRemove.has(stroke.id)),
+  };
+}
+
 export function updateStroke(value: DrawingValue, stroke: DrawingStroke): DrawingValue {
   return {
     ...value,
     strokes: value.strokes.map((s) => (s.id === stroke.id ? stroke : s)),
   };
+}
+
+export function updateStrokes(value: DrawingValue, strokes: readonly DrawingStroke[]): DrawingValue {
+  const replacementById = new Map(strokes.map((stroke) => [stroke.id, stroke]));
+
+  return {
+    ...value,
+    strokes: value.strokes.map((stroke) => replacementById.get(stroke.id) ?? stroke),
+  };
+}
+
+export function selectStrokesIntersectingLasso(
+  strokes: readonly DrawingStroke[],
+  lassoPoints: readonly DrawingPoint[],
+  options: LassoSelectionOptions = {},
+): string[] {
+  // 套索必须至少包含 3 个不同坐标点，否则无法构成有效多边形。
+  if (strokes.length === 0 || uniquePointCount(lassoPoints) < 3) {
+    return [];
+  }
+
+  const resolvedOptions: Required<LassoSelectionOptions> = {
+    ellipseSegments: options.ellipseSegments ?? 48,
+    bezierSegments: options.bezierSegments ?? 48,
+  };
+  const lassoPolygon = [...lassoPoints];
+  const lassoBBox = boundingBoxForPoints(lassoPolygon);
+
+  if (lassoBBox === null) {
+    return [];
+  }
+
+  const lassoSegments = closedSegments(lassoPolygon);
+  const selectedIds: string[] = [];
+
+  for (const stroke of strokes) {
+    const geometry = buildStrokeSelectionGeometry(stroke, resolvedOptions);
+    if (geometry.bbox === null) {
+      continue;
+    }
+
+    // 粗开放笔触可能只因 strokeWidth 与套索边“擦到”而命中，bbox 需要按半宽外扩避免误剔除。
+    const isOpenStroke = stroke.tool === 'pen' || stroke.tool === 'line' || stroke.tool === 'bezier';
+    const strokeHalfWidth = isOpenStroke ? Math.max(0, stroke.strokeWidth ?? 0) / 2 : 0;
+    const strokeBBox = expandBoundingBox(geometry.bbox, strokeHalfWidth);
+
+    if (strokeBBox === null || !boundingBoxesOverlap(lassoBBox, strokeBBox)) {
+      continue;
+    }
+
+    // 条件 A：笔画采样点 / 顶点落在套索多边形内部。
+    if (geometry.samples.some((point) => pointInPolygon(point, lassoPolygon))) {
+      selectedIds.push(stroke.id);
+      continue;
+    }
+
+    // 条件 B：套索顶点落在闭合图形内部，覆盖“套索完全在填充形状里”的情况。
+    if (
+      geometry.closedShapePoints !== null &&
+      lassoPolygon.some((point) => lassoPointInsideClosedStroke(point, stroke, geometry.closedShapePoints ?? []))
+    ) {
+      selectedIds.push(stroke.id);
+      continue;
+    }
+
+    let intersects = false;
+    for (const [strokeStart, strokeEnd] of geometry.segments) {
+      for (const [lassoStart, lassoEnd] of lassoSegments) {
+        // 条件 C：笔画线段与套索边直接相交。
+        if (segmentsIntersect(strokeStart, strokeEnd, lassoStart, lassoEnd)) {
+          intersects = true;
+          break;
+        }
+
+        // 条件 D：开放笔触按 strokeWidth 半径与套索边做距离命中。
+        if (
+          isOpenStroke &&
+          strokeHalfWidth > 0 &&
+          distanceSqSegmentToSegment(strokeStart, strokeEnd, lassoStart, lassoEnd) < strokeHalfWidth * strokeHalfWidth
+        ) {
+          intersects = true;
+          break;
+        }
+      }
+
+      if (intersects) {
+        break;
+      }
+    }
+
+    if (intersects) {
+      selectedIds.push(stroke.id);
+    }
+  }
+
+  return selectedIds;
 }
 
 export function clearStrokes(value: DrawingValue): DrawingValue {

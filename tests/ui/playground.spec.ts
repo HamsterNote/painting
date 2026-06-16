@@ -490,8 +490,8 @@ test.describe('DrawingSurface playground', () => {
 
   // ===== Task 14: Playground Demo Integration =====
 
-  test('exposes all 7 tool buttons with data-tool selectors', async ({ page }) => {
-    for (const tool of ['pen', 'line', 'rect', 'ellipse', 'polygon', 'bezier', 'eraser']) {
+  test('exposes all 8 tool buttons with data-tool selectors', async ({ page }) => {
+    for (const tool of ['pen', 'line', 'rect', 'ellipse', 'polygon', 'bezier', 'eraser', 'lasso']) {
       const btn = page.locator(`button[data-tool="${tool}"]`);
       await expect(btn).toBeVisible();
     }
@@ -1272,5 +1272,69 @@ test.describe('DrawingSurface playground', () => {
     const parsed = JSON.parse(previewText!);
     expect(parsed.strokes.length).toBe(1);
     expect(parsed.strokes[0].tool).toBe('line');
+  });
+
+  test.describe('lasso tool integration', () => {
+    test('lasso tool is exposed in toolbar and select', async ({ page }) => {
+      const lassoBtn = page.locator('button[data-tool="lasso"]');
+      await expect(lassoBtn).toBeVisible();
+
+      const toolSelect = page.getByTestId('drawing-tool-select');
+      await expect(toolSelect).toBeVisible();
+      await toolSelect.selectOption('lasso');
+      await expect(toolSelect).toHaveValue('lasso');
+
+      // 选中 lasso 后应显示对应的工具说明
+      await expect(page.getByTestId('tool-instruction')).toHaveText(/Drag to lasso strokes/);
+    });
+
+    test('delete selected button is present and initially disabled', async ({ page }) => {
+      const deleteBtn = page.getByTestId('lasso-delete-selected');
+      await expect(deleteBtn).toBeVisible();
+      await expect(deleteBtn).toBeDisabled();
+      // 初始无选中时计数标签不应出现
+      await expect(page.getByTestId('lasso-selection-count')).toHaveCount(0);
+    });
+
+    test('lasso selects seed stroke and delete button removes it', async ({ page }) => {
+      const surface = page.getByTestId('drawing-surface-uncontrolled');
+      const preview = page.getByTestId('drawing-preview-uncontrolled');
+      const deleteBtn = page.getByTestId('lasso-delete-selected');
+
+      // 非受控画布中已注入 seed stroke
+      await expect(surface).toHaveAttribute('data-stroke-count', '1');
+      await expect(preview).toContainText('seed-1');
+
+      // 切到 lasso 工具
+      await page.locator('button[data-tool="lasso"]').click();
+      await expect(surface).toHaveAttribute('data-active-tool', 'lasso');
+
+      const box = await surface.boundingBox();
+      expect(box).not.toBeNull();
+
+      // 拖拽套索路径覆盖 seed stroke（seed points: 50,50 → 100,100 → 150,80）
+      const startX = box!.x + 30;
+      const startY = box!.y + 30;
+      await page.mouse.move(startX, startY);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 170, box!.y + 30);
+      await page.mouse.move(box!.x + 170, box!.y + 120);
+      await page.mouse.move(box!.x + 30, box!.y + 120);
+      await page.mouse.move(startX, startY);
+      await page.mouse.up();
+
+      // 删除按钮应变为可用状态，且显示选中数量
+      await expect(deleteBtn).toBeEnabled();
+      await expect(page.getByTestId('lasso-selection-count')).toHaveText('(1)');
+
+      // 点击删除后 seed stroke 消失
+      await deleteBtn.click();
+      await expect(surface).toHaveAttribute('data-stroke-count', '0');
+      await expect(preview).not.toContainText('seed-1');
+
+      // 删除后按钮应再次 disabled
+      await expect(deleteBtn).toBeDisabled();
+      await expect(page.getByTestId('lasso-selection-count')).toHaveCount(0);
+    });
   });
 });

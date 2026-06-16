@@ -7,7 +7,8 @@ export type DrawingPointV2 = {
 };
 
 export type DrawingStrokeToolV2 = 'pen' | 'line' | 'rect' | 'ellipse' | 'polygon' | 'bezier';
-export type DrawingToolModeV2 = DrawingStrokeToolV2 | 'eraser';
+/** 所有可用的工具模式，包含不产生存储 stroke 的工具（eraser、lasso） */
+export type DrawingToolModeV2 = DrawingStrokeToolV2 | 'eraser' | 'lasso';
 
 type DrawingStrokeBaseV2<Tool extends DrawingStrokeToolV2> = {
   schemaVersion: typeof DRAWING_STROKE_SCHEMA_VERSION;
