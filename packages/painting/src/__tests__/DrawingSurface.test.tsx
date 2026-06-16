@@ -4190,6 +4190,54 @@ describe('DrawingSurface', () => {
 
         expect(container.querySelector('[data-testid="lasso-preview"]')).toBeNull();
       });
+
+      it('does not leave a lasso preview when Space-pan is used with the lasso tool', () => {
+        const onChange = jest.fn();
+        const onSelectionChange = jest.fn();
+        const { container } = render(
+          <DrawingSurface
+            testID="drawing-surface-host"
+            value={lassoFixture()}
+            onChange={onChange}
+            onSelectionChange={onSelectionChange}
+            tool="lasso"
+            gestures={['MouseAndSpacePan']}
+          />
+        );
+        const host = screen.getByTestId('drawing-surface-host');
+        zeroHostRect(host);
+
+        act(() => {
+          window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', key: ' ' }));
+        });
+        dispatchHostPointer(host, 'pointerdown', {
+          pointerId: 1,
+          clientX: 20,
+          clientY: 20,
+          pointerType: 'mouse',
+        });
+        dispatchHostPointer(host, 'pointermove', {
+          pointerId: 1,
+          clientX: 50,
+          clientY: 50,
+          pointerType: 'mouse',
+        });
+        dispatchHostPointer(host, 'pointerup', {
+          pointerId: 1,
+          clientX: 50,
+          clientY: 50,
+          pointerType: 'mouse',
+        });
+        act(() => {
+          window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space', key: ' ' }));
+        });
+
+        expect(host.getAttribute('data-tx')).toBe('30');
+        expect(host.getAttribute('data-ty')).toBe('30');
+        expect(container.querySelector('[data-testid="lasso-preview"]')).toBeNull();
+        expect(onChange).not.toHaveBeenCalled();
+        expect(onSelectionChange).not.toHaveBeenCalled();
+      });
     });
   });
 });

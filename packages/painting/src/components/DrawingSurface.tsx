@@ -1467,6 +1467,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           break;
         case 'single-end':
           if (singlePan?.pointerId === input.pointerId) {
+            clearLassoInteractionRef.current();
             dispatchInteraction({ type: 'POINTER_UP', pointerId: input.pointerId });
             singlePan = null;
           } else {
@@ -1545,12 +1546,14 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       ) {
         eraserGestureStartCanvasPointRef.current = screenToCanvas(input.point, viewportRef.current);
       }
-      startLassoInteraction(input, event);
       updateActivePointers(input);
       if (activePointers.size === 2) {
         adapter.setScale(viewportRef.current.scale);
       }
       startSinglePan(input, event);
+      if (!singlePan || singlePan.pointerId !== input.pointerId) {
+        startLassoInteraction(input, event);
+      }
       handleAdapterResult(input, event);
     };
 
