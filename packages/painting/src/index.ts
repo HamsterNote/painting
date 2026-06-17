@@ -4,7 +4,9 @@ export type {
 	DrawingGesture,
 	DrawingInputMethod,
 	DrawingPoint,
+	DrawingSelectionChange,
 	DrawingStroke,
+	DrawingSurfaceHandle,
 	DrawingSurfaceProps,
 	DrawingTool,
 	DrawingValue,
@@ -42,8 +44,12 @@ export {
 	clearStrokes,
 	pick,
 	removeStroke,
+	removeStrokes,
+	selectStrokesIntersectingLasso,
 	updateStroke,
+	updateStrokes,
 } from "./utils";
+export type { LassoSelectionOptions } from "./utils";
 export type { DrawingViewport, ViewportPoint } from "./viewport";
 export {
   DEFAULT_DRAWING_VIEWPORT,

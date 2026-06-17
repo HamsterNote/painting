@@ -1,14 +1,15 @@
 {
   "name": "@hamster-note/painting",
-  "version": "0.1.1-beta.2",
+  "version": "0.1.1",
   "private": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/HamsterNote/painting.git",
+    "directory": "packages/painting"
+  },
   "main": "lib/commonjs/index.js",
   "module": "lib/module/index.js",
   "types": "lib/typescript/index.d.ts",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/HamsterNote/painting.git"
-  },
   "react-native": "src/index.ts",
   "exports": {
     ".": {

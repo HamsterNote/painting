@@ -9,7 +9,9 @@ import {
 	clearStrokes as clearStrokesFromValue,
 	pick as pickStroke,
 	removeStroke as removeStrokeFromValue,
+	removeStrokes as removeStrokesFromValue,
 	updateStroke as updateStrokeInValue,
+	updateStrokes as updateStrokesInValue,
 } from "../utils";
 
 export type UseCanvasOptions = {
@@ -24,7 +26,9 @@ export type UseCanvasReturn = {
 	setActiveStroke: (stroke: DrawingStroke | null) => void;
 	addStroke: (stroke: DrawingStroke) => void;
 	removeStroke: (strokeId: string) => void;
+	removeStrokes: (strokeIds: readonly string[]) => void;
 	updateStroke: (stroke: DrawingStroke) => void;
+	updateStrokes: (strokes: readonly DrawingStroke[]) => void;
 	clearStrokes: () => void;
 	pick: (point: DrawingPoint, maxDistance?: number) => DrawingStroke | null;
 };
@@ -74,9 +78,23 @@ export function useCanvas(options: UseCanvasOptions = {}): UseCanvasReturn {
 		[updateValue],
 	);
 
+	const removeStrokes = useCallback(
+		(strokeIds: readonly string[]) => {
+			updateValue((currentValue) => removeStrokesFromValue(currentValue, strokeIds));
+		},
+		[updateValue],
+	);
+
 	const updateStroke = useCallback(
 		(stroke: DrawingStroke) => {
 			updateValue((currentValue) => updateStrokeInValue(currentValue, stroke));
+		},
+		[updateValue],
+	);
+
+	const updateStrokes = useCallback(
+		(strokes: readonly DrawingStroke[]) => {
+			updateValue((currentValue) => updateStrokesInValue(currentValue, strokes));
 		},
 		[updateValue],
 	);
@@ -96,7 +114,9 @@ export function useCanvas(options: UseCanvasOptions = {}): UseCanvasReturn {
 		setActiveStroke,
 		addStroke,
 		removeStroke,
+		removeStrokes,
 		updateStroke,
+		updateStrokes,
 		clearStrokes,
 		pick,
 	};
