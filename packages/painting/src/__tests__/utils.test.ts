@@ -9,7 +9,10 @@ import {
   pickStrokeIntersectingPolyline,
   pickStrokeIntersectingSegment,
   removeStroke,
+  removeStrokes,
+  selectStrokesIntersectingLasso,
   updateStroke,
+  updateStrokes,
 } from '../utils';
 
 describe('utils', () => {
@@ -21,7 +24,6 @@ describe('utils', () => {
 
   const createMockValue = (strokes: DrawingStroke[] = []): DrawingValue => ({
     strokes,
-    selectedId: null,
   });
 
   describe('addStroke', () => {
@@ -50,11 +52,11 @@ describe('utils', () => {
       expect(result).not.toBe(value);
     });
 
-    it('preserves other value properties', () => {
-      const value: DrawingValue = { strokes: [], selectedId: 'test' };
+    it('does not mutate the original value', () => {
+      const value: DrawingValue = { strokes: [] };
       const stroke = createMockStroke('1');
-      const result = addStroke(value, stroke);
-      expect(result.selectedId).toBe('test');
+      addStroke(value, stroke);
+      expect(value.strokes).toEqual([]);
     });
   });
 
@@ -149,10 +151,11 @@ describe('utils', () => {
       expect(result).not.toBe(value);
     });
 
-    it('preserves other value properties', () => {
-      const value: DrawingValue = { strokes: [createMockStroke('1')], selectedId: 'test' };
-      const result = clearStrokes(value);
-      expect(result.selectedId).toBe('test');
+    it('does not mutate the original value', () => {
+      const stroke = createMockStroke('1');
+      const value: DrawingValue = { strokes: [stroke] };
+      clearStrokes(value);
+      expect(value.strokes).toEqual([stroke]);
     });
   });
 
@@ -675,6 +678,8 @@ describe('utils', () => {
     };
 
     it('uses rendered pen width at exact, inside, outside, and required example distances', () => {
+      expect.hasAssertions();
+
       const stroke: DrawingStrokeV2 = {
         schemaVersion: 2,
         id: 'wide-pen',
@@ -694,6 +699,8 @@ describe('utils', () => {
     });
 
     it('uses pressure-adjusted pen segment width at exact, inside, and outside distances', () => {
+      expect.hasAssertions();
+
       const stroke: DrawingStrokeV2 = {
         schemaVersion: 2,
         id: 'pressure-pen',
@@ -713,6 +720,8 @@ describe('utils', () => {
     });
 
     it('uses rendered line width at exact, inside, and outside distances', () => {
+      expect.hasAssertions();
+
       const stroke: DrawingStrokeV2 = {
         schemaVersion: 2,
         id: 'wide-line',
@@ -730,6 +739,8 @@ describe('utils', () => {
     });
 
     it('uses rendered rect outline width and keeps filled interior hittable', () => {
+      expect.hasAssertions();
+
       const outlineRect: DrawingStrokeV2 = {
         schemaVersion: 2,
         id: 'outline-rect',
@@ -755,6 +766,8 @@ describe('utils', () => {
     });
 
     it('uses rendered ellipse outline width and keeps filled interior hittable', () => {
+      expect.hasAssertions();
+
       const outlineEllipse: DrawingStrokeV2 = {
         schemaVersion: 2,
         id: 'outline-ellipse',
@@ -780,6 +793,8 @@ describe('utils', () => {
     });
 
     it('uses rendered polygon outline width and keeps filled interior hittable', () => {
+      expect.hasAssertions();
+
       const outlinePolygon: DrawingStrokeV2 = {
         schemaVersion: 2,
         id: 'outline-polygon',
@@ -807,6 +822,8 @@ describe('utils', () => {
     });
 
     it('uses rendered bezier width with existing 24-segment sampling', () => {
+      expect.hasAssertions();
+
       const stroke: DrawingStrokeV2 = {
         schemaVersion: 2,
         id: 'wide-bezier',
@@ -876,6 +893,381 @@ describe('utils', () => {
       expect(exactResult?.id).toBe('polyline-target');
       expect(insideResult?.id).toBe('polyline-target');
       expect(outsideResult).toBeNull();
+    });
+  });
+
+  describe('selectStrokesIntersectingLasso', () => {
+    it('selects a horizontal pen when a vertical lasso covers its middle', () => {
+      const stroke = createMockStroke('pen-cross', 'pen', [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+      ]);
+      const lasso = [
+        { x: 45, y: -10 },
+        { x: 55, y: -10 },
+        { x: 55, y: 10 },
+        { x: 45, y: 10 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual(['pen-cross']);
+    });
+
+    it('does not select a pen completely outside the lasso', () => {
+      const stroke = createMockStroke('pen-outside', 'pen', [
+        { x: 0, y: 100 },
+        { x: 100, y: 100 },
+      ]);
+      const lasso = [
+        { x: 0, y: 0 },
+        { x: 20, y: 0 },
+        { x: 20, y: 20 },
+        { x: 0, y: 20 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual([]);
+    });
+
+    it('selects a wide pen whose segment is within half stroke width of a lasso edge', () => {
+      const stroke: DrawingStroke = {
+        ...createMockStroke('wide-pen', 'pen', [
+          { x: 0, y: 14 },
+          { x: 10, y: 14 },
+        ]),
+        strokeWidth: 10,
+      };
+      const lasso = [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 10 },
+        { x: 0, y: 10 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual(['wide-pen']);
+    });
+
+    it('selects a line crossing the lasso', () => {
+      const stroke = createMockStroke('line-cross', 'line', [
+        { x: -10, y: 5 },
+        { x: 30, y: 5 },
+      ]);
+      const lasso = [
+        { x: 0, y: 0 },
+        { x: 20, y: 0 },
+        { x: 20, y: 20 },
+        { x: 0, y: 20 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual(['line-cross']);
+    });
+
+    it('selects a rect partially inside the lasso', () => {
+      const stroke = createMockStroke('rect-partial', 'rect', [
+        { x: 0, y: 0 },
+        { x: 20, y: 20 },
+      ]);
+      const lasso = [
+        { x: 15, y: 15 },
+        { x: 25, y: 15 },
+        { x: 25, y: 25 },
+        { x: 15, y: 25 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual(['rect-partial']);
+    });
+
+    it('selects a filled rect when the lasso is completely inside it', () => {
+      const stroke: DrawingStroke = {
+        ...createMockStroke('rect-filled', 'rect', [
+          { x: 0, y: 0 },
+          { x: 100, y: 100 },
+        ]),
+        fillColor: '#ff0000',
+      };
+      const lasso = [
+        { x: 40, y: 40 },
+        { x: 60, y: 40 },
+        { x: 60, y: 60 },
+        { x: 40, y: 60 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual(['rect-filled']);
+    });
+
+    it('selects an ellipse whose edge intersects the lasso', () => {
+      const stroke = createMockStroke('ellipse-edge', 'ellipse', [
+        { x: 50, y: 50 },
+        { x: 70, y: 60 },
+      ]);
+      const lasso = [
+        { x: 68, y: 45 },
+        { x: 72, y: 45 },
+        { x: 72, y: 55 },
+        { x: 68, y: 55 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual(['ellipse-edge']);
+    });
+
+    it('uses first and last ellipse points as bounding-box corners for lasso selection', () => {
+      const stroke = createMockStroke('ellipse-bbox-edge', 'ellipse', [
+        { x: 0, y: 10 },
+        { x: 20, y: 30 },
+      ]);
+      const lasso = [
+        { x: 18, y: 18 },
+        { x: 22, y: 18 },
+        { x: 22, y: 22 },
+        { x: 18, y: 22 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual(['ellipse-bbox-edge']);
+    });
+
+    it('does not use the first ellipse point as a center for lasso selection', () => {
+      const stroke = createMockStroke('ellipse-wrong-center-region', 'ellipse', [
+        { x: 0, y: 10 },
+        { x: 20, y: 30 },
+      ]);
+      const lasso = [
+        { x: -18, y: 8 },
+        { x: -12, y: 8 },
+        { x: -12, y: 12 },
+        { x: -18, y: 12 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual([]);
+    });
+
+    it('selects a filled ellipse when a lasso vertex is inside it', () => {
+      const stroke: DrawingStroke = {
+        ...createMockStroke('ellipse-filled', 'ellipse', [
+          { x: 50, y: 50 },
+          { x: 80, y: 70 },
+        ]),
+        fillColor: '#00ff00',
+      };
+      const lasso = [
+        { x: 45, y: 45 },
+        { x: 55, y: 45 },
+        { x: 55, y: 55 },
+        { x: 45, y: 55 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual(['ellipse-filled']);
+    });
+
+    it('does not select an unfilled closed shape when the lasso is only inside its empty interior', () => {
+      const stroke = createMockStroke('rect-outline-only', 'rect', [
+        { x: 0, y: 0 },
+        { x: 100, y: 100 },
+      ]);
+      const lasso = [
+        { x: 40, y: 40 },
+        { x: 60, y: 40 },
+        { x: 60, y: 60 },
+        { x: 40, y: 60 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual([]);
+    });
+
+    it('selects a thick closed outline when the lasso overlaps only the rendered stroke width', () => {
+      const stroke: DrawingStroke = {
+        ...createMockStroke('wide-rect-outline', 'rect', [
+          { x: 0, y: 0 },
+          { x: 20, y: 20 },
+        ]),
+        strokeWidth: 20,
+      };
+      const lasso = [
+        { x: 5, y: -9 },
+        { x: 15, y: -9 },
+        { x: 15, y: -7 },
+        { x: 5, y: -7 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual(['wide-rect-outline']);
+    });
+
+    it('selects a polygon with one corner inside the lasso', () => {
+      const stroke = createMockStroke('polygon-corner', 'polygon', [
+        { x: 10, y: 10 },
+        { x: 40, y: 10 },
+        { x: 25, y: 40 },
+      ]);
+      const lasso = [
+        { x: 5, y: 5 },
+        { x: 15, y: 5 },
+        { x: 15, y: 15 },
+        { x: 5, y: 15 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual(['polygon-corner']);
+    });
+
+    it('selects a bezier curve crossing the lasso', () => {
+      const stroke = createMockStroke('bezier-cross', 'bezier', [
+        { x: 0, y: 0 },
+        { x: 50, y: 0 },
+        { x: 50, y: 100 },
+        { x: 100, y: 100 },
+      ]);
+      const lasso = [
+        { x: 49, y: 45 },
+        { x: 51, y: 45 },
+        { x: 51, y: 55 },
+        { x: 49, y: 55 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual(['bezier-cross']);
+    });
+
+    it('returns an empty array for an invalid lasso with fewer than three distinct points', () => {
+      const stroke = createMockStroke('pen', 'pen', [
+        { x: 0, y: 0 },
+        { x: 10, y: 10 },
+      ]);
+      const lasso = [
+        { x: 0, y: 0 },
+        { x: 10, y: 10 },
+        { x: 0, y: 0 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual([]);
+    });
+
+    it('returns an empty array for empty strokes', () => {
+      const lasso = [
+        { x: 0, y: 0 },
+        { x: 20, y: 0 },
+        { x: 20, y: 20 },
+        { x: 0, y: 20 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([], lasso);
+
+      expect(result).toEqual([]);
+    });
+
+    it('returns only matching ids for mixed strokes', () => {
+      const hitPen = createMockStroke('hit-pen', 'pen', [
+        { x: -10, y: 10 },
+        { x: 30, y: 10 },
+      ]);
+      const missPen = createMockStroke('miss-pen', 'pen', [
+        { x: 100, y: 100 },
+        { x: 120, y: 100 },
+      ]);
+      const hitRect = createMockStroke('hit-rect', 'rect', [
+        { x: 5, y: 5 },
+        { x: 15, y: 15 },
+      ]);
+      const lasso = [
+        { x: 0, y: 0 },
+        { x: 20, y: 0 },
+        { x: 20, y: 20 },
+        { x: 0, y: 20 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([hitPen, missPen, hitRect], lasso);
+
+      expect(result).toEqual(['hit-pen', 'hit-rect']);
+    });
+  });
+
+  describe('removeStrokes', () => {
+    it('removes multiple stroke ids', () => {
+      const stroke1 = createMockStroke('1');
+      const stroke2 = createMockStroke('2');
+      const stroke3 = createMockStroke('3');
+      const value = createMockValue([stroke1, stroke2, stroke3]);
+
+      const result = removeStrokes(value, ['1', '3']);
+
+      expect(result.strokes).toEqual([stroke2]);
+    });
+
+    it('ignores missing stroke ids', () => {
+      const stroke = createMockStroke('1');
+      const value = createMockValue([stroke]);
+
+      const result = removeStrokes(value, ['missing']);
+
+      expect(result.strokes).toEqual([stroke]);
+    });
+
+    it('keeps an equivalent value for an empty id array', () => {
+      const stroke = createMockStroke('1');
+      const value = createMockValue([stroke]);
+
+      const result = removeStrokes(value, []);
+
+      expect(result).toEqual(value);
+      expect(result).not.toBe(value);
+    });
+  });
+
+  describe('updateStrokes', () => {
+    it('updates multiple strokes by id', () => {
+      const stroke1 = createMockStroke('1', 'pen', [{ x: 0, y: 0 }]);
+      const stroke2 = createMockStroke('2', 'pen', [{ x: 10, y: 10 }]);
+      const value = createMockValue([stroke1, stroke2]);
+      const updated1 = createMockStroke('1', 'pen', [{ x: 1, y: 1 }]);
+      const updated2 = createMockStroke('2', 'pen', [{ x: 20, y: 20 }]);
+
+      const result = updateStrokes(value, [updated1, updated2]);
+
+      expect(result.strokes).toEqual([updated1, updated2]);
+    });
+
+    it('ignores updates for missing stroke ids', () => {
+      const stroke = createMockStroke('1', 'pen', [{ x: 0, y: 0 }]);
+      const value = createMockValue([stroke]);
+      const missing = createMockStroke('missing', 'pen', [{ x: 10, y: 10 }]);
+
+      const result = updateStrokes(value, [missing]);
+
+      expect(result.strokes).toEqual([stroke]);
+    });
+
+    it('keeps an equivalent value for an empty updates array', () => {
+      const stroke = createMockStroke('1');
+      const value = createMockValue([stroke]);
+
+      const result = updateStrokes(value, []);
+
+      expect(result).toEqual(value);
+      expect(result).not.toBe(value);
     });
   });
 });

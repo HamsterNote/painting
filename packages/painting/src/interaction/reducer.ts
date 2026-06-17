@@ -324,7 +324,9 @@ function enterFromIdle(
         dragging: true,
         shiftHeld: false,
       };
+    case 'lasso':
     case 'eraser':
+      // eraser 和 lasso 由 DrawingSurface 外部处理，reducer 不产生新状态
       return state;
     default:
       return assertNever(state.tool);

@@ -1,4 +1,4 @@
-import { DrawingSurface, type DrawingTool, type DrawingInputMethod, type DrawingValue, type DrawingStrokeSmoothingOptions, type DrawingGesture } from '@hamster-note/painting';
+import { DrawingSurface, type DrawingTool, type DrawingInputMethod, type DrawingValue, type DrawingStrokeSmoothingOptions, type DrawingGesture, type DrawingSurfaceHandle } from '@hamster-note/painting';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 /**
@@ -17,6 +17,7 @@ const ALL_TOOLS: { value: DrawingTool; label: string }[] = [
   { value: 'polygon', label: 'Polygon' },
   { value: 'bezier', label: 'Bezier' },
   { value: 'eraser', label: 'Eraser' },
+  { value: 'lasso', label: 'Lasso' },
 ];
 
 /**
@@ -33,6 +34,8 @@ function getToolInstruction(tool: DrawingTool): string | null {
       return 'Click to add points, double-click or Esc to finish';
     case 'bezier':
       return 'Drag 1 sets the start/end line, drag 2 sets the first control point, drag 3 sets the second control point and commits';
+    case 'lasso':
+      return 'Drag to lasso strokes (any intersection selects); drag selected strokes to move them';
     default:
       return null;
   }
@@ -135,6 +138,12 @@ export default function App() {
   // 当 reset 启用时显示 reset 按钮；按钮点击触发 viewportResetCounter 自增，
   // 通过 key 重挂载子组件来命令式重置（避免引入 imperative ref 接口）
   const [viewportResetCounter, setViewportResetCounter] = useState(0);
+
+  // ===== 套索选择相关 ref 和状态 =====
+  const uncontrolledSurfaceRef = useRef<DrawingSurfaceHandle>(null);
+  const controlledSurfaceRef = useRef<DrawingSurfaceHandle>(null);
+  const [uncontrolledSelectedIds, setUncontrolledSelectedIds] = useState<string[]>([]);
+  const [controlledSelectedIds, setControlledSelectedIds] = useState<string[]>([]);
 
   // ===== 采样率测试 Demo 状态 =====
   const [samplingDemoResults, setSamplingDemoResults] = useState<SamplingDemoResult[]>([]);
@@ -428,6 +437,32 @@ export default function App() {
             {toolInstruction}
           </span>
         )}
+
+        {/* 套索选择删除按钮：仅当任意画布有选中内容时才可用 */}
+        <button
+          type="button"
+          data-testid="lasso-delete-selected"
+          disabled={uncontrolledSelectedIds.length === 0 && controlledSelectedIds.length === 0}
+          onClick={() => {
+            uncontrolledSurfaceRef.current?.deleteSelectedStrokes();
+            controlledSurfaceRef.current?.deleteSelectedStrokes();
+          }}
+          style={{
+            padding: '4px 10px',
+            cursor: 'pointer',
+            border: '1px solid #aaa',
+            background: '#fff',
+            borderRadius: '3px',
+            opacity: uncontrolledSelectedIds.length === 0 && controlledSelectedIds.length === 0 ? 0.5 : 1,
+          }}
+        >
+          Delete Selected
+          {(uncontrolledSelectedIds.length > 0 || controlledSelectedIds.length > 0) && (
+            <span data-testid="lasso-selection-count" style={{ marginLeft: '6px', fontWeight: 'bold' }}>
+              ({uncontrolledSelectedIds.length + controlledSelectedIds.length})
+            </span>
+          )}
+        </button>
 
         <label>
           Color{' '}
@@ -841,9 +876,11 @@ export default function App() {
           <h2>Uncontrolled (defaultValue)</h2>
           <div style={{ width: '400px', height: '300px', marginBottom: '10px' }}>
             <DrawingSurface
+              ref={uncontrolledSurfaceRef}
               key={`uncontrolled-${viewportResetCounter}`}
               defaultValue={uncontrolledStrokes}
               onChange={handleUncontrolledChange}
+              onSelectionChange={setUncontrolledSelectedIds}
               tool={tool}
               strokeColor={color}
               strokeWidth={effectiveStrokeWidth}
@@ -885,9 +922,11 @@ export default function App() {
           <h2>Controlled (value + onChange)</h2>
           <div style={{ width: '400px', height: '300px', marginBottom: '10px' }}>
             <DrawingSurface
+              ref={controlledSurfaceRef}
               key={`controlled-${viewportResetCounter}`}
               value={controlledStrokes}
               onChange={handleControlledChange}
+              onSelectionChange={setControlledSelectedIds}
               tool={tool}
               strokeColor={color}
               strokeWidth={effectiveStrokeWidth}

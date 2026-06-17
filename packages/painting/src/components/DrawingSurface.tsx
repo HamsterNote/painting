@@ -1,6 +1,8 @@
 import {
+  forwardRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useReducer,
   useRef,
@@ -30,6 +32,7 @@ import {
   pickRenderedStrokeIntersectingPolyline,
   pickRenderedStrokeIntersectingSegment,
   type RenderedStrokeHitTestOptions,
+  selectStrokesIntersectingLasso,
 } from '../utils';
 import {
   type DrawingViewport,
@@ -39,7 +42,7 @@ import {
 } from '../viewport';
 
 // Public drawing contract types
-export type DrawingTool = 'pen' | 'line' | 'rect' | 'ellipse' | 'polygon' | 'bezier' | 'eraser';
+export type DrawingTool = 'pen' | 'line' | 'rect' | 'ellipse' | 'polygon' | 'bezier' | 'eraser' | 'lasso';
 export type DrawingInputMethod = 'touch' | 'mouse' | 'pen';
 
 /**
@@ -53,6 +56,33 @@ export type DrawingInputMethod = 'touch' | 'mouse' | 'pen';
  *   value-prop replacement / component cleanup all DISCARD the queue.
  */
 export type DrawingEraserCommitMode = 'while-sliding' | 'on-release';
+
+/**
+ * 套索选择变化回调。当用户通过 lasso 工具完成一次选择操作时触发，
+ * 参数为当前选中的 stroke id 数组。
+ */
+export type DrawingSelectionChange = (selectedStrokeIds: string[]) => void;
+
+/**
+ * DrawingSurface 的 imperative handle，通过 React ref 获取。
+ * 用于从外部以命令式方式操控选区状态。
+ *
+ * @example
+ * ```tsx
+ * const ref = useRef<DrawingSurfaceHandle>(null);
+ * <DrawingSurface ref={ref} tool="lasso" />
+ * // 删除选中的笔画
+ * ref.current?.deleteSelectedStrokes();
+ * ```
+ */
+export interface DrawingSurfaceHandle {
+  /** 删除所有当前选中的 stroke（内部会同步更新 value 并触发 onChange） */
+  deleteSelectedStrokes(): void;
+  /** 清除当前选择（将 selectedStrokeIds 置为空数组） */
+  clearSelection(): void;
+  /** 获取当前选中的 stroke id 数组（快照） */
+  getSelectedStrokeIds(): string[];
+}
 
 export type DrawingPoint = {
   x: number;
@@ -245,6 +275,13 @@ export type DrawingSurfaceProps = {
   pressureMultiplier?: number;
   /** Test identifier. */
   testID?: string;
+
+  /** 受控的选中 stroke id 列表。配合 onSelectionChange 实现受控选择模式。 */
+  selectedStrokeIds?: readonly string[];
+  /** 非受控模式下的初始选中 stroke id 列表。 */
+  defaultSelectedStrokeIds?: readonly string[];
+  /** 选择变化回调，当套索选择操作完成时触发。 */
+  onSelectionChange?: DrawingSelectionChange;
 };
 
 type PointerInputEvent = {
@@ -263,7 +300,8 @@ function isDrawingToolSupported(tool: unknown): tool is DrawingTool {
     tool === 'ellipse' ||
     tool === 'polygon' ||
     tool === 'bezier' ||
-    tool === 'eraser'
+    tool === 'eraser' ||
+    tool === 'lasso'
   );
 }
 
@@ -408,6 +446,41 @@ function totalPathDistance(points: DrawingPoint[]): number {
   return distance;
 }
 
+function uniqueStrokeIds(ids: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const id of ids) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      unique.push(id);
+    }
+  }
+  return unique;
+}
+
+function areStrokeIdListsEqual(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((id, index) => id === right[index]);
+}
+
+function cloneStrokeForLassoMove(stroke: DrawingStroke): DrawingStroke {
+  return {
+    ...stroke,
+    points: stroke.points.map((point) => ({ ...point })),
+    dashArray: stroke.dashArray ? [...stroke.dashArray] : undefined,
+  };
+}
+
+function offsetStrokeForLassoMove(stroke: DrawingStroke, dx: number, dy: number): DrawingStroke {
+  return {
+    ...stroke,
+    points: stroke.points.map((point) => ({ ...point, x: point.x + dx, y: point.y + dy })),
+    dashArray: stroke.dashArray ? [...stroke.dashArray] : undefined,
+  };
+}
+
 function isDrawingInput(
   event: PointerInputEvent | undefined,
   allowedMethods: DrawingInputMethod[]
@@ -465,7 +538,10 @@ function clampGestureScale(scale: number, bounds: { minScale: number; maxScale: 
   return Math.max(bounds.minScale, Math.min(bounds.maxScale, scale));
 }
 
-export function DrawingSurface(props: DrawingSurfaceProps) {
+export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfaceProps>(function DrawingSurface(
+  props,
+  ref
+) {
   const {
     tool,
     value,
@@ -489,6 +565,9 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
     eraserCommitMode,
     eraserTrajectory,
     testID,
+    selectedStrokeIds,
+    defaultSelectedStrokeIds,
+    onSelectionChange,
   } = props;
   const hostRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState<DrawingViewport>(() => createResetViewport());
@@ -570,11 +649,53 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
       : undefined;
   }
 
-  const { strokes, activeStroke, setActiveStroke, addStroke, removeStroke } = useCanvas({
+  const {
+    strokes,
+    activeStroke,
+    setActiveStroke,
+    addStroke,
+    removeStroke,
+    removeStrokes: removeStrokesFromCanvas,
+    updateStrokes: updateStrokesInCanvas,
+  } = useCanvas({
     value,
     onChange,
     defaultValue: initialDefaultValueRef.current,
   });
+
+  const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>(() =>
+    uniqueStrokeIds(defaultSelectedStrokeIds ?? [])
+  );
+  const isSelectionControlled = selectedStrokeIds !== undefined;
+  const selectedIds = useMemo(
+    () => uniqueStrokeIds(isSelectionControlled ? selectedStrokeIds : internalSelectedIds),
+    [internalSelectedIds, isSelectionControlled, selectedStrokeIds]
+  );
+  const selectedIdsRef = useRef<readonly string[]>(selectedIds);
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+
+  useEffect(() => {
+    selectedIdsRef.current = selectedIds;
+  }, [selectedIds]);
+
+  onSelectionChangeRef.current = onSelectionChange;
+
+  const commitSelection = useCallback(
+    (nextIds: readonly string[]) => {
+      const next = uniqueStrokeIds(nextIds);
+      const current = selectedIdsRef.current;
+      if (areStrokeIdListsEqual(current, next)) {
+        return;
+      }
+      selectedIdsRef.current = next;
+      if (!isSelectionControlled) {
+        setInternalSelectedIds(next);
+      }
+      onSelectionChangeRef.current?.(next);
+    },
+    [isSelectionControlled]
+  );
 
   // Click-to-place interaction state (polygon tool). The standalone reducer from Task 5
   // owns all vertex/cursor bookkeeping and completion semantics; we only translate native
@@ -592,6 +713,8 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
   const previousValueRef = useRef(value);
   const addStrokeRef = useRef(addStroke);
   const removeStrokeRef = useRef(removeStroke);
+  const removeStrokesRef = useRef(removeStrokesFromCanvas);
+  const updateStrokesRef = useRef(updateStrokesInCanvas);
   const clearActiveStrokeRef = useRef<(() => void) | null>(null);
   const resolvedColorRef = useRef(resolvedColor);
   const resolvedOpenWidthRef = useRef(resolvedOpenWidth);
@@ -622,6 +745,27 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
   const eraserQueuedHitsRef = useRef<Set<string>>(new Set());
   const eraserProcessedHitsRef = useRef<Set<string>>(new Set());
 
+  const [lassoPreviewPoints, setLassoPreviewPoints] = useState<DrawingPoint[]>([]);
+  const [lassoMode, setLassoMode] = useState<'idle' | 'drawing' | 'moving'>('idle');
+  // 套索临时点始终存 canvas 坐标；state 只负责预览，ref 负责 pointer 管线同步读取。
+  const lassoPointsRef = useRef<DrawingPoint[]>([]);
+  const selectionMoveRef = useRef<{
+    pointerId: number;
+    startCanvasPoint: DrawingPoint;
+    originals: DrawingStroke[];
+  } | null>(null);
+  const lassoModeRef = useRef<'idle' | 'drawing' | 'moving'>(lassoMode);
+
+  const clearLassoInteraction = useCallback(() => {
+    lassoPointsRef.current = [];
+    selectionMoveRef.current = null;
+    lassoModeRef.current = 'idle';
+    setLassoMode('idle');
+    setLassoPreviewPoints((prev) => (prev.length === 0 ? prev : []));
+  }, []);
+  const clearLassoInteractionRef = useRef(clearLassoInteraction);
+  clearLassoInteractionRef.current = clearLassoInteraction;
+
   // 当前橡皮手势在 canvas 坐标系下的轨迹点；空数组表示当前无活动手势。
   // 每次 single-move 追加一个点；single-end / cancel / multi-start /
   // 切换工具 / value prop 替换 / 卸载 都重置为空数组。
@@ -649,6 +793,8 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
   isDrawingEnabledRef.current = isDrawingEnabled;
   addStrokeRef.current = addStroke;
   removeStrokeRef.current = removeStroke;
+  removeStrokesRef.current = removeStrokesFromCanvas;
+  updateStrokesRef.current = updateStrokesInCanvas;
   strokesRef.current = strokes;
   resolvedColorRef.current = resolvedColor;
   resolvedOpenWidthRef.current = resolvedOpenWidth;
@@ -663,6 +809,34 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
   smoothingOptionsRef.current = resolveStrokeSmoothingOptions(strokeSmoothing);
   samplingRateRef.current = resolvedSamplingRate;
   eraserCommitModeRef.current = resolvedEraserCommitMode;
+  lassoModeRef.current = lassoMode;
+
+  useEffect(() => {
+    const existingStrokeIds = new Set(strokes.map((stroke) => stroke.id));
+    const prunedIds = selectedIdsRef.current.filter((id) => existingStrokeIds.has(id));
+    commitSelection(prunedIds);
+  }, [commitSelection, strokes]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      deleteSelectedStrokes() {
+        const ids = selectedIdsRef.current;
+        if (ids.length === 0) {
+          return;
+        }
+        removeStrokesFromCanvas(ids);
+        commitSelection([]);
+      },
+      clearSelection() {
+        commitSelection([]);
+      },
+      getSelectedStrokeIds() {
+        return [...selectedIdsRef.current];
+      },
+    }),
+    [commitSelection, removeStrokesFromCanvas]
+  );
 
   const getLocalCoordinates = useCallback((clientX: number, clientY: number): DrawingPoint => {
     if (!hostRef.current) {
@@ -864,6 +1038,69 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
       return hitStroke ? hitStroke.id : null;
     };
 
+    const pickSelectedLassoStrokeIdAtPoint = (canvasPoint: DrawingPoint): string | null => {
+      const selectedIdLookup = new Set(selectedIdsRef.current);
+      if (selectedIdLookup.size === 0) {
+        return null;
+      }
+      const selectedStrokes = strokesRef.current.filter((stroke) => selectedIdLookup.has(stroke.id));
+      const hitStroke = pickRenderedStrokeIntersectingPolyline(
+        [canvasPoint],
+        selectedStrokes,
+        getRenderedEraserHitTestOptions()
+      );
+      return hitStroke ? hitStroke.id : null;
+    };
+
+    const startLassoInteraction = (input: GestureAdapterInput, event: PointerEvent) => {
+      if (effectiveToolRef.current !== 'lasso' || !isDrawingEnabledRef.current) {
+        return;
+      }
+      const startEvent = pointerStartEvents.get(input.pointerId) ?? readPointerEvent(event);
+      if (!isDrawingInput(startEvent, inputMethodsRef.current)) {
+        clearLassoInteractionRef.current();
+        return;
+      }
+
+      const canvasPoint = screenToCanvas(input.point, viewportRef.current);
+      const hitSelectedId = pickSelectedLassoStrokeIdAtPoint(canvasPoint);
+      if (hitSelectedId) {
+        const selectedIdLookup = new Set(selectedIdsRef.current);
+        const originals = strokesRef.current
+          .filter((stroke) => selectedIdLookup.has(stroke.id))
+          .map(cloneStrokeForLassoMove);
+        selectionMoveRef.current = {
+          pointerId: input.pointerId,
+          startCanvasPoint: canvasPoint,
+          originals,
+        };
+        lassoPointsRef.current = [];
+        lassoModeRef.current = 'moving';
+        setLassoMode('moving');
+        setLassoPreviewPoints((prev) => (prev.length === 0 ? prev : []));
+      } else {
+        selectionMoveRef.current = null;
+        lassoPointsRef.current = [canvasPoint];
+        lassoModeRef.current = 'drawing';
+        setLassoMode('drawing');
+        setLassoPreviewPoints([canvasPoint]);
+      }
+      processedPathLengthRef.current = 1;
+    };
+
+    const finishLassoInteraction = () => {
+      if (lassoModeRef.current === 'drawing') {
+        commitSelection(selectStrokesIntersectingLasso(strokesRef.current, lassoPointsRef.current));
+        clearLassoInteractionRef.current();
+        return true;
+      }
+      if (lassoModeRef.current === 'moving') {
+        clearLassoInteractionRef.current();
+        return true;
+      }
+      return false;
+    };
+
     const routeEraserHit = (hitId: string | null) => {
       if (!hitId) {
         return;
@@ -1045,6 +1282,39 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
         return;
       }
 
+      if (effectiveToolRef.current === 'lasso') {
+        if (lassoModeRef.current === 'drawing') {
+          for (let index = processedPathLengthRef.current; index < path.length; index++) {
+            const pathItem = path[index];
+            if (!pathItem) {
+              continue;
+            }
+            const canvasPoint = screenToCanvas(pathItem.point, viewportRef.current);
+            lassoPointsRef.current.push(canvasPoint);
+          }
+          processedPathLengthRef.current = path.length;
+          setLassoPreviewPoints([...lassoPointsRef.current]);
+          return;
+        }
+
+        if (lassoModeRef.current === 'moving') {
+          const moveState = selectionMoveRef.current;
+          if (!moveState || moveState.pointerId !== input.pointerId) {
+            return;
+          }
+          const canvasPoint = screenToCanvas(input.point, viewportRef.current);
+          const dx = canvasPoint.x - moveState.startCanvasPoint.x;
+          const dy = canvasPoint.y - moveState.startCanvasPoint.y;
+          updateStrokesRef.current(
+            moveState.originals.map((stroke) => offsetStrokeForLassoMove(stroke, dx, dy))
+          );
+          processedPathLengthRef.current = path.length;
+          return;
+        }
+
+        return;
+      }
+
       const localPath = path.map((pathItem) => screenToCanvas(pathItem.point, viewportRef.current));
 
       // Line is click-to-place by default. Drag remains the shortcut, but only
@@ -1197,6 +1467,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
           break;
         case 'single-end':
           if (singlePan?.pointerId === input.pointerId) {
+            clearLassoInteractionRef.current();
             dispatchInteraction({ type: 'POINTER_UP', pointerId: input.pointerId });
             singlePan = null;
           } else {
@@ -1205,6 +1476,10 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
             if (effectiveToolRef.current === 'eraser') {
               commitQueuedEraserHits();
               clearEraserTrajectoryRef.current();
+            }
+            if (effectiveToolRef.current === 'lasso' && finishLassoInteraction()) {
+              dispatchInteraction({ type: 'POINTER_UP', pointerId: input.pointerId });
+              break;
             }
             commitCurrentActiveStroke();
             if (!isPlacementReducerTool(effectiveToolRef.current)) {
@@ -1227,6 +1502,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
           // transitioning to viewport gesture.
           eraserQueuedHitsRef.current.clear();
           clearEraserTrajectoryRef.current();
+          clearLassoInteractionRef.current();
           handleMultiStart(input, result.center ?? input.point);
           break;
         case 'multi-move':
@@ -1236,6 +1512,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
           // pointercancel discards any uncommitted eraser hits.
           eraserQueuedHitsRef.current.clear();
           clearEraserTrajectoryRef.current();
+          clearLassoInteractionRef.current();
           clearStrokeState();
           singlePan = null;
           multiStartViewport = null;
@@ -1274,6 +1551,9 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
         adapter.setScale(viewportRef.current.scale);
       }
       startSinglePan(input, event);
+      if (!singlePan || singlePan.pointerId !== input.pointerId) {
+        startLassoInteraction(input, event);
+      }
       handleAdapterResult(input, event);
     };
 
@@ -1347,9 +1627,10 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
       pointerStartEvents.clear();
       eraserQueuedHitsRef.current.clear();
       clearEraserTrajectoryRef.current();
+      clearLassoInteractionRef.current();
       adapter.reset();
     };
-  }, [getLocalCoordinates, setActiveStroke]);
+  }, [commitSelection, getLocalCoordinates, setActiveStroke]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -1439,6 +1720,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
       eraserQueuedHitsRef.current.clear();
       clearEraserTrajectoryRef.current();
     }
+    clearLassoInteractionRef.current();
   }, [effectiveTool]);
 
   useEffect(() => {
@@ -1910,6 +2192,7 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
             <StrokeRenderer
               key={stroke.id}
               stroke={stroke}
+              isActive={selectedIdSet.has(stroke.id)}
               fallbackColor={resolvedColor}
               fallbackWidth={resolvedOpenWidth}
               fallbackClosedWidth={resolvedClosedWidth}
@@ -1998,6 +2281,17 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
                 />
               )}
           </g>
+          {lassoPreviewPoints.length > 1 && (
+            <polyline
+              data-testid="lasso-preview"
+              points={lassoPreviewPoints.map((point) => `${point.x},${point.y}`).join(' ')}
+              fill="rgba(59,130,246,0.1)"
+              stroke="rgb(59,130,246)"
+              strokeWidth={2}
+              strokeDasharray="4 4"
+              pointerEvents="none"
+            />
+          )}
         </g>
       </svg>
       {cursorEnabled && cursorState.visible && (
@@ -2078,4 +2372,4 @@ export function DrawingSurface(props: DrawingSurfaceProps) {
       )}
     </div>
   );
-}
+});
