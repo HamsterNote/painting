@@ -28,9 +28,6 @@
     "test": "yarn --cwd ../.. test",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@system-ui-js/multi-drag-core": "0.4.0"
-  },
   "peerDependencies": {
     "react": "^18.0.0",
     "react-native": ">=0.74"

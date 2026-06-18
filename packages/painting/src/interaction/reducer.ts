@@ -1,6 +1,5 @@
 import { assertNever } from '../model/assertNever';
 import type { DrawingPointV2, DrawingStrokeToolV2, DrawingToolModeV2 } from '../model/strokes';
-import type { DrawingViewport } from '../viewport';
 
 export type CanvasPoint = Pick<DrawingPointV2, 'x' | 'y'>;
 export type InteractionTool = DrawingToolModeV2;
@@ -71,31 +70,13 @@ export type PlacingBezierInteractionState = {
   shiftHeld: boolean;
 };
 
-export type PanningInteractionState = {
-  phase: 'panning';
-  tool: InteractionTool;
-  viewport: DrawingViewport;
-  pointerId?: number;
-  centroid: CanvasPoint;
-};
-
-export type PinchingInteractionState = {
-  phase: 'pinching';
-  tool: InteractionTool;
-  viewport: DrawingViewport;
-  pointerIds: readonly [number, number];
-  centroid: CanvasPoint;
-};
-
 export type InteractionState =
   | IdleInteractionState
   | DrawingPenInteractionState
   | DrawingDragShapeInteractionState
   | PlacingPolygonInteractionState
   | PlacingLineInteractionState
-  | PlacingBezierInteractionState
-  | PanningInteractionState
-  | PinchingInteractionState;
+  | PlacingBezierInteractionState;
 
 export type PointerDownInteractionAction = {
   type: 'POINTER_DOWN';
@@ -103,18 +84,12 @@ export type PointerDownInteractionAction = {
   pointerId?: number;
   detail?: number;
   mode?: 'drag' | 'place';
-  gesture?: 'pan' | 'pinch';
-  viewport?: DrawingViewport;
-  pointerIds?: readonly [number, number];
-  centroid?: CanvasPoint;
 };
 
 export type PointerMoveInteractionAction = {
   type: 'POINTER_MOVE';
   point?: CanvasPoint;
   pointerId?: number;
-  viewport?: DrawingViewport;
-  centroid?: CanvasPoint;
 };
 
 export type PointerUpInteractionAction = {
@@ -144,7 +119,10 @@ export function createInitialState(tool: InteractionTool): InteractionState {
 export function isValidCompletion(state: InteractionState): boolean {
   switch (state.phase) {
     case 'idle':
-      return state.completedStroke !== undefined && hasDistinctPointCount(state.completedStroke.points, 2);
+      return (
+        state.completedStroke !== undefined &&
+        hasDistinctPointCount(state.completedStroke.points, 2)
+      );
     case 'drawingPen':
       return hasDistinctPointCount(state.points, 2);
     case 'drawingDragShape':
@@ -155,9 +133,6 @@ export function isValidCompletion(state: InteractionState): boolean {
       return hasDistinctPointCount(state.vertices, 2);
     case 'placingBezier':
       return isCompleteBezierPoints(state.points);
-    case 'panning':
-    case 'pinching':
-      return false;
     default:
       return assertNever(state);
   }
@@ -165,7 +140,7 @@ export function isValidCompletion(state: InteractionState): boolean {
 
 export function interactionReducer(
   state: InteractionState,
-  action: InteractionAction,
+  action: InteractionAction
 ): InteractionState {
   switch (action.type) {
     case 'TOOL_CHANGE':
@@ -204,7 +179,7 @@ export function interactionReducer(
 
 function reducePointerDown(
   state: InteractionState,
-  action: PointerDownInteractionAction,
+  action: PointerDownInteractionAction
 ): InteractionState {
   if (state.phase === 'idle') {
     return enterFromIdle(state, action);
@@ -213,8 +188,6 @@ function reducePointerDown(
   switch (state.phase) {
     case 'drawingPen':
     case 'drawingDragShape':
-    case 'panning':
-    case 'pinching':
       return state;
     case 'placingPolygon':
       return reducePolygonPointerDown(state, action);
@@ -229,38 +202,8 @@ function reducePointerDown(
 
 function enterFromIdle(
   state: IdleInteractionState,
-  action: PointerDownInteractionAction,
+  action: PointerDownInteractionAction
 ): InteractionState {
-  if (action.gesture === 'pan' && action.viewport && (action.point || action.centroid)) {
-    const centroid = action.centroid ?? action.point;
-    if (!centroid) {
-      return state;
-    }
-
-    return {
-      phase: 'panning',
-      tool: state.tool,
-      viewport: action.viewport,
-      pointerId: action.pointerId,
-      centroid: clonePoint(centroid),
-    };
-  }
-
-  if (action.gesture === 'pinch' && action.viewport && action.pointerIds && (action.point || action.centroid)) {
-    const centroid = action.centroid ?? action.point;
-    if (!centroid) {
-      return state;
-    }
-
-    return {
-      phase: 'pinching',
-      tool: state.tool,
-      viewport: action.viewport,
-      pointerIds: action.pointerIds,
-      centroid: clonePoint(centroid),
-    };
-  }
-
   if (!action.point) {
     return state;
   }
@@ -335,7 +278,7 @@ function enterFromIdle(
 
 function reducePointerMove(
   state: InteractionState,
-  action: PointerMoveInteractionAction,
+  action: PointerMoveInteractionAction
 ): InteractionState {
   switch (state.phase) {
     case 'idle':
@@ -362,18 +305,6 @@ function reducePointerMove(
       return action.point ? { ...state, cursorPoint: clonePoint(action.point) } : state;
     case 'placingBezier':
       return reduceBezierPointerMove(state, action);
-    case 'panning':
-      return {
-        ...state,
-        viewport: action.viewport ?? state.viewport,
-        centroid: clonePoint(action.centroid ?? action.point ?? state.centroid),
-      };
-    case 'pinching':
-      return {
-        ...state,
-        viewport: action.viewport ?? state.viewport,
-        centroid: clonePoint(action.centroid ?? action.point ?? state.centroid),
-      };
     default:
       return assertNever(state);
   }
@@ -381,7 +312,7 @@ function reducePointerMove(
 
 function reducePointerUp(
   state: InteractionState,
-  action: PointerUpInteractionAction,
+  action: PointerUpInteractionAction
 ): InteractionState {
   switch (state.phase) {
     case 'idle':
@@ -408,12 +339,6 @@ function reducePointerUp(
       const cursorPoint = action.point ? clonePoint(action.point) : state.cursorPoint;
       return completeIfValid(state.tool, [state.startPoint, cursorPoint], state.tool);
     }
-    case 'panning':
-      return isSamePointer(state.pointerId, action.pointerId) ? createInitialState(state.tool) : state;
-    case 'pinching':
-      return action.pointerId === undefined || state.pointerIds.includes(action.pointerId)
-        ? createInitialState(state.tool)
-        : state;
     default:
       return assertNever(state);
   }
@@ -421,7 +346,7 @@ function reducePointerUp(
 
 function reducePolygonPointerDown(
   state: PlacingPolygonInteractionState,
-  action: PointerDownInteractionAction,
+  action: PointerDownInteractionAction
 ): InteractionState {
   if (action.detail === 2 && isValidCompletion(state)) {
     return completedIdle(state.tool, { tool: 'polygon', points: state.vertices });
@@ -433,7 +358,11 @@ function reducePolygonPointerDown(
 
   const point = clonePoint(action.point);
   const firstVertex = state.vertices[0];
-  if (firstVertex && distance(firstVertex, point) <= POLYGON_CLOSE_RADIUS && isValidCompletion(state)) {
+  if (
+    firstVertex &&
+    distance(firstVertex, point) <= POLYGON_CLOSE_RADIUS &&
+    isValidCompletion(state)
+  ) {
     return completedIdle(state.tool, { tool: 'polygon', points: state.vertices });
   }
 
@@ -446,7 +375,7 @@ function reducePolygonPointerDown(
 
 function reduceLinePointerDown(
   state: PlacingLineInteractionState,
-  action: PointerDownInteractionAction,
+  action: PointerDownInteractionAction
 ): InteractionState {
   if (action.detail === 2 && isValidCompletion(state)) {
     const points = action.point
@@ -469,7 +398,7 @@ function reduceLinePointerDown(
 
 function reduceBezierPointerDown(
   state: PlacingBezierInteractionState,
-  action: PointerDownInteractionAction,
+  action: PointerDownInteractionAction
 ): InteractionState {
   if (!action.point || state.dragging) {
     return state;
@@ -485,7 +414,7 @@ function reduceBezierPointerDown(
 
 function reduceBezierPointerMove(
   state: PlacingBezierInteractionState,
-  action: PointerMoveInteractionAction,
+  action: PointerMoveInteractionAction
 ): InteractionState {
   if (!state.dragging || !isSamePointer(state.pointerId, action.pointerId) || !action.point) {
     return state;
@@ -496,7 +425,7 @@ function reduceBezierPointerMove(
 
 function reduceBezierPointerUp(
   state: PlacingBezierInteractionState,
-  action: PointerUpInteractionAction,
+  action: PointerUpInteractionAction
 ): InteractionState {
   if (!state.dragging || !isSamePointer(state.pointerId, action.pointerId)) {
     return state;
@@ -560,7 +489,7 @@ function reduceBezierPointerUp(
 function completeIfValid(
   completedTool: DrawingStrokeToolV2,
   points: CanvasPoint[],
-  currentTool: InteractionTool,
+  currentTool: InteractionTool
 ): InteractionState {
   return hasDistinctPointCount(points, 2)
     ? completedIdle(currentTool, { tool: completedTool, points })
@@ -569,7 +498,7 @@ function completeIfValid(
 
 function completedIdle(
   currentTool: InteractionTool,
-  completedStroke: CompletedInteractionStroke,
+  completedStroke: CompletedInteractionStroke
 ): IdleInteractionState {
   return {
     phase: 'idle',
@@ -584,8 +513,6 @@ function completedIdle(
 function setShiftHeld(state: InteractionState, held: boolean): InteractionState {
   switch (state.phase) {
     case 'idle':
-    case 'panning':
-    case 'pinching':
       return state;
     case 'drawingPen':
     case 'drawingDragShape':
@@ -611,8 +538,15 @@ function hasDistinctPointCount(points: readonly CanvasPoint[], minimumCount: num
   return new Set(points.map((point) => `${point.x}:${point.y}`)).size >= minimumCount;
 }
 
-function isSamePointer(statePointerId: number | undefined, actionPointerId: number | undefined): boolean {
-  return statePointerId === undefined || actionPointerId === undefined || statePointerId === actionPointerId;
+function isSamePointer(
+  statePointerId: number | undefined,
+  actionPointerId: number | undefined
+): boolean {
+  return (
+    statePointerId === undefined ||
+    actionPointerId === undefined ||
+    statePointerId === actionPointerId
+  );
 }
 
 function clonePoint(point: CanvasPoint): CanvasPoint;
@@ -625,6 +559,8 @@ function distance(a: CanvasPoint, b: CanvasPoint): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-function isCompleteBezierPoints(points: BezierControlPoints): points is [CanvasPoint, CanvasPoint, CanvasPoint, CanvasPoint] {
+function isCompleteBezierPoints(
+  points: BezierControlPoints
+): points is [CanvasPoint, CanvasPoint, CanvasPoint, CanvasPoint] {
   return points.every((point) => point !== undefined);
 }

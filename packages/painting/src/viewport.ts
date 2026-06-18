@@ -45,10 +45,7 @@ export function resetViewport(): DrawingViewport {
   return { ...DEFAULT_DRAWING_VIEWPORT };
 }
 
-export function canvasToScreen(
-  point: ViewportPoint,
-  viewport: DrawingViewport,
-): ViewportPoint {
+export function canvasToScreen(point: ViewportPoint, viewport: DrawingViewport): ViewportPoint {
   const normalized = normalizeViewport(viewport);
   const x = safeNumber(point.x, 0);
   const y = safeNumber(point.y, 0);
@@ -59,10 +56,7 @@ export function canvasToScreen(
   };
 }
 
-export function screenToCanvas(
-  point: ViewportPoint,
-  viewport: DrawingViewport,
-): ViewportPoint {
+export function screenToCanvas(point: ViewportPoint, viewport: DrawingViewport): ViewportPoint {
   const normalized = normalizeViewport(viewport);
   const x = safeNumber(point.x, 0);
   const y = safeNumber(point.y, 0);
@@ -70,25 +64,5 @@ export function screenToCanvas(
   return {
     x: (x - normalized.tx) / normalized.scale,
     y: (y - normalized.ty) / normalized.scale,
-  };
-}
-
-export function zoomViewportAroundScreenPoint(
-  viewport: DrawingViewport,
-  screenMidpoint: ViewportPoint,
-  requestedScale: number,
-): DrawingViewport {
-  const normalized = normalizeViewport(viewport);
-  const nextScale = clampScale(requestedScale);
-  const midpoint = {
-    x: safeNumber(screenMidpoint.x, 0),
-    y: safeNumber(screenMidpoint.y, 0),
-  };
-  const canvasMidpoint = screenToCanvas(midpoint, normalized);
-
-  return {
-    scale: nextScale,
-    tx: midpoint.x - canvasMidpoint.x * nextScale,
-    ty: midpoint.y - canvasMidpoint.y * nextScale,
   };
 }
