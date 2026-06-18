@@ -253,6 +253,51 @@ describe('DrawingSurface', () => {
     expect(container.querySelector('path')).toBeNull();
   });
 
+  it('commits an active pen stroke when pointerup is received on document', () => {
+    const onChange = jest.fn();
+    render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange}
+        tool="pen"
+        strokeSmoothing={false}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+
+    act(() => {
+      host.dispatchEvent(
+        createPointerEvent(
+          'pointerdown',
+          { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
+          1
+        )
+      );
+      document.dispatchEvent(
+        createPointerEvent(
+          'pointermove',
+          { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: -1 } },
+          1
+        )
+      );
+      document.dispatchEvent(
+        createPointerEvent(
+          'pointerup',
+          { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 } },
+          1
+        )
+      );
+    });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
+      { x: 5, y: 5 },
+      { x: 10, y: 15 },
+    ]);
+  });
+
   it('accepts pen, left mouse, and touch input by default', () => {
     expectInputAccepted(undefined, { pointerType: 'pen', button: 0 });
     expectInputAccepted(undefined, { pointerType: 'mouse', button: 0 });

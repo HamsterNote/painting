@@ -25,6 +25,7 @@ describe('viewport', () => {
 
   describe('coordinate transforms', () => {
     it.each(roundTripCases)('round-trips canvas points for $name viewport', ({ viewport }) => {
+      expect.hasAssertions();
       const point = { x: 123.456, y: -78.9 };
       const screenPoint = canvasToScreen(point, viewport);
       const canvasPoint = screenToCanvas(screenPoint, viewport);

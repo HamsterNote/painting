@@ -745,6 +745,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       const pointerPaths = new Map<number, PointerSample[]>();
       const activeDrawingPointerIds = new Set<number>();
       const capturedPointerIds = new Set<number>();
+      const eraserQueuedHits = eraserQueuedHitsRef.current;
       let currentActiveStroke: DrawingStroke | null = null;
 
       const clearCurrentActiveStroke = () => {
@@ -1184,7 +1185,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       };
 
       const cancelPointerInteraction = (input: PointerSample) => {
-        eraserQueuedHitsRef.current.clear();
+        eraserQueuedHits.clear();
         clearEraserTrajectoryRef.current();
         clearLassoInteractionRef.current();
         clearStrokeState();
@@ -1277,9 +1278,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       };
 
       host.addEventListener('pointerdown', handlePointerDown);
-      host.addEventListener('pointermove', handlePointerMove);
-      host.addEventListener('pointerup', handlePointerEnd);
-      host.addEventListener('pointercancel', handlePointerCancel);
+      // pointerdown 必须从 host 开始；后续 move/end 绑到 document，保证指针离开
+      // surface 或运行环境不支持 pointer capture 时仍能结束手势并提交/清理状态。
+      document.addEventListener('pointermove', handlePointerMove);
+      document.addEventListener('pointerup', handlePointerEnd);
+      document.addEventListener('pointercancel', handlePointerCancel);
       window.addEventListener('keydown', handleKeyChange);
       window.addEventListener('keyup', handleKeyChange);
       window.addEventListener('blur', handleBlur);
@@ -1289,9 +1292,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           clearActiveStrokeRef.current = null;
         }
         host.removeEventListener('pointerdown', handlePointerDown);
-        host.removeEventListener('pointermove', handlePointerMove);
-        host.removeEventListener('pointerup', handlePointerEnd);
-        host.removeEventListener('pointercancel', handlePointerCancel);
+        document.removeEventListener('pointermove', handlePointerMove);
+        document.removeEventListener('pointerup', handlePointerEnd);
+        document.removeEventListener('pointercancel', handlePointerCancel);
         window.removeEventListener('keydown', handleKeyChange);
         window.removeEventListener('keyup', handleKeyChange);
         window.removeEventListener('blur', handleBlur);
@@ -1300,7 +1303,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         }
         activeDrawingPointerIds.clear();
         pointerPaths.clear();
-        eraserQueuedHitsRef.current.clear();
+        eraserQueuedHits.clear();
         clearEraserTrajectoryRef.current();
         clearLassoInteractionRef.current();
       };
@@ -1492,16 +1495,18 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       };
 
       host.addEventListener('pointerdown', handlePointerDown);
-      host.addEventListener('pointermove', handlePointerMove);
-      host.addEventListener('pointerup', handlePointerUp);
+      // Placement drags (line/bezier) must survive leaving the host between
+      // pointerdown and pointerup; document listeners preserve that lifecycle.
+      document.addEventListener('pointermove', handlePointerMove);
+      document.addEventListener('pointerup', handlePointerUp);
       host.addEventListener('dblclick', handleDoubleClick);
       window.addEventListener('keydown', handleKeyDown);
       window.addEventListener('blur', handleBlur);
 
       return () => {
         host.removeEventListener('pointerdown', handlePointerDown);
-        host.removeEventListener('pointermove', handlePointerMove);
-        host.removeEventListener('pointerup', handlePointerUp);
+        document.removeEventListener('pointermove', handlePointerMove);
+        document.removeEventListener('pointerup', handlePointerUp);
         host.removeEventListener('dblclick', handleDoubleClick);
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('blur', handleBlur);

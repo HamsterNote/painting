@@ -497,12 +497,12 @@ test.describe('DrawingSurface playground', () => {
     }
   });
 
-  test('exposes dash / fill / cursor / gesture control panels', async ({ page }) => {
+  test('exposes dash / fill / cursor / eraser control panels without gesture controls', async ({ page }) => {
     await expect(page.getByTestId('panel-dash')).toBeVisible();
     await expect(page.getByTestId('panel-fill')).toBeVisible();
     await expect(page.getByTestId('panel-cursor')).toBeVisible();
     await expect(page.getByTestId('panel-eraser')).toBeVisible();
-    await expect(page.getByTestId('panel-gestures')).toBeVisible();
+    await expect(page.getByTestId('panel-gestures')).toHaveCount(0);
 
     await expect(page.getByTestId('dash-enabled')).toBeVisible();
     await expect(page.getByTestId('dash-length')).toBeVisible();
@@ -535,11 +535,11 @@ test.describe('DrawingSurface playground', () => {
       'MouseWheelZoom',
       'PenPan',
     ]) {
-      await expect(page.getByLabel(gesture)).toBeVisible();
+      await expect(page.getByLabel(gesture)).toHaveCount(0);
     }
-    await expect(page.getByTestId('gesture-min-scale-input')).toBeVisible();
-    await expect(page.getByTestId('gesture-max-scale-input')).toBeVisible();
-    await expect(page.getByTestId('gesture-reset-toggle')).toBeVisible();
+    await expect(page.getByTestId('gesture-min-scale-input')).toHaveCount(0);
+    await expect(page.getByTestId('gesture-max-scale-input')).toHaveCount(0);
+    await expect(page.getByTestId('gesture-reset-toggle')).toHaveCount(0);
   });
 
   test('shows shift instruction for rect / ellipse', async ({ page }) => {
@@ -560,19 +560,15 @@ test.describe('DrawingSurface playground', () => {
     await expect(page.getByTestId('tool-instruction')).toHaveText(/Drag 1 sets the start\/end line, drag 2 sets the first control point, drag 3 sets the second control point and commits/);
   });
 
-  test('reset button appears when gesture reset is enabled', async ({ page }) => {
+  test('gesture reset button is not rendered after gesture removal', async ({ page }) => {
     await expect(page.getByTestId('gesture-reset-button')).toHaveCount(0);
-    await page.getByTestId('gesture-reset-toggle').check();
-    await expect(page.getByTestId('gesture-reset-button')).toBeVisible();
   });
 
-  test('TouchSinglePan pans while pen input still draws strokes', async ({ page }) => {
+  test('touch input draws strokes instead of panning after gesture removal', async ({ page }) => {
     const surface = page.getByTestId('drawing-surface-controlled');
     const preview = page.getByTestId('drawing-preview-controlled');
     await expect(surface).toBeVisible();
     await expect(preview).toBeVisible();
-    await page.getByLabel('TouchSinglePan').check();
-    await expect(page.getByLabel('TouchSinglePan')).toBeChecked();
     await expect(surface).toHaveAttribute('data-stroke-count', '0');
     await expect(surface).toHaveAttribute('data-scale', '1');
     await expect(surface).toHaveAttribute('data-tx', '0');
@@ -588,21 +584,9 @@ test.describe('DrawingSurface playground', () => {
       ],
     });
 
-    const panTx = Number(await surface.getAttribute('data-tx'));
-    const panTy = Number(await surface.getAttribute('data-ty'));
-    expect(panTx !== 0 || panTy !== 0).toBe(true);
-    await expect(surface).toHaveAttribute('data-stroke-count', '0');
-
-    await dispatchPointerDrag(surface, {
-      pointerId: 32,
-      pointerType: 'pen',
-      start: { x: 60, y: 60 },
-      moves: [
-        { x: 100, y: 100 },
-        { x: 145, y: 135 },
-      ],
-    });
-
+    await expect(surface).toHaveAttribute('data-scale', '1');
+    await expect(surface).toHaveAttribute('data-tx', '0');
+    await expect(surface).toHaveAttribute('data-ty', '0');
     await expect(surface).toHaveAttribute('data-stroke-count', '1');
     const previewText = await preview.textContent();
     expect(previewText).toBeTruthy();
@@ -612,7 +596,7 @@ test.describe('DrawingSurface playground', () => {
     expect(parsed.strokes[0].points.length).toBeGreaterThan(0);
   });
 
-  test('MouseWheelZoom is opt-in only for wheel viewport changes', async ({ page }) => {
+  test('wheel input no longer changes viewport after gesture removal', async ({ page }) => {
     const surface = page.getByTestId('drawing-surface-controlled');
     await expect(surface).toBeVisible();
     await expect(surface).toHaveAttribute('data-scale', '1');
@@ -623,17 +607,8 @@ test.describe('DrawingSurface playground', () => {
       clientY: 150,
     });
     await expect(surface).toHaveAttribute('data-scale', '1');
-
-    await page.getByLabel('MouseWheelZoom').check();
-    await expect(page.getByLabel('MouseWheelZoom')).toBeChecked();
-    await surface.dispatchEvent('wheel', {
-      deltaY: -120,
-      clientX: 200,
-      clientY: 150,
-    });
-
-    const enabledScale = Number(await surface.getAttribute('data-scale'));
-    expect(enabledScale).toBeGreaterThan(1);
+    await expect(surface).toHaveAttribute('data-tx', '0');
+    await expect(surface).toHaveAttribute('data-ty', '0');
   });
 
   test('draws ellipse via drag and commits to JSON preview', async ({ page }) => {
@@ -867,113 +842,6 @@ test.describe('DrawingSurface playground', () => {
     expect(parsed.strokes.length).toBe(1);
     expect(parsed.strokes[0].tool).toBe('bezier');
     expect(parsed.strokes[0].points).toHaveLength(4);
-  });
-
-  // Task 8: two-finger pinch behavior-lock test.
-  //
-  // Strategy: CDP `Input.dispatchTouchEvent` is the most reliable way to drive
-  // genuine multi-touch in headless Chromium because Playwright's `page.touchscreen`
-  // only models a single touch point. We open a CDP session against the controlled
-  // surface page, enable pan + pinch-zoom gestures, then dispatch touchStart,
-  // touchMove, touchEnd with two concrete touch points whose distance ratio is
-  // 1.4 (start 100px apart at y=100, end 140px apart at y=110, so scale ratio = 1.4).
-  //
-  // The center moves from (150, 100) to (160, 110) producing a 10/10 px center
-  // delta in screen space, so we assert data-scale != "1" AND at least one of
-  // data-tx / data-ty changed from "0" (the DrawingSurface viewport formula
-  // also folds the focal-point translation into tx/ty so the canvas point under
-  // the original center stays anchored).
-  //
-  // `hasTouch: true` is enabled at the describe level below so the browser
-  // context advertises touch support; CDP itself doesn't strictly require it
-  // but it prevents Chromium from short-circuiting touch handlers.
-  test.describe('two-finger gestures', () => {
-    test.use({ hasTouch: true });
-
-    test('two-finger pinch changes viewport transform', async ({ page }) => {
-      // Enable the enum gestures needed for combined two-touch pan and zoom.
-      await page.getByLabel('TouchDoublePan').check();
-      await page.getByLabel('TouchDoubleZoom').check();
-      await expect(page.getByLabel('TouchDoublePan')).toBeChecked();
-      await expect(page.getByLabel('TouchDoubleZoom')).toBeChecked();
-
-      const surface = page.getByTestId('drawing-surface-controlled');
-      await expect(surface).toBeVisible();
-
-      // Baseline viewport: surface should advertise identity transform.
-      await expect(surface).toHaveAttribute('data-scale', '1');
-      await expect(surface).toHaveAttribute('data-tx', '0');
-      await expect(surface).toHaveAttribute('data-ty', '0');
-
-      const box = await surface.boundingBox();
-      expect(box).not.toBeNull();
-
-      // Start: touches 100px apart centered at (x+150, y+100).
-      // End:   touches 140px apart centered at (x+160, y+110).
-      // Distance ratio = 140/100 = 1.4 -> requested scale = 1.4 (within clamp).
-      const startA = { x: box!.x + 100, y: box!.y + 100 };
-      const startB = { x: box!.x + 200, y: box!.y + 100 };
-      const endA = { x: box!.x + 90, y: box!.y + 110 };
-      const endB = { x: box!.x + 230, y: box!.y + 110 };
-
-      // CDP fallback: open a session against the page and dispatch genuine
-      // multi-touch events. `Input.dispatchTouchEvent` is the only API surface
-      // in Playwright/Chromium that supports >1 simultaneous touch point.
-      const cdp = await page.context().newCDPSession(page);
-
-      // touchStart with both fingers down. CDP requires both points in a single
-      // payload for the simultaneous-down case.
-      await cdp.send('Input.dispatchTouchEvent', {
-        type: 'touchStart',
-        touchPoints: [
-          { x: startA.x, y: startA.y, id: 1 },
-          { x: startB.x, y: startB.y, id: 2 },
-        ],
-      });
-
-      // A small intermediate move halfway between start and end smoothes the
-      // adapter's pose accumulation so the snapshot is well-formed before the
-      // final move (mirrors how a real pinch produces multiple samples).
-      await cdp.send('Input.dispatchTouchEvent', {
-        type: 'touchMove',
-        touchPoints: [
-          { x: (startA.x + endA.x) / 2, y: (startA.y + endA.y) / 2, id: 1 },
-          { x: (startB.x + endB.x) / 2, y: (startB.y + endB.y) / 2, id: 2 },
-        ],
-      });
-
-      await cdp.send('Input.dispatchTouchEvent', {
-        type: 'touchMove',
-        touchPoints: [
-          { x: endA.x, y: endA.y, id: 1 },
-          { x: endB.x, y: endB.y, id: 2 },
-        ],
-      });
-
-      // Release. Note CDP touchEnd payload is just the remaining points (empty here).
-      await cdp.send('Input.dispatchTouchEvent', {
-        type: 'touchEnd',
-        touchPoints: [],
-      });
-
-      await cdp.detach();
-
-      // Assert viewport mutated. Scale must have moved away from 1 (we expect
-      // ~1.4) and the translation should also have shifted from the identity
-      // origin because the two-finger center moved by (10, 10) AND the focal
-      // point zoom around the start center contributes additional tx/ty.
-      const scaleAttr = await surface.getAttribute('data-scale');
-      const txAttr = await surface.getAttribute('data-tx');
-      const tyAttr = await surface.getAttribute('data-ty');
-      expect(scaleAttr).not.toBeNull();
-      expect(scaleAttr).not.toBe('1');
-      expect(Number(scaleAttr)).toBeGreaterThan(1);
-      expect(txAttr !== '0' || tyAttr !== '0').toBe(true);
-
-      // Persist a screenshot as evidence so the run is auditable from the
-      // .omo/evidence directory.
-      await page.screenshot({ path: '.omo/evidence/task-8-pinch-after.png' });
-    });
   });
 
   // Task 7: Eraser options end-to-end coverage. Trajectory assertions are tight
