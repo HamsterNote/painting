@@ -1,5 +1,12 @@
-import { DrawingSurface, type DrawingTool, type DrawingInputMethod, type DrawingValue, type DrawingStrokeSmoothingOptions, type DrawingGesture, type DrawingSurfaceHandle } from '@hamster-note/painting';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  type DrawingInputMethod,
+  type DrawingStrokeSmoothingOptions,
+  DrawingSurface,
+  type DrawingSurfaceHandle,
+  type DrawingTool,
+  type DrawingValue,
+} from '@hamster-note/painting';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 /**
  * Eraser commit mode union literal — mirrors the exported
@@ -103,7 +110,9 @@ export default function App() {
   const [smoothingStrength, setSmoothingStrength] = useState(0.5);
   const [smoothingDensity, setSmoothingDensity] = useState(1);
   const [smoothingVelocityThreshold, setSmoothingVelocityThreshold] = useState(0.5);
-  const [controlledValue, setControlledValue] = useState<DrawingValue>({ strokes: [] });
+  const [controlledValue, setControlledValue] = useState<DrawingValue>({
+    strokes: [],
+  });
   const [uncontrolledStrokes, setUncontrolledStrokes] = useState<DrawingValue>(SEED_VALUE);
 
   // ===== Dash 控制状态 (Task 8/9 dashArray + dashOffset) =====
@@ -129,15 +138,6 @@ export default function App() {
   const [eraserTrajectoryColor, setEraserTrajectoryColor] = useState('#ccc');
   const [eraserTrajectoryOpacity, setEraserTrajectoryOpacity] = useState(0.5);
   const [eraserTrajectoryLineWidth, setEraserTrajectoryLineWidth] = useState(3);
-
-  // ===== Gestures 控制状态 (Task 3: gesture enum list + scale bounds + reset) =====
-  const [gestureList, setGestureList] = useState<DrawingGesture[]>([]);
-  const [gestureMinScale, setGestureMinScale] = useState(0.25);
-  const [gestureMaxScale, setGestureMaxScale] = useState(4);
-  const [gestureReset, setGestureReset] = useState(false);
-  // 当 reset 启用时显示 reset 按钮；按钮点击触发 viewportResetCounter 自增，
-  // 通过 key 重挂载子组件来命令式重置（避免引入 imperative ref 接口）
-  const [viewportResetCounter, setViewportResetCounter] = useState(0);
 
   // ===== 套索选择相关 ref 和状态 =====
   const uncontrolledSurfaceRef = useRef<DrawingSurfaceHandle>(null);
@@ -261,7 +261,8 @@ export default function App() {
     ref.coalescedPointsCount = 0;
     ref.pointerType = e.pointerType as 'mouse' | 'touch' | 'pen';
     ref.supportsRawUpdate = 'onpointerrawupdate' in HTMLElement.prototype;
-    ref.supportsCoalescedEvents = typeof (e.nativeEvent as PointerEvent).getCoalescedEvents === 'function';
+    ref.supportsCoalescedEvents =
+      typeof (e.nativeEvent as PointerEvent).getCoalescedEvents === 'function';
   }, []);
 
   const handleRawSamplingPointerMove = useCallback((_e: React.PointerEvent<HTMLDivElement>) => {
@@ -321,9 +322,7 @@ export default function App() {
 
   const handleInputMethodToggle = useCallback((method: DrawingInputMethod) => {
     setInputMethods((prev) =>
-      prev.includes(method)
-        ? prev.filter((m) => m !== method)
-        : [...prev, method]
+      prev.includes(method) ? prev.filter((m) => m !== method) : [...prev, method]
     );
   }, []);
 
@@ -350,10 +349,20 @@ export default function App() {
   const resolvedFillOpacity = fillEnabled ? fillOpacity : undefined;
 
   // cursor: false disables overlay; object enables custom render demo; undefined uses default crosshair
-  const cursorProp: false | { size?: number; color?: string; render?: (state: { screen: { x: number; y: number }; visible: boolean; activeTool: DrawingTool }) => ReactNode } | undefined =
-    !cursorEnabled
-      ? false
-      : cursorCustomRender
+  const cursorProp:
+    | false
+    | {
+        size?: number;
+        color?: string;
+        render?: (state: {
+          screen: { x: number; y: number };
+          visible: boolean;
+          activeTool: DrawingTool;
+        }) => ReactNode;
+      }
+    | undefined = !cursorEnabled
+    ? false
+    : cursorCustomRender
       ? {
           size: 20,
           color: '#ff6600',
@@ -373,12 +382,6 @@ export default function App() {
         }
       : undefined;
 
-  const gesturesProp = gestureList;
-  const gestureScaleBounds = useMemo(
-    () => ({ minScale: gestureMinScale, maxScale: gestureMaxScale }),
-    [gestureMinScale, gestureMaxScale],
-  );
-
   // Memoize so DrawingSurface 不会因为父组件 re-render 而频繁触发 eraserTrajectory 副作用。
   const eraserTrajectoryProp = useMemo(
     () => ({
@@ -387,12 +390,13 @@ export default function App() {
       opacity: eraserTrajectoryOpacity,
       lineWidth: eraserTrajectoryLineWidth,
     }),
-    [eraserTrajectoryVisible, eraserTrajectoryColor, eraserTrajectoryOpacity, eraserTrajectoryLineWidth],
+    [
+      eraserTrajectoryVisible,
+      eraserTrajectoryColor,
+      eraserTrajectoryOpacity,
+      eraserTrajectoryLineWidth,
+    ]
   );
-
-  const handleViewportReset = useCallback(() => {
-    setViewportResetCounter((n) => n + 1);
-  }, []);
 
   const toolInstruction = getToolInstruction(tool);
 
@@ -400,7 +404,15 @@ export default function App() {
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       <h1 style={{ marginBottom: '20px' }}>DrawingSurface Playground</h1>
 
-      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap' }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: '12px',
+          alignItems: 'center',
+          marginBottom: '20px',
+          flexWrap: 'wrap',
+        }}
+      >
         <label>
           Tool{' '}
           <select
@@ -409,7 +421,9 @@ export default function App() {
             onChange={(e) => setTool(e.target.value as DrawingTool)}
           >
             {ALL_TOOLS.map((t) => (
-              <option key={t.value} value={t.value}>{t.label}</option>
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
             ))}
           </select>
         </label>
@@ -433,7 +447,10 @@ export default function App() {
         ))}
 
         {toolInstruction && (
-          <span data-testid="tool-instruction" style={{ fontSize: '12px', color: '#666', fontStyle: 'italic' }}>
+          <span
+            data-testid="tool-instruction"
+            style={{ fontSize: '12px', color: '#666', fontStyle: 'italic' }}
+          >
             {toolInstruction}
           </span>
         )}
@@ -453,12 +470,16 @@ export default function App() {
             border: '1px solid #aaa',
             background: '#fff',
             borderRadius: '3px',
-            opacity: uncontrolledSelectedIds.length === 0 && controlledSelectedIds.length === 0 ? 0.5 : 1,
+            opacity:
+              uncontrolledSelectedIds.length === 0 && controlledSelectedIds.length === 0 ? 0.5 : 1,
           }}
         >
           Delete Selected
           {(uncontrolledSelectedIds.length > 0 || controlledSelectedIds.length > 0) && (
-            <span data-testid="lasso-selection-count" style={{ marginLeft: '6px', fontWeight: 'bold' }}>
+            <span
+              data-testid="lasso-selection-count"
+              style={{ marginLeft: '6px', fontWeight: 'bold' }}
+            >
               ({uncontrolledSelectedIds.length + controlledSelectedIds.length})
             </span>
           )}
@@ -482,9 +503,7 @@ export default function App() {
             value={width}
             min={1}
             max={24}
-            onChange={(e) =>
-              setWidth(Math.min(24, Math.max(1, parseInt(e.target.value, 10) || 1)))
-            }
+            onChange={(e) => setWidth(Math.min(24, Math.max(1, parseInt(e.target.value, 10) || 1)))}
           />
         </label>
 
@@ -580,7 +599,9 @@ export default function App() {
                 onChange={(e) => setSmoothingStrength(parseFloat(e.target.value))}
                 style={{ width: '80px' }}
               />
-              <span style={{ fontSize: '12px', color: '#666' }}>{smoothingStrength.toFixed(1)}</span>
+              <span style={{ fontSize: '12px', color: '#666' }}>
+                {smoothingStrength.toFixed(1)}
+              </span>
             </label>
 
             <label>
@@ -610,265 +631,283 @@ export default function App() {
                 onChange={(e) => setSmoothingVelocityThreshold(parseFloat(e.target.value))}
                 style={{ width: '80px' }}
               />
-              <span style={{ fontSize: '12px', color: '#666' }}>{smoothingVelocityThreshold.toFixed(1)}</span>
+              <span style={{ fontSize: '12px', color: '#666' }}>
+                {smoothingVelocityThreshold.toFixed(1)}
+              </span>
             </label>
           </>
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' }}>
-      <fieldset data-testid="panel-dash" style={{ margin: 0, border: '1px solid #ccc', borderRadius: '4px', padding: '8px 12px', flex: '1 1 320px' }}>
-        <legend><strong>Dash</strong></legend>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <label>
-            <input
-              type="checkbox"
-              data-testid="dash-enabled"
-              checked={dashEnabled}
-              onChange={(e) => setDashEnabled(e.target.checked)}
-            />
-            {' '}Enable
-          </label>
-          <label>
-            Length{' '}
-            <input
-              type="number"
-              data-testid="dash-length"
-              min={0}
-              max={100}
-              value={dashLength}
-              onChange={(e) => setDashLength(Math.max(0, parseInt(e.target.value, 10) || 0))}
-              style={{ width: '60px' }}
-            />
-          </label>
-          <label>
-            Gap{' '}
-            <input
-              type="number"
-              data-testid="dash-gap"
-              min={0}
-              max={100}
-              value={dashGap}
-              onChange={(e) => setDashGap(Math.max(0, parseInt(e.target.value, 10) || 0))}
-              style={{ width: '60px' }}
-            />
-          </label>
-          <label>
-            Offset{' '}
-            <input
-              type="number"
-              data-testid="dash-offset"
-              min={-100}
-              max={100}
-              value={dashOffset}
-              onChange={(e) => setDashOffset(parseInt(e.target.value, 10) || 0)}
-              style={{ width: '60px' }}
-            />
-          </label>
-        </div>
-      </fieldset>
-
-      <fieldset data-testid="panel-fill" style={{ margin: 0, border: '1px solid #ccc', borderRadius: '4px', padding: '8px 12px', flex: '1 1 320px' }}>
-        <legend><strong>Fill (closed shapes: rect / ellipse / polygon)</strong></legend>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <label>
-            <input
-              type="checkbox"
-              data-testid="fill-enabled"
-              checked={fillEnabled}
-              onChange={(e) => setFillEnabled(e.target.checked)}
-            />
-            {' '}Enable
-          </label>
-          <label>
-            Color{' '}
-            <input
-              type="color"
-              data-testid="fill-color"
-              value={fillColor}
-              onChange={(e) => setFillColor(e.target.value)}
-            />
-          </label>
-          <label>
-            Opacity{' '}
-            <input
-              type="range"
-              data-testid="fill-opacity"
-              min={0}
-              max={1}
-              step={0.05}
-              value={fillOpacity}
-              onChange={(e) => setFillOpacity(parseFloat(e.target.value))}
-              style={{ width: '80px' }}
-            />
-            <span style={{ fontSize: '12px', color: '#666' }}>{fillOpacity.toFixed(2)}</span>
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              data-testid="force-stroke-width-zero"
-              checked={forceStrokeWidthZero}
-              onChange={(e) => setForceStrokeWidthZero(e.target.checked)}
-            />
-            {' '}strokeWidth = 0 (fill only)
-          </label>
-        </div>
-      </fieldset>
-
-      <fieldset data-testid="panel-cursor" style={{ margin: 0, border: '1px solid #ccc', borderRadius: '4px', padding: '8px 12px', flex: '1 1 320px' }}>
-        <legend><strong>Cursor / Crosshair</strong></legend>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <label>
-            <input
-              type="checkbox"
-              data-testid="cursor-enabled"
-              checked={cursorEnabled}
-              onChange={(e) => setCursorEnabled(e.target.checked)}
-            />
-            {' '}Enable crosshair
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              data-testid="cursor-custom-render-toggle"
-              checked={cursorCustomRender}
-              onChange={(e) => setCursorCustomRender(e.target.checked)}
-              disabled={!cursorEnabled}
-            />
-            {' '}Use custom render (orange dot + tool label)
-          </label>
-        </div>
-      </fieldset>
-
-      <fieldset data-testid="panel-eraser" style={{ margin: 0, border: '1px solid #ccc', borderRadius: '4px', padding: '8px 12px', flex: '1 1 320px' }}>
-        <legend><strong>Eraser (commit mode / trajectory)</strong></legend>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <label>
-            Commit{' '}
-            <select
-              data-testid="eraser-commit-mode"
-              value={eraserCommitMode}
-              onChange={(e) => setEraserCommitMode(e.target.value as EraserCommitMode)}
-            >
-              <option value="while-sliding">while-sliding</option>
-              <option value="on-release">on-release</option>
-            </select>
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              data-testid="eraser-trajectory-visible"
-              checked={eraserTrajectoryVisible}
-              onChange={(e) => setEraserTrajectoryVisible(e.target.checked)}
-            />
-            {' '}Trajectory visible
-          </label>
-          <label>
-            Color{' '}
-            <input
-              type="text"
-              data-testid="eraser-trajectory-color"
-              value={eraserTrajectoryColor}
-              onChange={(e) => setEraserTrajectoryColor(e.target.value)}
-              style={{ width: '70px' }}
-            />
-          </label>
-          <label>
-            Opacity{' '}
-            <input
-              type="number"
-              data-testid="eraser-trajectory-opacity"
-              min={0}
-              max={1}
-              step={0.05}
-              value={eraserTrajectoryOpacity}
-              onChange={(e) => setEraserTrajectoryOpacity(Math.min(1, Math.max(0, parseFloat(e.target.value) || 0)))}
-              style={{ width: '60px' }}
-            />
-          </label>
-          <label>
-            Line width{' '}
-            <input
-              type="number"
-              data-testid="eraser-trajectory-line-width"
-              min={1}
-              step={1}
-              value={eraserTrajectoryLineWidth}
-              onChange={(e) =>
-                setEraserTrajectoryLineWidth(Math.max(1, parseInt(e.target.value, 10) || 1))
-              }
-              style={{ width: '60px' }}
-            />
-          </label>
-        </div>
-      </fieldset>
-
-      <fieldset data-testid="panel-gestures" style={{ margin: 0, border: '1px solid #ccc', borderRadius: '4px', padding: '8px 12px', flex: '1 1 320px' }}>
-        <legend><strong>Gestures (viewport pan / pinch zoom / reset)</strong></legend>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-          {(['TouchSinglePan', 'TouchDoublePan', 'TouchDoubleZoom', 'MousePan', 'MouseWheelZoom', 'PenPan'] as DrawingGesture[]).map((gesture) => (
-            <label key={gesture} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: '12px',
+          flexWrap: 'wrap',
+          marginBottom: '16px',
+        }}
+      >
+        <fieldset
+          data-testid="panel-dash"
+          style={{
+            margin: 0,
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            padding: '8px 12px',
+            flex: '1 1 320px',
+          }}
+        >
+          <legend>
+            <strong>Dash</strong>
+          </legend>
+          <div
+            style={{
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}
+          >
+            <label>
               <input
                 type="checkbox"
-                data-testid={`gesture-${gesture.toLowerCase()}-toggle`}
-                checked={gestureList.includes(gesture)}
-                onChange={(e) => {
-                  setGestureList((prev) =>
-                    e.target.checked
-                      ? [...prev, gesture]
-                      : prev.filter((g) => g !== gesture)
-                  );
-                }}
-              />
-              {' '}{gesture}
+                data-testid="dash-enabled"
+                checked={dashEnabled}
+                onChange={(e) => setDashEnabled(e.target.checked)}
+              />{' '}
+              Enable
             </label>
-          ))}
-          <label>
-            Min scale{' '}
-            <input
-              type="number"
-              data-testid="gesture-min-scale-input"
-              min={0.1}
-              max={gestureMaxScale}
-              step={0.05}
-              value={gestureMinScale}
-              onChange={(e) => setGestureMinScale(Math.max(0.1, parseFloat(e.target.value) || 0.1))}
-              style={{ width: '70px' }}
-            />
-          </label>
-          <label>
-            Max scale{' '}
-            <input
-              type="number"
-              data-testid="gesture-max-scale-input"
-              min={gestureMinScale}
-              step={0.05}
-              value={gestureMaxScale}
-              onChange={(e) => setGestureMaxScale(Math.max(gestureMinScale, parseFloat(e.target.value) || gestureMinScale))}
-              style={{ width: '70px' }}
-            />
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              data-testid="gesture-reset-toggle"
-              checked={gestureReset}
-              onChange={(e) => setGestureReset(e.target.checked)}
-            />
-            {' '}Reset
-          </label>
-          {gestureReset && (
-            <button
-              type="button"
-              data-testid="gesture-reset-button"
-              onClick={handleViewportReset}
-              style={{ padding: '4px 10px', cursor: 'pointer' }}
-            >
-              Reset viewport
-            </button>
-          )}
-        </div>
-      </fieldset>
+            <label>
+              Length{' '}
+              <input
+                type="number"
+                data-testid="dash-length"
+                min={0}
+                max={100}
+                value={dashLength}
+                onChange={(e) => setDashLength(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                style={{ width: '60px' }}
+              />
+            </label>
+            <label>
+              Gap{' '}
+              <input
+                type="number"
+                data-testid="dash-gap"
+                min={0}
+                max={100}
+                value={dashGap}
+                onChange={(e) => setDashGap(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                style={{ width: '60px' }}
+              />
+            </label>
+            <label>
+              Offset{' '}
+              <input
+                type="number"
+                data-testid="dash-offset"
+                min={-100}
+                max={100}
+                value={dashOffset}
+                onChange={(e) => setDashOffset(parseInt(e.target.value, 10) || 0)}
+                style={{ width: '60px' }}
+              />
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset
+          data-testid="panel-fill"
+          style={{
+            margin: 0,
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            padding: '8px 12px',
+            flex: '1 1 320px',
+          }}
+        >
+          <legend>
+            <strong>Fill (closed shapes: rect / ellipse / polygon)</strong>
+          </legend>
+          <div
+            style={{
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}
+          >
+            <label>
+              <input
+                type="checkbox"
+                data-testid="fill-enabled"
+                checked={fillEnabled}
+                onChange={(e) => setFillEnabled(e.target.checked)}
+              />{' '}
+              Enable
+            </label>
+            <label>
+              Color{' '}
+              <input
+                type="color"
+                data-testid="fill-color"
+                value={fillColor}
+                onChange={(e) => setFillColor(e.target.value)}
+              />
+            </label>
+            <label>
+              Opacity{' '}
+              <input
+                type="range"
+                data-testid="fill-opacity"
+                min={0}
+                max={1}
+                step={0.05}
+                value={fillOpacity}
+                onChange={(e) => setFillOpacity(parseFloat(e.target.value))}
+                style={{ width: '80px' }}
+              />
+              <span style={{ fontSize: '12px', color: '#666' }}>{fillOpacity.toFixed(2)}</span>
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                data-testid="force-stroke-width-zero"
+                checked={forceStrokeWidthZero}
+                onChange={(e) => setForceStrokeWidthZero(e.target.checked)}
+              />{' '}
+              strokeWidth = 0 (fill only)
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset
+          data-testid="panel-cursor"
+          style={{
+            margin: 0,
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            padding: '8px 12px',
+            flex: '1 1 320px',
+          }}
+        >
+          <legend>
+            <strong>Cursor / Crosshair</strong>
+          </legend>
+          <div
+            style={{
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}
+          >
+            <label>
+              <input
+                type="checkbox"
+                data-testid="cursor-enabled"
+                checked={cursorEnabled}
+                onChange={(e) => setCursorEnabled(e.target.checked)}
+              />{' '}
+              Enable crosshair
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                data-testid="cursor-custom-render-toggle"
+                checked={cursorCustomRender}
+                onChange={(e) => setCursorCustomRender(e.target.checked)}
+                disabled={!cursorEnabled}
+              />{' '}
+              Use custom render (orange dot + tool label)
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset
+          data-testid="panel-eraser"
+          style={{
+            margin: 0,
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            padding: '8px 12px',
+            flex: '1 1 320px',
+          }}
+        >
+          <legend>
+            <strong>Eraser (commit mode / trajectory)</strong>
+          </legend>
+          <div
+            style={{
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}
+          >
+            <label>
+              Commit{' '}
+              <select
+                data-testid="eraser-commit-mode"
+                value={eraserCommitMode}
+                onChange={(e) => setEraserCommitMode(e.target.value as EraserCommitMode)}
+              >
+                <option value="while-sliding">while-sliding</option>
+                <option value="on-release">on-release</option>
+              </select>
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                data-testid="eraser-trajectory-visible"
+                checked={eraserTrajectoryVisible}
+                onChange={(e) => setEraserTrajectoryVisible(e.target.checked)}
+              />{' '}
+              Trajectory visible
+            </label>
+            <label>
+              Color{' '}
+              <input
+                type="text"
+                data-testid="eraser-trajectory-color"
+                value={eraserTrajectoryColor}
+                onChange={(e) => setEraserTrajectoryColor(e.target.value)}
+                style={{ width: '70px' }}
+              />
+            </label>
+            <label>
+              Opacity{' '}
+              <input
+                type="number"
+                data-testid="eraser-trajectory-opacity"
+                min={0}
+                max={1}
+                step={0.05}
+                value={eraserTrajectoryOpacity}
+                onChange={(e) =>
+                  setEraserTrajectoryOpacity(
+                    Math.min(1, Math.max(0, parseFloat(e.target.value) || 0))
+                  )
+                }
+                style={{ width: '60px' }}
+              />
+            </label>
+            <label>
+              Line width{' '}
+              <input
+                type="number"
+                data-testid="eraser-trajectory-line-width"
+                min={1}
+                step={1}
+                value={eraserTrajectoryLineWidth}
+                onChange={(e) =>
+                  setEraserTrajectoryLineWidth(Math.max(1, parseInt(e.target.value, 10) || 1))
+                }
+                style={{ width: '60px' }}
+              />
+            </label>
+          </div>
+        </fieldset>
       </div>
 
       <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
@@ -877,7 +916,6 @@ export default function App() {
           <div style={{ width: '400px', height: '300px', marginBottom: '10px' }}>
             <DrawingSurface
               ref={uncontrolledSurfaceRef}
-              key={`uncontrolled-${viewportResetCounter}`}
               defaultValue={uncontrolledStrokes}
               onChange={handleUncontrolledChange}
               onSelectionChange={setUncontrolledSelectedIds}
@@ -894,9 +932,6 @@ export default function App() {
               fillColor={resolvedFillColor}
               fillOpacity={resolvedFillOpacity}
               cursor={cursorProp}
-              gestures={gesturesProp}
-              gestureScaleBounds={gestureScaleBounds}
-              gestureReset={gestureReset}
               eraserCommitMode={eraserCommitMode}
               eraserTrajectory={eraserTrajectoryProp}
               testID="drawing-surface-uncontrolled"
@@ -923,7 +958,6 @@ export default function App() {
           <div style={{ width: '400px', height: '300px', marginBottom: '10px' }}>
             <DrawingSurface
               ref={controlledSurfaceRef}
-              key={`controlled-${viewportResetCounter}`}
               value={controlledStrokes}
               onChange={handleControlledChange}
               onSelectionChange={setControlledSelectedIds}
@@ -940,9 +974,6 @@ export default function App() {
               fillColor={resolvedFillColor}
               fillOpacity={resolvedFillOpacity}
               cursor={cursorProp}
-              gestures={gesturesProp}
-              gestureScaleBounds={gestureScaleBounds}
-              gestureReset={gestureReset}
               eraserCommitMode={eraserCommitMode}
               eraserTrajectory={eraserTrajectoryProp}
               testID="drawing-surface-controlled"
@@ -978,7 +1009,13 @@ export default function App() {
       </div>
 
       {/* ===== 采样率测试 Demo ===== */}
-      <div style={{ marginTop: '30px', borderTop: '1px solid #ddd', paddingTop: '20px' }}>
+      <div
+        style={{
+          marginTop: '30px',
+          borderTop: '1px solid #ddd',
+          paddingTop: '20px',
+        }}
+      >
         <h2>采样率测试 Demo</h2>
         <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
           在下方区域按下鼠标/触摸/手写笔并移动，抬起后查看事件统计。
@@ -1012,7 +1049,9 @@ export default function App() {
 
           {/* 结果面板 */}
           <div style={{ flex: 1, minWidth: '300px' }}>
-            <h3 style={{ marginBottom: '12px' }}>事件统计（最近 {samplingDemoResults.length} 次）</h3>
+            <h3 style={{ marginBottom: '12px' }}>
+              事件统计（最近 {samplingDemoResults.length} 次）
+            </h3>
 
             {samplingDemoResults.length === 0 ? (
               <p style={{ color: '#999' }}>尚无数据，请在左侧区域绘制</p>
@@ -1031,12 +1070,26 @@ export default function App() {
                       fontFamily: 'monospace',
                     }}
                   >
-                    <div><strong>#{samplingDemoResults.length - index}</strong> | 类型: {result.pointerType}</div>
-                    <div>总事件数: <strong>{result.totalEvents}</strong>（down 1 + move {result.moveCount} + up 1）</div>
-                    <div>move 事件数: <strong>{result.moveCount}</strong></div>
-                    <div>总时间: <strong>{result.totalTime.toFixed(1)} ms</strong></div>
-                    <div>move 采样率: <strong>{result.moveRate.toFixed(1)} events/sec</strong></div>
-                    <div>平均 move 间隔: <strong>{result.avgMoveInterval.toFixed(2)} ms</strong></div>
+                    <div>
+                      <strong>#{samplingDemoResults.length - index}</strong> | 类型:{' '}
+                      {result.pointerType}
+                    </div>
+                    <div>
+                      总事件数: <strong>{result.totalEvents}</strong>（down 1 + move{' '}
+                      {result.moveCount} + up 1）
+                    </div>
+                    <div>
+                      move 事件数: <strong>{result.moveCount}</strong>
+                    </div>
+                    <div>
+                      总时间: <strong>{result.totalTime.toFixed(1)} ms</strong>
+                    </div>
+                    <div>
+                      move 采样率: <strong>{result.moveRate.toFixed(1)} events/sec</strong>
+                    </div>
+                    <div>
+                      平均 move 间隔: <strong>{result.avgMoveInterval.toFixed(2)} ms</strong>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1061,10 +1114,17 @@ export default function App() {
       </div>
 
       {/* ===== getCoalescedEvents 采样率测试 Demo ===== */}
-      <div style={{ marginTop: '30px', borderTop: '1px solid #ddd', paddingTop: '20px' }}>
+      <div
+        style={{
+          marginTop: '30px',
+          borderTop: '1px solid #ddd',
+          paddingTop: '20px',
+        }}
+      >
         <h2>getCoalescedEvents 采样率测试</h2>
         <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
-          测试 pointermove 事件中 getCoalescedEvents() 返回的合并点数，验证是否能获取更高频率的采样数据。
+          测试 pointermove 事件中 getCoalescedEvents()
+          返回的合并点数，验证是否能获取更高频率的采样数据。
         </p>
 
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
@@ -1094,7 +1154,9 @@ export default function App() {
           </div>
 
           <div style={{ flex: 1, minWidth: '300px' }}>
-            <h3 style={{ marginBottom: '12px' }}>事件统计（最近 {rawSamplingDemoResults.length} 次）</h3>
+            <h3 style={{ marginBottom: '12px' }}>
+              事件统计（最近 {rawSamplingDemoResults.length} 次）
+            </h3>
 
             {rawSamplingDemoResults.length === 0 ? (
               <p style={{ color: '#999' }}>尚无数据，请在左侧区域绘制</p>
@@ -1113,15 +1175,38 @@ export default function App() {
                       fontFamily: 'monospace',
                     }}
                   >
-                    <div><strong>#{rawSamplingDemoResults.length - index}</strong> | 类型: {result.pointerType}</div>
-                    <div>pointermove 事件数: <strong>{result.pointerMoveCount}</strong> ({result.pointerMoveRate.toFixed(1)} events/sec)</div>
-                    <div>coalesced 总点数: <strong>{result.coalescedPointsCount}</strong> ({result.coalescedPointsRate.toFixed(1)} points/sec)</div>
+                    <div>
+                      <strong>#{rawSamplingDemoResults.length - index}</strong> | 类型:{' '}
+                      {result.pointerType}
+                    </div>
+                    <div>
+                      pointermove 事件数: <strong>{result.pointerMoveCount}</strong> (
+                      {result.pointerMoveRate.toFixed(1)} events/sec)
+                    </div>
+                    <div>
+                      coalesced 总点数: <strong>{result.coalescedPointsCount}</strong> (
+                      {result.coalescedPointsRate.toFixed(1)} points/sec)
+                    </div>
                     {result.pointerMoveCount > 0 && (
-                      <div>平均每次 move 合并点数: <strong>{(result.coalescedPointsCount / result.pointerMoveCount).toFixed(1)}</strong></div>
+                      <div>
+                        平均每次 move 合并点数:{' '}
+                        <strong>
+                          {(result.coalescedPointsCount / result.pointerMoveCount).toFixed(1)}
+                        </strong>
+                      </div>
                     )}
-                    <div>总时间: <strong>{result.totalTime.toFixed(1)} ms</strong></div>
-                    <div style={{ marginTop: '4px', fontSize: '12px', color: '#666' }}>
-                      支持 pointerrawupdate: {result.supportsRawUpdate ? '✓' : '✗'} | 支持 getCoalescedEvents: {result.supportsCoalescedEvents ? '✓' : '✗'}
+                    <div>
+                      总时间: <strong>{result.totalTime.toFixed(1)} ms</strong>
+                    </div>
+                    <div
+                      style={{
+                        marginTop: '4px',
+                        fontSize: '12px',
+                        color: '#666',
+                      }}
+                    >
+                      支持 pointerrawupdate: {result.supportsRawUpdate ? '✓' : '✗'} | 支持
+                      getCoalescedEvents: {result.supportsCoalescedEvents ? '✓' : '✗'}
                     </div>
                   </div>
                 ))}

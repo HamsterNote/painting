@@ -1,50 +1,40 @@
 export type PointerInputController = {
-	destroy: () => void;
-	getActivePointerCount: () => number;
-	isGestureEnabled: () => boolean;
+  destroy: () => void;
+  getActivePointerCount: () => number;
 };
 
-export type PointerInputControllerOptions = {
-	gesturesEnabled?: boolean;
-};
+export function createPointerInputController(element: HTMLElement): PointerInputController {
+  const activePointers = new Map<number, PointerEvent>();
 
-export function createPointerInputController(
-	element: HTMLElement,
-	options: PointerInputControllerOptions = {},
-): PointerInputController {
-	const activePointers = new Map<number, PointerEvent>();
-	const gesturesEnabled = options.gesturesEnabled === true;
+  const handlePointerDown = (event: PointerEvent) => {
+    activePointers.set(event.pointerId, event);
+  };
 
-	const handlePointerDown = (event: PointerEvent) => {
-		activePointers.set(event.pointerId, event);
-	};
+  const handlePointerMove = (event: PointerEvent) => {
+    if (!activePointers.has(event.pointerId)) {
+      return;
+    }
 
-	const handlePointerMove = (event: PointerEvent) => {
-		if (!activePointers.has(event.pointerId)) {
-			return;
-		}
+    activePointers.set(event.pointerId, event);
+  };
 
-		activePointers.set(event.pointerId, event);
-	};
+  const handlePointerEnd = (event: PointerEvent) => {
+    activePointers.delete(event.pointerId);
+  };
 
-	const handlePointerEnd = (event: PointerEvent) => {
-		activePointers.delete(event.pointerId);
-	};
+  element.addEventListener('pointerdown', handlePointerDown);
+  document.addEventListener('pointermove', handlePointerMove);
+  document.addEventListener('pointerup', handlePointerEnd);
+  document.addEventListener('pointercancel', handlePointerEnd);
 
-	element.addEventListener("pointerdown", handlePointerDown);
-	document.addEventListener("pointermove", handlePointerMove);
-	document.addEventListener("pointerup", handlePointerEnd);
-	document.addEventListener("pointercancel", handlePointerEnd);
-
-	return {
-		destroy: () => {
-			element.removeEventListener("pointerdown", handlePointerDown);
-			document.removeEventListener("pointermove", handlePointerMove);
-			document.removeEventListener("pointerup", handlePointerEnd);
-			document.removeEventListener("pointercancel", handlePointerEnd);
-			activePointers.clear();
-		},
-		getActivePointerCount: () => activePointers.size,
-		isGestureEnabled: () => gesturesEnabled,
-	};
+  return {
+    destroy: () => {
+      element.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerEnd);
+      document.removeEventListener('pointercancel', handlePointerEnd);
+      activePointers.clear();
+    },
+    getActivePointerCount: () => activePointers.size,
+  };
 }
