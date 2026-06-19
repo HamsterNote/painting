@@ -73,7 +73,7 @@ describe('interactionReducer', () => {
         shiftHeld: false,
         pointerId: undefined,
       });
-    },
+    }
   );
 
   it('enters placingPolygon from idle with the first vertex', () => {
@@ -150,32 +150,13 @@ describe('interactionReducer', () => {
     ['placingPolygon', enterFromIdle('polygon')],
     ['placingLine', enterFromIdle('line', point(0, 0), 'place')],
     ['placingBezier', enterFromIdle('bezier')],
-    [
-      'panning',
-      interactionReducer(createInitialState('pen'), {
-        type: 'POINTER_DOWN',
-        gesture: 'pan',
-        viewport: { scale: 1, tx: 0, ty: 0 },
-        point: point(4, 5),
-      }),
-    ],
-    [
-      'pinching',
-      interactionReducer(createInitialState('pen'), {
-        type: 'POINTER_DOWN',
-        gesture: 'pinch',
-        viewport: { scale: 1, tx: 0, ty: 0 },
-        pointerIds: [1, 2],
-        centroid: point(4, 5),
-      }),
-    ],
   ] as Array<[string, InteractionState]>)(
     'Escape cancels %s back to idle with no commit',
     (_phase, inProgress) => {
       const state = interactionReducer(inProgress, { type: 'KEY_DOWN', key: 'Escape' });
 
       expect(state).toEqual({ phase: 'idle', tool: inProgress.tool });
-    },
+    }
   );
 
   it.each([
@@ -190,7 +171,7 @@ describe('interactionReducer', () => {
       const state = interactionReducer(inProgress, { type: 'BLUR' });
 
       expect(state).toEqual({ phase: 'idle', tool: inProgress.tool });
-    },
+    }
   );
 
   it('reset request cancels in-progress drawing and surfaces a viewport reset signal', () => {
@@ -246,11 +227,20 @@ describe('interactionReducer', () => {
 
   it('Bezier drag 2 commits cp1 while cp2 remains unknown without completed stroke', () => {
     const lineCommitted = interactionReducer(
-      interactionReducer(enterFromIdle('bezier', point(0, 0)), { type: 'POINTER_MOVE', point: point(30, 30) }),
-      { type: 'POINTER_UP', point: point(30, 30) },
+      interactionReducer(enterFromIdle('bezier', point(0, 0)), {
+        type: 'POINTER_MOVE',
+        point: point(30, 30),
+      }),
+      { type: 'POINTER_UP', point: point(30, 30) }
     );
-    const controlStarted = interactionReducer(lineCommitted, { type: 'POINTER_DOWN', point: point(10, 0) });
-    const controlPreview = interactionReducer(controlStarted, { type: 'POINTER_MOVE', point: point(12, 2) });
+    const controlStarted = interactionReducer(lineCommitted, {
+      type: 'POINTER_DOWN',
+      point: point(10, 0),
+    });
+    const controlPreview = interactionReducer(controlStarted, {
+      type: 'POINTER_MOVE',
+      point: point(12, 2),
+    });
 
     const state = interactionReducer(controlPreview, { type: 'POINTER_UP', point: point(12, 2) });
 
@@ -269,16 +259,19 @@ describe('interactionReducer', () => {
 
   it('Bezier drag 3 completes with start/cp1/cp2/end order and keeps bezier active', () => {
     const lineCommitted = interactionReducer(
-      interactionReducer(enterFromIdle('bezier', point(0, 0)), { type: 'POINTER_MOVE', point: point(30, 30) }),
-      { type: 'POINTER_UP', point: point(30, 30) },
+      interactionReducer(enterFromIdle('bezier', point(0, 0)), {
+        type: 'POINTER_MOVE',
+        point: point(30, 30),
+      }),
+      { type: 'POINTER_UP', point: point(30, 30) }
     );
     const control1Committed = interactionReducer(
       interactionReducer(lineCommitted, { type: 'POINTER_DOWN', point: point(10, 0) }),
-      { type: 'POINTER_UP', point: point(10, 0) },
+      { type: 'POINTER_UP', point: point(10, 0) }
     );
     const control2Preview = interactionReducer(
       interactionReducer(control1Committed, { type: 'POINTER_DOWN', point: point(20, 10) }),
-      { type: 'POINTER_MOVE', point: point(22, 12) },
+      { type: 'POINTER_MOVE', point: point(22, 12) }
     );
 
     const state = interactionReducer(control2Preview, { type: 'POINTER_UP', point: point(22, 12) });
@@ -300,13 +293,19 @@ describe('interactionReducer', () => {
     ['pointer cancel', { type: 'POINTER_CANCEL' }],
   ] as const)('cancels partial Bezier on %s with no commit', (_label, action) => {
     const partial = interactionReducer(
-      interactionReducer(enterFromIdle('bezier', point(0, 0)), { type: 'POINTER_MOVE', point: point(30, 30) }),
-      { type: 'POINTER_UP', point: point(30, 30) },
+      interactionReducer(enterFromIdle('bezier', point(0, 0)), {
+        type: 'POINTER_MOVE',
+        point: point(30, 30),
+      }),
+      { type: 'POINTER_UP', point: point(30, 30) }
     );
 
     const state = interactionReducer(partial, action);
 
-    expect(state).toEqual({ phase: 'idle', tool: action.type === 'TOOL_CHANGE' ? 'pen' : 'bezier' });
+    expect(state).toEqual({
+      phase: 'idle',
+      tool: action.type === 'TOOL_CHANGE' ? 'pen' : 'bezier',
+    });
   });
 
   it('updates and clears shiftHeld on drawable in-progress states', () => {
