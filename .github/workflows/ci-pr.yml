@@ -71,9 +71,9 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
 
-      - name: Build
+      - name: Build library and demo
         run: |
-          yarn build
+          yarn build:all
 
       - name: Verify npm pack (dry-run)
         run: |

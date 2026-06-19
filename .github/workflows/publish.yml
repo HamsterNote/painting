@@ -1,12 +1,12 @@
-name: Publish to npm (version branches)
+name: Publish to npm
 
 on:
   push:
-    branches:
-      - 'version/*'
+    tags:
+      - 'v*'
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 jobs:
@@ -19,28 +19,36 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Classify branch and prepare env
+      - name: Classify tag and prepare env
         run: |
-          BRANCH="${GITHUB_REF#refs/heads/}"
-          echo "Detected branch: $BRANCH"
+          TAG="${GITHUB_REF#refs/tags/v}"
+          echo "Detected tag: v$TAG"
 
-          VERSION="${BRANCH#version/}"
+          VERSION="$TAG"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
           PKG_VERSION=$(node -e "console.log(JSON.parse(require('fs').readFileSync('packages/painting/package.json','utf8')).version)")
 
+          if [ "$VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag version ($VERSION) must match package version ($PKG_VERSION)."
+            exit 1
+          fi
+
           if [[ "$PKG_VERSION" =~ -dev ]]; then
+            PUBLISH_TAG=dev
             echo "PUBLISH_TAG=dev" >> "$GITHUB_ENV"
             echo "Version type: Dev Pre-release"
           elif [[ "$PKG_VERSION" =~ -beta ]]; then
+            PUBLISH_TAG=beta
             echo "PUBLISH_TAG=beta" >> "$GITHUB_ENV"
             echo "Version type: Beta Pre-release"
           else
+            PUBLISH_TAG=latest
             echo "PUBLISH_TAG=latest" >> "$GITHUB_ENV"
             echo "Version type: Release"
           fi
 
-          echo "Branch version: $VERSION"
+          echo "Tag version: $VERSION"
           echo "Package version: $PKG_VERSION"
           echo "Publish tag: $PUBLISH_TAG"
 
@@ -84,7 +92,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           cd packages/painting
-          npm publish --tag "$PUBLISH_TAG" --access public --provenance
+          npm publish --provenance --tag "$PUBLISH_TAG" --access public
 
       - name: Ensure pre-release dist-tag
         if: (env.PUBLISH_TAG == 'dev' || env.PUBLISH_TAG == 'beta') && steps.version.outputs.should_publish == 'true'
@@ -96,3 +104,10 @@ jobs:
           echo "Ensure dist-tag: ${PUBLISH_TAG} -> $VERSION"
           npm dist-tag add "$PKG_NAME@$VERSION" "$PUBLISH_TAG" || true
           npm dist-tag ls "$PKG_NAME"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
