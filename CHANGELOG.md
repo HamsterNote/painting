@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1-beta-3] - 2026-06-19
+
+### Added
+- Lasso selection tool with move and delete support (`feat(painting): add lasso selection tool with move and delete support`)
+
+### Changed
+- Stabilize document pointer lifecycle and remove gesture remnants (`refactor(painting): stabilize document pointer lifecycle and remove gesture remnants`)
+- Remove gesture adapter and touch/mouse/zoom gestures from DrawingSurface (`refactor(painting): remove gesture adapter and touch/mouse/zoom gestures from DrawingSurface`)
+
+### Fixed
+- Keep lasso out of space pan (`fix(painting): keep lasso out of space pan`)
+- Correct lasso selection geometry (`fix(painting): correct lasso selection geometry`)
+- Harden tag release metadata (`fix(ci): harden tag release metadata`)
+- Restore workspace install compatibility (`fix(ci): restore workspace install compatibility`)
+- Add repository field and provenance support for npm publish (`fix: add repository field and provenance support for npm publish`)
+
 ## [0.1.1-beta.2] - 2026-06-13
 
 ### Fixed
