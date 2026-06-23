@@ -22,6 +22,13 @@ type BoundingBox = {
   maxY: number;
 };
 
+export type SelectionBox = {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+};
+
 type StrokeSelectionGeometry = {
   samples: DrawingPoint[];
   segments: Array<readonly [DrawingPoint, DrawingPoint]>;
@@ -30,6 +37,7 @@ type StrokeSelectionGeometry = {
 };
 
 const RENDERED_HIT_EPSILON = 1e-9;
+export const SELECTION_BOX_PADDING = 8;
 
 function distanceSqPointToSegment(point: DrawingPoint, a: DrawingPoint, b: DrawingPoint): number {
   const dx = b.x - a.x;
@@ -273,6 +281,26 @@ function expandBoundingBox(bbox: BoundingBox | null, amount: number): BoundingBo
   };
 }
 
+function isValidBoundingBox(bbox: BoundingBox): boolean {
+  return (
+    Number.isFinite(bbox.minX) &&
+    Number.isFinite(bbox.minY) &&
+    Number.isFinite(bbox.maxX) &&
+    Number.isFinite(bbox.maxY) &&
+    bbox.minX <= bbox.maxX &&
+    bbox.minY <= bbox.maxY
+  );
+}
+
+function unionBoundingBoxes(a: BoundingBox, b: BoundingBox): BoundingBox {
+  return {
+    minX: Math.min(a.minX, b.minX),
+    minY: Math.min(a.minY, b.minY),
+    maxX: Math.max(a.maxX, b.maxX),
+    maxY: Math.max(a.maxY, b.maxY),
+  };
+}
+
 function boundingBoxesOverlap(a: BoundingBox, b: BoundingBox): boolean {
   return a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;
 }
@@ -380,7 +408,7 @@ function distanceSqSegmentToSegment(a1: DrawingPoint, a2: DrawingPoint, b1: Draw
   );
 }
 
-function buildStrokeSelectionGeometry(stroke: DrawingStroke, options: Required<LassoSelectionOptions>): StrokeSelectionGeometry {
+function buildStrokeSelectionGeometry(stroke: PickableStroke, options: Required<LassoSelectionOptions>): StrokeSelectionGeometry {
   const { points, tool } = stroke;
 
   if (points.length === 0) {
@@ -696,6 +724,58 @@ export function updateStrokes(value: DrawingValue, strokes: readonly DrawingStro
     ...value,
     strokes: value.strokes.map((stroke) => replacementById.get(stroke.id) ?? stroke),
   };
+}
+
+/**
+ * 计算当前选中 strokes 的画布坐标选区框。
+ *
+ * 复用套索命中的 geometry 采样规则，确保 rect/ellipse/polygon/bezier 的边界
+ * 与渲染和套索选择使用同一套几何语义。每条 stroke 先按自身 strokeWidth/2
+ * 外扩，再把所有有效选中 stroke 合并并追加固定选区 padding。
+ */
+export function computeSelectionBox(
+  strokes: readonly (DrawingStroke | DrawingStrokeV2)[],
+  selectedIds: readonly string[],
+  options: LassoSelectionOptions = {},
+): SelectionBox | null {
+  if (strokes.length === 0 || selectedIds.length === 0) {
+    return null;
+  }
+
+  const resolvedOptions: Required<LassoSelectionOptions> = {
+    ellipseSegments: options.ellipseSegments ?? 48,
+    bezierSegments: options.bezierSegments ?? 48,
+  };
+  const selectedIdSet = new Set(selectedIds);
+  let unionBBox: BoundingBox | null = null;
+
+  for (const stroke of strokes) {
+    if (!selectedIdSet.has(stroke.id)) {
+      continue;
+    }
+
+    const geometry = buildStrokeSelectionGeometry(stroke, resolvedOptions);
+    if (geometry.bbox === null || !isValidBoundingBox(geometry.bbox)) {
+      continue;
+    }
+
+    // 每条 stroke 用自己的宽度半径外扩，不能退回到当前激活工具宽度。
+    const strokeHalfWidth = Math.max(0, stroke.strokeWidth ?? 0) / 2;
+    const strokeBBox = expandBoundingBox(geometry.bbox, strokeHalfWidth);
+
+    if (strokeBBox === null || !isValidBoundingBox(strokeBBox)) {
+      continue;
+    }
+
+    unionBBox = unionBBox === null ? strokeBBox : unionBoundingBoxes(unionBBox, strokeBBox);
+  }
+
+  const paddedBBox = expandBoundingBox(unionBBox, SELECTION_BOX_PADDING);
+  if (paddedBBox === null || !isValidBoundingBox(paddedBBox)) {
+    return null;
+  }
+
+  return paddedBBox;
 }
 
 export function selectStrokesIntersectingLasso(

@@ -3150,6 +3150,12 @@ describe('DrawingSurface', () => {
       },
     ];
 
+    const dispatchPointerDown = (target: EventTarget, item: PointerPathItem, pointerId = 1) => {
+      act(() => {
+        target.dispatchEvent(createPointerEvent('pointerdown', item, pointerId));
+      });
+    };
+
     it('selects strokes intersecting the drawn lasso', () => {
       const onSelectionChange = jest.fn();
       render(
@@ -3225,6 +3231,107 @@ describe('DrawingSurface', () => {
         { x: 30, y: 30 },
         { x: 70, y: 30 },
       ]);
+    });
+
+    it('renders a padded selection box after lasso selection and clears the preview', () => {
+      const { container } = render(
+        <DrawingSurface testID="drawing-surface-host" value={lassoFixture()} tool="lasso" />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      zeroHostRect(host);
+
+      dispatchDragMove(host, [finger(lassoPathAroundTarget())]);
+      dispatchDragEnd(host);
+
+      const selectionBox = container.querySelector('[data-testid="lasso-selection-box"]');
+      expect(selectionBox?.getAttribute('x')).toBe('9');
+      expect(selectionBox?.getAttribute('y')).toBe('9');
+      expect(selectionBox?.getAttribute('width')).toBe('62');
+      expect(selectionBox?.getAttribute('height')).toBe('22');
+      expect(selectionBox?.getAttribute('data-padding')).toBe('8');
+      expect(container.querySelector('[data-testid="lasso-preview"]')).toBeNull();
+    });
+
+    it('does not render a selection box when lasso selection is empty', () => {
+      const { container } = render(
+        <DrawingSurface testID="drawing-surface-host" value={lassoFixture()} tool="lasso" />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      zeroHostRect(host);
+
+      dispatchDragMove(host, [finger(lassoPathAwayFromStrokes())]);
+      dispatchDragEnd(host);
+
+      expect(container.querySelector('[data-testid="lasso-selection-box"]')).toBeNull();
+      expect(container.querySelector('[data-testid="lasso-preview"]')).toBeNull();
+    });
+
+    it('moves selected strokes when dragging from empty padded box interior', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          onChange={onChange}
+          tool="lasso"
+          selectedStrokeIds={['lasso-target']}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      zeroHostRect(host);
+
+      dispatchDragMove(host, [
+        finger([
+          {
+            point: { x: 15, y: 25 },
+            event: { pointerType: 'pen', button: 0, clientX: 15, clientY: 25 },
+          },
+          {
+            point: { x: 25, y: 35 },
+            event: { pointerType: 'pen', button: 0, clientX: 25, clientY: 35 },
+          },
+        ]),
+      ]);
+      dispatchDragEnd(host);
+
+      expect(onChange).toHaveBeenCalled();
+      const movedStroke = onChange.mock.calls[0][0].strokes.find(
+        (stroke: DrawingStroke) => stroke.id === 'lasso-target'
+      );
+      expect(movedStroke?.points).toEqual([
+        { x: 30, y: 30 },
+        { x: 70, y: 30 },
+      ]);
+    });
+
+    it('renders a padded ellipse selection box from shape extent instead of raw endpoints only', () => {
+      const ellipseFixture: DrawingValue = {
+        strokes: [
+          {
+            id: 'selected-ellipse',
+            tool: 'ellipse',
+            points: [
+              { x: 30, y: 40 },
+              { x: 90, y: 80 },
+            ],
+            strokeWidth: 4,
+          },
+        ],
+      };
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={ellipseFixture}
+          tool="lasso"
+          selectedStrokeIds={['selected-ellipse']}
+        />
+      );
+
+      const selectionBox = container.querySelector('[data-testid="lasso-selection-box"]');
+      expect(selectionBox?.getAttribute('x')).toBe('20');
+      expect(selectionBox?.getAttribute('y')).toBe('30');
+      expect(selectionBox?.getAttribute('width')).toBe('80');
+      expect(selectionBox?.getAttribute('height')).toBe('60');
     });
 
     it('deleteSelectedStrokes removes selected strokes and clears selection', () => {
@@ -3319,6 +3426,235 @@ describe('DrawingSurface', () => {
       rerender(<DrawingSurface testID="drawing-surface-host" value={lassoFixture()} tool="pen" />);
 
       expect(container.querySelector('[data-testid="lasso-preview"]')).toBeNull();
+    });
+
+    it('clears an uncontrolled lasso selection and hides the box when switching to pen', () => {
+      const onSelectionChange = jest.fn();
+      const { container, rerender } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          tool="lasso"
+          defaultSelectedStrokeIds={['lasso-target']}
+          onSelectionChange={onSelectionChange}
+        />
+      );
+
+      expect(container.querySelector('[data-testid="lasso-selection-box"]')).toBeTruthy();
+
+      rerender(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          tool="pen"
+          defaultSelectedStrokeIds={['lasso-target']}
+          onSelectionChange={onSelectionChange}
+        />
+      );
+
+      expect(onSelectionChange).toHaveBeenCalledWith([]);
+      expect(container.querySelector('[data-testid="lasso-selection-box"]')).toBeNull();
+    });
+
+    it('clears selection on inside-host pointerdown outside the selection box without creating a preview', () => {
+      const onSelectionChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          tool="lasso"
+          selectedStrokeIds={['lasso-target']}
+          onSelectionChange={onSelectionChange}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      zeroHostRect(host);
+
+      dispatchPointerDown(host, {
+        point: { x: 100, y: 100 },
+        event: { pointerType: 'pen', button: 0, clientX: 100, clientY: 100 },
+      });
+
+      expect(onSelectionChange).toHaveBeenCalledWith([]);
+      expect(container.querySelector('[data-testid="lasso-preview"]')).toBeNull();
+    });
+
+    it('clears lasso selection on document body pointerdown outside the host', () => {
+      const onSelectionChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          tool="lasso"
+          selectedStrokeIds={['lasso-target']}
+          onSelectionChange={onSelectionChange}
+        />
+      );
+
+      dispatchPointerDown(document.body, {
+        point: { x: 5, y: 5 },
+        event: { pointerType: 'mouse', button: 0, clientX: 5, clientY: 5 },
+      });
+
+      expect(onSelectionChange).toHaveBeenCalledWith([]);
+    });
+
+    it('ignores inside-host pointerdown in the document listener', () => {
+      const onSelectionChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          tool="lasso"
+          selectedStrokeIds={['lasso-target']}
+          onSelectionChange={onSelectionChange}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      zeroHostRect(host);
+
+      dispatchPointerDown(host, {
+        point: { x: 15, y: 25 },
+        event: { pointerType: 'pen', button: 0, clientX: 15, clientY: 25 },
+      });
+
+      expect(onSelectionChange).not.toHaveBeenCalled();
+      dispatchDragEnd(host);
+    });
+
+    it('cleans up the document pointerdown listener after rerender without selection and unmount', () => {
+      const onSelectionChange = jest.fn();
+      const { rerender, unmount } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          tool="lasso"
+          selectedStrokeIds={['lasso-target']}
+          onSelectionChange={onSelectionChange}
+        />
+      );
+
+      rerender(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          tool="lasso"
+          selectedStrokeIds={[]}
+          onSelectionChange={onSelectionChange}
+        />
+      );
+      dispatchPointerDown(document.body, {
+        point: { x: 5, y: 5 },
+        event: { pointerType: 'mouse', button: 0, clientX: 5, clientY: 5 },
+      });
+
+      unmount();
+      dispatchPointerDown(document.body, {
+        point: { x: 6, y: 6 },
+        event: { pointerType: 'mouse', button: 0, clientX: 6, clientY: 6 },
+      });
+
+      expect(onSelectionChange).not.toHaveBeenCalled();
+    });
+
+    it('fires controlled selection clearing callback and hides the box after selected ids rerender empty', () => {
+      const onSelectionChange = jest.fn();
+      const { container, rerender } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          tool="lasso"
+          selectedStrokeIds={['lasso-target']}
+          onSelectionChange={onSelectionChange}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      zeroHostRect(host);
+
+      dispatchPointerDown(host, {
+        point: { x: 80, y: 50 },
+        event: { pointerType: 'pen', button: 0, clientX: 80, clientY: 50 },
+      });
+
+      expect(onSelectionChange).toHaveBeenCalledWith([]);
+      expect(container.querySelector('[data-testid="lasso-selection-box"]')).toBeTruthy();
+
+      rerender(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          tool="lasso"
+          selectedStrokeIds={[]}
+          onSelectionChange={onSelectionChange}
+        />
+      );
+
+      expect(container.querySelector('[data-testid="lasso-selection-box"]')).toBeNull();
+    });
+
+    it('does not clear selection from the document listener while a lasso draw is active', () => {
+      const onSelectionChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          tool="lasso"
+          onSelectionChange={onSelectionChange}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      zeroHostRect(host);
+
+      dispatchDragMove(host, [finger(lassoPathAroundTarget().slice(0, 2))]);
+      expect(container.querySelector('[data-testid="lasso-preview"]')).toBeTruthy();
+
+      dispatchPointerDown(document.body, {
+        point: { x: 5, y: 5 },
+        event: { pointerType: 'mouse', button: 0, clientX: 5, clientY: 5 },
+      });
+
+      expect(onSelectionChange).not.toHaveBeenCalledWith([]);
+      expect(container.querySelector('[data-testid="lasso-preview"]')).toBeTruthy();
+      dispatchDragEnd(host);
+    });
+
+    it('does not clear selection from the document listener while a multitouch lasso path is active', () => {
+      const onSelectionChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          tool="lasso"
+          selectedStrokeIds={['lasso-target']}
+          onSelectionChange={onSelectionChange}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      zeroHostRect(host);
+
+      dispatchDragMove(host, [
+        finger([
+          {
+            point: { x: 15, y: 25 },
+            event: { pointerType: 'touch', button: 0, clientX: 15, clientY: 25, pointerId: 1 },
+          },
+        ]),
+        finger([
+          {
+            point: { x: 16, y: 26 },
+            event: { pointerType: 'touch', button: 0, clientX: 16, clientY: 26, pointerId: 2 },
+          },
+        ]),
+      ]);
+
+      dispatchPointerDown(document.body, {
+        point: { x: 5, y: 5 },
+        event: { pointerType: 'mouse', button: 0, clientX: 5, clientY: 5 },
+      });
+
+      expect(onSelectionChange).not.toHaveBeenCalledWith([]);
+      dispatchDragEnd(host, 1);
+      dispatchDragEnd(host, 2);
     });
   });
 });
