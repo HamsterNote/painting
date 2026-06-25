@@ -30,7 +30,9 @@ import {
 import {
   pickRenderedStrokeIntersectingPolyline,
   pickRenderedStrokeIntersectingSegment,
+  computeSelectionBox,
   type RenderedStrokeHitTestOptions,
+  SELECTION_BOX_PADDING,
   selectStrokesIntersectingLasso,
 } from '../utils';
 import {
@@ -528,13 +530,19 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       () => uniqueStrokeIds(isSelectionControlled ? selectedStrokeIds : internalSelectedIds),
       [internalSelectedIds, isSelectionControlled, selectedStrokeIds]
     );
+    const selectionBox = useMemo(() => computeSelectionBox(strokes, selectedIds), [strokes, selectedIds]);
     const selectedIdsRef = useRef<readonly string[]>(selectedIds);
+    const selectionBoxRef = useRef(selectionBox);
     const onSelectionChangeRef = useRef(onSelectionChange);
     const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
     useEffect(() => {
       selectedIdsRef.current = selectedIds;
     }, [selectedIds]);
+
+    useEffect(() => {
+      selectionBoxRef.current = selectionBox;
+    }, [selectionBox]);
 
     onSelectionChangeRef.current = onSelectionChange;
 
@@ -566,6 +574,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     const cursorPointersRef = useRef(new Map<number, CursorPointer>());
     const processedPathLengthRef = useRef(0);
     const effectiveToolRef = useRef(effectiveTool);
+    const previousToolForCleanupRef = useRef(effectiveTool);
     const isDrawingEnabledRef = useRef(isDrawingEnabled);
     const previousValueRef = useRef(value);
     const addStrokeRef = useRef(addStroke);
@@ -621,6 +630,30 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     const clearLassoInteractionRef = useRef(clearLassoInteraction);
     clearLassoInteractionRef.current = clearLassoInteraction;
 
+    const handleDocumentPointerDown = useCallback(
+      (event: PointerEvent) => {
+        const host = hostRef.current;
+        if (host?.contains(event.target as Node)) {
+          return;
+        }
+        // 点击外部交互控件（如工具栏按钮）时不应取消套索选择，否则依赖选中的按钮（如删除）会失效。
+        const target = event.target;
+        if (
+          target instanceof Element &&
+          target.closest(
+            'button, input, textarea, select, a[href], [role="button"], [role="link"], [contenteditable="true"], [data-interactive]'
+          )
+        ) {
+          return;
+        }
+        if (lassoModeRef.current !== 'idle' || selectionMoveRef.current !== null) {
+          return;
+        }
+        commitSelection([]);
+      },
+      [commitSelection]
+    );
+
     // 当前橡皮手势在 canvas 坐标系下的轨迹点；空数组表示当前无活动手势。
     // 每次 single-move 追加一个点；single-end / cancel / multi-start /
     // 切换工具 / value prop 替换 / 卸载 都重置为空数组。
@@ -671,6 +704,16 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       const prunedIds = selectedIdsRef.current.filter((id) => existingStrokeIds.has(id));
       commitSelection(prunedIds);
     }, [commitSelection, strokes]);
+
+    useEffect(() => {
+      if (effectiveTool !== 'lasso' || selectedIds.length === 0) {
+        return undefined;
+      }
+      document.addEventListener('pointerdown', handleDocumentPointerDown);
+      return () => {
+        document.removeEventListener('pointerdown', handleDocumentPointerDown);
+      };
+    }, [effectiveTool, selectedIds.length, handleDocumentPointerDown]);
 
     useImperativeHandle(
       ref,
@@ -915,8 +958,20 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         }
 
         const canvasPoint = screenToCanvas(input.point, viewportRef.current);
+        const currentSelectionBox = selectionBoxRef.current;
+        const isInsideSelectionBox =
+          currentSelectionBox !== null &&
+          canvasPoint.x >= currentSelectionBox.minX &&
+          canvasPoint.x <= currentSelectionBox.maxX &&
+          canvasPoint.y >= currentSelectionBox.minY &&
+          canvasPoint.y <= currentSelectionBox.maxY;
+        if (currentSelectionBox !== null && !isInsideSelectionBox) {
+          // 在选区框外按下时，清空旧选区并继续执行下面的 else 分支，
+          // 从而在同一手势中立即开始新的套索绘制。
+          commitSelection([]);
+        }
         const hitSelectedId = pickSelectedLassoStrokeIdAtPoint(canvasPoint);
-        if (hitSelectedId) {
+        if (isInsideSelectionBox || (currentSelectionBox === null && hitSelectedId)) {
           const selectedIdLookup = new Set(selectedIdsRef.current);
           const originals = strokesRef.current
             .filter((stroke) => selectedIdLookup.has(stroke.id))
@@ -1312,6 +1367,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     // Tool switch: reset reducer state. Cancels any in-progress polygon placement
     // when user picks a different tool mid-draw (or vice versa).
     useEffect(() => {
+      const previousTool = previousToolForCleanupRef.current;
       dispatchInteraction({ type: 'TOOL_CHANGE', tool: effectiveTool });
       // Switching tool discards any in-flight on-release eraser queue —
       // hits collected before the switch were never committed.
@@ -1319,8 +1375,16 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         eraserQueuedHitsRef.current.clear();
         clearEraserTrajectoryRef.current();
       }
+      if (
+        previousTool === 'lasso' &&
+        effectiveTool !== 'lasso' &&
+        selectedIdsRef.current.length > 0
+      ) {
+        commitSelection([]);
+      }
       clearLassoInteractionRef.current();
-    }, [effectiveTool]);
+      previousToolForCleanupRef.current = effectiveTool;
+    }, [commitSelection, effectiveTool]);
 
     useEffect(() => {
       eraserCommitModeRef.current = resolvedEraserCommitMode;
@@ -1904,6 +1968,22 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
                 strokeWidth={2}
                 strokeDasharray="4 4"
                 pointerEvents="none"
+              />
+            )}
+            {effectiveTool === 'lasso' && selectedIds.length > 0 && selectionBox != null && (
+              <rect
+                data-testid="lasso-selection-box"
+                x={selectionBox.minX}
+                y={selectionBox.minY}
+                width={selectionBox.maxX - selectionBox.minX}
+                height={selectionBox.maxY - selectionBox.minY}
+                fill="rgba(59,130,246,0.2)"
+                stroke="rgb(59,130,246)"
+                strokeWidth={3}
+                strokeDasharray="4 4"
+                vectorEffect="non-scaling-stroke"
+                pointerEvents="none"
+                data-padding={SELECTION_BOX_PADDING}
               />
             )}
           </g>
