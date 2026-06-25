@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1-beta-4] - 2026-06-25
+
+### Added
+- Selection box visualization for lasso selection (`feat(painting): add selection box visualization`)
+- Compute selection bounding box from selected strokes (`feat(painting): compute selection box from selected strokes`)
+
+### Fixed
+- Expand pointerdown selector to cover data-interactive elements (`fix(painting): expand pointerdown selector to cover data-interactive elements`)
+- Pin @hamster-note/painting dependency to match workspace version (`fix(workspace): pin @hamster-note/painting dependency to match workspace version`)
+
+### Changed
+- Improve lasso selection interactions (`feat(painting): improve lasso selection interactions`)
+
 ## [0.1.1-beta-3] - 2026-06-19
 
 ### Added
