@@ -636,6 +636,15 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (host?.contains(event.target as Node)) {
           return;
         }
+        // 点击外部交互控件（如工具栏按钮）时不应取消套索选择，否则依赖选中的按钮（如删除）会失效。
+        const target = event.target as Element | null;
+        if (
+          target?.closest(
+            'button, input, textarea, select, a[href], [role="button"], [role="link"], [contenteditable="true"]'
+          )
+        ) {
+          return;
+        }
         if (lassoModeRef.current !== 'idle' || selectionMoveRef.current !== null) {
           return;
         }
@@ -956,10 +965,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           canvasPoint.y >= currentSelectionBox.minY &&
           canvasPoint.y <= currentSelectionBox.maxY;
         if (currentSelectionBox !== null && !isInsideSelectionBox) {
+          // 在选区框外按下时，清空旧选区并继续执行下面的 else 分支，
+          // 从而在同一手势中立即开始新的套索绘制。
           commitSelection([]);
-          clearLassoInteractionRef.current();
-          processedPathLengthRef.current = 0;
-          return;
         }
         const hitSelectedId = pickSelectedLassoStrokeIdAtPoint(canvasPoint);
         if (isInsideSelectionBox || (currentSelectionBox === null && hitSelectedId)) {
@@ -1968,10 +1976,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
                 y={selectionBox.minY}
                 width={selectionBox.maxX - selectionBox.minX}
                 height={selectionBox.maxY - selectionBox.minY}
-                fill="none"
+                fill="rgba(59,130,246,0.2)"
                 stroke="rgb(59,130,246)"
-                strokeWidth={2}
+                strokeWidth={3}
                 strokeDasharray="4 4"
+                vectorEffect="non-scaling-stroke"
                 pointerEvents="none"
                 data-padding={SELECTION_BOX_PADDING}
               />

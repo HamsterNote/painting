@@ -3249,6 +3249,11 @@ describe('DrawingSurface', () => {
       expect(selectionBox?.getAttribute('width')).toBe('62');
       expect(selectionBox?.getAttribute('height')).toBe('22');
       expect(selectionBox?.getAttribute('data-padding')).toBe('8');
+      expect(selectionBox?.getAttribute('fill')).toBe('rgba(59,130,246,0.2)');
+      expect(selectionBox?.getAttribute('stroke')).toBe('rgb(59,130,246)');
+      expect(selectionBox?.getAttribute('stroke-width')).toBe('3');
+      expect(selectionBox?.getAttribute('stroke-dasharray')).toBe('4 4');
+      expect(selectionBox?.getAttribute('vector-effect')).toBe('non-scaling-stroke');
       expect(container.querySelector('[data-testid="lasso-preview"]')).toBeNull();
     });
 
@@ -3497,6 +3502,32 @@ describe('DrawingSurface', () => {
       });
 
       expect(onSelectionChange).toHaveBeenCalledWith([]);
+    });
+
+    it('does not clear lasso selection when pointerdown originates on an external button', () => {
+      const onSelectionChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          tool="lasso"
+          selectedStrokeIds={['lasso-target']}
+          onSelectionChange={onSelectionChange}
+        />
+      );
+
+      const externalButton = document.createElement('button');
+      document.body.appendChild(externalButton);
+      try {
+        dispatchPointerDown(externalButton, {
+          point: { x: 5, y: 5 },
+          event: { pointerType: 'mouse', button: 0, clientX: 5, clientY: 5 },
+        });
+
+        expect(onSelectionChange).not.toHaveBeenCalled();
+      } finally {
+        document.body.removeChild(externalButton);
+      }
     });
 
     it('ignores inside-host pointerdown in the document listener', () => {

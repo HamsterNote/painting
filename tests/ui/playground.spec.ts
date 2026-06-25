@@ -1195,6 +1195,16 @@ test.describe('DrawingSurface playground', () => {
       await expect(deleteBtn).toBeEnabled();
       await expect(page.getByTestId('lasso-selection-count')).toHaveText('(1)');
 
+      // 套索选择框应可见，并使用半透明蓝色填充与蓝色虚线描边
+      const selectionBox = surface.locator('[data-testid="lasso-selection-box"]');
+      await expect(selectionBox).toHaveCount(1);
+      await expect(selectionBox).toBeVisible();
+      await expect(selectionBox).toHaveAttribute('fill', 'rgba(59,130,246,0.2)');
+      await expect(selectionBox).toHaveAttribute('stroke', 'rgb(59,130,246)');
+      await expect(selectionBox).toHaveAttribute('stroke-width', '3');
+      await expect(selectionBox).toHaveAttribute('stroke-dasharray', '4 4');
+      await expect(selectionBox).toHaveAttribute('vector-effect', 'non-scaling-stroke');
+
       // 点击删除后 seed stroke 消失
       await deleteBtn.click();
       await expect(surface).toHaveAttribute('data-stroke-count', '0');
@@ -1203,6 +1213,129 @@ test.describe('DrawingSurface playground', () => {
       // 删除后按钮应再次 disabled
       await expect(deleteBtn).toBeDisabled();
       await expect(page.getByTestId('lasso-selection-count')).toHaveCount(0);
+    });
+
+    // 选区外拖拽应立即开始新的套索，而不是只清空选区。
+    test('lasso: drag outside selection box clears old selection and starts new lasso', async ({ page }) => {
+      const surface = page.getByTestId('drawing-surface-uncontrolled');
+      const deleteBtn = page.getByTestId('lasso-delete-selected');
+
+      await page.locator('button[data-tool="lasso"]').click();
+      await expect(surface).toHaveAttribute('data-active-tool', 'lasso');
+
+      const box = await surface.boundingBox();
+      expect(box).not.toBeNull();
+
+      // 第一次拖拽：用套索选中 seed stroke
+      const startX1 = box!.x + 30;
+      const startY1 = box!.y + 30;
+      await page.mouse.move(startX1, startY1);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 170, box!.y + 30);
+      await page.mouse.move(box!.x + 170, box!.y + 120);
+      await page.mouse.move(box!.x + 30, box!.y + 120);
+      await page.mouse.move(startX1, startY1);
+      await page.mouse.up();
+
+      const selectionBox = surface.locator('[data-testid="lasso-selection-box"]');
+      await expect(selectionBox).toHaveCount(1);
+      await expect(deleteBtn).toBeEnabled();
+      await expect(page.getByTestId('lasso-selection-count')).toHaveText('(1)');
+
+      // 第二次拖拽：从选区框外开始（seed stroke 位于画布 50~150, 50~100 区域，选区框会稍外扩）
+      const startX2 = box!.x + 250;
+      const startY2 = box!.y + 200;
+      await page.mouse.move(startX2, startY2);
+      await page.mouse.down();
+      await page.mouse.move(startX2 + 60, startY2 + 60);
+
+      // 旧选区应立即消失，并且新的套索预览应出现
+      await expect(selectionBox).toHaveCount(0);
+      const lassoPreview = surface.locator('[data-testid="lasso-preview"]');
+      await expect(lassoPreview).toBeVisible();
+
+      await page.mouse.up();
+    });
+
+    // 选区内拖拽应保持移动模式，不应新建套索。
+    test('lasso: drag inside selection box moves selected strokes', async ({ page }) => {
+      const surface = page.getByTestId('drawing-surface-uncontrolled');
+      const deleteBtn = page.getByTestId('lasso-delete-selected');
+
+      await page.locator('button[data-tool="lasso"]').click();
+      await expect(surface).toHaveAttribute('data-active-tool', 'lasso');
+
+      const box = await surface.boundingBox();
+      expect(box).not.toBeNull();
+
+      // 第一次拖拽：用套索选中 seed stroke
+      const startX1 = box!.x + 30;
+      const startY1 = box!.y + 30;
+      await page.mouse.move(startX1, startY1);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 170, box!.y + 30);
+      await page.mouse.move(box!.x + 170, box!.y + 120);
+      await page.mouse.move(box!.x + 30, box!.y + 120);
+      await page.mouse.move(startX1, startY1);
+      await page.mouse.up();
+
+      const selectionBox = surface.locator('[data-testid="lasso-selection-box"]');
+      await expect(selectionBox).toHaveCount(1);
+      await expect(deleteBtn).toBeEnabled();
+
+      // 第二次拖拽：从选区框内部开始并移动
+      const startX2 = box!.x + 100;
+      const startY2 = box!.y + 75;
+      await page.mouse.move(startX2, startY2);
+      await page.mouse.down();
+      await page.mouse.move(startX2 + 30, startY2 + 30);
+      await page.mouse.up();
+
+      // 选区应仍然存在，删除按钮仍可用
+      await expect(selectionBox).toHaveCount(1);
+      await expect(deleteBtn).toBeEnabled();
+    });
+
+    // Bug 2 回归：lasso 选中后切换到 pen 工具，选区应自动清空且选区框消失。
+    test('lasso selection is cleared when switching to pen tool', async ({ page }) => {
+      const surface = page.getByTestId('drawing-surface-uncontrolled');
+      const deleteBtn = page.getByTestId('lasso-delete-selected');
+
+      await expect(surface).toHaveAttribute('data-stroke-count', '1');
+
+      await page.locator('button[data-tool="lasso"]').click();
+      await expect(surface).toHaveAttribute('data-active-tool', 'lasso');
+
+      const box = await surface.boundingBox();
+      expect(box).not.toBeNull();
+
+      const startX = box!.x + 30;
+      const startY = box!.y + 30;
+      await page.mouse.move(startX, startY);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 170, box!.y + 30);
+      await page.mouse.move(box!.x + 170, box!.y + 120);
+      await page.mouse.move(box!.x + 30, box!.y + 120);
+      await page.mouse.move(startX, startY);
+      await page.mouse.up();
+
+      await expect(deleteBtn).toBeEnabled();
+      await expect(page.getByTestId('lasso-selection-count')).toHaveText('(1)');
+      const selectionBox = surface.locator('[data-testid="lasso-selection-box"]');
+      await expect(selectionBox).toHaveCount(1);
+
+      await page.locator('button[data-tool="pen"]').click();
+      await expect(surface).toHaveAttribute('data-active-tool', 'pen');
+
+      await expect(selectionBox).toHaveCount(0);
+
+      const pathOpacity = await surface.locator('svg').first().locator('path').evaluate((el) =>
+        el.getAttribute('opacity'),
+      );
+      expect(pathOpacity).toBeNull();
+
+      await page.locator('button[data-tool="lasso"]').click();
+      await expect(deleteBtn).toBeDisabled();
     });
   });
 });
