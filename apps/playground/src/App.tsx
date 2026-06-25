@@ -1025,6 +1025,7 @@ export default function App() {
           {/* 交互区域 */}
           <div
             data-testid="sampling-demo-area"
+            data-interactive
             onPointerDown={handleSamplingDemoPointerDown}
             onPointerMove={handleSamplingDemoPointerMove}
             onPointerUp={handleSamplingDemoPointerUp}
@@ -1131,6 +1132,7 @@ export default function App() {
           <div
             ref={rawSamplingAreaRef}
             data-testid="raw-sampling-demo-area"
+            data-interactive
             onPointerDown={handleRawSamplingPointerDown}
             onPointerMove={handleRawSamplingPointerMove}
             onPointerUp={handleRawSamplingPointerUp}

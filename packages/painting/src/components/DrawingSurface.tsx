@@ -637,10 +637,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           return;
         }
         // 点击外部交互控件（如工具栏按钮）时不应取消套索选择，否则依赖选中的按钮（如删除）会失效。
-        const target = event.target as Element | null;
+        const target = event.target;
         if (
-          target?.closest(
-            'button, input, textarea, select, a[href], [role="button"], [role="link"], [contenteditable="true"]'
+          target instanceof Element &&
+          target.closest(
+            'button, input, textarea, select, a[href], [role="button"], [role="link"], [contenteditable="true"], [data-interactive]'
           )
         ) {
           return;

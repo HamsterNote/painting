@@ -3530,6 +3530,33 @@ describe('DrawingSurface', () => {
       }
     });
 
+    it('does not clear lasso selection when pointerdown originates on an external [data-interactive] element', () => {
+      const onSelectionChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          tool="lasso"
+          selectedStrokeIds={['lasso-target']}
+          onSelectionChange={onSelectionChange}
+        />
+      );
+
+      const externalInteractive = document.createElement('div');
+      externalInteractive.setAttribute('data-interactive', '');
+      document.body.appendChild(externalInteractive);
+      try {
+        dispatchPointerDown(externalInteractive, {
+          point: { x: 5, y: 5 },
+          event: { pointerType: 'mouse', button: 0, clientX: 5, clientY: 5 },
+        });
+
+        expect(onSelectionChange).not.toHaveBeenCalled();
+      } finally {
+        document.body.removeChild(externalInteractive);
+      }
+    });
+
     it('ignores inside-host pointerdown in the document listener', () => {
       const onSelectionChange = jest.fn();
       render(
