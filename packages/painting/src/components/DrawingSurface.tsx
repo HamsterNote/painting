@@ -138,21 +138,22 @@ export type DrawingCursorRenderState = {
   /** Whether the crosshair should be visible (hover for mouse/pen; down for touch). */
   visible: boolean;
   /**
-   * Eraser pickup radius in CSS pixels (screen-space). Defined ONLY when the
-   * active tool is `eraser`; `undefined` for every other tool. The default
-   * cursor renderer reads this to draw the eraser hover circle; custom
-   * `render` callbacks may also consult it to visualise the same radius.
+   * Eraser pickup radius in screen-space CSS pixels scaled by viewport.scale.
+   * Defined ONLY when the active tool is `eraser`; `undefined` for every other
+   * tool. The default cursor renderer reads this to draw the eraser hover
+   * circle; custom `render` callbacks may also consult it to visualise the same
+   * radius.
    */
   eraserRadius?: number;
 };
 
 /**
  * Cursor overlay configuration. Pass `false` to disable the overlay entirely.
- * When undefined (the default), the surface renders a 10px screen-pixel
+ * When undefined (the default), the surface renders a 20px screen-pixel
  * crosshair centered on the pointer.
  */
 export type DrawingCursorOptions = {
-  /** Square size in CSS pixels (length of each cross arm). Defaults to 10. */
+  /** Square size in CSS pixels (length of each cross arm). Defaults to 20. */
   size?: number;
   /** Stroke color used by the default crosshair shape. Defaults to `currentColor`. */
   color?: string;
@@ -530,7 +531,10 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       () => uniqueStrokeIds(isSelectionControlled ? selectedStrokeIds : internalSelectedIds),
       [internalSelectedIds, isSelectionControlled, selectedStrokeIds]
     );
-    const selectionBox = useMemo(() => computeSelectionBox(strokes, selectedIds), [strokes, selectedIds]);
+    const selectionBox = useMemo(
+      () => computeSelectionBox(strokes, selectedIds),
+      [strokes, selectedIds]
+    );
     const selectedIdsRef = useRef<readonly string[]>(selectedIds);
     const selectionBoxRef = useRef(selectionBox);
     const onSelectionChangeRef = useRef(onSelectionChange);
@@ -1265,10 +1269,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           return;
         }
         // 多指按下时清空 on-release 橡皮队列，避免多指误触把之前的待提交删除一起提交。
-        if (
-          activeDrawingPointerIds.size > 0 &&
-          eraserCommitModeRef.current === 'on-release'
-        ) {
+        if (activeDrawingPointerIds.size > 0 && eraserCommitModeRef.current === 'on-release') {
           eraserQueuedHitsRef.current.clear();
         }
         activeDrawingPointerIds.add(input.pointerId);
@@ -1666,7 +1667,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       Number.isFinite(cursorOptions.size) &&
       cursorOptions.size > 0
         ? cursorOptions.size
-        : 10;
+        : 20;
     const cursorColor = cursorOptions.color ?? 'currentColor';
     const cursorRender = cursorOptions.render;
 
@@ -1823,13 +1824,19 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       };
     }, [cursorEnabled, getLocalCoordinates]);
 
+    const cursorStrokeRadius = (resolvedOpenWidth * viewport.scale) / 2;
+    const crosshairCircleRadius = Math.min(
+      Math.max(cursorStrokeRadius, 1),
+      Math.max(1, cursorSize / 2 - 1)
+    );
+
     const cursorRenderState: DrawingCursorRenderState = {
       screen: cursorState.screen,
       canvas: cursorState.canvas,
       pointerType: cursorState.pointerType,
       activeTool: effectiveTool,
       visible: cursorState.visible,
-      eraserRadius: effectiveTool === 'eraser' ? resolvedOpenWidth / 2 : undefined,
+      eraserRadius: effectiveTool === 'eraser' ? cursorStrokeRadius : undefined,
     };
 
     return (
@@ -2056,6 +2063,14 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
                     y1={0}
                     x2={cursorSize / 2}
                     y2={cursorSize}
+                    stroke={cursorColor}
+                    strokeWidth={1}
+                  />
+                  <circle
+                    cx={cursorSize / 2}
+                    cy={cursorSize / 2}
+                    r={crosshairCircleRadius}
+                    fill="none"
                     stroke={cursorColor}
                     strokeWidth={1}
                   />
