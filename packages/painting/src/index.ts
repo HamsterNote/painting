@@ -3,6 +3,8 @@ export type {
   DrawingEraserTrajectoryOptions,
   DrawingInputMethod,
   DrawingPoint,
+  DrawingRulerOptions,
+  DrawingRulerState,
   DrawingSelectionChange,
   DrawingSnapOptions,
   DrawingStroke,
@@ -40,6 +42,7 @@ export type { RenderableStroke, StrokeRendererProps } from './render/StrokeRende
 export { StrokeRenderer } from './render/StrokeRenderer';
 export type { DrawingStrokeSmoothingOptions } from './stroke-helpers';
 export type { LassoSelectionOptions } from './utils';
+export type { RulerTransform } from './ruler/geometry';
 export {
   addStroke,
   clearStrokes,

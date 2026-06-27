@@ -12,4 +12,5 @@ export default {
   transform: {
     '^.+\\.(t|j)sx?$': 'babel-jest',
   },
+  transformIgnorePatterns: ['/node_modules/(?!@system-ui-js/(multi-drag|multi-drag-core)/)'],
 };
