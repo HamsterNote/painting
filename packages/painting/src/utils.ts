@@ -36,6 +36,27 @@ type StrokeSelectionGeometry = {
   bbox: BoundingBox | null;
 };
 
+type SnapOptions = {
+  enabled: boolean;
+  endpoints: boolean;
+  lines: boolean;
+  radius?: number;
+};
+
+type SnapKind = 'endpoint' | 'line';
+
+type SnapCandidate = {
+  canvas: DrawingPoint;
+  kind: SnapKind;
+  strokeId?: string;
+};
+
+type SnapSearchResult = SnapCandidate & {
+  distanceSq: number;
+};
+
+export type SnapPointResult = SnapCandidate | null;
+
 const RENDERED_HIT_EPSILON = 1e-9;
 export const SELECTION_BOX_PADDING = 8;
 
@@ -58,6 +79,27 @@ function distanceSqPointToSegment(point: DrawingPoint, a: DrawingPoint, b: Drawi
   const py = point.y - projY;
 
   return px * px + py * py;
+}
+
+function closestPointOnSegment(point: DrawingPoint, a: DrawingPoint, b: DrawingPoint): DrawingPoint {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+
+  if (dx === 0 && dy === 0) {
+    return { x: a.x, y: a.y };
+  }
+
+  const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy)));
+  return {
+    x: a.x + t * dx,
+    y: a.y + t * dy,
+  };
+}
+
+function distanceSqBetweenPoints(a: DrawingPoint, b: DrawingPoint): number {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return dx * dx + dy * dy;
 }
 
 function distanceSqPointToPolyline(point: DrawingPoint, points: DrawingPoint[]): number {
@@ -685,6 +727,142 @@ function pickRenderedStrokeAtPoint<TStroke extends PickableStroke>(
   }
 
   return best;
+}
+
+function snapRadiusInCanvas(options: SnapOptions, viewportScale: number | undefined): number {
+  const safeRadius = typeof options.radius === 'number' && Number.isFinite(options.radius) && options.radius > 0 ? options.radius : 8;
+  const safeScale = typeof viewportScale === 'number' && Number.isFinite(viewportScale) && viewportScale > 0 ? viewportScale : 1;
+  return safeRadius / safeScale;
+}
+
+function endpointTargetsForStroke(stroke: DrawingStroke): DrawingPoint[] {
+  const { points, tool } = stroke;
+  if (points.length === 0) {
+    return [];
+  }
+
+  switch (tool) {
+    case 'pen':
+    case 'line':
+      return points.length === 1 ? [points[0]] : [points[0], points[points.length - 1]];
+    case 'rect':
+      return points.length >= 2 ? rectCornerPoints(points[0], points[points.length - 1]) : [];
+    case 'ellipse':
+      return points.length >= 2
+        ? [{ x: (points[0].x + points[points.length - 1].x) / 2, y: (points[0].y + points[points.length - 1].y) / 2 }]
+        : [];
+    case 'polygon':
+      return [...points];
+    case 'bezier':
+      return points.length === 4 ? [points[0], points[3]] : [];
+    case 'eraser':
+    case 'lasso':
+      return [];
+  }
+}
+
+function lineSegmentsForStroke(stroke: DrawingStroke): Array<readonly [DrawingPoint, DrawingPoint]> {
+  const { points, tool } = stroke;
+  if (points.length < 2) {
+    return [];
+  }
+
+  switch (tool) {
+    case 'pen':
+    case 'line':
+      return openSegments(points);
+    case 'rect':
+      return closedSegments(rectCornerPoints(points[0], points[points.length - 1]));
+    case 'ellipse':
+      return closedSegments(sampleEllipseFromBoundingBox(points[0], points[points.length - 1], 64));
+    case 'polygon':
+      return closedSegments(points);
+    case 'bezier':
+      return points.length === 4 ? openSegments(sampleCubicBezierPolyline(points[0], points[1], points[2], points[3], 64)) : openSegments(points);
+    case 'eraser':
+    case 'lasso':
+      return [];
+  }
+}
+
+function chooseNearestSnapCandidate(
+  best: SnapSearchResult | null,
+  candidate: SnapCandidate,
+  distanceSq: number,
+  radiusSq: number,
+): SnapSearchResult | null {
+  if (distanceSq > radiusSq) {
+    return best;
+  }
+
+  if (best === null || distanceSq < best.distanceSq) {
+    return { ...candidate, distanceSq };
+  }
+
+  return best;
+}
+
+function resolveEndpointSnap(point: DrawingPoint, strokes: readonly DrawingStroke[], radiusSq: number): SnapSearchResult | null {
+  let best: SnapSearchResult | null = null;
+
+  for (const stroke of strokes) {
+    for (const target of endpointTargetsForStroke(stroke)) {
+      best = chooseNearestSnapCandidate(
+        best,
+        { canvas: { x: target.x, y: target.y }, kind: 'endpoint', strokeId: stroke.id },
+        distanceSqBetweenPoints(point, target),
+        radiusSq,
+      );
+    }
+  }
+
+  return best;
+}
+
+function resolveLineSnap(point: DrawingPoint, strokes: readonly DrawingStroke[], radiusSq: number): SnapSearchResult | null {
+  let best: SnapSearchResult | null = null;
+
+  for (const stroke of strokes) {
+    for (const [start, end] of lineSegmentsForStroke(stroke)) {
+      const canvas = closestPointOnSegment(point, start, end);
+      best = chooseNearestSnapCandidate(
+        best,
+        { canvas, kind: 'line', strokeId: stroke.id },
+        distanceSqBetweenPoints(point, canvas),
+        radiusSq,
+      );
+    }
+  }
+
+  return best;
+}
+
+export function resolveSnapPoint(
+  point: DrawingPoint,
+  strokes: readonly DrawingStroke[],
+  options: SnapOptions,
+  viewportScale?: number,
+): SnapPointResult {
+  if (!options.enabled) {
+    return null;
+  }
+
+  const radius = snapRadiusInCanvas(options, viewportScale);
+  const radiusSq = radius * radius;
+
+  if (options.endpoints) {
+    const endpoint = resolveEndpointSnap(point, strokes, radiusSq);
+    if (endpoint !== null) {
+      return { canvas: endpoint.canvas, kind: endpoint.kind, strokeId: endpoint.strokeId };
+    }
+  }
+
+  if (!options.lines) {
+    return null;
+  }
+
+  const line = resolveLineSnap(point, strokes, radiusSq);
+  return line === null ? null : { canvas: line.canvas, kind: line.kind, strokeId: line.strokeId };
 }
 
 export function addStroke(value: DrawingValue, stroke: DrawingStroke): DrawingValue {

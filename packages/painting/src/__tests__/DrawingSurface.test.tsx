@@ -3031,6 +3031,758 @@ describe('DrawingSurface', () => {
     });
   });
 
+/* eslint-disable jest/expect-expect */
+  describe('pen-tip snapping integration', () => {
+    const snapTargetValue: DrawingValue = {
+      strokes: [
+        {
+          id: 'snap-target-line',
+          tool: 'line',
+          points: [
+            { x: 0, y: 0 },
+            { x: 100, y: 0 },
+          ],
+        },
+        {
+          id: 'snap-target-pen',
+          tool: 'pen',
+          points: [
+            { x: 100, y: 100 },
+            { x: 140, y: 140 },
+          ],
+        },
+      ],
+    };
+
+    function pointerEvent(
+      type: 'pointerenter' | 'pointermove' | 'pointerdown' | 'pointerup',
+      props: { clientX: number; clientY: number; pointerType?: string; pointerId?: number }
+    ): Event {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.assign(event, {
+        pointerType: 'pen',
+        pointerId: 1,
+        button: 0,
+        isPrimary: true,
+        ...props,
+      });
+      return event;
+    }
+
+    function clickPlacementPoint(host: HTMLElement, clientX: number, clientY: number) {
+      act(() => {
+        host.dispatchEvent(pointerEvent('pointerdown', { clientX, clientY }));
+        host.dispatchEvent(pointerEvent('pointerup', { clientX, clientY }));
+      });
+    }
+
+    function doubleClickPlacementPoint(host: HTMLElement, clientX: number, clientY: number) {
+      const event = new Event('dblclick', { bubbles: true, cancelable: true });
+      Object.assign(event, { clientX, clientY });
+      act(() => {
+        host.dispatchEvent(event);
+      });
+    }
+
+    function dragBezierPlacement(
+      host: HTMLElement,
+      from: { x: number; y: number },
+      to: { x: number; y: number }
+    ) {
+      act(() => {
+        host.dispatchEvent(pointerEvent('pointerdown', { clientX: from.x, clientY: from.y }));
+        document.dispatchEvent(pointerEvent('pointermove', { clientX: to.x, clientY: to.y }));
+        document.dispatchEvent(pointerEvent('pointerup', { clientX: to.x, clientY: to.y }));
+      });
+    }
+
+    type PenSnapExpectation = {
+      value: DrawingValue;
+      snap: { endpoints?: boolean; lines?: boolean; radius?: number };
+      clientStart: { x: number; y: number };
+      expectedStart: { x: number; y: number };
+    };
+
+    function expectCommittedPenStart({
+      value,
+      snap,
+      clientStart,
+      expectedStart,
+    }: PenSnapExpectation) {
+      const onChange = jest.fn();
+      const { unmount } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={value}
+          onChange={onChange}
+          tool="pen"
+          strokeSmoothing={false}
+          snap={snap}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      dispatchDragMove(host, [
+        finger([
+          { point: clientStart, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 150, y: 160 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+      dispatchDragEnd(host);
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const firstPoint = onChange.mock.calls[0][0].strokes.at(-1).points[0];
+      expect(firstPoint.x).toBeCloseTo(expectedStart.x);
+      expect(firstPoint.y).toBeCloseTo(expectedStart.y);
+      unmount();
+    }
+
+    it('no snap prop preserves raw pen coordinates and cursor positions near snap targets', () => {
+      const onChange = jest.fn();
+      const renderSpy = jest.fn(() => <span data-testid="snap-cursor">cursor</span>);
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={snapTargetValue}
+          onChange={onChange}
+          tool="pen"
+          strokeSmoothing={false}
+          cursor={{ render: renderSpy }}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      act(() => {
+        host.dispatchEvent(pointerEvent('pointerenter', { clientX: 114, clientY: 123 }));
+      });
+      dispatchDragMove(host, [
+        finger([
+          { point: { x: 114, y: 123 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 150, y: 160 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+      dispatchDragEnd(host);
+
+      const lastCall = renderSpy.mock.calls[renderSpy.mock.calls.length - 1][0] as {
+        screen: { x: number; y: number };
+        canvas: { x: number; y: number };
+      };
+      expect(lastCall.screen).toEqual({ x: 104, y: 103 });
+      expect(lastCall.canvas).toEqual({ x: 104, y: 103 });
+      expect(onChange.mock.calls[0][0].strokes.at(-1).points).toEqual([
+        { x: 104, y: 103 },
+        { x: 140, y: 140 },
+      ]);
+    });
+
+    it('endpoint snapping changes cursor and committed pen coordinates', () => {
+      const onChange = jest.fn();
+      const renderSpy = jest.fn(() => <span data-testid="snap-cursor">cursor</span>);
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={snapTargetValue}
+          onChange={onChange}
+          tool="pen"
+          strokeSmoothing={false}
+          cursor={{ render: renderSpy }}
+          snap={{ endpoints: true }}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      act(() => {
+        host.dispatchEvent(pointerEvent('pointerenter', { clientX: 114, clientY: 123 }));
+      });
+      dispatchDragMove(host, [
+        finger([
+          { point: { x: 114, y: 123 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 150, y: 160 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+      dispatchDragEnd(host);
+
+      const lastCall = renderSpy.mock.calls[renderSpy.mock.calls.length - 1][0] as {
+        screen: { x: number; y: number };
+        canvas: { x: number; y: number };
+      };
+      expect(lastCall.screen).toEqual({ x: 100, y: 100 });
+      expect(lastCall.canvas).toEqual({ x: 100, y: 100 });
+      expect(onChange.mock.calls[0][0].strokes.at(-1).points).toEqual([
+        { x: 100, y: 100 },
+        { x: 140, y: 140 },
+      ]);
+    });
+
+    it('line snapping changes cursor and committed pen coordinates', () => {
+      const onChange = jest.fn();
+      const renderSpy = jest.fn(() => <span data-testid="snap-cursor">cursor</span>);
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={snapTargetValue}
+          onChange={onChange}
+          tool="pen"
+          strokeSmoothing={false}
+          cursor={{ render: renderSpy }}
+          snap={{ lines: true }}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      act(() => {
+        host.dispatchEvent(pointerEvent('pointerenter', { clientX: 60, clientY: 23 }));
+      });
+      dispatchDragMove(host, [
+        finger([
+          { point: { x: 60, y: 23 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 150, y: 160 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+      dispatchDragEnd(host);
+
+      const lastCall = renderSpy.mock.calls[renderSpy.mock.calls.length - 1][0] as {
+        screen: { x: number; y: number };
+        canvas: { x: number; y: number };
+      };
+      expect(lastCall.screen).toEqual({ x: 50, y: 0 });
+      expect(lastCall.canvas).toEqual({ x: 50, y: 0 });
+      expect(onChange.mock.calls[0][0].strokes.at(-1).points[0]).toEqual({ x: 50, y: 0 });
+    });
+
+    it('endpoint snapping wins over line snapping when both are enabled', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={snapTargetValue}
+          onChange={onChange}
+          tool="pen"
+          strokeSmoothing={false}
+          snap={{ endpoints: true, lines: true }}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      dispatchDragMove(host, [
+        finger([
+          { point: { x: 13, y: 20 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 150, y: 160 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+      dispatchDragEnd(host);
+
+      expect(onChange.mock.calls[0][0].strokes.at(-1).points[0]).toEqual({ x: 0, y: 0 });
+    });
+
+    it('drag tools receive snapped pointer down and move coordinates', () => {
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={snapTargetValue}
+          onChange={onChange}
+          tool="rect"
+          snap={{ endpoints: true, lines: true }}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      dispatchDragMove(host, [
+        finger([
+          { point: { x: 13, y: 20 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 60, y: 23 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+      expect(container.querySelector('rect')?.getAttribute('x')).toBe('0');
+      expect(container.querySelector('rect')?.getAttribute('y')).toBe('0');
+      dispatchDragEnd(host);
+
+      expect(onChange.mock.calls[0][0].strokes.at(-1).points).toEqual([
+        { x: 0, y: 0 },
+        { x: 50, y: 0 },
+      ]);
+    });
+
+    it('line, polygon, and bezier placement receive snapped points', () => {
+      const lineChange = jest.fn();
+      const { unmount: unmountLine } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={snapTargetValue}
+          onChange={lineChange}
+          tool="line"
+          snap={{ endpoints: true, lines: true }}
+        />
+      );
+      let host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      clickPlacementPoint(host, 13, 20);
+      clickPlacementPoint(host, 60, 23);
+      doubleClickPlacementPoint(host, 114, 123);
+      expect(lineChange.mock.calls[0][0].strokes.at(-1).points).toEqual([
+        { x: 0, y: 0 },
+        { x: 50, y: 0 },
+        { x: 100, y: 100 },
+      ]);
+      unmountLine();
+
+      const polygonChange = jest.fn();
+      const { unmount: unmountPolygon } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={snapTargetValue}
+          onChange={polygonChange}
+          tool="polygon"
+          snap={{ endpoints: true, lines: true }}
+        />
+      );
+      host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      clickPlacementPoint(host, 13, 20);
+      clickPlacementPoint(host, 60, 23);
+      clickPlacementPoint(host, 114, 123);
+      doubleClickPlacementPoint(host, 150, 160);
+      expect(polygonChange.mock.calls[0][0].strokes.at(-1).points).toEqual([
+        { x: 0, y: 0 },
+        { x: 50, y: 0 },
+        { x: 100, y: 100 },
+      ]);
+      unmountPolygon();
+
+      const bezierChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={snapTargetValue}
+          onChange={bezierChange}
+          tool="bezier"
+          snap={{ endpoints: true, lines: true }}
+        />
+      );
+      host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      dragBezierPlacement(host, { x: 13, y: 20 }, { x: 114, y: 123 });
+      dragBezierPlacement(host, { x: 55, y: 60 }, { x: 60, y: 60 });
+      dragBezierPlacement(host, { x: 70, y: 70 }, { x: 80, y: 80 });
+      expect(bezierChange.mock.calls[0][0].strokes.at(-1).points).toEqual([
+        { x: 0, y: 0 },
+        { x: 50, y: 40 },
+        { x: 70, y: 60 },
+        { x: 100, y: 100 },
+      ]);
+    });
+
+    it('current in-progress pen stroke does not self-snap', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="pen"
+          strokeSmoothing={false}
+          snap={{ endpoints: true, lines: true }}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      dispatchDragMove(host, [
+        finger([
+          { point: { x: 30, y: 40 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 34, y: 44 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+      dispatchDragEnd(host);
+
+      expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
+        { x: 20, y: 20 },
+        { x: 24, y: 24 },
+      ]);
+    });
+
+    it('points outside radius and disabled snap options stay raw', () => {
+      const outsideChange = jest.fn();
+      const { unmount } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={snapTargetValue}
+          onChange={outsideChange}
+          tool="pen"
+          strokeSmoothing={false}
+          snap={{ endpoints: true, radius: 4 }}
+        />
+      );
+      let host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      dispatchDragMove(host, [
+        finger([
+          { point: { x: 115, y: 120 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 150, y: 160 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+      dispatchDragEnd(host);
+      expect(outsideChange.mock.calls[0][0].strokes.at(-1).points[0]).toEqual({ x: 105, y: 100 });
+      unmount();
+
+      const disabledChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={snapTargetValue}
+          onChange={disabledChange}
+          tool="pen"
+          strokeSmoothing={false}
+          snap={{ endpoints: false, lines: false }}
+        />
+      );
+      host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      dispatchDragMove(host, [
+        finger([
+          { point: { x: 114, y: 123 }, event: { pointerType: 'pen', button: 0 } },
+          { point: { x: 150, y: 160 }, event: { pointerType: 'pen', button: 0 } },
+        ]),
+      ]);
+      dispatchDragEnd(host);
+      expect(disabledChange.mock.calls[0][0].strokes.at(-1).points[0]).toEqual({
+        x: 104,
+        y: 103,
+      });
+    });
+
+    it('pen target snaps to first and last endpoints and to a middle segment', () => {
+      const value: DrawingValue = {
+        strokes: [
+          {
+            id: 'target-pen-class',
+            tool: 'pen',
+            points: [
+              { x: 20, y: 20 },
+              { x: 40, y: 20 },
+              { x: 80, y: 20 },
+            ],
+          },
+        ],
+      };
+
+      expectCommittedPenStart({
+        value,
+        snap: { endpoints: true, radius: 5 },
+        clientStart: { x: 31, y: 42 },
+        expectedStart: { x: 20, y: 20 },
+      });
+      expectCommittedPenStart({
+        value,
+        snap: { endpoints: true, radius: 5 },
+        clientStart: { x: 91, y: 42 },
+        expectedStart: { x: 80, y: 20 },
+      });
+      expectCommittedPenStart({
+        value,
+        snap: { lines: true, radius: 5 },
+        clientStart: { x: 60, y: 43 },
+        expectedStart: { x: 50, y: 20 },
+      });
+    });
+
+    it('line target snaps to endpoints and line body', () => {
+      const value: DrawingValue = {
+        strokes: [
+          {
+            id: 'target-line-class',
+            tool: 'line',
+            points: [
+              { x: 20, y: 40 },
+              { x: 80, y: 40 },
+            ],
+          },
+        ],
+      };
+
+      expectCommittedPenStart({
+        value,
+        snap: { endpoints: true, radius: 5 },
+        clientStart: { x: 31, y: 62 },
+        expectedStart: { x: 20, y: 40 },
+      });
+      expectCommittedPenStart({
+        value,
+        snap: { lines: true, radius: 5 },
+        clientStart: { x: 60, y: 63 },
+        expectedStart: { x: 50, y: 40 },
+      });
+    });
+
+    it('rect target snaps to bbox corners and edges but not the center', () => {
+      const value: DrawingValue = {
+        strokes: [
+          {
+            id: 'target-rect-class',
+            tool: 'rect',
+            points: [
+              { x: 20, y: 20 },
+              { x: 80, y: 60 },
+            ],
+          },
+        ],
+      };
+
+      expectCommittedPenStart({
+        value,
+        snap: { endpoints: true, radius: 5 },
+        clientStart: { x: 91, y: 82 },
+        expectedStart: { x: 80, y: 60 },
+      });
+      expectCommittedPenStart({
+        value,
+        snap: { lines: true, radius: 5 },
+        clientStart: { x: 60, y: 43 },
+        expectedStart: { x: 50, y: 20 },
+      });
+      expectCommittedPenStart({
+        value,
+        snap: { lines: true, radius: 5 },
+        clientStart: { x: 60, y: 60 },
+        expectedStart: { x: 50, y: 40 },
+      });
+    });
+
+    it('ellipse target snaps endpoint to center and line to outline only', () => {
+      const value: DrawingValue = {
+        strokes: [
+          {
+            id: 'target-ellipse-class',
+            tool: 'ellipse',
+            points: [
+              { x: 20, y: 20 },
+              { x: 80, y: 60 },
+            ],
+          },
+        ],
+      };
+
+      expectCommittedPenStart({
+        value,
+        snap: { endpoints: true, radius: 5 },
+        clientStart: { x: 61, y: 62 },
+        expectedStart: { x: 50, y: 40 },
+      });
+      expectCommittedPenStart({
+        value,
+        snap: { endpoints: true, radius: 5 },
+        clientStart: { x: 31, y: 42 },
+        expectedStart: { x: 21, y: 22 },
+      });
+      expectCommittedPenStart({
+        value,
+        snap: { lines: true, radius: 5 },
+        clientStart: { x: 93, y: 60 },
+        expectedStart: { x: 80, y: 40 },
+      });
+      expectCommittedPenStart({
+        value,
+        snap: { lines: true, radius: 5 },
+        clientStart: { x: 31, y: 42 },
+        expectedStart: { x: 21, y: 22 },
+      });
+    });
+
+    it('polygon target snaps to vertices and edges', () => {
+      const value: DrawingValue = {
+        strokes: [
+          {
+            id: 'target-polygon-class',
+            tool: 'polygon',
+            points: [
+              { x: 20, y: 20 },
+              { x: 80, y: 20 },
+              { x: 50, y: 60 },
+            ],
+          },
+        ],
+      };
+
+      expectCommittedPenStart({
+        value,
+        snap: { endpoints: true, radius: 5 },
+        clientStart: { x: 91, y: 42 },
+        expectedStart: { x: 80, y: 20 },
+      });
+      expectCommittedPenStart({
+        value,
+        snap: { lines: true, radius: 5 },
+        clientStart: { x: 60, y: 43 },
+        expectedStart: { x: 50, y: 20 },
+      });
+    });
+
+    it('bezier target snaps endpoints to start and end and lines to the curve only', () => {
+      const value: DrawingValue = {
+        strokes: [
+          {
+            id: 'target-bezier-class',
+            tool: 'bezier',
+            points: [
+              { x: 20, y: 20 },
+              { x: 40, y: 20 },
+              { x: 60, y: 20 },
+              { x: 80, y: 20 },
+            ],
+          },
+        ],
+      };
+
+      expectCommittedPenStart({
+        value,
+        snap: { endpoints: true, radius: 5 },
+        clientStart: { x: 31, y: 42 },
+        expectedStart: { x: 20, y: 20 },
+      });
+      expectCommittedPenStart({
+        value,
+        snap: { endpoints: true, radius: 5 },
+        clientStart: { x: 91, y: 42 },
+        expectedStart: { x: 80, y: 20 },
+      });
+      expectCommittedPenStart({
+        value,
+        snap: { endpoints: true, radius: 5 },
+        clientStart: { x: 50, y: 42 },
+        expectedStart: { x: 40, y: 22 },
+      });
+      expectCommittedPenStart({
+        value,
+        snap: { lines: true, radius: 5 },
+        clientStart: { x: 60, y: 43 },
+        expectedStart: { x: 50, y: 20 },
+      });
+    });
+
+    it('endpoint snap beats a closer line projection', () => {
+      const value: DrawingValue = {
+        strokes: [
+          {
+            id: 'endpoint-priority-target',
+            tool: 'pen',
+            points: [
+              { x: 0, y: 0 },
+              { x: 20, y: 0 },
+            ],
+          },
+          {
+            id: 'closer-line-target',
+            tool: 'line',
+            points: [
+              { x: -10, y: 3 },
+              { x: 20, y: 3 },
+            ],
+          },
+        ],
+      };
+
+      expectCommittedPenStart({
+        value,
+        snap: { endpoints: true, lines: true, radius: 5 },
+        clientStart: { x: 11, y: 23 },
+        expectedStart: { x: 0, y: 0 },
+      });
+    });
+
+    it('line snap tie-break keeps the first matching target at equal distance', () => {
+      const value: DrawingValue = {
+        strokes: [
+          {
+            id: 'first-equal-line',
+            tool: 'line',
+            points: [
+              { x: 0, y: 0 },
+              { x: 100, y: 0 },
+            ],
+          },
+          {
+            id: 'second-equal-line',
+            tool: 'line',
+            points: [
+              { x: 0, y: 10 },
+              { x: 100, y: 10 },
+            ],
+          },
+        ],
+      };
+
+      expectCommittedPenStart({
+        value,
+        snap: { lines: true, radius: 5 },
+        clientStart: { x: 60, y: 25 },
+        expectedStart: { x: 50, y: 0 },
+      });
+    });
+
+    it('radius boundary includes exact hits and excludes just outside hits', () => {
+      const value: DrawingValue = {
+        strokes: [
+          {
+            id: 'radius-boundary-line',
+            tool: 'line',
+            points: [
+              { x: 0, y: 0 },
+              { x: 100, y: 0 },
+            ],
+          },
+        ],
+      };
+
+      expectCommittedPenStart({
+        value,
+        snap: { lines: true, radius: 5 },
+        clientStart: { x: 60, y: 25 },
+        expectedStart: { x: 50, y: 0 },
+      });
+      expectCommittedPenStart({
+        value,
+        snap: { lines: true, radius: 5 },
+        clientStart: { x: 60, y: 25.01 },
+        expectedStart: { x: 50, y: 5.01 },
+      });
+    });
+
+    it('disabled endpoint and line flags keep raw coordinates regardless of radius', () => {
+      const value: DrawingValue = {
+        strokes: [
+          {
+            id: 'disabled-flags-line',
+            tool: 'line',
+            points: [
+              { x: 0, y: 0 },
+              { x: 100, y: 0 },
+            ],
+          },
+        ],
+      };
+
+      expectCommittedPenStart({
+        value,
+        snap: { endpoints: false, radius: 200 },
+        clientStart: { x: 11, y: 21 },
+        expectedStart: { x: 1, y: 1 },
+      });
+      expectCommittedPenStart({
+        value,
+        snap: { lines: false, radius: 200 },
+        clientStart: { x: 60, y: 23 },
+        expectedStart: { x: 50, y: 3 },
+      });
+    });
+  });
+
   // Behavior-lock test: single-finger pen draw commits a stroke with
   // canvas-local coordinates derived from mockHostRect (clientX - left, clientY - top).
   it('single-finger draw commits a pen stroke (behavior lock)', () => {
@@ -4629,4 +5381,5 @@ describe('eraserCursorAndTrajectory', () => {
       unmount();
     });
   });
+  /* eslint-enable jest/expect-expect */
 });
