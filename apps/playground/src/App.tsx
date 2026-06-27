@@ -5,6 +5,8 @@ import {
   type DrawingSurfaceHandle,
   type DrawingTool,
   type DrawingValue,
+  type DrawingRulerState,
+  type DrawingRulerOptions,
 } from '@hamster-note/painting';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -100,6 +102,9 @@ const SEED_VALUE: DrawingValue = {
 
 export default function App() {
   const [tool, setTool] = useState<DrawingTool>('pen');
+  const [rulerEnabled, setRulerEnabled] = useState(false);
+  const [rulerStateUncontrolled, setRulerStateUncontrolled] = useState<DrawingRulerState | undefined>(undefined);
+  const [rulerStateControlled, setRulerStateControlled] = useState<DrawingRulerState | undefined>(undefined);
   const [color, setColor] = useState('#000000');
   const [width, setWidth] = useState(2);
   const [pressure, setPressure] = useState(false);
@@ -382,6 +387,22 @@ export default function App() {
         }
       : undefined;
 
+  const rulerUncontrolledOptions: false | DrawingRulerOptions = rulerEnabled
+    ? {
+        enabled: true,
+        state: rulerStateUncontrolled,
+        defaultState: rulerStateUncontrolled,
+      }
+    : false;
+
+  const rulerControlledOptions: false | DrawingRulerOptions = rulerEnabled
+    ? {
+        enabled: true,
+        state: rulerStateControlled,
+        defaultState: rulerStateControlled,
+      }
+    : false;
+
   // Memoize so DrawingSurface 不会因为父组件 re-render 而频繁触发 eraserTrajectory 副作用。
   const eraserTrajectoryProp = useMemo(
     () => ({
@@ -439,12 +460,24 @@ export default function App() {
               cursor: 'pointer',
               border: tool === t.value ? '2px solid #333' : '1px solid #aaa',
               background: tool === t.value ? '#e0e0e0' : '#fff',
-              borderRadius: '3px',
             }}
           >
             {t.label}
           </button>
         ))}
+        <button
+          type="button"
+          data-testid="drawing-ruler-toggle"
+          onClick={() => setRulerEnabled((prev) => !prev)}
+          style={{
+            padding: '4px 10px',
+            cursor: 'pointer',
+            border: rulerEnabled ? '2px solid #333' : '1px solid #aaa',
+            background: rulerEnabled ? '#e0e0e0' : '#fff',
+          }}
+        >
+          {rulerEnabled ? '隐藏尺子' : '添加尺子'}
+        </button>
 
         {toolInstruction && (
           <span
@@ -920,6 +953,8 @@ export default function App() {
               onChange={handleUncontrolledChange}
               onSelectionChange={setUncontrolledSelectedIds}
               tool={tool}
+              ruler={rulerUncontrolledOptions}
+              onRulerChange={setRulerStateUncontrolled}
               strokeColor={color}
               strokeWidth={effectiveStrokeWidth}
               pressure={pressure}
@@ -962,6 +997,8 @@ export default function App() {
               onChange={handleControlledChange}
               onSelectionChange={setControlledSelectedIds}
               tool={tool}
+              ruler={rulerControlledOptions}
+              onRulerChange={setRulerStateControlled}
               strokeColor={color}
               strokeWidth={effectiveStrokeWidth}
               pressure={pressure}
