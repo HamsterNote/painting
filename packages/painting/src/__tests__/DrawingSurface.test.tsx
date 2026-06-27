@@ -2901,7 +2901,7 @@ describe('DrawingSurface', () => {
       return event;
     }
 
-    it('default mouse hover renders [data-crosshair] sized 20x20 outside the SVG', () => {
+    it('default mouse hover renders [data-crosshair] sized 20x20 with two lines and one circle outside the SVG', () => {
       const { container } = render(
         <DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} />
       );
@@ -2918,8 +2918,23 @@ describe('DrawingSurface', () => {
 
       const crosshair = container.querySelector('[data-crosshair]') as SVGSVGElement | null;
       expect(crosshair).toBeTruthy();
+      // 新增默认 crosshair 尺寸为 20x20（旧值 10x10 → 新值 20x20）
       expect(crosshair?.getAttribute('width')).toBe('20');
       expect(crosshair?.getAttribute('height')).toBe('20');
+
+      // crosshair 内部应包含两条 <line> 元素（水平 + 垂直交叉线）
+      const lines = crosshair?.querySelectorAll('line');
+      expect(lines?.length).toBe(2);
+
+      // crosshair 中心应包含一个 <circle> 元素
+      const circles = crosshair?.querySelectorAll('circle');
+      expect(circles?.length).toBe(1);
+      const centerCircle = circles?.[0] as SVGCircleElement;
+      expect(centerCircle?.getAttribute('cx')).toBe('10');
+      expect(centerCircle?.getAttribute('cy')).toBe('10');
+      expect(centerCircle?.getAttribute('fill')).toBe('none');
+      expect(centerCircle?.getAttribute('stroke')).toBeTruthy();
+
       // Crosshair element lives OUTSIDE the drawing SVG — the host's first child is
       // the drawing surface SVG; the crosshair sits in a sibling overlay div.
       const overlay = container.querySelector('[data-crosshair-layer]') as HTMLElement | null;
@@ -3009,6 +3024,31 @@ describe('DrawingSurface', () => {
       ) as SVGCircleElement | null;
       expect(circle).toBeTruthy();
       expect(circle?.getAttribute('r')).toBe('2');
+    });
+
+    it('pen tool with strokeWidth=100 clamps crosshair circle r to 9 (cursorSize/2 - 1)', () => {
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          tool="pen"
+          strokeWidth={100}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      act(() => {
+        host.dispatchEvent(
+          pointerEvent('pointerenter', { clientX: 50, clientY: 60, pointerType: 'mouse' })
+        );
+      });
+
+      const circle = container.querySelector(
+        '[data-testid="crosshair-center-circle"]'
+      ) as SVGCircleElement | null;
+      expect(circle).toBeTruthy();
+      expect(circle?.getAttribute('r')).toBe('9');
     });
 
     it('polygon crosshair center circle uses resolvedOpenWidth/2', () => {
@@ -5216,8 +5256,8 @@ describe('eraserCursorAndTrajectory', () => {
     return event;
   }
 
-    // AC-E5 — default eraser cursor renders an SVG with r = strokeWidth/2.
-  it('AC-E5 default cursor renders [data-testid="eraser-cursor"] with circle r = strokeWidth/2 when tool=eraser', () => {
+  // AC-E5 — default eraser cursor renders an SVG with r = strokeWidth/2 (= screen-space line radius at default scale 1).
+  it('AC-E5 default cursor renders [data-testid="eraser-cursor"] with circle r = strokeWidth/2 (= screen-space line radius at default scale 1) when tool=eraser', () => {
     const { container } = render(
       <DrawingSurface
         testID="drawing-surface-host"

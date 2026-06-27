@@ -141,17 +141,18 @@ export type DrawingCursorRenderState = {
   /** Whether the crosshair should be visible (hover for mouse/pen; down for touch). */
   visible: boolean;
   /**
-   * Eraser pickup radius in CSS pixels (screen-space). Defined ONLY when the
-   * active tool is `eraser`; `undefined` for every other tool. The default
-   * cursor renderer reads this to draw the eraser hover circle; custom
-   * `render` callbacks may also consult it to visualise the same radius.
+   * Eraser pickup radius in screen-space CSS pixels scaled by viewport.scale.
+   * Defined ONLY when the active tool is `eraser`; `undefined` for every other
+   * tool. The default cursor renderer reads this to draw the eraser hover
+   * circle; custom `render` callbacks may also consult it to visualise the same
+   * radius.
    */
   eraserRadius?: number;
 };
 
 /**
  * Cursor overlay configuration. Pass `false` to disable the overlay entirely.
- * When undefined (the default), the surface renders a 10px screen-pixel
+ * When undefined (the default), the surface renders a 20px screen-pixel
  * crosshair centered on the pointer.
  */
 export type DrawingCursorOptions = {
@@ -580,7 +581,10 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       () => uniqueStrokeIds(isSelectionControlled ? selectedStrokeIds : internalSelectedIds),
       [internalSelectedIds, isSelectionControlled, selectedStrokeIds]
     );
-    const selectionBox = useMemo(() => computeSelectionBox(strokes, selectedIds), [strokes, selectedIds]);
+    const selectionBox = useMemo(
+      () => computeSelectionBox(strokes, selectedIds),
+      [strokes, selectedIds]
+    );
     const selectedIdsRef = useRef<readonly string[]>(selectedIds);
     const selectionBoxRef = useRef(selectionBox);
     const onSelectionChangeRef = useRef(onSelectionChange);
@@ -1362,10 +1366,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           return;
         }
         // 多指按下时清空 on-release 橡皮队列，避免多指误触把之前的待提交删除一起提交。
-        if (
-          activeDrawingPointerIds.size > 0 &&
-          eraserCommitModeRef.current === 'on-release'
-        ) {
+        if (activeDrawingPointerIds.size > 0 && eraserCommitModeRef.current === 'on-release') {
           eraserQueuedHitsRef.current.clear();
         }
         activeDrawingPointerIds.add(input.pointerId);
@@ -1935,13 +1936,23 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       };
     }, [cursorEnabled, getLocalCoordinates, resolvePointerSnap]);
 
+    const cursorStrokeRadius = (resolvedOpenWidth * viewport.scale) / 2;
+    const crosshairStrokeRadius =
+      ((isBboxShapeTool(effectiveTool) ? resolvedClosedWidth : resolvedOpenWidth) *
+        viewport.scale) /
+      2;
+    const crosshairCircleRadius = Math.min(
+      Math.max(crosshairStrokeRadius, 1),
+      Math.max(1, cursorSize / 2 - 1)
+    );
+
     const cursorRenderState: DrawingCursorRenderState = {
       screen: cursorState.screen,
       canvas: cursorState.canvas,
       pointerType: cursorState.pointerType,
       activeTool: effectiveTool,
       visible: cursorState.visible,
-      eraserRadius: effectiveTool === 'eraser' ? resolvedOpenWidth / 2 : undefined,
+      eraserRadius: effectiveTool === 'eraser' ? cursorStrokeRadius : undefined,
     };
 
     return (
@@ -2176,7 +2187,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
                     data-testid="crosshair-center-circle"
                     cx={cursorSize / 2}
                     cy={cursorSize / 2}
-                    r={isBboxShapeTool(effectiveTool) ? resolvedClosedWidth / 2 : resolvedOpenWidth / 2}
+                    r={crosshairCircleRadius}
                     fill="none"
                     stroke={cursorColor}
                     strokeWidth={1}
