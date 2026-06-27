@@ -1338,4 +1338,186 @@ test.describe('DrawingSurface playground', () => {
       await expect(deleteBtn).toBeDisabled();
     });
   });
+
+
+  test.describe('ruler overlay', () => {
+    test('toggle shows ruler and keeps tool', async ({ page }) => {
+      const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
+      const toolSelect = page.getByTestId('drawing-tool-select');
+      const uncontrolled = page.getByTestId('drawing-surface-uncontrolled');
+      const controlled = page.getByTestId('drawing-surface-controlled');
+
+      await toolSelect.selectOption('pen');
+      await toggleBtn.click();
+
+      await expect(toolSelect).toHaveValue('pen');
+      await expect(uncontrolled.getByTestId('drawing-ruler')).toBeVisible();
+      await expect(controlled.getByTestId('drawing-ruler')).toBeVisible();
+    });
+
+    test('visual constants', async ({ page }) => {
+      const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
+      await toggleBtn.click();
+
+      const uncontrolled = page.getByTestId('drawing-surface-uncontrolled');
+      const rulerBg = uncontrolled.getByTestId('drawing-ruler-background');
+      
+      const fillOpacity = await rulerBg.getAttribute('fill-opacity');
+      expect(fillOpacity).toBe('0.2');
+
+      const labels = await uncontrolled.locator('text[fill="black"]').allInnerTexts();
+      for (const label of labels) {
+        expect(String(label).startsWith('-')).toBe(false);
+      }
+
+      const centerTick = uncontrolled.getByTestId('drawing-ruler-center-tick');
+      const centerLabel = await centerTick.locator('+ text').textContent();
+      expect(centerLabel?.trim()).toBe('0');
+    });
+
+    test('geometry attributes numeric', async ({ page }) => {
+      const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
+      await toggleBtn.click();
+
+      const ruler = page.getByTestId('drawing-surface-uncontrolled').getByTestId('drawing-ruler');
+      
+      for (const attr of ['data-ruler-center-x', 'data-ruler-center-y', 'data-ruler-rotation', 'data-ruler-length', 'data-ruler-height']) {
+        const val = await ruler.getAttribute(attr);
+        expect(val).not.toBeNull();
+        expect(Number.isFinite(parseFloat(val!))).toBe(true);
+      }
+    });
+
+    test('draw outside ruler is normal', async ({ page }) => {
+      const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
+      await toggleBtn.click();
+
+      const surface = page.getByTestId('drawing-surface-uncontrolled');
+      const preview = page.getByTestId('drawing-preview-uncontrolled');
+      const ruler = surface.getByTestId('drawing-ruler');
+
+      const cx = parseFloat((await ruler.getAttribute('data-ruler-center-x'))!);
+      const cy = parseFloat((await ruler.getAttribute('data-ruler-center-y'))!);
+      const height = parseFloat((await ruler.getAttribute('data-ruler-height'))!);
+
+      const drawY = cy + height + 50;
+
+      await dispatchPointerDrag(surface, {
+        pointerId: 98,
+        pointerType: 'mouse',
+        start: { x: cx - 50, y: drawY },
+        moves: [{ x: cx + 50, y: drawY }],
+      });
+      await page.waitForTimeout(100);
+
+      const previewText = await preview.textContent();
+      const parsed = JSON.parse(previewText!);
+      expect(parsed.strokes.length).toBeGreaterThan(1);
+      const lastStroke = parsed.strokes[parsed.strokes.length - 1];
+      
+      for (const pt of lastStroke.points) {
+        expect(Math.abs(pt.y - cy)).toBeGreaterThan(height / 2);
+      }
+    });
+
+    test('draw inside horizontal ruler is projected', async ({ page }) => {
+      const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
+      await toggleBtn.click();
+
+      const surface = page.getByTestId('drawing-surface-uncontrolled');
+      const preview = page.getByTestId('drawing-preview-uncontrolled');
+      const ruler = surface.getByTestId('drawing-ruler');
+
+      const cx = parseFloat((await ruler.getAttribute('data-ruler-center-x'))!);
+      const cy = parseFloat((await ruler.getAttribute('data-ruler-center-y'))!);
+      const height = parseFloat((await ruler.getAttribute('data-ruler-height'))!);
+
+      const drawY = cy + height / 4;
+
+      await dispatchPointerDrag(surface, {
+        pointerId: 99,
+        pointerType: 'mouse',
+        start: { x: cx - 20, y: drawY },
+        moves: [{ x: cx + 50, y: drawY }],
+      });
+      await page.waitForTimeout(100);
+
+      const previewText = await preview.textContent();
+      const parsed = JSON.parse(previewText!);
+      expect(parsed.strokes.length).toBeGreaterThan(1);
+      const lastStroke = parsed.strokes[parsed.strokes.length - 1];
+      
+      for (const pt of lastStroke.points) {
+        expect(Math.abs(pt.y - cy)).toBeLessThan(1);
+      }
+    });
+
+    test('disable ruler restores normal drawing', async ({ page }) => {
+      const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
+      await toggleBtn.click();
+
+      const surface = page.getByTestId('drawing-surface-uncontrolled');
+      const preview = page.getByTestId('drawing-preview-uncontrolled');
+      const ruler = surface.getByTestId('drawing-ruler');
+
+      const cx = parseFloat((await ruler.getAttribute('data-ruler-center-x'))!);
+      const cy = parseFloat((await ruler.getAttribute('data-ruler-center-y'))!);
+      const height = parseFloat((await ruler.getAttribute('data-ruler-height'))!);
+
+      await toggleBtn.click();
+
+      const drawY = cy + height / 4;
+
+      await dispatchPointerDrag(surface, {
+        pointerId: 100,
+        pointerType: 'mouse',
+        start: { x: cx - 50, y: drawY },
+        moves: [{ x: cx + 50, y: drawY }],
+      });
+      await page.waitForTimeout(100);
+
+      const previewText = await preview.textContent();
+      const parsed = JSON.parse(previewText!);
+      expect(parsed.strokes.length).toBeGreaterThan(1);
+      const lastStroke = parsed.strokes[parsed.strokes.length - 1];
+      
+      for (const pt of lastStroke.points) {
+        expect(Math.abs(pt.y - cy)).toBeGreaterThan(5);
+      }
+    });
+
+    test('grip drag changes transform without stroke', async ({ page }) => {
+      const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
+      await toggleBtn.click();
+
+      const surface = page.getByTestId('drawing-surface-uncontrolled');
+      const preview = page.getByTestId('drawing-preview-uncontrolled');
+      const ruler = surface.getByTestId('drawing-ruler');
+      const grip = surface.getByTestId('drawing-ruler-drag-grip');
+
+      const startCx = parseFloat((await ruler.getAttribute('data-ruler-center-x'))!);
+      const startCy = parseFloat((await ruler.getAttribute('data-ruler-center-y'))!);
+
+      const gripBox = await grip.boundingBox();
+      expect(gripBox).not.toBeNull();
+
+      const previewBefore = await preview.textContent();
+
+      await dispatchPointerDrag(grip, {
+        pointerId: 101,
+        pointerType: 'mouse',
+        start: { x: gripBox!.width / 2, y: gripBox!.height / 2 },
+        moves: [{ x: gripBox!.width / 2 + 50, y: gripBox!.height / 2 + 50 }],
+      });
+
+      const endCx = parseFloat((await ruler.getAttribute('data-ruler-center-x'))!);
+      const endCy = parseFloat((await ruler.getAttribute('data-ruler-center-y'))!);
+
+      expect(endCx).not.toBe(startCx);
+      expect(endCy).not.toBe(startCy);
+
+      const previewAfter = await preview.textContent();
+      expect(previewAfter).toBe(previewBefore);
+    });
+  });
 });

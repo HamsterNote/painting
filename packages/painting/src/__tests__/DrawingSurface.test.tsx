@@ -7,6 +7,8 @@ import type {
   DrawingStroke,
   DrawingTool,
   DrawingValue,
+  DrawingRulerOptions,
+  DrawingRulerState,
 } from '../components/DrawingSurface';
 import { DrawingSurface } from '../components/DrawingSurface';
 
@@ -123,6 +125,17 @@ function dispatchDragEnd(host: HTMLElement, pointerId?: number) {
   });
 }
 
+function dispatchElementPointerEvent(
+  element: Element | Document,
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  item: PointerPathItem,
+  pointerId: number
+) {
+  act(() => {
+    element.dispatchEvent(createPointerEvent(type, item, pointerId));
+  });
+}
+
 function mockHostRect(element: HTMLElement) {
   element.getBoundingClientRect = jest.fn(() => ({
     x: 10,
@@ -135,6 +148,16 @@ function mockHostRect(element: HTMLElement) {
     height: 200,
     toJSON: () => ({}),
   }));
+}
+
+function mockElementClientSize(width: number, height: number) {
+  const clientWidthSpy = jest.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(width);
+  const clientHeightSpy = jest.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(height);
+
+  return () => {
+    clientWidthSpy.mockRestore();
+    clientHeightSpy.mockRestore();
+  };
 }
 
 function emitCompletedStroke(host: HTMLElement, event: MockInputEvent) {
@@ -4692,6 +4715,763 @@ describe('eraserCursorAndTrajectory', () => {
       const svg = container.querySelector('svg');
       expect(svg?.getAttribute('data-pressure-multiplier')).toBe('2.5');
       unmount();
+    });
+  });
+
+  describe('ruler projection', () => {
+    const horizontalRuler: DrawingRulerState = {
+      center: { x: 50, y: 40 },
+      rotationRad: 0,
+      length: 160,
+      height: 30,
+    };
+
+    const clientPoint = (point: { x: number; y: number }) => ({
+      x: point.x + 10,
+      y: point.y + 20,
+    });
+
+    const dispatchProjectedPenStroke = (
+      host: HTMLElement,
+      points: readonly { x: number; y: number }[]
+    ) => {
+      dispatchDragMove(host, [
+        finger(
+          points.map((point) => ({
+            point: clientPoint(point),
+            event: { pointerType: 'pen', button: 0 },
+          }))
+        ),
+      ]);
+      dispatchDragEnd(host);
+    };
+
+    const renderProjectedSurface = (
+      props: {
+        readonly ruler?: false | DrawingRulerOptions;
+        readonly tool?: DrawingTool;
+        readonly value?: DrawingValue;
+        readonly strokeWidth?: number;
+      },
+      onChange = jest.fn()
+    ) => {
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={props.value ?? { strokes: [] }}
+          onChange={onChange}
+          tool={props.tool ?? 'pen'}
+          ruler={props.ruler}
+          strokeWidth={props.strokeWidth}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      return { host, onChange };
+    };
+
+    const expectCommittedPoints = (onChange: jest.Mock): DrawingStroke['points'] => {
+      expect(onChange).toHaveBeenCalledTimes(1);
+      return onChange.mock.calls[0][0].strokes[0].points;
+    };
+
+    const distanceToLine = (point: { x: number; y: number }, rulerState: DrawingRulerState) => {
+      const dx = point.x - rulerState.center.x;
+      const dy = point.y - rulerState.center.y;
+      return Math.abs(-Math.sin(rulerState.rotationRad) * dx + Math.cos(rulerState.rotationRad) * dy);
+    };
+
+    it('horizontal ruler: pen stroke drawn inside ruler body has all points.y equal to rulerCenterY', () => {
+      const { host, onChange } = renderProjectedSurface({
+        ruler: { enabled: true, state: horizontalRuler },
+      });
+
+      dispatchProjectedPenStroke(host, [
+        { x: 10, y: 32 },
+        { x: 70, y: 50 },
+      ]);
+
+      const points = expectCommittedPoints(onChange);
+      expect(points.map((point) => point.y)).toEqual([horizontalRuler.center.y, horizontalRuler.center.y]);
+    });
+
+    it('rotated 30° ruler: committed points lie on rotated centerline', () => {
+      const rotatedRuler: DrawingRulerState = {
+        center: { x: 80, y: 70 },
+        rotationRad: Math.PI / 6,
+        length: 160,
+        height: 40,
+      };
+      const { host, onChange } = renderProjectedSurface({
+        ruler: { enabled: true, state: rotatedRuler },
+      });
+
+      dispatchProjectedPenStroke(host, [
+        { x: 46, y: 47 },
+        { x: 110, y: 90 },
+      ]);
+
+      const points = expectCommittedPoints(onChange);
+      points.forEach((point) => {
+        expect(distanceToLine(point, rotatedRuler)).toBeCloseTo(0, 6);
+      });
+    });
+
+    it('outside-ruler point remains unprojected', () => {
+      const outsidePoints = [
+        { x: 10, y: 80 },
+        { x: 70, y: 80 },
+      ];
+      const { host, onChange } = renderProjectedSurface({
+        ruler: { enabled: true, state: horizontalRuler },
+      });
+
+      dispatchProjectedPenStroke(host, outsidePoints);
+
+      expect(expectCommittedPoints(onChange)).toEqual(outsidePoints);
+    });
+
+    it('disabled ruler leaves drawing unchanged', () => {
+      const rawPoints = [
+        { x: 10, y: 32 },
+        { x: 70, y: 50 },
+      ];
+      const { host, onChange } = renderProjectedSurface({
+        ruler: { enabled: false, state: horizontalRuler },
+      });
+
+      dispatchProjectedPenStroke(host, rawPoints);
+
+      expect(expectCommittedPoints(onChange)).toEqual(rawPoints);
+    });
+
+    it('eraser inside ruler does NOT snap', () => {
+      const onChange = jest.fn();
+      const { host } = renderProjectedSurface(
+        {
+          tool: 'eraser',
+          strokeWidth: 4,
+          ruler: { enabled: true, state: horizontalRuler },
+          value: {
+            strokes: [
+              {
+                id: 'off-center-stroke',
+                tool: 'pen',
+                points: [
+                  { x: 10, y: 50 },
+                  { x: 70, y: 50 },
+                ],
+                strokeWidth: 4,
+              },
+            ],
+          },
+        },
+        onChange
+      );
+
+      dispatchProjectedPenStroke(host, [
+        { x: 30, y: 50 },
+        { x: 30, y: 50 },
+      ]);
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0][0].strokes).toEqual([]);
+    });
+  });
+
+  describe('ruler gesture', () => {
+    const rulerState: DrawingRulerState = {
+      center: { x: 50, y: 40 },
+      rotationRad: 0,
+      length: 160,
+      height: 30,
+    };
+
+    const renderRulerGestureSurface = (onRulerChange = jest.fn()) => {
+      const onChange = jest.fn();
+      const result = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{
+            strokes: [
+              {
+                id: 'committed-stroke',
+                tool: 'pen',
+                points: [
+                  { x: 10, y: 10 },
+                  { x: 20, y: 20 },
+                ],
+              },
+            ],
+          }}
+          onChange={onChange}
+          ruler={{ enabled: true, state: rulerState }}
+          onRulerChange={onRulerChange}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      return { ...result, host, onChange, onRulerChange };
+    };
+
+    it('centers ruler at visible surface center on first enable', () => {
+      const restoreClientSize = mockElementClientSize(800, 600);
+
+      try {
+        render(
+          <DrawingSurface
+            testID="drawing-surface-host"
+            value={{ strokes: [] }}
+            ruler={{ enabled: true }}
+          />
+        );
+
+        const ruler = screen.getByTestId('drawing-ruler');
+        expect(Number(ruler.getAttribute('data-ruler-center-x'))).toBeCloseTo(400, 6);
+        expect(Number(ruler.getAttribute('data-ruler-center-y'))).toBeCloseTo(300, 6);
+      } finally {
+        restoreClientSize();
+      }
+    });
+
+    it('moves ruler center after single-pointer grip drag', () => {
+      const { onRulerChange, rerender } = renderRulerGestureSurface();
+      const grip = screen.getByTestId('drawing-ruler-drag-grip');
+
+      dispatchElementPointerEvent(
+        grip,
+        'pointerdown',
+        { point: { x: 60, y: 60 }, event: { pointerType: 'touch' }, timestamp: 0 },
+        1
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        { point: { x: 80, y: 90 }, event: { pointerType: 'touch' }, timestamp: 10 },
+        1
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointerup',
+        { point: { x: 80, y: 90 }, event: { pointerType: 'touch' }, timestamp: 20 },
+        1
+      );
+
+      expect(onRulerChange).toHaveBeenCalled();
+      const nextState = onRulerChange.mock.calls.at(-1)?.[0] as DrawingRulerState;
+      rerender(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          ruler={{ enabled: true, state: nextState }}
+          onRulerChange={onRulerChange}
+        />
+      );
+
+      const ruler = screen.getByTestId('drawing-ruler');
+      expect(ruler.getAttribute('data-ruler-center-x')).not.toBe(String(rulerState.center.x));
+      expect(ruler.getAttribute('data-ruler-center-y')).not.toBe(String(rulerState.center.y));
+    });
+
+    it('moves and rotates ruler after two-pointer body gesture and leaves committed strokes untouched', () => {
+      const { container, onChange, onRulerChange, rerender } = renderRulerGestureSurface();
+      const body = screen.getByTestId('drawing-ruler-background');
+      const initialStrokeCount = container.querySelector('svg')?.getAttribute('data-stroke-count');
+
+      dispatchElementPointerEvent(
+        body,
+        'pointerdown',
+        { point: { x: 100, y: 60 }, event: { pointerType: 'touch', isPrimary: true }, timestamp: 0 },
+        1
+      );
+      dispatchElementPointerEvent(
+        body,
+        'pointerdown',
+        { point: { x: 20, y: 60 }, event: { pointerType: 'touch', isPrimary: false }, timestamp: 1 },
+        2
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        { point: { x: 130, y: 90 }, event: { pointerType: 'touch', isPrimary: true }, timestamp: 10 },
+        1
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        { point: { x: 50, y: 40 }, event: { pointerType: 'touch', isPrimary: false }, timestamp: 11 },
+        2
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointerup',
+        { point: { x: 130, y: 90 }, event: { pointerType: 'touch', isPrimary: true }, timestamp: 20 },
+        1
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointerup',
+        { point: { x: 50, y: 40 }, event: { pointerType: 'touch', isPrimary: false }, timestamp: 21 },
+        2
+      );
+
+      expect(onRulerChange).toHaveBeenCalled();
+      expect(onChange).not.toHaveBeenCalled();
+      expect(container.querySelector('svg')?.getAttribute('data-stroke-count')).toBe(initialStrokeCount);
+
+      const nextState = onRulerChange.mock.calls.at(-1)?.[0] as DrawingRulerState;
+      rerender(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{
+            strokes: [
+              {
+                id: 'committed-stroke',
+                tool: 'pen',
+                points: [
+                  { x: 10, y: 10 },
+                  { x: 20, y: 20 },
+                ],
+              },
+            ],
+          }}
+          ruler={{ enabled: true, state: nextState }}
+          onRulerChange={onRulerChange}
+        />
+      );
+
+      const ruler = screen.getByTestId('drawing-ruler');
+      expect(ruler.getAttribute('data-ruler-center-x')).not.toBe(String(rulerState.center.x));
+      expect(ruler.getAttribute('data-ruler-center-y')).not.toBe(String(rulerState.center.y));
+      expect(ruler.getAttribute('data-ruler-rotation')).not.toBe(String(rulerState.rotationRad));
+      expect(container.querySelector('svg')?.getAttribute('data-stroke-count')).toBe(initialStrokeCount);
+    });
+  });
+
+  describe('ruler regression', () => {
+    const horizontalRuler: DrawingRulerState = {
+      center: { x: 50, y: 40 },
+      rotationRad: 0,
+      length: 160,
+      height: 30,
+    };
+
+    const rotatedRuler: DrawingRulerState = {
+      center: { x: 80, y: 70 },
+      rotationRad: Math.PI / 6,
+      length: 160,
+      height: 40,
+    };
+
+    const toClientPoint = (point: { readonly x: number; readonly y: number }) => ({
+      x: point.x + 10,
+      y: point.y + 20,
+    });
+
+    const dispatchPenPath = (
+      target: HTMLElement | SVGElement,
+      points: readonly { readonly x: number; readonly y: number }[],
+      pointerId = 1
+    ) => {
+      const firstPoint = points[0];
+      if (!firstPoint) {
+        return;
+      }
+
+      dispatchElementPointerEvent(
+        target,
+        'pointerdown',
+        { point: toClientPoint(firstPoint), event: { pointerType: 'pen', button: 0 } },
+        pointerId
+      );
+
+      for (const point of points.slice(1)) {
+        dispatchElementPointerEvent(
+          document,
+          'pointermove',
+          { point: toClientPoint(point), event: { pointerType: 'pen', button: -1 } },
+          pointerId
+        );
+      }
+
+      dispatchElementPointerEvent(
+        document,
+        'pointerup',
+        { point: toClientPoint(points[points.length - 1] ?? firstPoint), event: { pointerType: 'pen', button: 0 } },
+        pointerId
+      );
+    };
+
+    const distanceToRulerCenterLine = (
+      point: { readonly x: number; readonly y: number },
+      rulerState: DrawingRulerState
+    ) => {
+      const dx = point.x - rulerState.center.x;
+      const dy = point.y - rulerState.center.y;
+      return Math.abs(-Math.sin(rulerState.rotationRad) * dx + Math.cos(rulerState.rotationRad) * dy);
+    };
+
+    const committedPointsFrom = (onChange: jest.Mock): DrawingStroke['points'] => {
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const nextValue = onChange.mock.calls[0][0] as DrawingValue;
+      const stroke = nextValue.strokes[0];
+      expect(stroke).toBeDefined();
+      return stroke?.points ?? [];
+    };
+
+    it('omitting ruler preserves legacy pen drawing and active tool attributes', () => {
+      const onChange = jest.fn();
+      const { container, queryByTestId } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="pen"
+          strokeSmoothing={false}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      dispatchPenPath(host, [
+        { x: 5, y: 5 },
+        { x: 10, y: 15 },
+      ]);
+
+      expect(queryByTestId('drawing-ruler')).toBeNull();
+      expect(host.getAttribute('data-active-tool')).toBe('pen');
+      expect(container.querySelector('svg')).not.toBeNull();
+      expect(committedPointsFrom(onChange)).toEqual([
+        { x: 5, y: 5 },
+        { x: 10, y: 15 },
+      ]);
+    });
+
+    it('ruler false preserves legacy pen drawing and hides projection overlay', () => {
+      const onChange = jest.fn();
+      const { queryByTestId } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="pen"
+          ruler={false}
+          strokeSmoothing={false}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      dispatchPenPath(host, [
+        { x: 10, y: 32 },
+        { x: 70, y: 50 },
+      ]);
+
+      expect(queryByTestId('drawing-ruler')).toBeNull();
+      expect(committedPointsFrom(onChange)).toEqual([
+        { x: 10, y: 32 },
+        { x: 70, y: 50 },
+      ]);
+    });
+
+    it('renders exact ruler opacity defaults, overrides, non-negative labels, and center label', () => {
+      const { container, rerender } = render(
+        <DrawingSurface ruler={{ enabled: true, state: horizontalRuler }} />
+      );
+
+      expect(screen.getByTestId('drawing-ruler-background').getAttribute('fill-opacity')).toBe('0.2');
+      const labels = Array.from(container.querySelectorAll('text')).map((element) => element.textContent ?? '');
+      expect(labels.length).toBeGreaterThan(0);
+      labels.forEach((label) => {
+        expect(label.startsWith('-')).toBe(false);
+      });
+      const centerTickGroup = screen.getByTestId('drawing-ruler-center-tick').parentElement;
+      expect(centerTickGroup?.querySelector('text')?.textContent).toBe('0');
+
+      rerender(
+        <DrawingSurface
+          ruler={{ enabled: true, state: horizontalRuler, backgroundOpacity: 0.45 }}
+        />
+      );
+
+      expect(screen.getByTestId('drawing-ruler-background').getAttribute('fill-opacity')).toBe('0.45');
+    });
+
+    it('projects accessible cursor state while hovering inside the ruler', () => {
+      const observedStates: DrawingCursorRenderState[] = [];
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          ruler={{ enabled: true, state: horizontalRuler }}
+          cursor={{
+            render: (state) => {
+              observedStates.push(state);
+              return (
+                <div
+                  data-testid="projected-cursor"
+                  data-canvas-x={String(state.canvas.x)}
+                  data-canvas-y={String(state.canvas.y)}
+                />
+              );
+            },
+          }}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      act(() => {
+        host.dispatchEvent(
+          createPointerEvent(
+            'pointerenter',
+            { point: toClientPoint({ x: 70, y: 50 }), event: { pointerType: 'pen', button: 0 } },
+            1
+          )
+        );
+        host.dispatchEvent(
+          createPointerEvent(
+            'pointermove',
+            { point: toClientPoint({ x: 70, y: 50 }), event: { pointerType: 'pen', button: -1 } },
+            1
+          )
+        );
+      });
+
+      const cursorElement = screen.getByTestId('projected-cursor');
+      expect(cursorElement.getAttribute('data-canvas-x')).toBe('70');
+      expect(cursorElement.getAttribute('data-canvas-y')).toBe(String(horizontalRuler.center.y));
+      expect(observedStates.at(-1)?.screen).toEqual({ x: 70, y: horizontalRuler.center.y });
+    });
+
+    it('stores horizontal and rotated projected pen points numerically', () => {
+      const horizontalChange = jest.fn();
+      const { unmount } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={horizontalChange}
+          tool="pen"
+          ruler={{ enabled: true, state: horizontalRuler }}
+          strokeSmoothing={false}
+        />
+      );
+      const horizontalHost = screen.getByTestId('drawing-surface-host');
+      mockHostRect(horizontalHost);
+
+      dispatchPenPath(horizontalHost, [
+        { x: 10, y: 32 },
+        { x: 70, y: 50 },
+      ]);
+
+      committedPointsFrom(horizontalChange).forEach((point) => {
+        expect(point.y).toBe(horizontalRuler.center.y);
+      });
+      unmount();
+
+      const rotatedChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={rotatedChange}
+          tool="pen"
+          ruler={{ enabled: true, state: rotatedRuler }}
+          strokeSmoothing={false}
+        />
+      );
+      const rotatedHost = screen.getByTestId('drawing-surface-host');
+      mockHostRect(rotatedHost);
+
+      dispatchPenPath(rotatedHost, [
+        { x: 46, y: 47 },
+        { x: 110, y: 90 },
+      ]);
+
+      committedPointsFrom(rotatedChange).forEach((point) => {
+        expect(distanceToRulerCenterLine(point, rotatedRuler)).toBeCloseTo(0, 6);
+      });
+    });
+
+    it('arbitrates drag grip gestures from body drawing with pen input', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="pen"
+          ruler={{ enabled: true, state: horizontalRuler }}
+          strokeSmoothing={false}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const grip = screen.getByTestId('drawing-ruler-drag-grip');
+
+      dispatchPenPath(grip, [
+        { x: horizontalRuler.center.x, y: horizontalRuler.center.y },
+        { x: horizontalRuler.center.x + 10, y: horizontalRuler.center.y },
+      ]);
+
+      expect(onChange).not.toHaveBeenCalled();
+
+      const body = screen.getByTestId('drawing-ruler-background');
+      dispatchPenPath(body, [
+        { x: 20, y: 50 },
+        { x: 70, y: 50 },
+      ], 2);
+
+      expect(committedPointsFrom(onChange).map(({ x, y }) => ({ x, y }))).toEqual([
+        { x: 20, y: horizontalRuler.center.y },
+        { x: 70, y: horizontalRuler.center.y },
+      ]);
+    });
+
+    it('mounts and unmounts enabled ruler gesture integration without duplicate rulers', () => {
+      const first = render(
+        <DrawingSurface testID="drawing-surface-host" ruler={{ enabled: true, state: horizontalRuler }} />
+      );
+      expect(first.container.querySelectorAll('[data-testid="drawing-ruler"]')).toHaveLength(1);
+      expect(() => first.unmount()).not.toThrow();
+
+      const second = render(
+        <DrawingSurface testID="drawing-surface-host" ruler={{ enabled: true, state: horizontalRuler }} />
+      );
+
+      expect(second.container.querySelectorAll('[data-testid="drawing-ruler"]')).toHaveLength(1);
+      expect(screen.getByTestId('drawing-ruler').getAttribute('data-ruler-length')).toBe(String(horizontalRuler.length));
+      expect(() => second.unmount()).not.toThrow();
+    });
+
+    it('does not call onRulerChange on mount when controlled state is supplied', () => {
+      const onRulerChange = jest.fn();
+
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          ruler={{ enabled: true, state: horizontalRuler }}
+          onRulerChange={onRulerChange}
+        />
+      );
+
+      expect(onRulerChange).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('ruler prop (类型安全)', () => {
+    it('不传 ruler 时正常渲染，且不显示 ruler', () => {
+      const { container, unmount, queryByTestId } = render(
+        <DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} tool="pen" />
+      );
+      const svg = container.querySelector('svg');
+      expect(svg).not.toBeNull();
+      expect(queryByTestId('drawing-ruler')).toBeNull();
+      unmount();
+    });
+
+    it('ruler={false} 时正常渲染，且不显示 ruler', () => {
+      const { container, unmount, queryByTestId } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          tool="pen"
+          ruler={false}
+        />
+      );
+      const svg = container.querySelector('svg');
+      expect(svg).not.toBeNull();
+      expect(queryByTestId('drawing-ruler')).toBeNull();
+      unmount();
+    });
+
+    it('ruler options 对象时正常渲染', () => {
+      const rulerOptions: DrawingRulerOptions = {
+        enabled: true,
+        length: 400,
+        height: 48,
+      };
+      const { container, unmount } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          tool="pen"
+          ruler={rulerOptions}
+        />
+      );
+      const svg = container.querySelector('svg');
+      expect(svg).not.toBeNull();
+      unmount();
+    });
+
+    it('onRulerChange 回调可传入但不改变渲染', () => {
+      const handleChange = jest.fn();
+      const { container, unmount } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          tool="pen"
+          ruler={{ enabled: true }}
+          onRulerChange={handleChange}
+        />
+      );
+      const svg = container.querySelector('svg');
+      expect(svg).not.toBeNull();
+      expect(handleChange).toHaveBeenCalledTimes(1);
+      unmount();
+    });
+
+    it('ruler prop = true 时显示标尺，且有 5 个特定的 data 属性与透明度、0中心标签、拖动区', () => {
+      const { getByTestId, queryAllByText } = render(<DrawingSurface ruler={{ enabled: true }} />);
+
+      const rulerGroup = getByTestId('drawing-ruler');
+      expect(rulerGroup).not.toBeNull();
+      expect(rulerGroup.getAttribute('data-ruler-center-x')).not.toBeNull();
+      expect(rulerGroup.getAttribute('data-ruler-center-y')).not.toBeNull();
+      expect(rulerGroup.getAttribute('data-ruler-rotation')).not.toBeNull();
+      expect(rulerGroup.getAttribute('data-ruler-length')).not.toBeNull();
+      expect(rulerGroup.getAttribute('data-ruler-height')).not.toBeNull();
+
+      const bg = getByTestId('drawing-ruler-background');
+      expect(bg.getAttribute('fill-opacity') || bg.getAttribute('fillOpacity')).toEqual('0.2');
+
+      const grip = getByTestId('drawing-ruler-drag-grip');
+      expect(grip).not.toBeNull();
+
+      const centerTick = getByTestId('drawing-ruler-center-tick');
+      expect(centerTick).not.toBeNull();
+
+      const zeroLabels = queryAllByText('0');
+      expect(zeroLabels.length).toBeGreaterThan(0);
+      
+      const allText = document.querySelectorAll('text');
+      allText.forEach((t) => {
+        if (t.textContent) {
+          expect(t.textContent).not.toMatch(/^-/);
+        }
+      });
+    });
+
+    it('ruler={false} 卸载后不改变 data-stroke-count 也不出现在 value 中', () => {
+      const { rerender, container, getByTestId } = render(<DrawingSurface ruler={{ enabled: true }} />);
+      expect(getByTestId('drawing-ruler')).not.toBeNull();
+      const initialCount = container.querySelector('svg')?.getAttribute('data-stroke-count');
+
+      rerender(<DrawingSurface ruler={false} />);
+      expect(container.querySelector('[data-testid="drawing-ruler"]')).toBeNull();
+      
+      const finalCount = container.querySelector('svg')?.getAttribute('data-stroke-count');
+      expect(finalCount).toEqual(initialCount);
+    });
+
+    it('DrawingRulerState 类型与 RulerTransform 字段一致', () => {
+      const state: DrawingRulerState = {
+        center: { x: 100, y: 200 },
+        rotationRad: Math.PI / 4,
+        length: 400,
+        height: 48,
+      };
+      expect(state.center.x).toBe(100);
+      expect(state.rotationRad).toBeCloseTo(Math.PI / 4, 6);
     });
   });
 });
