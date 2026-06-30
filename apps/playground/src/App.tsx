@@ -128,6 +128,11 @@ export default function App() {
   // 闭合形状允许 strokeWidth=0（纯填充无描边），此 toggle 强制 strokeWidth=0
   const [forceStrokeWidthZero, setForceStrokeWidthZero] = useState(false);
 
+  // ===== Snap 控制状态 (Task 5) =====
+  const [snapEndpoints, setSnapEndpoints] = useState(false);
+  const [snapLines, setSnapLines] = useState(false);
+  const [snapRadius, setSnapRadius] = useState(8);
+
   // ===== Cursor 控制状态 (Task 12) =====
   const [cursorEnabled, setCursorEnabled] = useState(true);
   const [cursorCustomRender, setCursorCustomRender] = useState(false);
@@ -137,7 +142,6 @@ export default function App() {
   const [eraserTrajectoryVisible, setEraserTrajectoryVisible] = useState(false);
   const [eraserTrajectoryColor, setEraserTrajectoryColor] = useState('#ccc');
   const [eraserTrajectoryOpacity, setEraserTrajectoryOpacity] = useState(0.5);
-  const [eraserTrajectoryLineWidth, setEraserTrajectoryLineWidth] = useState(3);
 
   // ===== 套索选择相关 ref 和状态 =====
   const uncontrolledSurfaceRef = useRef<DrawingSurfaceHandle>(null);
@@ -382,20 +386,24 @@ export default function App() {
         }
       : undefined;
 
+  const snapProp = useMemo(() => {
+    if (!snapEndpoints && !snapLines) return undefined;
+    return {
+      endpoints: snapEndpoints,
+      lines: snapLines,
+      radius: snapRadius,
+    };
+  }, [snapEndpoints, snapLines, snapRadius]);
+
   // Memoize so DrawingSurface 不会因为父组件 re-render 而频繁触发 eraserTrajectory 副作用。
   const eraserTrajectoryProp = useMemo(
     () => ({
       visible: eraserTrajectoryVisible,
       color: eraserTrajectoryColor,
       opacity: eraserTrajectoryOpacity,
-      lineWidth: eraserTrajectoryLineWidth,
+      lineWidth: effectiveStrokeWidth,
     }),
-    [
-      eraserTrajectoryVisible,
-      eraserTrajectoryColor,
-      eraserTrajectoryOpacity,
-      eraserTrajectoryLineWidth,
-    ]
+    [eraserTrajectoryVisible, eraserTrajectoryColor, eraserTrajectoryOpacity, effectiveStrokeWidth]
   );
 
   const toolInstruction = getToolInstruction(tool);
@@ -892,17 +900,59 @@ export default function App() {
                 style={{ width: '60px' }}
               />
             </label>
+          </div>
+        </fieldset>
+        <fieldset
+          data-testid="panel-snap"
+          style={{
+            margin: 0,
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            padding: '8px 12px',
+            flex: '1 1 320px',
+          }}
+        >
+          <legend>
+            <strong>Snap (Pen Tip Snapping)</strong>
+          </legend>
+          <div
+            style={{
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}
+          >
             <label>
-              Line width{' '}
+              <input
+                type="checkbox"
+                data-testid="snap-endpoints-toggle"
+                checked={snapEndpoints}
+                onChange={(e) => setSnapEndpoints(e.target.checked)}
+              />{' '}
+              Endpoints
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                data-testid="snap-lines-toggle"
+                checked={snapLines}
+                onChange={(e) => setSnapLines(e.target.checked)}
+              />{' '}
+              Lines
+            </label>
+            <label>
+              Radius{' '}
               <input
                 type="number"
-                data-testid="eraser-trajectory-line-width"
+                data-testid="snap-radius-input"
                 min={1}
                 step={1}
-                value={eraserTrajectoryLineWidth}
-                onChange={(e) =>
-                  setEraserTrajectoryLineWidth(Math.max(1, parseInt(e.target.value, 10) || 1))
-                }
+                value={snapRadius}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  setSnapRadius(isNaN(val) || val <= 0 ? 8 : val);
+                }}
                 style={{ width: '60px' }}
               />
             </label>
@@ -932,6 +982,7 @@ export default function App() {
               fillColor={resolvedFillColor}
               fillOpacity={resolvedFillOpacity}
               cursor={cursorProp}
+              snap={snapProp}
               eraserCommitMode={eraserCommitMode}
               eraserTrajectory={eraserTrajectoryProp}
               testID="drawing-surface-uncontrolled"
@@ -974,6 +1025,7 @@ export default function App() {
               fillColor={resolvedFillColor}
               fillOpacity={resolvedFillOpacity}
               cursor={cursorProp}
+              snap={snapProp}
               eraserCommitMode={eraserCommitMode}
               eraserTrajectory={eraserTrajectoryProp}
               testID="drawing-surface-controlled"

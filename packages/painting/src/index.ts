@@ -4,6 +4,7 @@ export type {
   DrawingInputMethod,
   DrawingPoint,
   DrawingSelectionChange,
+  DrawingSnapOptions,
   DrawingStroke,
   DrawingSurfaceHandle,
   DrawingSurfaceProps,

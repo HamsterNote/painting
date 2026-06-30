@@ -31,11 +31,14 @@ import {
   pickRenderedStrokeIntersectingPolyline,
   pickRenderedStrokeIntersectingSegment,
   computeSelectionBox,
+  resolveSnapPoint,
   type RenderedStrokeHitTestOptions,
   SELECTION_BOX_PADDING,
   selectStrokesIntersectingLasso,
+  type SnapPointResult,
 } from '../utils';
 import {
+  canvasToScreen,
   type DrawingViewport,
   resetViewport as createResetViewport,
   screenToCanvas,
@@ -152,12 +155,25 @@ export type DrawingCursorRenderState = {
  * crosshair centered on the pointer.
  */
 export type DrawingCursorOptions = {
-  /** Square size in CSS pixels (length of each cross arm). Defaults to 10. */
+  /** Square size in CSS pixels (length of each cross arm). Defaults to 20. */
   size?: number;
   /** Stroke color used by the default crosshair shape. Defaults to `currentColor`. */
   color?: string;
   /** Override the rendered crosshair entirely. Receives current pointer state. */
   render?: (state: DrawingCursorRenderState) => ReactNode;
+};
+
+/**
+ * Pen-tip snapping configuration. Disabled by default: omitting `snap`, passing
+ * `{}`, or leaving both target booleans false keeps current drawing behavior.
+ */
+export type DrawingSnapOptions = {
+  /** Enable snapping to existing stroke endpoints. Defaults to false. */
+  endpoints?: boolean;
+  /** Enable snapping to existing line geometry. Defaults to false. */
+  lines?: boolean;
+  /** Snap search radius in CSS pixels. Defaults to 8 when snapping is enabled. */
+  radius?: number;
 };
 
 /**
@@ -175,6 +191,19 @@ export type DrawingEraserTrajectoryOptions = {
 };
 
 type CursorPointer = { x: number; y: number };
+
+type ResolvedDrawingSnapOptions = {
+  enabled: boolean;
+  endpoints: boolean;
+  lines: boolean;
+  radius: number;
+};
+
+type ResolvedPointerSnap = {
+  screen: DrawingPoint;
+  canvas: DrawingPoint;
+  result: SnapPointResult;
+};
 
 export type DrawingSurfaceProps = {
   /** The drawing tool to use. Defaults to 'pen'. */
@@ -211,6 +240,8 @@ export type DrawingSurfaceProps = {
    * options object to customize size/color or fully override rendering.
    */
   cursor?: false | DrawingCursorOptions;
+  /** Pen-tip snapping configuration. Disabled unless at least one target is enabled. */
+  snap?: DrawingSnapOptions;
   /**
    * Controls when eraser deletions are committed. Defaults to `"while-sliding"`
    * (delete each hit stroke immediately during the gesture). `"on-release"`
@@ -284,6 +315,10 @@ function isClosedShapeTool(tool: DrawingTool): boolean {
 // Polygon is closed but defined by vertex list, not bbox; shift has no meaning there.
 function isBboxShapeTool(tool: DrawingTool): boolean {
   return tool === 'rect' || tool === 'ellipse';
+}
+
+function isSnapEligibleTool(tool: DrawingTool): boolean {
+  return tool === 'pen' || tool === 'line' || tool === 'rect' || tool === 'ellipse' || tool === 'polygon' || tool === 'bezier';
 }
 
 // Shift 约束：把首末两点收敛为正方形 bbox，保持原拖拽方向（dx/dy 符号不变），
@@ -405,6 +440,18 @@ function normalizePointPressure(pressure: number | undefined): number {
     : 1;
 }
 
+function resolveDrawingSnapOptions(snap: DrawingSnapOptions | undefined): ResolvedDrawingSnapOptions {
+  const endpoints = snap?.endpoints === true;
+  const lines = snap?.lines === true;
+  const enabled = endpoints || lines;
+  const radius =
+    enabled && typeof snap?.radius === 'number' && Number.isFinite(snap.radius) && snap.radius > 0
+      ? snap.radius
+      : 8;
+
+  return { enabled, endpoints, lines, radius };
+}
+
 export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfaceProps>(
   function DrawingSurface(props, ref) {
     const {
@@ -423,6 +470,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       pressure,
       samplingRate,
       cursor,
+      snap,
       pressureMultiplier,
       eraserCommitMode,
       eraserTrajectory,
@@ -458,6 +506,8 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       typeof samplingRate === 'number' && Number.isFinite(samplingRate) && samplingRate > 0
         ? samplingRate
         : 0;
+
+    const resolvedSnapOptions = resolveDrawingSnapOptions(snap);
 
     // Pressure multiplier: invalid (NaN, Infinity, non-finite, <=0, non-number) → 1.
     const resolvedPressureMultiplier =
@@ -594,6 +644,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     const pressureRef = useRef(pressure);
     const inputMethodsRef = useRef<DrawingInputMethod[]>(DEFAULT_INPUT_METHODS);
     const smoothingOptionsRef = useRef(resolveStrokeSmoothingOptions(strokeSmoothing));
+    // Snapping is only normalized and exposed through a ref in this task. Pointer
+    // listeners can read current values later without closing over stale props.
+    const snapOptionsRef = useRef<ResolvedDrawingSnapOptions>(resolvedSnapOptions);
 
     const samplingRateRef = useRef(samplingRate);
     const pendingPointsRef = useRef<TimedDrawingPoint[]>([]);
@@ -695,6 +748,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     pressureRef.current = pressure;
     inputMethodsRef.current = inputMethods ?? DEFAULT_INPUT_METHODS;
     smoothingOptionsRef.current = resolveStrokeSmoothingOptions(strokeSmoothing);
+    snapOptionsRef.current = resolvedSnapOptions;
     samplingRateRef.current = resolvedSamplingRate;
     eraserCommitModeRef.current = resolvedEraserCommitMode;
     lassoModeRef.current = lassoMode;
@@ -746,6 +800,27 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         y: clientY - rect.top,
       };
     }, []);
+
+    const resolvePointerSnap = useCallback(
+      (
+        screenPoint: DrawingPoint,
+        viewport: DrawingViewport,
+        snapOptions: ResolvedDrawingSnapOptions,
+        targetStrokes: DrawingStroke[]
+      ): ResolvedPointerSnap => {
+        const canvas = screenToCanvas(screenPoint, viewport);
+        const result = resolveSnapPoint(canvas, targetStrokes, snapOptions, viewport.scale);
+        if (!result) {
+          return { screen: screenPoint, canvas, result };
+        }
+        return {
+          screen: canvasToScreen(result.canvas, viewport),
+          canvas: result.canvas,
+          result,
+        };
+      },
+      []
+    );
 
     const clearActiveStroke = useCallback(() => {
       clearActiveStrokeRef.current?.();
@@ -1164,18 +1239,23 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           return;
         }
 
-        const localPath = path.map((pathItem) =>
-          screenToCanvas(pathItem.point, viewportRef.current)
-        );
-
         // Line is click-to-place by default. Drag remains the shortcut, but only
         // after real movement: at least two path samples and >4 px total travel.
-        if (
-          effectiveToolRef.current === 'line' &&
-          !currentActiveStroke &&
-          (path.length < 2 || totalPathDistance(localPath) <= LINE_DRAG_THRESHOLD_PX)
-        ) {
-          return;
+        if (effectiveToolRef.current === 'line' && !currentActiveStroke) {
+          if (path.length < 2) {
+            return;
+          }
+          const thresholdPath = path.map((pathItem) =>
+            resolvePointerSnap(
+              pathItem.point,
+              viewportRef.current,
+              snapOptionsRef.current,
+              strokesRef.current
+            ).canvas
+          );
+          if (totalPathDistance(thresholdPath) <= LINE_DRAG_THRESHOLD_PX) {
+            return;
+          }
         }
 
         if (!currentActiveStroke) {
@@ -1198,7 +1278,17 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         const rawTimedPoints: TimedDrawingPoint[] = [];
         for (let index = processedPathLengthRef.current; index < path.length; index++) {
           const pathItem = path[index];
-          const localPoint = localPath[index];
+          if (!pathItem) {
+            continue;
+          }
+          const localPoint = isSnapEligibleTool(effectiveToolRef.current)
+            ? resolvePointerSnap(
+                pathItem.point,
+                viewportRef.current,
+                snapOptionsRef.current,
+                strokesRef.current
+              ).canvas
+            : screenToCanvas(pathItem.point, viewportRef.current);
           const timedPoint: TimedDrawingPoint = {
             ...localPoint,
             timestamp: pathItem.timestamp || undefined,
@@ -1234,7 +1324,14 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           dispatchInteraction({
             type: 'POINTER_UP',
             pointerId: input.pointerId,
-            point: screenToCanvas(input.point, viewportRef.current),
+            point: isSnapEligibleTool(effectiveToolRef.current)
+              ? resolvePointerSnap(
+                  input.point,
+                  viewportRef.current,
+                  snapOptionsRef.current,
+                  strokesRef.current
+                ).canvas
+              : screenToCanvas(input.point, viewportRef.current),
           });
         }
       };
@@ -1362,7 +1459,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         clearEraserTrajectoryRef.current();
         clearLassoInteractionRef.current();
       };
-    }, [commitSelection, getLocalCoordinates, setActiveStroke]);
+    }, [commitSelection, getLocalCoordinates, resolvePointerSnap, setActiveStroke]);
 
     // Tool switch: reset reducer state. Cancels any in-progress polygon placement
     // when user picks a different tool mid-draw (or vice versa).
@@ -1458,7 +1555,13 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       }
 
       const toCanvasPoint = (clientX: number, clientY: number) => {
-        return screenToCanvas(getLocalCoordinates(clientX, clientY), viewportRef.current);
+        const screenPoint = getLocalCoordinates(clientX, clientY);
+        return resolvePointerSnap(
+          screenPoint,
+          viewportRef.current,
+          snapOptionsRef.current,
+          strokesRef.current
+        ).canvas;
       };
 
       let pendingLineClick: { point: DrawingPoint; pointerId?: number } | null = null;
@@ -1575,7 +1678,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('blur', handleBlur);
       };
-    }, [effectiveTool, getLocalCoordinates, isDrawingEnabled]);
+    }, [effectiveTool, getLocalCoordinates, isDrawingEnabled, resolvePointerSnap]);
 
     const linePreviewStroke: LineStrokeV2 | null =
       interactionState.phase === 'placingLine'
@@ -1666,7 +1769,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       Number.isFinite(cursorOptions.size) &&
       cursorOptions.size > 0
         ? cursorOptions.size
-        : 10;
+        : 20;
     const cursorColor = cursorOptions.color ?? 'currentColor';
     const cursorRender = cursorOptions.render;
 
@@ -1699,8 +1802,17 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
 
       const computePositions = (clientX: number, clientY: number) => {
         const screen = getLocalCoordinates(clientX, clientY);
-        const canvas = screenToCanvas(screen, viewportRef.current);
-        return { screen, canvas };
+        if (!isSnapEligibleTool(effectiveToolRef.current)) {
+          const canvas = screenToCanvas(screen, viewportRef.current);
+          return { screen, canvas };
+        }
+        const snapped = resolvePointerSnap(
+          screen,
+          viewportRef.current,
+          snapOptionsRef.current,
+          strokesRef.current
+        );
+        return { screen: snapped.screen, canvas: snapped.canvas };
       };
 
       const readPointer = (
@@ -1821,7 +1933,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         host.removeEventListener('pointerup', handleUp);
         window.removeEventListener('blur', handleWindowBlur);
       };
-    }, [cursorEnabled, getLocalCoordinates]);
+    }, [cursorEnabled, getLocalCoordinates, resolvePointerSnap]);
 
     const cursorRenderState: DrawingCursorRenderState = {
       screen: cursorState.screen,
@@ -1850,6 +1962,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           border: '1px solid #ccc',
           position: 'relative',
           touchAction: 'none',
+          cursor: cursorEnabled ? 'none' : undefined,
         }}
       >
         <svg
@@ -2056,6 +2169,15 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
                     y1={0}
                     x2={cursorSize / 2}
                     y2={cursorSize}
+                    stroke={cursorColor}
+                    strokeWidth={1}
+                  />
+                  <circle
+                    data-testid="crosshair-center-circle"
+                    cx={cursorSize / 2}
+                    cy={cursorSize / 2}
+                    r={isBboxShapeTool(effectiveTool) ? resolvedClosedWidth / 2 : resolvedOpenWidth / 2}
+                    fill="none"
                     stroke={cursorColor}
                     strokeWidth={1}
                   />

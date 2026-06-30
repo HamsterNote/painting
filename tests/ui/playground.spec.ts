@@ -523,7 +523,6 @@ test.describe('DrawingSurface playground', () => {
     await expect(page.getByTestId('eraser-trajectory-color')).toHaveValue('#ccc');
     await expect(page.getByTestId('eraser-trajectory-opacity')).toBeVisible();
     await expect(page.getByTestId('eraser-trajectory-opacity')).toHaveValue('0.5');
-    await expect(page.getByTestId('eraser-trajectory-line-width')).toBeVisible();
     await expect(page.getByTestId('drawing-pressure-multiplier-input')).toBeVisible();
     await expect(page.getByTestId('drawing-pressure-multiplier-input')).toHaveValue('1');
 
@@ -857,11 +856,11 @@ test.describe('DrawingSurface playground', () => {
     const commitMode = page.getByTestId('eraser-commit-mode');
     const trajectoryVisible = page.getByTestId('eraser-trajectory-visible');
     const trajectoryColor = page.getByTestId('eraser-trajectory-color');
-    const trajectoryLineWidth = page.getByTestId('eraser-trajectory-line-width');
+    const widthInput = page.getByTestId('drawing-stroke-width-input');
     await expect(commitMode).toBeVisible();
     await expect(trajectoryVisible).toBeVisible();
     await expect(trajectoryColor).toBeVisible();
-    await expect(trajectoryLineWidth).toBeVisible();
+    await expect(widthInput).toBeVisible();
 
     // Seed: draw one pen stroke so the eraser has something to delete later.
     const box = await surface.boundingBox();
@@ -878,9 +877,10 @@ test.describe('DrawingSurface playground', () => {
     await page.locator('button[data-tool="eraser"]').click();
     await trajectoryVisible.check();
     await trajectoryColor.fill('#ff0000');
-    await trajectoryLineWidth.fill('3');
+    // The trajectory line width now follows the shared top Width control.
+    await widthInput.fill('5');
+    await expect(widthInput).toHaveValue('5');
     await expect(trajectoryVisible).toBeChecked();
-    await expect(trajectoryLineWidth).toHaveValue('3');
 
     // Default commit mode is while-sliding; first sweep avoids the pen stroke
     // so the test isolates trajectory rendering from deletion behavior.
@@ -894,7 +894,7 @@ test.describe('DrawingSurface playground', () => {
     const trajectory = surface.locator('[data-testid="eraser-trajectory"]');
     await expect(trajectory).toHaveCount(1);
     await expect(trajectory).toHaveAttribute('stroke', '#ff0000');
-    await expect(trajectory).toHaveAttribute('stroke-width', '3');
+    await expect(trajectory).toHaveAttribute('stroke-width', '5');
 
     await page.mouse.up();
     await expect(trajectory).toHaveCount(0);
@@ -1257,85 +1257,314 @@ test.describe('DrawingSurface playground', () => {
       await page.mouse.up();
     });
 
-    // 选区内拖拽应保持移动模式，不应新建套索。
-    test('lasso: drag inside selection box moves selected strokes', async ({ page }) => {
-      const surface = page.getByTestId('drawing-surface-uncontrolled');
-      const deleteBtn = page.getByTestId('lasso-delete-selected');
+  // 选区内拖拽应保持移动模式，不应新建套索。
+  test('lasso: drag inside selection box moves selected strokes', async ({ page }) => {
+    const surface = page.getByTestId('drawing-surface-uncontrolled');
+    const deleteBtn = page.getByTestId('lasso-delete-selected');
 
-      await page.locator('button[data-tool="lasso"]').click();
-      await expect(surface).toHaveAttribute('data-active-tool', 'lasso');
+    await page.locator('button[data-tool="lasso"]').click();
+    await expect(surface).toHaveAttribute('data-active-tool', 'lasso');
 
-      const box = await surface.boundingBox();
-      expect(box).not.toBeNull();
+    const box = await surface.boundingBox();
+    expect(box).not.toBeNull();
 
-      // 第一次拖拽：用套索选中 seed stroke
-      const startX1 = box!.x + 30;
-      const startY1 = box!.y + 30;
-      await page.mouse.move(startX1, startY1);
-      await page.mouse.down();
-      await page.mouse.move(box!.x + 170, box!.y + 30);
-      await page.mouse.move(box!.x + 170, box!.y + 120);
-      await page.mouse.move(box!.x + 30, box!.y + 120);
-      await page.mouse.move(startX1, startY1);
-      await page.mouse.up();
+    // 第一次拖拽：用套索选中 seed stroke
+    const startX1 = box!.x + 30;
+    const startY1 = box!.y + 30;
+    await page.mouse.move(startX1, startY1);
+    await page.mouse.down();
+    await page.mouse.move(box!.x + 170, box!.y + 30);
+    await page.mouse.move(box!.x + 170, box!.y + 120);
+    await page.mouse.move(box!.x + 30, box!.y + 120);
+    await page.mouse.move(startX1, startY1);
+    await page.mouse.up();
 
-      const selectionBox = surface.locator('[data-testid="lasso-selection-box"]');
-      await expect(selectionBox).toHaveCount(1);
-      await expect(deleteBtn).toBeEnabled();
+    const selectionBox = surface.locator('[data-testid="lasso-selection-box"]');
+    await expect(selectionBox).toHaveCount(1);
+    await expect(deleteBtn).toBeEnabled();
 
-      // 第二次拖拽：从选区框内部开始并移动
-      const startX2 = box!.x + 100;
-      const startY2 = box!.y + 75;
-      await page.mouse.move(startX2, startY2);
-      await page.mouse.down();
-      await page.mouse.move(startX2 + 30, startY2 + 30);
-      await page.mouse.up();
+    // 第二次拖拽：从选区框内部开始并移动
+    const startX2 = box!.x + 100;
+    const startY2 = box!.y + 75;
+    await page.mouse.move(startX2, startY2);
+    await page.mouse.down();
+    await page.mouse.move(startX2 + 30, startY2 + 30);
+    await page.mouse.up();
 
-      // 选区应仍然存在，删除按钮仍可用
-      await expect(selectionBox).toHaveCount(1);
-      await expect(deleteBtn).toBeEnabled();
+    // 选区应仍然存在，删除按钮仍可用
+    await expect(selectionBox).toHaveCount(1);
+    await expect(deleteBtn).toBeEnabled();
+  });
+
+  // Bug 2 回归：lasso 选中后切换到 pen 工具，选区应自动清空且选区框消失。
+  test('lasso selection is cleared when switching to pen tool', async ({ page }) => {
+    const surface = page.getByTestId('drawing-surface-uncontrolled');
+    const deleteBtn = page.getByTestId('lasso-delete-selected');
+
+    await expect(surface).toHaveAttribute('data-stroke-count', '1');
+
+    await page.locator('button[data-tool="lasso"]').click();
+    await expect(surface).toHaveAttribute('data-active-tool', 'lasso');
+
+    const box = await surface.boundingBox();
+    expect(box).not.toBeNull();
+
+    const startX = box!.x + 30;
+    const startY = box!.y + 30;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(box!.x + 170, box!.y + 30);
+    await page.mouse.move(box!.x + 170, box!.y + 120);
+    await page.mouse.move(box!.x + 30, box!.y + 120);
+    await page.mouse.move(startX, startY);
+    await page.mouse.up();
+
+    await expect(deleteBtn).toBeEnabled();
+    await expect(page.getByTestId('lasso-selection-count')).toHaveText('(1)');
+    const selectionBox = surface.locator('[data-testid="lasso-selection-box"]');
+    await expect(selectionBox).toHaveCount(1);
+
+    await page.locator('button[data-tool="pen"]').click();
+    await expect(surface).toHaveAttribute('data-active-tool', 'pen');
+
+    await expect(selectionBox).toHaveCount(0);
+
+    const pathOpacity = await surface.locator('svg').first().locator('path').evaluate((el) =>
+      el.getAttribute('opacity'),
+    );
+    expect(pathOpacity).toBeNull();
+
+    await page.locator('button[data-tool="lasso"]').click();
+    await expect(deleteBtn).toBeDisabled();
+  });
+
+  test.describe('pen tip snapping integration', () => {
+    test('snap toggles default to off with radius 8', async ({ page }) => {
+      await expect(page.getByTestId('snap-endpoints-toggle')).not.toBeChecked();
+      await expect(page.getByTestId('snap-lines-toggle')).not.toBeChecked();
+      await expect(page.getByTestId('snap-radius-input')).toHaveValue('8');
     });
 
-    // Bug 2 回归：lasso 选中后切换到 pen 工具，选区应自动清空且选区框消失。
-    test('lasso selection is cleared when switching to pen tool', async ({ page }) => {
-      const surface = page.getByTestId('drawing-surface-uncontrolled');
-      const deleteBtn = page.getByTestId('lasso-delete-selected');
-
-      await expect(surface).toHaveAttribute('data-stroke-count', '1');
-
-      await page.locator('button[data-tool="lasso"]').click();
-      await expect(surface).toHaveAttribute('data-active-tool', 'lasso');
-
-      const box = await surface.boundingBox();
-      expect(box).not.toBeNull();
-
-      const startX = box!.x + 30;
-      const startY = box!.y + 30;
-      await page.mouse.move(startX, startY);
-      await page.mouse.down();
-      await page.mouse.move(box!.x + 170, box!.y + 30);
-      await page.mouse.move(box!.x + 170, box!.y + 120);
-      await page.mouse.move(box!.x + 30, box!.y + 120);
-      await page.mouse.move(startX, startY);
-      await page.mouse.up();
-
-      await expect(deleteBtn).toBeEnabled();
-      await expect(page.getByTestId('lasso-selection-count')).toHaveText('(1)');
-      const selectionBox = surface.locator('[data-testid="lasso-selection-box"]');
-      await expect(selectionBox).toHaveCount(1);
+    test('snaps to endpoints when enabled', async ({ page }) => {
+      const surface = page.getByTestId('drawing-surface-controlled');
+      const preview = page.getByTestId('drawing-preview-controlled');
 
       await page.locator('button[data-tool="pen"]').click();
-      await expect(surface).toHaveAttribute('data-active-tool', 'pen');
+      await page.getByTestId('snap-endpoints-toggle').check();
 
-      await expect(selectionBox).toHaveCount(0);
+      const box = await surface.boundingBox();
+      expect(box).not.toBeNull();
 
-      const pathOpacity = await surface.locator('svg').first().locator('path').evaluate((el) =>
-        el.getAttribute('opacity'),
-      );
-      expect(pathOpacity).toBeNull();
+      const p1X = box!.x + 50;
+      const p1Y = box!.y + 50;
+      await page.mouse.move(p1X, p1Y);
+      await page.mouse.down();
+      await page.mouse.move(p1X + 50, p1Y + 50);
+      await page.mouse.up();
 
-      await page.locator('button[data-tool="lasso"]').click();
-      await expect(deleteBtn).toBeDisabled();
+      const p2X = p1X + 4;
+      const p2Y = p1Y + 4;
+      await page.mouse.move(p2X, p2Y);
+      await page.mouse.down();
+      await page.mouse.move(p2X + 50, p2Y);
+      await page.mouse.up();
+
+      const previewText = await preview.textContent();
+      const parsed = JSON.parse(previewText!);
+      
+      expect(parsed.strokes.length).toBe(2);
+      
+      const firstStrokeStart = parsed.strokes[0].points[0];
+      const secondStrokeStart = parsed.strokes[1].points[0];
+      
+      expect(secondStrokeStart.x).toBeCloseTo(firstStrokeStart.x, 1);
+      expect(secondStrokeStart.y).toBeCloseTo(firstStrokeStart.y, 1);
     });
+
+    test('snaps to lines when enabled', async ({ page }) => {
+      const surface = page.getByTestId('drawing-surface-controlled');
+      const preview = page.getByTestId('drawing-preview-controlled');
+
+      await page.locator('button[data-tool="pen"]').click();
+      await page.getByTestId('snap-lines-toggle').check();
+
+      const box = await surface.boundingBox();
+      expect(box).not.toBeNull();
+
+      const p1X = box!.x + 50;
+      const p1Y = box!.y + 100;
+      await page.mouse.move(p1X, p1Y);
+      await page.mouse.down();
+      await page.mouse.move(p1X + 100, p1Y);
+      await page.mouse.up();
+
+      const p2X = p1X + 50;
+      const p2Y = p1Y + 4;
+      await page.mouse.move(p2X, p2Y);
+      await page.mouse.down();
+      await page.mouse.move(p2X, p2Y + 50);
+      await page.mouse.up();
+
+      const previewText = await preview.textContent();
+      const parsed = JSON.parse(previewText!);
+      
+      expect(parsed.strokes.length).toBe(2);
+      
+      const secondStrokeStart = parsed.strokes[1].points[0];
+
+      expect(secondStrokeStart.y).toBeCloseTo(100, 1);
+    });
+
+    test('snaps to ellipse outline when line snapping is enabled', async ({ page }) => {
+      const surface = page.getByTestId('drawing-surface-controlled');
+      const preview = page.getByTestId('drawing-preview-controlled');
+
+      await page.locator('button[data-tool="ellipse"]').click();
+
+      await dispatchPointerDrag(surface, {
+        pointerId: 81,
+        pointerType: 'mouse',
+        start: { x: 100, y: 100 },
+        moves: [{ x: 220, y: 180 }],
+      });
+
+      await page.locator('button[data-tool="pen"]').click();
+      await page.getByTestId('snap-lines-toggle').check();
+
+      await dispatchPointerDrag(surface, {
+        pointerId: 82,
+        pointerType: 'pen',
+        start: { x: 160, y: 96 },
+        moves: [{ x: 190, y: 96 }],
+      });
+
+      const parsed = await readPreview(preview);
+
+      expect(parsed.strokes.length).toBe(2);
+
+      const secondStrokeStart = parsed.strokes[1].points[0];
+      expect(secondStrokeStart.x).toBeCloseTo(160, 1);
+      expect(secondStrokeStart.y).toBeCloseTo(100, 1);
+    });
+
+    test('prefers endpoint over closer line projection when both are enabled', async ({ page }) => {
+      const surface = page.getByTestId('drawing-surface-controlled');
+      const preview = page.getByTestId('drawing-preview-controlled');
+
+      await page.locator('button[data-tool="pen"]').click();
+
+      await dispatchPointerDrag(surface, {
+        pointerId: 83,
+        pointerType: 'pen',
+        start: { x: 100, y: 100 },
+        moves: [{ x: 220, y: 100 }],
+      });
+
+      await page.getByTestId('snap-endpoints-toggle').check();
+      await page.getByTestId('snap-lines-toggle').check();
+
+      await dispatchPointerDrag(surface, {
+        pointerId: 84,
+        pointerType: 'pen',
+        start: { x: 105, y: 103 },
+        moves: [{ x: 150, y: 130 }],
+      });
+
+      const parsed = await readPreview(preview);
+
+      expect(parsed.strokes.length).toBe(2);
+
+      const secondStrokeStart = parsed.strokes[1].points[0];
+      expect(secondStrokeStart.x).toBeCloseTo(100, 1);
+      expect(secondStrokeStart.y).toBeCloseTo(100, 1);
+    });
+
+    test('respects custom radius', async ({ page }) => {
+      const surface = page.getByTestId('drawing-surface-controlled');
+      const preview = page.getByTestId('drawing-preview-controlled');
+
+      await page.locator('button[data-tool="pen"]').click();
+      await page.getByTestId('snap-endpoints-toggle').check();
+      await page.getByTestId('snap-radius-input').fill('20');
+
+      const box = await surface.boundingBox();
+      expect(box).not.toBeNull();
+
+      const p1X = box!.x + 50;
+      const p1Y = box!.y + 50;
+      await page.mouse.move(p1X, p1Y);
+      await page.mouse.down();
+      await page.mouse.move(p1X + 50, p1Y + 50);
+      await page.mouse.up();
+
+      const p2X = p1X + 15;
+      const p2Y = p1Y;
+      await page.mouse.move(p2X, p2Y);
+      await page.mouse.down();
+      await page.mouse.move(p2X + 50, p2Y);
+      await page.mouse.up();
+
+      const p3X = p1X + 25;
+      const p3Y = p1Y;
+      await page.mouse.move(p3X, p3Y);
+      await page.mouse.down();
+      await page.mouse.move(p3X + 50, p3Y);
+      await page.mouse.up();
+
+      const previewText = await preview.textContent();
+      const parsed = JSON.parse(previewText!);
+      
+      expect(parsed.strokes.length).toBe(3);
+      
+      const firstStrokeStart = parsed.strokes[0].points[0];
+      const secondStrokeStart = parsed.strokes[1].points[0];
+      const thirdStrokeStart = parsed.strokes[2].points[0];
+      
+      expect(secondStrokeStart.x).toBeCloseTo(firstStrokeStart.x, 1);
+      expect(secondStrokeStart.y).toBeCloseTo(firstStrokeStart.y, 1);
+      
+      expect(thirdStrokeStart.x).toBeCloseTo(p3X - box!.x, 1);
+      expect(thirdStrokeStart.y).toBeCloseTo(p3Y - box!.y, 1);
+    });
+
+    test('uses raw coordinates when toggles are off', async ({ page }) => {
+      const surface = page.getByTestId('drawing-surface-controlled');
+      const preview = page.getByTestId('drawing-preview-controlled');
+
+      await page.locator('button[data-tool="pen"]').click();
+      await expect(page.getByTestId('snap-endpoints-toggle')).not.toBeChecked();
+      await expect(page.getByTestId('snap-lines-toggle')).not.toBeChecked();
+
+      const box = await surface.boundingBox();
+      expect(box).not.toBeNull();
+
+      const p1X = box!.x + 50;
+      const p1Y = box!.y + 50;
+      await page.mouse.move(p1X, p1Y);
+      await page.mouse.down();
+      await page.mouse.move(p1X + 50, p1Y + 50);
+      await page.mouse.up();
+
+      const p2X = p1X + 4;
+      const p2Y = p1Y + 4;
+      await page.mouse.move(p2X, p2Y);
+      await page.mouse.down();
+      await page.mouse.move(p2X + 50, p2Y);
+      await page.mouse.up();
+
+      const previewText = await preview.textContent();
+      const parsed = JSON.parse(previewText!);
+      
+      expect(parsed.strokes.length).toBe(2);
+      
+      const firstStrokeStart = parsed.strokes[0].points[0];
+      const secondStrokeStart = parsed.strokes[1].points[0];
+      
+      expect(secondStrokeStart.x).not.toBeCloseTo(firstStrokeStart.x, 1);
+      expect(secondStrokeStart.y).not.toBeCloseTo(firstStrokeStart.y, 1);
+      expect(secondStrokeStart.x).toBeCloseTo(p2X - box!.x, 1);
+      expect(secondStrokeStart.y).toBeCloseTo(p2Y - box!.y, 1);
+    });
+  });
   });
 });
