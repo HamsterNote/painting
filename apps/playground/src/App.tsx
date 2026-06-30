@@ -951,7 +951,7 @@ export default function App() {
                 value={snapRadius}
                 onChange={(e) => {
                   const val = parseInt(e.target.value, 10);
-                  setSnapRadius(isNaN(val) || val <= 0 ? 8 : val);
+                  setSnapRadius(Number.isNaN(val) || val <= 0 ? 8 : val);
                 }}
                 style={{ width: '60px' }}
               />
