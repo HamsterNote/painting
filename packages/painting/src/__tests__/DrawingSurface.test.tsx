@@ -2901,7 +2901,7 @@ describe('DrawingSurface', () => {
       return event;
     }
 
-    it('default mouse hover renders [data-crosshair] sized 10x10 outside the SVG', () => {
+    it('default mouse hover renders [data-crosshair] sized 20x20 outside the SVG', () => {
       const { container } = render(
         <DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} />
       );
@@ -2918,8 +2918,8 @@ describe('DrawingSurface', () => {
 
       const crosshair = container.querySelector('[data-crosshair]') as SVGSVGElement | null;
       expect(crosshair).toBeTruthy();
-      expect(crosshair?.getAttribute('width')).toBe('10');
-      expect(crosshair?.getAttribute('height')).toBe('10');
+      expect(crosshair?.getAttribute('width')).toBe('20');
+      expect(crosshair?.getAttribute('height')).toBe('20');
       // Crosshair element lives OUTSIDE the drawing SVG — the host's first child is
       // the drawing surface SVG; the crosshair sits in a sibling overlay div.
       const overlay = container.querySelector('[data-crosshair-layer]') as HTMLElement | null;
@@ -2933,6 +2933,183 @@ describe('DrawingSurface', () => {
         host.dispatchEvent(pointerEvent('pointerleave', { pointerType: 'mouse' }));
       });
       expect(container.querySelector('[data-crosshair]')).toBeNull();
+    });
+
+    it('pen crosshair includes center circle with r = resolvedOpenWidth/2', () => {
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          tool="pen"
+          strokeWidth={10}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      act(() => {
+        host.dispatchEvent(
+          pointerEvent('pointerenter', { clientX: 50, clientY: 60, pointerType: 'mouse' })
+        );
+      });
+
+      const circle = container.querySelector(
+        '[data-testid="crosshair-center-circle"]'
+      ) as SVGCircleElement | null;
+      expect(circle).toBeTruthy();
+      expect(circle?.getAttribute('r')).toBe('5');
+      expect(circle?.getAttribute('fill')).toBe('none');
+    });
+
+    it('rect crosshair center circle uses resolvedClosedWidth/2', () => {
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          tool="rect"
+          strokeWidth={6}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      act(() => {
+        host.dispatchEvent(
+          pointerEvent('pointerenter', { clientX: 50, clientY: 60, pointerType: 'mouse' })
+        );
+      });
+
+      const circle = container.querySelector(
+        '[data-testid="crosshair-center-circle"]'
+      ) as SVGCircleElement | null;
+      expect(circle).toBeTruthy();
+      expect(circle?.getAttribute('r')).toBe('3');
+    });
+
+    it('ellipse crosshair center circle uses resolvedClosedWidth/2', () => {
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          tool="ellipse"
+          strokeWidth={4}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      act(() => {
+        host.dispatchEvent(
+          pointerEvent('pointerenter', { clientX: 50, clientY: 60, pointerType: 'mouse' })
+        );
+      });
+
+      const circle = container.querySelector(
+        '[data-testid="crosshair-center-circle"]'
+      ) as SVGCircleElement | null;
+      expect(circle).toBeTruthy();
+      expect(circle?.getAttribute('r')).toBe('2');
+    });
+
+    it('polygon crosshair center circle uses resolvedOpenWidth/2', () => {
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          tool="polygon"
+          strokeWidth={8}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      act(() => {
+        host.dispatchEvent(
+          pointerEvent('pointerenter', { clientX: 50, clientY: 60, pointerType: 'mouse' })
+        );
+      });
+
+      const circle = container.querySelector(
+        '[data-testid="crosshair-center-circle"]'
+      ) as SVGCircleElement | null;
+      expect(circle).toBeTruthy();
+      expect(circle?.getAttribute('r')).toBe('4');
+    });
+
+    it('center circle radius updates when strokeWidth prop changes', () => {
+      const { container, rerender } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          tool="pen"
+          strokeWidth={4}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      act(() => {
+        host.dispatchEvent(
+          pointerEvent('pointerenter', { clientX: 50, clientY: 60, pointerType: 'mouse' })
+        );
+      });
+
+      const circle = container.querySelector(
+        '[data-testid="crosshair-center-circle"]'
+      ) as SVGCircleElement | null;
+      expect(circle).toBeTruthy();
+      expect(circle?.getAttribute('r')).toBe('2');
+
+      act(() => {
+        host.dispatchEvent(pointerEvent('pointerleave', { pointerType: 'mouse' }));
+      });
+
+      rerender(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          tool="pen"
+          strokeWidth={16}
+        />
+      );
+
+      act(() => {
+        host.dispatchEvent(
+          pointerEvent('pointerenter', { clientX: 50, clientY: 60, pointerType: 'mouse' })
+        );
+      });
+
+      const circleAfter = container.querySelector(
+        '[data-testid="crosshair-center-circle"]'
+      ) as SVGCircleElement | null;
+      expect(circleAfter).toBeTruthy();
+      expect(circleAfter?.getAttribute('r')).toBe('8');
+    });
+
+    it('hides native cursor on host div when cursor is enabled by default', () => {
+      render(<DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} />);
+      const host = screen.getByTestId('drawing-surface-host');
+      expect(host.style.cursor).toBe('none');
+    });
+
+    it('does not hide native cursor when cursor={false}', () => {
+      render(
+        <DrawingSurface testID="drawing-surface-host" value={{ strokes: [] }} cursor={false} />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      expect(host.style.cursor).toBe('');
+    });
+
+    it('hides native cursor when a custom cursor render is provided', () => {
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          cursor={{ render: () => <span data-testid="custom-cursor">x</span> }}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      expect(host.style.cursor).toBe('none');
     });
 
     it('cursor={false} removes [data-crosshair] entirely', () => {
@@ -5039,7 +5216,7 @@ describe('eraserCursorAndTrajectory', () => {
     return event;
   }
 
-  // AC-E5 — default eraser cursor renders an SVG with r = strokeWidth/2.
+    // AC-E5 — default eraser cursor renders an SVG with r = strokeWidth/2.
   it('AC-E5 default cursor renders [data-testid="eraser-cursor"] with circle r = strokeWidth/2 when tool=eraser', () => {
     const { container } = render(
       <DrawingSurface
@@ -5073,6 +5250,66 @@ describe('eraserCursorAndTrajectory', () => {
     // strokeWidth=20 → resolvedOpenWidth=20 → eraserRadius=10
     expect(circle?.getAttribute('r')).toBe(String(20 / 2));
     expect(circle?.getAttribute('fill')).toBe('none');
+  });
+
+  // Regression: eraser cursor radius must update when strokeWidth ("Line Width") changes.
+  it('default eraser cursor radius updates when strokeWidth prop changes while visible', () => {
+    const { container, rerender } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        tool="eraser"
+        strokeWidth={20}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+
+    act(() => {
+      host.dispatchEvent(
+        rawPointerEvent('pointerenter', { clientX: 50, clientY: 60, pointerType: 'mouse' })
+      );
+    });
+
+    const circleBefore = container.querySelector('[data-testid="eraser-cursor"] circle');
+    expect(circleBefore).toBeTruthy();
+    expect(circleBefore?.getAttribute('r')).toBe('10');
+
+    // Change Line Width while the cursor is still visible (no pointerleave).
+    rerender(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        tool="eraser"
+        strokeWidth={40}
+      />
+    );
+
+    const circleAfter = container.querySelector('[data-testid="eraser-cursor"] circle');
+    expect(circleAfter).toBeTruthy();
+    expect(circleAfter?.getAttribute('r')).toBe('20');
+  });
+
+  it('eraser cursor has no crosshair-center-circle element', () => {
+    const { container } = render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        tool="eraser"
+        strokeWidth={20}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+
+    act(() => {
+      host.dispatchEvent(
+        rawPointerEvent('pointerenter', { clientX: 50, clientY: 60, pointerType: 'mouse' })
+      );
+    });
+
+    expect(container.querySelector('[data-testid="crosshair-center-circle"]')).toBeNull();
+    expect(container.querySelector('[data-testid="eraser-cursor"]')).toBeTruthy();
   });
 
   // AC-E6 — trajectory polyline is OFF by default; never appears during eraser gesture.

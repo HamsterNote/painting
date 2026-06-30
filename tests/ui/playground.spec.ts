@@ -523,7 +523,6 @@ test.describe('DrawingSurface playground', () => {
     await expect(page.getByTestId('eraser-trajectory-color')).toHaveValue('#ccc');
     await expect(page.getByTestId('eraser-trajectory-opacity')).toBeVisible();
     await expect(page.getByTestId('eraser-trajectory-opacity')).toHaveValue('0.5');
-    await expect(page.getByTestId('eraser-trajectory-line-width')).toBeVisible();
     await expect(page.getByTestId('drawing-pressure-multiplier-input')).toBeVisible();
     await expect(page.getByTestId('drawing-pressure-multiplier-input')).toHaveValue('1');
 
@@ -857,11 +856,11 @@ test.describe('DrawingSurface playground', () => {
     const commitMode = page.getByTestId('eraser-commit-mode');
     const trajectoryVisible = page.getByTestId('eraser-trajectory-visible');
     const trajectoryColor = page.getByTestId('eraser-trajectory-color');
-    const trajectoryLineWidth = page.getByTestId('eraser-trajectory-line-width');
+    const widthInput = page.getByTestId('drawing-stroke-width-input');
     await expect(commitMode).toBeVisible();
     await expect(trajectoryVisible).toBeVisible();
     await expect(trajectoryColor).toBeVisible();
-    await expect(trajectoryLineWidth).toBeVisible();
+    await expect(widthInput).toBeVisible();
 
     // Seed: draw one pen stroke so the eraser has something to delete later.
     const box = await surface.boundingBox();
@@ -878,9 +877,10 @@ test.describe('DrawingSurface playground', () => {
     await page.locator('button[data-tool="eraser"]').click();
     await trajectoryVisible.check();
     await trajectoryColor.fill('#ff0000');
-    await trajectoryLineWidth.fill('3');
+    // The trajectory line width now follows the shared top Width control.
+    await widthInput.fill('5');
+    await expect(widthInput).toHaveValue('5');
     await expect(trajectoryVisible).toBeChecked();
-    await expect(trajectoryLineWidth).toHaveValue('3');
 
     // Default commit mode is while-sliding; first sweep avoids the pen stroke
     // so the test isolates trajectory rendering from deletion behavior.
@@ -894,7 +894,7 @@ test.describe('DrawingSurface playground', () => {
     const trajectory = surface.locator('[data-testid="eraser-trajectory"]');
     await expect(trajectory).toHaveCount(1);
     await expect(trajectory).toHaveAttribute('stroke', '#ff0000');
-    await expect(trajectory).toHaveAttribute('stroke-width', '3');
+    await expect(trajectory).toHaveAttribute('stroke-width', '5');
 
     await page.mouse.up();
     await expect(trajectory).toHaveCount(0);

@@ -155,7 +155,7 @@ export type DrawingCursorRenderState = {
  * crosshair centered on the pointer.
  */
 export type DrawingCursorOptions = {
-  /** Square size in CSS pixels (length of each cross arm). Defaults to 10. */
+  /** Square size in CSS pixels (length of each cross arm). Defaults to 20. */
   size?: number;
   /** Stroke color used by the default crosshair shape. Defaults to `currentColor`. */
   color?: string;
@@ -1769,7 +1769,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       Number.isFinite(cursorOptions.size) &&
       cursorOptions.size > 0
         ? cursorOptions.size
-        : 10;
+        : 20;
     const cursorColor = cursorOptions.color ?? 'currentColor';
     const cursorRender = cursorOptions.render;
 
@@ -1962,6 +1962,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           border: '1px solid #ccc',
           position: 'relative',
           touchAction: 'none',
+          cursor: cursorEnabled ? 'none' : undefined,
         }}
       >
         <svg
@@ -2168,6 +2169,15 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
                     y1={0}
                     x2={cursorSize / 2}
                     y2={cursorSize}
+                    stroke={cursorColor}
+                    strokeWidth={1}
+                  />
+                  <circle
+                    data-testid="crosshair-center-circle"
+                    cx={cursorSize / 2}
+                    cy={cursorSize / 2}
+                    r={isBboxShapeTool(effectiveTool) ? resolvedClosedWidth / 2 : resolvedOpenWidth / 2}
+                    fill="none"
                     stroke={cursorColor}
                     strokeWidth={1}
                   />

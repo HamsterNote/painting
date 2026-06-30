@@ -142,7 +142,6 @@ export default function App() {
   const [eraserTrajectoryVisible, setEraserTrajectoryVisible] = useState(false);
   const [eraserTrajectoryColor, setEraserTrajectoryColor] = useState('#ccc');
   const [eraserTrajectoryOpacity, setEraserTrajectoryOpacity] = useState(0.5);
-  const [eraserTrajectoryLineWidth, setEraserTrajectoryLineWidth] = useState(3);
 
   // ===== 套索选择相关 ref 和状态 =====
   const uncontrolledSurfaceRef = useRef<DrawingSurfaceHandle>(null);
@@ -402,14 +401,9 @@ export default function App() {
       visible: eraserTrajectoryVisible,
       color: eraserTrajectoryColor,
       opacity: eraserTrajectoryOpacity,
-      lineWidth: eraserTrajectoryLineWidth,
+      lineWidth: effectiveStrokeWidth,
     }),
-    [
-      eraserTrajectoryVisible,
-      eraserTrajectoryColor,
-      eraserTrajectoryOpacity,
-      eraserTrajectoryLineWidth,
-    ]
+    [eraserTrajectoryVisible, eraserTrajectoryColor, eraserTrajectoryOpacity, effectiveStrokeWidth]
   );
 
   const toolInstruction = getToolInstruction(tool);
@@ -902,20 +896,6 @@ export default function App() {
                   setEraserTrajectoryOpacity(
                     Math.min(1, Math.max(0, parseFloat(e.target.value) || 0))
                   )
-                }
-                style={{ width: '60px' }}
-              />
-            </label>
-            <label>
-              Line width{' '}
-              <input
-                type="number"
-                data-testid="eraser-trajectory-line-width"
-                min={1}
-                step={1}
-                value={eraserTrajectoryLineWidth}
-                onChange={(e) =>
-                  setEraserTrajectoryLineWidth(Math.max(1, parseInt(e.target.value, 10) || 1))
                 }
                 style={{ width: '60px' }}
               />
