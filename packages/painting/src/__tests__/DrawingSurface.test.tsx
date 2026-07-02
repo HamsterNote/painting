@@ -19,6 +19,9 @@ type MockInputEvent = {
   clientY?: number;
   pointerId?: number;
   isPrimary?: boolean;
+  ctrlKey?: boolean;
+  altKey?: boolean;
+  metaKey?: boolean;
 };
 
 type PointerPathItem = {
@@ -74,6 +77,9 @@ function createPointerEvent(
     button: source.button ?? 0,
     pressure: item.pressure,
     isPrimary: source.isPrimary ?? pointerId === 1,
+    ctrlKey: source.ctrlKey ?? false,
+    altKey: source.altKey ?? false,
+    metaKey: source.metaKey ?? false,
   });
   Object.defineProperty(event, 'timeStamp', { value: item.timestamp ?? 0 });
   return event;
@@ -4781,7 +4787,7 @@ describe('eraserCursorAndTrajectory', () => {
       return Math.abs(-Math.sin(rulerState.rotationRad) * dx + Math.cos(rulerState.rotationRad) * dy);
     };
 
-    it('horizontal ruler: pen stroke drawn inside ruler body has all points.y equal to rulerCenterY', () => {
+    it('horizontal ruler: pen stroke drawn inside ruler body has all points.y equal to tick edge', () => {
       const { host, onChange } = renderProjectedSurface({
         ruler: { enabled: true, state: horizontalRuler },
       });
@@ -4792,10 +4798,11 @@ describe('eraserCursorAndTrajectory', () => {
       ]);
 
       const points = expectCommittedPoints(onChange);
-      expect(points.map((point) => point.y)).toEqual([horizontalRuler.center.y, horizontalRuler.center.y]);
+      const tickEdgeY = horizontalRuler.center.y - horizontalRuler.height / 2;
+      expect(points.map((point) => point.y)).toEqual([tickEdgeY, tickEdgeY]);
     });
 
-    it('rotated 30° ruler: committed points lie on rotated centerline', () => {
+    it('rotated 30° ruler: committed points lie on rotated tick edge', () => {
       const rotatedRuler: DrawingRulerState = {
         center: { x: 80, y: 70 },
         rotationRad: Math.PI / 6,
@@ -4813,7 +4820,7 @@ describe('eraserCursorAndTrajectory', () => {
 
       const points = expectCommittedPoints(onChange);
       points.forEach((point) => {
-        expect(distanceToLine(point, rotatedRuler)).toBeCloseTo(0, 6);
+        expect(distanceToLine(point, rotatedRuler)).toBeCloseTo(rotatedRuler.height / 2, 6);
       });
     });
 
@@ -5238,9 +5245,10 @@ describe('eraserCursorAndTrajectory', () => {
       });
 
       const cursorElement = screen.getByTestId('projected-cursor');
+      const tickEdgeY = horizontalRuler.center.y - horizontalRuler.height / 2;
       expect(cursorElement.getAttribute('data-canvas-x')).toBe('70');
-      expect(cursorElement.getAttribute('data-canvas-y')).toBe(String(horizontalRuler.center.y));
-      expect(observedStates.at(-1)?.screen).toEqual({ x: 70, y: horizontalRuler.center.y });
+      expect(cursorElement.getAttribute('data-canvas-y')).toBe(String(tickEdgeY));
+      expect(observedStates.at(-1)?.screen).toEqual({ x: 70, y: tickEdgeY });
     });
 
     it('stores horizontal and rotated projected pen points numerically', () => {
@@ -5264,7 +5272,7 @@ describe('eraserCursorAndTrajectory', () => {
       ]);
 
       committedPointsFrom(horizontalChange).forEach((point) => {
-        expect(point.y).toBe(horizontalRuler.center.y);
+        expect(point.y).toBe(horizontalRuler.center.y - horizontalRuler.height / 2);
       });
       unmount();
 
@@ -5288,7 +5296,7 @@ describe('eraserCursorAndTrajectory', () => {
       ]);
 
       committedPointsFrom(rotatedChange).forEach((point) => {
-        expect(distanceToRulerCenterLine(point, rotatedRuler)).toBeCloseTo(0, 6);
+        expect(distanceToRulerCenterLine(point, rotatedRuler)).toBeCloseTo(rotatedRuler.height / 2, 6);
       });
     });
 
@@ -5322,8 +5330,8 @@ describe('eraserCursorAndTrajectory', () => {
       ], 2);
 
       expect(committedPointsFrom(onChange).map(({ x, y }) => ({ x, y }))).toEqual([
-        { x: 20, y: horizontalRuler.center.y },
-        { x: 70, y: horizontalRuler.center.y },
+        { x: 20, y: horizontalRuler.center.y - horizontalRuler.height / 2 },
+        { x: 70, y: horizontalRuler.center.y - horizontalRuler.height / 2 },
       ]);
     });
 

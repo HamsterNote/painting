@@ -90,11 +90,11 @@ export function isInsideRuler(canvasPoint: RulerPoint, ruler: RulerTransform): b
 }
 
 /**
- * 将画布坐标点投影到 ruler 中心线上，返回投影后的画布坐标。
+ * 将画布坐标点投影到 ruler 刻度边缘线上，返回投影后的画布坐标。
  * 如果点在 ruler 矩形区域外，返回 null。
  *
- * 投影逻辑：在本地坐标中，将 localX clamp 到 [-length/2, length/2]，localY 置为 0，
- * 然后旋转回画布坐标。
+ * 投影逻辑：在本地坐标中，将 localX clamp 到 [-length/2, length/2]，
+ * localY 置为 -height/2（刻度所在的边缘），然后旋转回画布坐标。
  */
 export function projectOntoRuler(canvasPoint: RulerPoint, ruler: RulerTransform): RulerPoint | null {
   if (!isInsideRuler(canvasPoint, ruler)) {
@@ -104,10 +104,10 @@ export function projectOntoRuler(canvasPoint: RulerPoint, ruler: RulerTransform)
   const local = toLocalPoint(canvasPoint, ruler);
   const halfLen = ruler.length / 2;
 
-  // 在本地坐标中投影到 x 轴（y=0），并 clamp x 到 ruler 范围
+  // 在本地坐标中投影到刻度边缘（y = -height/2），并 clamp x 到 ruler 范围
   const projectedLocal: RulerPoint = {
     x: Math.max(-halfLen, Math.min(halfLen, local.x)),
-    y: 0,
+    y: -ruler.height / 2,
   };
 
   return toCanvasPoint(projectedLocal, ruler);

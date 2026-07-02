@@ -122,15 +122,15 @@ describe('ruler geometry - isInsideRuler', () => {
 // ─── 投影 ────────────────────────────────────────────────────────────────────
 
 describe('ruler geometry - projectOntoRuler', () => {
-  it('水平 ruler：内部点投影后 y == center.y', () => {
+  it('水平 ruler：内部点投影后 y == 刻度边缘（center.y - height/2）', () => {
     const ruler = makeHorizontalRuler(200, 300, 400, 40);
     // 点在 ruler 内部偏右上方
     const canvasPoint = { x: 220, y: 310 };
     const projected = projectOntoRuler(canvasPoint, ruler);
 
     expect(projected).not.toBeNull();
-    // 投影后 y 应该等于 center.y（在中心线上）
-    expect(projected!.y).toBeCloseTo(300, 6);
+    // 投影后 y 应该等于刻度边缘 (center.y - height/2 = 300 - 20 = 280)
+    expect(projected!.y).toBeCloseTo(280, 6);
     // x 应该被 clamp 到 ruler 范围内，但 220 在范围内所以 x == 220
     expect(projected!.x).toBeCloseTo(220, 6);
   });
@@ -154,7 +154,7 @@ describe('ruler geometry - projectOntoRuler', () => {
     expect(projected).toBeNull();
   });
 
-  it('边界点投影时 localX 被限制在 [-length/2, length/2]', () => {
+  it('边界点投影时 localX 被限制在 [-length/2, length/2], localY == -height/2', () => {
     const ruler = makeHorizontalRuler(200, 300, 400, 40);
 
     const rightEdgeProjection = projectOntoRuler({ x: 400, y: 310 }, ruler);
@@ -168,12 +168,12 @@ describe('ruler geometry - projectOntoRuler', () => {
     const rightLocal = toLocalPoint(rightEdgeProjection, ruler);
     const leftLocal = toLocalPoint(leftEdgeProjection, ruler);
     expect(rightLocal.x).toBeCloseTo(ruler.length / 2, 6);
-    expect(rightLocal.y).toBeCloseTo(0, 6);
+    expect(rightLocal.y).toBeCloseTo(-ruler.height / 2, 6);
     expect(leftLocal.x).toBeCloseTo(-ruler.length / 2, 6);
-    expect(leftLocal.y).toBeCloseTo(0, 6);
+    expect(leftLocal.y).toBeCloseTo(-ruler.height / 2, 6);
   });
 
-  it('30° 旋转 ruler：内部点投影到旋转中心线（容差内）', () => {
+  it('30° 旋转 ruler：内部点投影到刻度边缘线（容差内）', () => {
     const ruler = makeRotatedRuler(200, 300, 30, 400, 40);
 
     // 构造一个本地坐标为 (50, 5) 的点 → 画布坐标
@@ -184,20 +184,22 @@ describe('ruler geometry - projectOntoRuler', () => {
     const projected = projectOntoRuler(canvasPoint, ruler);
     expect(projected).not.toBeNull();
 
-    // 预期投影后的本地坐标为 (50, 0)
+    // 预期投影后的本地坐标为 (50, -height/2)
     const projectedLocal = toLocalPoint(projected!, ruler);
     expect(projectedLocal.x).toBeCloseTo(50, 4);
-    expect(projectedLocal.y).toBeCloseTo(0, 4);
+    expect(projectedLocal.y).toBeCloseTo(-ruler.height / 2, 4);
 
-    // 验证投影点在 ruler 中心线上：
-    // 从 center 到 projected 的向量应与 ruler 方向向量平行
-    const dx = projected!.x - ruler.center.x;
-    const dy = projected!.y - ruler.center.y;
+    // 验证投影点在 ruler 刻度边缘线上：
+    // 从 center 沿 ruler 方向走 localX，再沿短轴方向走 -height/2
     const dirX = Math.cos(ruler.rotationRad);
     const dirY = Math.sin(ruler.rotationRad);
-    // 叉积应接近 0（平行）
-    const cross = dx * dirY - dy * dirX;
-    expect(Math.abs(cross)).toBeLessThan(1e-4);
+    // 短轴方向 = ruler 方向逆时针旋转 90° → (-dirY, dirX)
+    const perpX = -dirY;
+    const perpY = dirX;
+    const expectedX = ruler.center.x + 50 * dirX + (-ruler.height / 2) * perpX;
+    const expectedY = ruler.center.y + 50 * dirY + (-ruler.height / 2) * perpY;
+    expect(projected!.x).toBeCloseTo(expectedX, 4);
+    expect(projected!.y).toBeCloseTo(expectedY, 4);
   });
 
   it('30° 旋转 ruler：外部点返回 null', () => {

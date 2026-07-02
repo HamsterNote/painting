@@ -494,6 +494,10 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     const internalRulerStateRef = useRef<DrawingRulerState | null>(null);
     const [rulerInitTick, setRulerInitTick] = useState(0);
     const [, setRulerGestureTick] = useState(0);
+    // 尺子手势是否激活 —— 当 Mixin 检测到手势开始时置为 true，全部结束时置为 false。
+    // 绘制系统的 handlePointerDown 通过此 ref 判断是否需要阻止绘制，
+    // 防止双指触摸尺子时第二指落在画布上误绘（触摸双指与绘制冲突）。
+    const rulerGestureActiveRef = useRef(false);
 
     const isRulerEnabled = ruler !== false && ruler !== undefined && (ruler.enabled ?? true);
     const effectiveRulerOptions = typeof ruler === 'object' ? ruler : {};
@@ -562,7 +566,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       destroyExistingMixin();
 
       const host = hostRef.current;
-      let gestureRegion: 'grip' | 'body' | null = null;
+      let gestureRegion: 'grip' | 'body' | 'rotate' | null = null;
       const gestureStartState = currentRulerState;
 
       const getPose = (): Pose => ({
@@ -608,6 +612,27 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         return gestureStartState.rotationRad + (firstDelta + secondDelta) / 2;
       };
 
+      // 鼠标 alt+拖拽单指旋转：计算鼠标围绕尺子中心的角度变化
+      const resolveMouseRotation = () => {
+        const fingers = multiDragRef.current?.getFingers() ?? [];
+        const firstFinger = fingers[0];
+        const firstStart = firstFinger?.getPath()[0]?.point;
+        const firstCurrent = firstFinger?.getLastOperation()?.point;
+
+        if (!firstStart || !firstCurrent) {
+          return null;
+        }
+
+        const center = canvasToScreen(gestureStartState.center, viewportRef.current);
+        const angleFromCenter = (point: { readonly x: number; readonly y: number }) =>
+          Math.atan2(point.y - center.y, point.x - center.x);
+        const delta = normalizeRotationDelta(
+          angleFromCenter(firstCurrent) - angleFromCenter(firstStart)
+        );
+
+        return gestureStartState.rotationRad + delta;
+      };
+
       const commitRulerState = (pose: Partial<Pose>, shouldRender: boolean) => {
         let nextState: DrawingRulerState | null = null;
 
@@ -618,19 +643,30 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           };
         }
 
-        if (gestureRegion === 'body') {
-          const rotationRad = resolveBodyRotation();
-          if (rotationRad === null) {
-            return;
-          }
-          nextState = {
-            ...gestureStartState,
-            center: pose.position
-              ? screenToCanvas(pose.position, viewportRef.current)
-              : gestureStartState.center,
-            rotationRad,
-          };
+if (gestureRegion === 'body') {
+        const rotationRad = resolveBodyRotation();
+        if (rotationRad === null) {
+          return;
         }
+        nextState = {
+          ...gestureStartState,
+          center: pose.position
+            ? screenToCanvas(pose.position, viewportRef.current)
+            : gestureStartState.center,
+          rotationRad,
+        };
+      }
+
+      if (gestureRegion === 'rotate') {
+        const rotationRad = resolveMouseRotation();
+        if (rotationRad === null) {
+          return;
+        }
+        nextState = {
+          ...gestureStartState,
+          rotationRad,
+        };
+      }
 
         if (!nextState) {
           return;
@@ -661,28 +697,47 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
 
       const handleStart = () => {
         const [finger] = multiDrag.getFingers();
-        const target = finger?.getLastOperation()?.event?.target;
+        const event = finger?.getLastOperation()?.event;
+        const target = event?.target;
 
         if (!(target instanceof Element)) {
           gestureRegion = null;
+          rulerGestureActiveRef.current = false;
           return;
+        }
+
+        // 鼠标修饰键：ctrl/cmd → 移动尺子, alt → 旋转尺子（需鼠标在尺子上）
+        if (event?.pointerType === 'mouse' && (event.ctrlKey || event.metaKey || event.altKey)) {
+          if (target.closest('[data-testid="drawing-ruler"]')) {
+            gestureRegion = event.altKey ? 'rotate' : 'grip';
+            rulerGestureActiveRef.current = true;
+            return;
+          }
         }
 
         if (target.closest('[data-testid="drawing-ruler-drag-grip"]')) {
           gestureRegion = 'grip';
+          rulerGestureActiveRef.current = true;
           return;
         }
 
         if (target.closest('[data-testid="drawing-ruler"]')) {
           gestureRegion = 'body';
+          rulerGestureActiveRef.current = true;
           return;
         }
 
         gestureRegion = null;
+        rulerGestureActiveRef.current = false;
       };
 
       const handleMove = () => {
         if (gestureRegion === 'grip' && multiDrag.getFingers().length !== 1) {
+          gestureRegion = null;
+          return;
+        }
+
+        if (gestureRegion === 'rotate' && multiDrag.getFingers().length !== 1) {
           gestureRegion = null;
           return;
         }
@@ -694,6 +749,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
 
       const handleAllEnd = () => {
         gestureRegion = null;
+        rulerGestureActiveRef.current = false;
         multiDrag.setEnabled();
       };
 
@@ -1547,6 +1603,10 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (event.button !== undefined && event.button !== 0) {
           return;
         }
+        // 尺子手势激活时阻止非 pen 指针绘制（防止双指触摸尺子时第二指在画布上误绘）
+        if (rulerGestureActiveRef.current && event.pointerType !== 'pen') {
+          return;
+        }
         if (event.target instanceof Element) {
           if (event.target.closest('[data-testid="drawing-ruler-drag-grip"]')) {
             return;
@@ -1764,6 +1824,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
 
       const handlePointerDown = (event: PointerEvent) => {
         if (event.button !== undefined && event.button !== 0) {
+          return;
+        }
+        if (rulerGestureActiveRef.current && event.pointerType !== 'pen') {
           return;
         }
         const point = toCanvasPoint(event.clientX, event.clientY);
