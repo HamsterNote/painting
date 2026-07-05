@@ -9,6 +9,7 @@ import {
   type DrawingRulerOptions,
 } from '@hamster-note/painting';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ExternalPropsDemo } from './ExternalPropsDemo';
 
 /**
  * Eraser commit mode union literal — mirrors the exported
@@ -1096,6 +1097,8 @@ export default function App() {
           </pre>
         </div>
       </div>
+
+      <ExternalPropsDemo />
 
       {/* ===== 采样率测试 Demo ===== */}
       <div
