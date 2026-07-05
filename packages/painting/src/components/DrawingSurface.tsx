@@ -8,6 +8,7 @@ import {
   useReducer,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from 'react';
 import { DragOperationType, Mixin, MixinType, type Pose } from '@system-ui-js/multi-drag';
@@ -180,6 +181,16 @@ export type DrawingEraserTrajectoryOptions = {
   lineWidth?: number;
 };
 
+export type DrawingEventTargetRef = { readonly current: EventTarget | null };
+
+/**
+ * Pointer/mouse/touch listener target for drawing interactions.
+ * Defaults to the DrawingSurface host; pass a parent/container element ref to
+ * receive gestures there while strokes are still stored in this surface's
+ * local SVG coordinate system.
+ */
+export type DrawingEventTarget = EventTarget | DrawingEventTargetRef | null;
+
 /**
  * Ruler 状态 — 描述 ruler 在画布中的位置、朝向和尺寸。
  * 字段与 `RulerTransform`（ruler/geometry.ts）完全对齐，
@@ -280,6 +291,15 @@ export type DrawingSurfaceProps = {
   pressureMultiplier?: number;
   /** Test identifier. */
   testID?: string;
+
+  /**
+   * Element (or ref) that receives drawing pointer/mouse/touch events.
+   * Coordinates remain relative to this DrawingSurface's SVG host, so a parent
+   * can own the events and forward the resulting gesture into the child canvas.
+   */
+  eventTarget?: DrawingEventTarget;
+  /** CSS overflow value applied to the root SVG element. */
+  overflow?: CSSProperties['overflow'];
 
   /** 受控的选中 stroke id 列表。配合 onSelectionChange 实现受控选择模式。 */
   selectedStrokeIds?: readonly string[];
@@ -458,6 +478,29 @@ function normalizePointPressure(pressure: number | undefined): number {
     : 1;
 }
 
+function isEventTargetLike(target: EventTarget | DrawingEventTargetRef): target is EventTarget {
+  return 'addEventListener' in target && typeof target.addEventListener === 'function';
+}
+
+function resolveDrawingEventTarget(target: DrawingEventTarget | undefined): EventTarget | null {
+  if (!target) {
+    return null;
+  }
+  return isEventTargetLike(target) ? target : target.current;
+}
+
+function containsEventTarget(container: EventTarget | null, target: EventTarget | null): boolean {
+  return container instanceof Node && target instanceof Node && container.contains(target);
+}
+
+function isPointerDomEvent(event: Event): event is PointerEvent {
+  return event.type.startsWith('pointer');
+}
+
+function isDoubleClickDomEvent(event: Event): event is MouseEvent {
+  return event.type === 'dblclick';
+}
+
 export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfaceProps>(
   function DrawingSurface(props, ref) {
     const {
@@ -480,12 +523,15 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       eraserCommitMode,
       eraserTrajectory,
       testID,
+      eventTarget,
+      overflow,
       selectedStrokeIds,
       defaultSelectedStrokeIds,
       onSelectionChange,
       ruler,
     } = props;
     const hostRef = useRef<HTMLDivElement>(null);
+    const eventTargetRef = useRef<DrawingEventTarget | undefined>(eventTarget);
     const multiDragRef = useRef<InstanceType<typeof Mixin> | null>(null);
     const [viewport] = useState<DrawingViewport>(() => createResetViewport());
     const viewportRef = useRef<DrawingViewport>(viewport);
@@ -517,6 +563,17 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         currentRulerState = internalRulerStateRef.current;
       }
     }
+
+    // 始终保持最新 ruler 状态到 ref，供 Mixin effect 读取而无需将 currentRulerState 放入依赖。
+    // 核心修复：之前 effect 依赖 currentRulerState，每次拖拽 onRulerChange → 父组件 re-render
+    // → currentRulerState 变为新对象 → effect 清理重建 Mixin → 拖拽手势中断。
+    // 改用 ref 后 effect 只在 isRulerEnabled 切换时重建，拖拽过程不再被打断。
+    const currentRulerStateRef = useRef<DrawingRulerState | null>(null);
+    currentRulerStateRef.current = currentRulerState;
+
+    // onRulerChange 回调也用 ref 包装，避免 effect 因回调引用变化而重建
+    const onRulerChangeRef = useRef(props.onRulerChange);
+    onRulerChangeRef.current = props.onRulerChange;
 
     const hasInitializedRulerCenter = useRef(false);
 
@@ -554,7 +611,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         multiDragRef.current = null;
       };
 
-      if (!isRulerEnabled || !currentRulerState || !hostRef.current) {
+      if (!isRulerEnabled || !currentRulerStateRef.current || !hostRef.current) {
         destroyExistingMixin();
         return;
       }
@@ -563,14 +620,22 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
 
       const host = hostRef.current;
       let gestureRegion: 'grip' | 'body' | null = null;
-      const gestureStartState = currentRulerState;
+      // 手势开始时的 ruler 状态快照；在 handleStart 中从 ref 捕获最新值，
+      // 使每次手势都基于按下瞬间的状态计算 delta
+      let gestureStartState: DrawingRulerState | null = currentRulerStateRef.current;
 
-      const getPose = (): Pose => ({
-        position: canvasToScreen(gestureStartState.center, viewportRef.current),
-        rotation: gestureStartState.rotationRad,
-        width: gestureStartState.length,
-        height: gestureStartState.height,
-      });
+      const getPose = (): Pose => {
+        const state = gestureStartState;
+        if (!state) {
+          return { position: { x: 0, y: 0 }, rotation: 0, width: 0, height: 0 };
+        }
+        return {
+          position: canvasToScreen(state.center, viewportRef.current),
+          rotation: state.rotationRad,
+          width: state.length,
+          height: state.height,
+        };
+      };
 
       const normalizeRotationDelta = (delta: number) => {
         if (delta > Math.PI) {
@@ -583,6 +648,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       };
 
       const resolveBodyRotation = () => {
+        if (!gestureStartState) {
+          return null;
+        }
         const fingers = multiDragRef.current?.getFingers() ?? [];
         const firstFinger = fingers[0];
         const secondFinger = fingers[1];
@@ -609,6 +677,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       };
 
       const commitRulerState = (pose: Partial<Pose>, shouldRender: boolean) => {
+        if (!gestureStartState) {
+          return;
+        }
         let nextState: DrawingRulerState | null = null;
 
         if (gestureRegion === 'grip' && pose.position) {
@@ -640,7 +711,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (shouldRender) {
           setRulerGestureTick((tick) => tick + 1);
         }
-        props.onRulerChange?.(nextState);
+        onRulerChangeRef.current?.(nextState);
       };
 
       const multiDrag = new Mixin(
@@ -660,6 +731,14 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       );
 
       const handleStart = () => {
+        // 手势开始时从 ref 捕获最新 ruler 状态作为基准快照，
+        // 确保整个拖拽过程中的 delta 计算都基于按下瞬间的状态
+        gestureStartState = currentRulerStateRef.current;
+        if (!gestureStartState) {
+          gestureRegion = null;
+          return;
+        }
+
         const [finger] = multiDrag.getFingers();
         const target = finger?.getLastOperation()?.event?.target;
 
@@ -711,10 +790,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         }
         multiDrag.destroy();
       };
-    }, [isRulerEnabled, currentRulerState, props.onRulerChange]);
+    }, [isRulerEnabled]);
 
     const effectiveTool: DrawingTool = isDrawingToolSupported(tool) ? tool : 'pen';
     const isDrawingEnabled = tool === undefined || isDrawingToolSupported(tool);
+    eventTargetRef.current = eventTarget;
 
     const resolvedColor = strokeColor && strokeColor.trim() !== '' ? strokeColor : 'black';
     const resolvedOpenWidth =
@@ -856,6 +936,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     const effectiveToolRef = useRef(effectiveTool);
     const previousToolForCleanupRef = useRef(effectiveTool);
     const isDrawingEnabledRef = useRef(isDrawingEnabled);
+    // Ruler 启用状态 ref，供 drawing effect 内部读取最新值
+    // （drawing effect 依赖数组不含 isRulerEnabled，需通过 ref 避免闭包陈旧值）
+    const isRulerEnabledRef = useRef(isRulerEnabled);
     const previousValueRef = useRef(value);
     const addStrokeRef = useRef(addStroke);
     const removeStrokeRef = useRef(removeStroke);
@@ -913,11 +996,12 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     const handleDocumentPointerDown = useCallback(
       (event: PointerEvent) => {
         const host = hostRef.current;
-        if (host?.contains(event.target as Node)) {
+        const target = event.target;
+        const listenerTarget = resolveDrawingEventTarget(eventTargetRef.current);
+        if (containsEventTarget(host, target) || containsEventTarget(listenerTarget, target)) {
           return;
         }
         // 点击外部交互控件（如工具栏按钮）时不应取消套索选择，否则依赖选中的按钮（如删除）会失效。
-        const target = event.target;
         if (
           target instanceof Element &&
           target.closest(
@@ -959,6 +1043,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
 
     effectiveToolRef.current = effectiveTool;
     isDrawingEnabledRef.current = isDrawingEnabled;
+    isRulerEnabledRef.current = isRulerEnabled;
     addStrokeRef.current = addStroke;
     removeStrokeRef.current = removeStroke;
     removeStrokesRef.current = removeStrokesFromCanvas;
@@ -1066,6 +1151,8 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       if (!host) {
         return undefined;
       }
+      const listenerTarget = resolveDrawingEventTarget(eventTarget) ?? host;
+      const pointerCaptureTarget = listenerTarget instanceof Element ? listenerTarget : host;
 
       type PointerSample = {
         pointerId: number;
@@ -1078,6 +1165,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
 
       const pointerPaths = new Map<number, PointerSample[]>();
       const activeDrawingPointerIds = new Set<number>();
+      // 跟踪所有活跃触摸指针（包括落在 ruler 上的），
+      // 用于判断是否为多指手势以在 ruler 启用时阻止绘画
+      const activeTouchPointerIds = new Set<number>();
       const capturedPointerIds = new Set<number>();
       const eraserQueuedHits = eraserQueuedHitsRef.current;
       let currentActiveStroke: DrawingStroke | null = null;
@@ -1346,19 +1436,20 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           return;
         }
         if (
-          typeof host.releasePointerCapture === 'function' &&
-          (typeof host.hasPointerCapture !== 'function' || host.hasPointerCapture(pointerId))
+          typeof pointerCaptureTarget.releasePointerCapture === 'function' &&
+          (typeof pointerCaptureTarget.hasPointerCapture !== 'function' ||
+            pointerCaptureTarget.hasPointerCapture(pointerId))
         ) {
-          host.releasePointerCapture(pointerId);
+          pointerCaptureTarget.releasePointerCapture(pointerId);
         }
         capturedPointerIds.delete(pointerId);
       };
 
       const capturePointer = (event: PointerEvent) => {
-        if (typeof host.setPointerCapture !== 'function') {
+        if (typeof pointerCaptureTarget.setPointerCapture !== 'function') {
           return;
         }
-        host.setPointerCapture(event.pointerId);
+        pointerCaptureTarget.setPointerCapture(event.pointerId);
         capturedPointerIds.add(event.pointerId);
       };
 
@@ -1547,6 +1638,10 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (event.button !== undefined && event.button !== 0) {
           return;
         }
+        // 记录触摸指针（无论目标是否在 ruler 上），用于多指检测
+        if (event.pointerType === 'touch') {
+          activeTouchPointerIds.add(event.pointerId);
+        }
         if (event.target instanceof Element) {
           if (event.target.closest('[data-testid="drawing-ruler-drag-grip"]')) {
             return;
@@ -1554,6 +1649,18 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           if (event.pointerType !== 'pen' && event.target.closest('[data-testid="drawing-ruler"]')) {
             return;
           }
+        }
+        // Ruler 启用时，Ctrl/Alt + 鼠标用于拖拽 ruler，阻止绘画
+        if (isRulerEnabledRef.current && (event.ctrlKey || event.altKey)) {
+          return;
+        }
+        // Ruler 启用时，第二根及后续触摸手指用于 ruler 旋转手势，阻止绘画
+        if (
+          isRulerEnabledRef.current &&
+          event.pointerType === 'touch' &&
+          activeTouchPointerIds.size >= 2
+        ) {
+          return;
         }
         capturePointer(event);
         const input = toPointerSample(event);
@@ -1581,6 +1688,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         }
         startLassoInteraction(input, event);
       };
+      const handlePointerDownEvent: EventListener = (event) => {
+        if (isPointerDomEvent(event)) {
+          handlePointerDown(event);
+        }
+      };
 
       const handlePointerMove = (event: PointerEvent) => {
         const input = toPointerSample(event);
@@ -1600,6 +1712,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         }
         activeDrawingPointerIds.delete(input.pointerId);
         pointerPaths.delete(input.pointerId);
+        if (event.pointerType === 'touch') {
+          activeTouchPointerIds.delete(event.pointerId);
+        }
       };
 
       const handlePointerCancel = (event: PointerEvent) => {
@@ -1610,6 +1725,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         }
         activeDrawingPointerIds.delete(input.pointerId);
         pointerPaths.delete(input.pointerId);
+        if (event.pointerType === 'touch') {
+          activeTouchPointerIds.delete(event.pointerId);
+        }
       };
 
       const handleKeyChange = (event: KeyboardEvent) => {
@@ -1629,9 +1747,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         shiftPressedRef.current = false;
       };
 
-      host.addEventListener('pointerdown', handlePointerDown);
-      // pointerdown 必须从 host 开始；后续 move/end 绑到 document，保证指针离开
-      // surface 或运行环境不支持 pointer capture 时仍能结束手势并提交/清理状态。
+      listenerTarget.addEventListener('pointerdown', handlePointerDownEvent);
       document.addEventListener('pointermove', handlePointerMove);
       document.addEventListener('pointerup', handlePointerEnd);
       document.addEventListener('pointercancel', handlePointerCancel);
@@ -1643,7 +1759,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (clearActiveStrokeRef.current === clearCurrentActiveStroke) {
           clearActiveStrokeRef.current = null;
         }
-        host.removeEventListener('pointerdown', handlePointerDown);
+        listenerTarget.removeEventListener('pointerdown', handlePointerDownEvent);
         document.removeEventListener('pointermove', handlePointerMove);
         document.removeEventListener('pointerup', handlePointerEnd);
         document.removeEventListener('pointercancel', handlePointerCancel);
@@ -1655,11 +1771,12 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         }
         activeDrawingPointerIds.clear();
         pointerPaths.clear();
+        activeTouchPointerIds.clear();
         eraserQueuedHits.clear();
         clearEraserTrajectoryRef.current();
         clearLassoInteractionRef.current();
       };
-    }, [commitSelection, getLocalCoordinates, getProjectedCanvasPoint, setActiveStroke]);
+    }, [commitSelection, eventTarget, getLocalCoordinates, getProjectedCanvasPoint, setActiveStroke]);
 
     // Tool switch: reset reducer state. Cancels any in-progress polygon placement
     // when user picks a different tool mid-draw (or vice versa).
@@ -1753,6 +1870,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       if (!host) {
         return undefined;
       }
+      const listenerTarget = resolveDrawingEventTarget(eventTarget) ?? host;
 
       const toCanvasPoint = (clientX: number, clientY: number) => {
         return getProjectedCanvasPoint(
@@ -1777,6 +1895,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           pointerId: event.pointerId,
           detail: event.detail,
         });
+      };
+      const handlePointerDownEvent: EventListener = (event) => {
+        if (isPointerDomEvent(event)) {
+          handlePointerDown(event);
+        }
       };
 
       const handlePointerMove = (event: PointerEvent) => {
@@ -1845,6 +1968,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           detail: 2,
         });
       };
+      const handleDoubleClickEvent: EventListener = (event) => {
+        if (isDoubleClickDomEvent(event)) {
+          handleDoubleClick(event);
+        }
+      };
 
       const handleKeyDown = (event: KeyboardEvent) => {
         if (event.key === 'Escape') {
@@ -1857,24 +1985,24 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         dispatchInteraction({ type: 'BLUR' });
       };
 
-      host.addEventListener('pointerdown', handlePointerDown);
+      listenerTarget.addEventListener('pointerdown', handlePointerDownEvent);
       // Placement drags (line/bezier) must survive leaving the host between
       // pointerdown and pointerup; document listeners preserve that lifecycle.
       document.addEventListener('pointermove', handlePointerMove);
       document.addEventListener('pointerup', handlePointerUp);
-      host.addEventListener('dblclick', handleDoubleClick);
+      listenerTarget.addEventListener('dblclick', handleDoubleClickEvent);
       window.addEventListener('keydown', handleKeyDown);
       window.addEventListener('blur', handleBlur);
 
       return () => {
-        host.removeEventListener('pointerdown', handlePointerDown);
+        listenerTarget.removeEventListener('pointerdown', handlePointerDownEvent);
         document.removeEventListener('pointermove', handlePointerMove);
         document.removeEventListener('pointerup', handlePointerUp);
-        host.removeEventListener('dblclick', handleDoubleClick);
+        listenerTarget.removeEventListener('dblclick', handleDoubleClickEvent);
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('blur', handleBlur);
       };
-    }, [effectiveTool, getLocalCoordinates, getProjectedCanvasPoint, isDrawingEnabled]);
+    }, [effectiveTool, eventTarget, getLocalCoordinates, getProjectedCanvasPoint, isDrawingEnabled]);
 
     const linePreviewStroke: LineStrokeV2 | null =
       interactionState.phase === 'placingLine'
@@ -1988,6 +2116,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       if (!cursorEnabled) return undefined;
       const host = hostRef.current;
       if (!host) return undefined;
+      const listenerTarget = resolveDrawingEventTarget(eventTarget) ?? host;
 
       const normalizePointerType = (value: string | undefined): DrawingInputMethod => {
         if (value === 'touch' || value === 'pen' || value === 'mouse') {
@@ -2107,22 +2236,22 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         setCursorState((prev) => ({ ...prev, visible: false }));
       };
 
-      host.addEventListener('pointerenter', handleEnter);
-      host.addEventListener('pointermove', handleMove);
-      host.addEventListener('pointerleave', handleLeave);
-      host.addEventListener('pointerdown', handleDown);
-      host.addEventListener('pointerup', handleUp);
+      listenerTarget.addEventListener('pointerenter', handleEnter);
+      listenerTarget.addEventListener('pointermove', handleMove);
+      listenerTarget.addEventListener('pointerleave', handleLeave);
+      listenerTarget.addEventListener('pointerdown', handleDown);
+      listenerTarget.addEventListener('pointerup', handleUp);
       window.addEventListener('blur', handleWindowBlur);
 
       return () => {
-        host.removeEventListener('pointerenter', handleEnter);
-        host.removeEventListener('pointermove', handleMove);
-        host.removeEventListener('pointerleave', handleLeave);
-        host.removeEventListener('pointerdown', handleDown);
-        host.removeEventListener('pointerup', handleUp);
+        listenerTarget.removeEventListener('pointerenter', handleEnter);
+        listenerTarget.removeEventListener('pointermove', handleMove);
+        listenerTarget.removeEventListener('pointerleave', handleLeave);
+        listenerTarget.removeEventListener('pointerdown', handleDown);
+        listenerTarget.removeEventListener('pointerup', handleUp);
         window.removeEventListener('blur', handleWindowBlur);
       };
-    }, [cursorEnabled, getLocalCoordinates, getProjectedCanvasPoint]);
+    }, [cursorEnabled, eventTarget, getLocalCoordinates, getProjectedCanvasPoint]);
 
     const cursorStrokeRadius = (resolvedOpenWidth * viewport.scale) / 2;
     const crosshairCircleRadius = Math.min(
@@ -2167,6 +2296,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
             left: 0,
             width: '100%',
             height: '100%',
+            overflow,
           }}
         >
           <title>Drawing surface</title>

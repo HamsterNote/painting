@@ -1,6 +1,8 @@
 export type {
   DrawingEraserCommitMode,
   DrawingEraserTrajectoryOptions,
+  DrawingEventTarget,
+  DrawingEventTargetRef,
   DrawingInputMethod,
   DrawingPoint,
   DrawingRulerOptions,

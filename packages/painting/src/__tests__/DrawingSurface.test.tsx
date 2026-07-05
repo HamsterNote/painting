@@ -1,6 +1,6 @@
 import { DrawingSurface as DrawingSurfaceFromIndex } from '@hamster-note/painting';
 import { act, render, screen } from '@testing-library/react';
-import { createRef, useState } from 'react';
+import { createRef, useRef, useState } from 'react';
 import type {
   DrawingInputMethod,
   DrawingSurfaceHandle,
@@ -228,6 +228,13 @@ describe('DrawingSurface', () => {
     expect(svg).toBeTruthy();
   });
 
+  it('applies overflow to the root svg element', () => {
+    const { container } = render(<DrawingSurface overflow="visible" />);
+    const svg = container.querySelector('svg');
+
+    expect(svg?.style.overflow).toBe('visible');
+  });
+
   it('mounts native pointer input without legacy drag setup', () => {
     render(<DrawingSurface testID="drawing-surface-host" />);
     const host = screen.getByTestId('drawing-surface-host');
@@ -313,6 +320,56 @@ describe('DrawingSurface', () => {
         )
       );
     });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
+      { x: 5, y: 5 },
+      { x: 10, y: 15 },
+    ]);
+  });
+
+  it('binds drawing events to an external target while keeping host-relative coordinates', () => {
+    const onChange = jest.fn();
+
+    function ExternalTargetSurface() {
+      const parentRef = useRef<HTMLDivElement>(null);
+      return (
+        <div data-testid="external-event-parent" ref={parentRef}>
+          <DrawingSurface
+            testID="drawing-surface-host"
+            value={{ strokes: [] }}
+            onChange={onChange}
+            eventTarget={parentRef}
+            tool="pen"
+            strokeSmoothing={false}
+          />
+        </div>
+      );
+    }
+
+    render(<ExternalTargetSurface />);
+    const parent = screen.getByTestId('external-event-parent');
+    const host = screen.getByTestId('drawing-surface-host');
+    mockHostRect(host);
+
+    dispatchElementPointerEvent(
+      parent,
+      'pointerdown',
+      { point: { x: 15, y: 25 }, event: { pointerType: 'pen', button: 0 } },
+      1
+    );
+    dispatchElementPointerEvent(
+      document,
+      'pointermove',
+      { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: -1 } },
+      1
+    );
+    dispatchElementPointerEvent(
+      document,
+      'pointerup',
+      { point: { x: 20, y: 35 }, event: { pointerType: 'pen', button: 0 } },
+      1
+    );
 
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange.mock.calls[0][0].strokes[0].points).toEqual([
