@@ -1358,6 +1358,13 @@
     "@eslint/core" "^0.17.0"
     levn "^0.4.1"
 
+"@hamster-note/virtual-paper@0.1.0-beta.2":
+  version "0.1.0-beta.2"
+  resolved "https://registry.yarnpkg.com/@hamster-note/virtual-paper/-/virtual-paper-0.1.0-beta.2.tgz#2cff4d99116c9665dc9eef94c57a3a97d7f2c580"
+  integrity sha512-x8HN06mlbwEvpOXrn/j/s5ggploDzjwfTTEnKZphrFqnif2+UYngJfQrhTyXZjiUYM0iSlctD6wl/q4KVj2aiQ==
+  dependencies:
+    "@system-ui-js/multi-drag" "^0.4.0"
+
 "@humanfs/core@^0.19.2":
   version "0.19.2"
   resolved "https://registry.yarnpkg.com/@humanfs/core/-/core-0.19.2.tgz#a8272ca03b2acf492670222b2320b6c421bfde60"
@@ -2084,7 +2091,7 @@
   resolved "https://registry.yarnpkg.com/@system-ui-js/multi-drag-core/-/multi-drag-core-0.4.0.tgz#68dd401af22691ca55f840e0fd4b7818794473d6"
   integrity sha512-7V366jAmK8hUjPJi9yYngabhuE+ixnRxZS7lw/1uNbxEYLaR/Mh5XtxMvY/gGHcL7tdJtYzE5lF1i786jKbKIA==
 
-"@system-ui-js/multi-drag@0.4.0":
+"@system-ui-js/multi-drag@0.4.0", "@system-ui-js/multi-drag@^0.4.0":
   version "0.4.0"
   resolved "https://registry.yarnpkg.com/@system-ui-js/multi-drag/-/multi-drag-0.4.0.tgz#0404192470eaa84a1afbe9ed01cf1ea1a2a12097"
   integrity sha512-gZwFJ2hrpq8CCmJhdoViIQAFd1cD+o8uWJUP/+Myo2xuqvamIuZdDsd9rIaD+JV6otA9+JF2O9XV0vozmqafOg==

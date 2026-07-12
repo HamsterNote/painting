@@ -4,6 +4,8 @@ import {
   clampScale,
   resetViewport,
   screenToCanvas,
+  virtualPaperTransformToViewport,
+  viewportToVirtualPaperTransform,
 } from '../viewport';
 import type { DrawingViewport, ViewportPoint } from '../viewport';
 
@@ -89,6 +91,39 @@ describe('viewport', () => {
       expect(resetViewport()).toEqual({ scale: 1, tx: 0, ty: 0 });
       expect(resetViewport()).toEqual(DEFAULT_DRAWING_VIEWPORT);
       expect(resetViewport()).not.toBe(DEFAULT_DRAWING_VIEWPORT);
+    });
+  });
+
+  describe('virtual paper transform mapping', () => {
+    it('maps virtual-paper transform fields to DrawingViewport fields', () => {
+      expect(virtualPaperTransformToViewport({ x: 100, y: 50, scale: 2 })).toEqual({
+        scale: 2,
+        tx: 100,
+        ty: 50,
+      });
+    });
+
+    it('keeps screenToCanvas aligned with mirrored virtual-paper viewport', () => {
+      const viewport = virtualPaperTransformToViewport({ x: 100, y: 50, scale: 2 });
+
+      expect(screenToCanvas({ x: 120, y: 90 }, viewport)).toEqual({ x: 10, y: 20 });
+    });
+
+    it('keeps canvasToScreen as the inverse of screenToCanvas for mirrored virtual-paper viewport', () => {
+      const viewport = virtualPaperTransformToViewport({ x: 100, y: 50, scale: 2 });
+      const canvasPoint = screenToCanvas({ x: 120, y: 90 }, viewport);
+
+      expect(canvasToScreen(canvasPoint, viewport)).toEqual({ x: 120, y: 90 });
+      expect(viewportToVirtualPaperTransform(viewport)).toEqual({ x: 100, y: 50, scale: 2 });
+    });
+
+    it('normalizes invalid virtual-paper transforms to finite viewport values', () => {
+      const viewport = virtualPaperTransformToViewport({ x: NaN, y: Infinity, scale: NaN });
+
+      expect(Number.isFinite(viewport.scale)).toBe(true);
+      expect(Number.isFinite(viewport.tx)).toBe(true);
+      expect(Number.isFinite(viewport.ty)).toBe(true);
+      expect(viewport).toEqual(DEFAULT_DRAWING_VIEWPORT);
     });
   });
 });

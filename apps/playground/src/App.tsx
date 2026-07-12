@@ -104,6 +104,9 @@ const SEED_VALUE: DrawingValue = {
 export default function App() {
   const [tool, setTool] = useState<DrawingTool>('pen');
   const [rulerEnabled, setRulerEnabled] = useState(false);
+  // ===== Virtual-paper 滚动/平移模式开关 (Task 9) =====
+  // 启用后 DrawingSurface 将虚拟纸张交给 @hamster-note/virtual-paper 管理视口变换
+  const [virtualPaperEnabled, setVirtualPaperEnabled] = useState(false);
   const [rulerStateUncontrolled, setRulerStateUncontrolled] = useState<DrawingRulerState | undefined>(undefined);
   const [rulerStateControlled, setRulerStateControlled] = useState<DrawingRulerState | undefined>(undefined);
   const [color, setColor] = useState('#000000');
@@ -478,6 +481,20 @@ export default function App() {
           }}
         >
           {rulerEnabled ? '隐藏尺子' : '添加尺子'}
+        </button>
+
+        <button
+          type="button"
+          data-testid="drawing-virtualpaper-toggle"
+          onClick={() => setVirtualPaperEnabled((prev) => !prev)}
+          style={{
+            padding: '4px 10px',
+            cursor: 'pointer',
+            border: virtualPaperEnabled ? '2px solid #333' : '1px solid #aaa',
+            background: virtualPaperEnabled ? '#e0e0e0' : '#fff',
+          }}
+        >
+          {virtualPaperEnabled ? 'VirtualPaper ON' : 'VirtualPaper OFF'}
         </button>
 
         {toolInstruction && (
@@ -970,6 +987,7 @@ export default function App() {
               cursor={cursorProp}
               eraserCommitMode={eraserCommitMode}
               eraserTrajectory={eraserTrajectoryProp}
+              virtualPaper={virtualPaperEnabled}
               testID="drawing-surface-uncontrolled"
             />
           </div>
@@ -1014,6 +1032,7 @@ export default function App() {
               cursor={cursorProp}
               eraserCommitMode={eraserCommitMode}
               eraserTrajectory={eraserTrajectoryProp}
+              virtualPaper={virtualPaperEnabled}
               testID="drawing-surface-controlled"
             />
           </div>

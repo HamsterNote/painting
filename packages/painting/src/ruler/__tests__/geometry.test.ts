@@ -20,7 +20,6 @@ import {
   degToRad,
 } from '../geometry';
 import { generateTicks } from '../ticks';
-import type { RulerTick } from '../ticks';
 
 // ─── 测试用 ruler 便利构造 ────────────────────────────────────────────────────
 
