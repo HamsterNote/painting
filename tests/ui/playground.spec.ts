@@ -1751,5 +1751,72 @@ test.describe('DrawingSurface playground', () => {
       const previewAfter = await preview.textContent();
       expect(previewAfter).toBe(previewBefore);
     });
+
+    test('Ctrl move and Alt rotate ruler without creating stroke in real browser path', async ({ page }) => {
+      const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
+      const surface = page.getByTestId('drawing-surface-uncontrolled');
+      const preview = page.getByTestId('drawing-preview-uncontrolled');
+
+      await surface.scrollIntoViewIfNeeded();
+      await toggleBtn.click();
+      await surface.scrollIntoViewIfNeeded();
+
+      const ruler = surface.getByTestId('drawing-ruler');
+      const background = surface.getByTestId('drawing-ruler-background');
+      await expect(ruler).toBeVisible();
+
+      const previewBefore = await preview.textContent();
+      const before = {
+        centerX: parseFloat((await ruler.getAttribute('data-ruler-center-x')) ?? '0'),
+        centerY: parseFloat((await ruler.getAttribute('data-ruler-center-y')) ?? '0'),
+        rotation: parseFloat((await ruler.getAttribute('data-ruler-rotation')) ?? '0'),
+      };
+
+      const beforeBox = await background.boundingBox();
+      expect(beforeBox).not.toBeNull();
+
+      const ctrlStartX = beforeBox!.x + beforeBox!.width * 0.25;
+      const ctrlStartY = beforeBox!.y + beforeBox!.height * 0.5;
+      await page.keyboard.down('Control');
+      await page.mouse.move(ctrlStartX, ctrlStartY);
+      await page.mouse.down();
+      await page.mouse.move(ctrlStartX + 48, ctrlStartY + 26, { steps: 10 });
+      await page.mouse.up();
+      await page.keyboard.up('Control');
+
+      const afterCtrl = {
+        centerX: parseFloat((await ruler.getAttribute('data-ruler-center-x')) ?? '0'),
+        centerY: parseFloat((await ruler.getAttribute('data-ruler-center-y')) ?? '0'),
+        rotation: parseFloat((await ruler.getAttribute('data-ruler-rotation')) ?? '0'),
+      };
+
+      expect(afterCtrl.centerX !== before.centerX || afterCtrl.centerY !== before.centerY).toBe(true);
+      expect(afterCtrl.rotation).toBe(before.rotation);
+
+      const afterCtrlBox = await background.boundingBox();
+      expect(afterCtrlBox).not.toBeNull();
+
+      const altStartX = afterCtrlBox!.x + afterCtrlBox!.width * 0.75;
+      const altStartY = afterCtrlBox!.y + afterCtrlBox!.height * 0.5;
+      await page.keyboard.down('Alt');
+      await page.mouse.move(altStartX, altStartY);
+      await page.mouse.down();
+      await page.mouse.move(altStartX - 36, altStartY + 42, { steps: 10 });
+      await page.mouse.up();
+      await page.keyboard.up('Alt');
+
+      const afterAlt = {
+        centerX: parseFloat((await ruler.getAttribute('data-ruler-center-x')) ?? '0'),
+        centerY: parseFloat((await ruler.getAttribute('data-ruler-center-y')) ?? '0'),
+        rotation: parseFloat((await ruler.getAttribute('data-ruler-rotation')) ?? '0'),
+      };
+
+      expect(afterAlt.centerX).toBe(afterCtrl.centerX);
+      expect(afterAlt.centerY).toBe(afterCtrl.centerY);
+      expect(afterAlt.rotation).not.toBe(afterCtrl.rotation);
+
+      const previewAfter = await preview.textContent();
+      expect(previewAfter).toBe(previewBefore);
+    });
   });
 });
