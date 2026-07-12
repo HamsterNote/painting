@@ -4,7 +4,8 @@
  * 覆盖：
  * - 坐标转换往返一致性
  * - 点在 ruler 内/外判断
- * - 水平 ruler 投影（投影后 y == center.y）
+ * - 水平 ruler 中心线投影（投影后 y == center.y）
+ * - 内部交互使用的刻度边缘投影
  * - 外部点返回 null
  * - 30° 旋转 ruler 投影到旋转中心线（容差内）
  * - 刻度标签：中心 "0"，正标签镜像，无负标签
@@ -13,11 +14,12 @@
 
 import type { RulerTransform } from '../geometry';
 import {
-  toLocalPoint,
-  toCanvasPoint,
+  degToRad,
   isInsideRuler,
   projectOntoRuler,
-  degToRad,
+  projectOntoRulerTickEdge,
+  toCanvasPoint,
+  toLocalPoint,
 } from '../geometry';
 import { generateTicks } from '../ticks';
 
@@ -121,17 +123,12 @@ describe('ruler geometry - isInsideRuler', () => {
 // ─── 投影 ────────────────────────────────────────────────────────────────────
 
 describe('ruler geometry - projectOntoRuler', () => {
-  it('水平 ruler：内部点投影后 y == 刻度边缘（center.y - height/2）', () => {
+  it('水平 ruler：内部点投影后 y == 中心线（center.y）', () => {
     const ruler = makeHorizontalRuler(200, 300, 400, 40);
-    // 点在 ruler 内部偏右上方
     const canvasPoint = { x: 220, y: 310 };
     const projected = projectOntoRuler(canvasPoint, ruler);
 
-    expect(projected).not.toBeNull();
-    // 投影后 y 应该等于刻度边缘 (center.y - height/2 = 300 - 20 = 280)
-    expect(projected!.y).toBeCloseTo(280, 6);
-    // x 应该被 clamp 到 ruler 范围内，但 220 在范围内所以 x == 220
-    expect(projected!.x).toBeCloseTo(220, 6);
+    expect(projected).toEqual({ x: 220, y: 300 });
   });
 
   it('外部点返回 null', () => {
@@ -153,7 +150,7 @@ describe('ruler geometry - projectOntoRuler', () => {
     expect(projected).toBeNull();
   });
 
-  it('边界点投影时 localX 被限制在 [-length/2, length/2], localY == -height/2', () => {
+  it('边界点投影时 localX 被限制在 [-length/2, length/2], localY == 0', () => {
     const ruler = makeHorizontalRuler(200, 300, 400, 40);
 
     const rightEdgeProjection = projectOntoRuler({ x: 400, y: 310 }, ruler);
@@ -167,44 +164,61 @@ describe('ruler geometry - projectOntoRuler', () => {
     const rightLocal = toLocalPoint(rightEdgeProjection, ruler);
     const leftLocal = toLocalPoint(leftEdgeProjection, ruler);
     expect(rightLocal.x).toBeCloseTo(ruler.length / 2, 6);
-    expect(rightLocal.y).toBeCloseTo(-ruler.height / 2, 6);
+    expect(rightLocal.y).toBeCloseTo(0, 6);
     expect(leftLocal.x).toBeCloseTo(-ruler.length / 2, 6);
-    expect(leftLocal.y).toBeCloseTo(-ruler.height / 2, 6);
+    expect(leftLocal.y).toBeCloseTo(0, 6);
   });
 
-  it('30° 旋转 ruler：内部点投影到刻度边缘线（容差内）', () => {
+  it('30° 旋转 ruler：内部点投影到中心线（容差内）', () => {
     const ruler = makeRotatedRuler(200, 300, 30, 400, 40);
 
-    // 构造一个本地坐标为 (50, 5) 的点 → 画布坐标
     const localInput = { x: 50, y: 5 };
     const canvasPoint = toCanvasPoint(localInput, ruler);
 
-    // 投影
     const projected = projectOntoRuler(canvasPoint, ruler);
-    expect(projected).not.toBeNull();
+    if (!projected) {
+      throw new Error('Expected projected point to exist for inside ruler input');
+    }
 
-    // 预期投影后的本地坐标为 (50, -height/2)
-    const projectedLocal = toLocalPoint(projected!, ruler);
+    const projectedLocal = toLocalPoint(projected, ruler);
     expect(projectedLocal.x).toBeCloseTo(50, 4);
-    expect(projectedLocal.y).toBeCloseTo(-ruler.height / 2, 4);
+    expect(projectedLocal.y).toBeCloseTo(0, 4);
 
-    // 验证投影点在 ruler 刻度边缘线上：
-    // 从 center 沿 ruler 方向走 localX，再沿短轴方向走 -height/2
     const dirX = Math.cos(ruler.rotationRad);
     const dirY = Math.sin(ruler.rotationRad);
-    // 短轴方向 = ruler 方向逆时针旋转 90° → (-dirY, dirX)
-    const perpX = -dirY;
-    const perpY = dirX;
-    const expectedX = ruler.center.x + 50 * dirX + (-ruler.height / 2) * perpX;
-    const expectedY = ruler.center.y + 50 * dirY + (-ruler.height / 2) * perpY;
-    expect(projected!.x).toBeCloseTo(expectedX, 4);
-    expect(projected!.y).toBeCloseTo(expectedY, 4);
+    const expectedX = ruler.center.x + 50 * dirX;
+    const expectedY = ruler.center.y + 50 * dirY;
+    expect(projected.x).toBeCloseTo(expectedX, 4);
+    expect(projected.y).toBeCloseTo(expectedY, 4);
   });
 
   it('30° 旋转 ruler：外部点返回 null', () => {
     const ruler = makeRotatedRuler(200, 300, 30, 400, 40);
     const projected = projectOntoRuler({ x: 600, y: 600 }, ruler);
     expect(projected).toBeNull();
+  });
+});
+
+describe('ruler geometry - projectOntoRulerTickEdge', () => {
+  it('水平 ruler：内部点投影后 y == 刻度边缘（center.y - height/2）', () => {
+    const ruler = makeHorizontalRuler(200, 300, 400, 40);
+    const projected = projectOntoRulerTickEdge({ x: 220, y: 310 }, ruler);
+
+    expect(projected).toEqual({ x: 220, y: 280 });
+  });
+
+  it('30° 旋转 ruler：内部点投影到刻度边缘线（容差内）', () => {
+    const ruler = makeRotatedRuler(200, 300, 30, 400, 40);
+    const localInput = { x: 50, y: 5 };
+    const canvasPoint = toCanvasPoint(localInput, ruler);
+    const projected = projectOntoRulerTickEdge(canvasPoint, ruler);
+
+    if (!projected) {
+      throw new Error('Expected edge projection to exist for inside ruler input');
+    }
+    const projectedLocal = toLocalPoint(projected, ruler);
+    expect(projectedLocal.x).toBeCloseTo(50, 4);
+    expect(projectedLocal.y).toBeCloseTo(-ruler.height / 2, 4);
   });
 });
 
@@ -227,9 +241,11 @@ describe('ruler ticks - generateTicks', () => {
   it('中心刻度标签为 "0"', () => {
     const ticks = generateTicks(ruler, { majorSpacing: 50, minorSpacing: 10 });
     const centerTick = ticks.find((t) => Math.abs(t.localX) < 1e-6);
-    expect(centerTick).toBeDefined();
-    expect(centerTick!.label).toBe('0');
-    expect(centerTick!.kind).toBe('major');
+    if (!centerTick) {
+      throw new Error('Expected center tick to exist');
+    }
+    expect(centerTick.label).toBe('0');
+    expect(centerTick.kind).toBe('major');
   });
 
   it('所有标签不含负号', () => {

@@ -40,7 +40,7 @@ import {
   selectStrokesIntersectingLasso,
   type SnapPointResult,
 } from '../utils';
-import { isInsideRuler, projectOntoRuler, type RulerTransform } from '../ruler/geometry';
+import { isInsideRuler, projectOntoRulerTickEdge, type RulerTransform } from '../ruler/geometry';
 import { generateTicks } from '../ruler/ticks';
 import {
   canvasToScreen,
@@ -1310,7 +1310,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (!currentRulerState || !isInsideRuler(canvasPoint, currentRulerState)) {
           return canvasPoint;
         }
-        const projected = projectOntoRuler(canvasPoint, currentRulerState);
+        const projected = projectOntoRulerTickEdge(canvasPoint, currentRulerState);
         return projected ? { ...canvasPoint, x: projected.x, y: projected.y } : canvasPoint;
       },
       [currentRulerState]
