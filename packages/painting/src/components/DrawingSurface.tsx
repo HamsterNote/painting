@@ -40,7 +40,7 @@ import {
   selectStrokesIntersectingLasso,
   type SnapPointResult,
 } from '../utils';
-import { isInsideRuler, projectOntoRuler, type RulerTransform } from '../ruler/geometry';
+import { isInsideRuler, projectOntoRulerTickEdge, type RulerTransform } from '../ruler/geometry';
 import { generateTicks } from '../ruler/ticks';
 import {
   canvasToScreen,
@@ -692,7 +692,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       destroyExistingMixin();
 
       const host = hostRef.current;
-      let gestureRegion: 'grip' | 'body' | null = null;
+      let gestureRegion: 'grip' | 'body' | 'rotate' | null = null;
       // 手势开始时的 ruler 状态快照；在 handleStart 中从 ref 捕获最新值，
       // 使每次手势都基于按下瞬间的状态计算 delta
       let gestureStartState: DrawingRulerState | null = currentRulerStateRef.current;
@@ -749,6 +749,30 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         return gestureStartState.rotationRad + (firstDelta + secondDelta) / 2;
       };
 
+      // 鼠标 alt+拖拽单指旋转：计算鼠标围绕尺子中心的角度变化。
+      const resolveMouseRotation = () => {
+        if (!gestureStartState) {
+          return null;
+        }
+        const fingers = multiDragRef.current?.getFingers() ?? [];
+        const firstFinger = fingers[0];
+        const firstStart = firstFinger?.getPath()[0]?.point;
+        const firstCurrent = firstFinger?.getLastOperation()?.point;
+
+        if (!firstStart || !firstCurrent) {
+          return null;
+        }
+
+        const center = canvasToScreen(gestureStartState.center, viewportRef.current);
+        const angleFromCenter = (point: { readonly x: number; readonly y: number }) =>
+          Math.atan2(point.y - center.y, point.x - center.x);
+        const delta = normalizeRotationDelta(
+          angleFromCenter(firstCurrent) - angleFromCenter(firstStart)
+        );
+
+        return gestureStartState.rotationRad + delta;
+      };
+
       const commitRulerState = (pose: Partial<Pose>, shouldRender: boolean) => {
         if (!gestureStartState) {
           return;
@@ -772,6 +796,17 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
             center: pose.position
               ? screenToCanvas(pose.position, viewportRef.current)
               : gestureStartState.center,
+            rotationRad,
+          };
+        }
+
+        if (gestureRegion === 'rotate') {
+          const rotationRad = resolveMouseRotation();
+          if (rotationRad === null) {
+            return;
+          }
+          nextState = {
+            ...gestureStartState,
             rotationRad,
           };
         }
@@ -834,6 +869,13 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           return;
         }
 
+        if (event.pointerType === 'mouse' && (event.ctrlKey || event.metaKey || event.altKey)) {
+          if (target.closest('[data-testid="drawing-ruler"]')) {
+            gestureRegion = event.altKey ? 'rotate' : 'grip';
+            return;
+          }
+        }
+
         if (target.closest('[data-testid="drawing-ruler-drag-grip"]')) {
           gestureRegion = 'grip';
           return;
@@ -849,6 +891,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
 
       const handleMove = () => {
         if (gestureRegion === 'grip' && multiDrag.getFingers().length !== 1) {
+          gestureRegion = null;
+          return;
+        }
+
+        if (gestureRegion === 'rotate' && multiDrag.getFingers().length !== 1) {
           gestureRegion = null;
           return;
         }
@@ -1263,7 +1310,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (!currentRulerState || !isInsideRuler(canvasPoint, currentRulerState)) {
           return canvasPoint;
         }
-        const projected = projectOntoRuler(canvasPoint, currentRulerState);
+        const projected = projectOntoRulerTickEdge(canvasPoint, currentRulerState);
         return projected ? { ...canvasPoint, x: projected.x, y: projected.y } : canvasPoint;
       },
       [currentRulerState]

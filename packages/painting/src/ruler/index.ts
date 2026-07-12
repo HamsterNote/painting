@@ -7,15 +7,16 @@
 // 几何类型与函数
 export type { RulerPoint, RulerTransform } from './geometry';
 export {
-  toLocalPoint,
-  toCanvasPoint,
-  isInsideRuler,
-  projectOntoRuler,
   degToRad,
-  radToDeg,
+  isInsideRuler,
   normalizeAngle,
+  projectOntoRuler,
+  projectOntoRulerTickEdge,
+  radToDeg,
+  toCanvasPoint,
+  toLocalPoint,
 } from './geometry';
 
 // 刻度类型与函数
 export type { RulerTick, RulerTickOptions, TickKind } from './ticks';
-export { generateTicks, DEFAULT_TICK_OPTIONS } from './ticks';
+export { DEFAULT_TICK_OPTIONS, generateTicks } from './ticks';

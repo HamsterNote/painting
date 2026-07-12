@@ -22,6 +22,9 @@ type MockInputEvent = {
   clientY?: number;
   pointerId?: number;
   isPrimary?: boolean;
+  ctrlKey?: boolean;
+  altKey?: boolean;
+  metaKey?: boolean;
 };
 
 type PointerPathItem = {
@@ -77,6 +80,9 @@ function createPointerEvent(
     button: source.button ?? 0,
     pressure: item.pressure,
     isPrimary: source.isPrimary ?? pointerId === 1,
+    ctrlKey: source.ctrlKey ?? false,
+    altKey: source.altKey ?? false,
+    metaKey: source.metaKey ?? false,
   });
   Object.defineProperty(event, 'timeStamp', { value: item.timestamp ?? 0 });
   return event;
@@ -401,6 +407,131 @@ describe('DrawingSurface', () => {
 
     expect(onRulerChange).toHaveBeenCalled();
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('moves the ruler with Ctrl/Cmd mouse drag when virtualPaper stops bubbling pointerdown', () => {
+    const onChange = jest.fn();
+    const onRulerChange = jest.fn();
+    render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange}
+        ruler={{ enabled: true, state: { center: { x: 50, y: 40 }, rotationRad: 0, length: 160, height: 30 } }}
+        onRulerChange={onRulerChange}
+        virtualPaper={true}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    const body = screen.getByTestId('drawing-ruler-background');
+    mockHostRect(host);
+
+    dispatchElementPointerEvent(
+      body,
+      'pointerdown',
+      {
+        point: { x: 70, y: 60 },
+        event: {
+          pointerType: 'mouse',
+          button: 0,
+          clientX: 70,
+          clientY: 60,
+          ctrlKey: true,
+          metaKey: true,
+        },
+        timestamp: 0,
+      },
+      1
+    );
+    dispatchElementPointerEvent(
+      document,
+      'pointermove',
+      {
+        point: { x: 95, y: 88 },
+        event: { pointerType: 'mouse', button: -1, clientX: 95, clientY: 88 },
+        timestamp: 10,
+      },
+      1
+    );
+    dispatchElementPointerEvent(
+      document,
+      'pointerup',
+      {
+        point: { x: 95, y: 88 },
+        event: { pointerType: 'mouse', button: 0, clientX: 95, clientY: 88 },
+        timestamp: 20,
+      },
+      1
+    );
+
+    expect(onRulerChange).toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+    const nextState = onRulerChange.mock.calls.at(-1)?.[0] as DrawingRulerState;
+    expect(nextState.center.x).not.toBe(50);
+    expect(nextState.center.y).not.toBe(40);
+    expect(nextState.rotationRad).toBe(0);
+  });
+
+  it('rotates the ruler with Alt mouse drag when virtualPaper stops bubbling pointerdown', () => {
+    const onChange = jest.fn();
+    const onRulerChange = jest.fn();
+    render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        value={{ strokes: [] }}
+        onChange={onChange}
+        ruler={{ enabled: true, state: { center: { x: 50, y: 40 }, rotationRad: 0, length: 160, height: 30 } }}
+        onRulerChange={onRulerChange}
+        virtualPaper={true}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    const body = screen.getByTestId('drawing-ruler-background');
+    mockHostRect(host);
+
+    dispatchElementPointerEvent(
+      body,
+      'pointerdown',
+      {
+        point: { x: 90, y: 60 },
+        event: {
+          pointerType: 'mouse',
+          button: 0,
+          clientX: 90,
+          clientY: 60,
+          altKey: true,
+        },
+        timestamp: 0,
+      },
+      1
+    );
+    dispatchElementPointerEvent(
+      document,
+      'pointermove',
+      {
+        point: { x: 70, y: 100 },
+        event: { pointerType: 'mouse', button: -1, clientX: 70, clientY: 100 },
+        timestamp: 10,
+      },
+      1
+    );
+    dispatchElementPointerEvent(
+      document,
+      'pointerup',
+      {
+        point: { x: 70, y: 100 },
+        event: { pointerType: 'mouse', button: 0, clientX: 70, clientY: 100 },
+        timestamp: 20,
+      },
+      1
+    );
+
+    expect(onRulerChange).toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+    const nextState = onRulerChange.mock.calls.at(-1)?.[0] as DrawingRulerState;
+    expect(nextState.center.x).toBe(50);
+    expect(nextState.center.y).toBe(40);
+    expect(nextState.rotationRad).not.toBe(0);
   });
 
   it('does not create strokes for wheel input under virtualPaper', () => {
@@ -6603,13 +6734,14 @@ describe('eraserCursorAndTrajectory', () => {
       return onChange.mock.calls[0][0].strokes[0].points;
     };
 
-    const distanceToLine = (point: { x: number; y: number }, rulerState: DrawingRulerState) => {
+    const distanceToTickEdge = (point: { x: number; y: number }, rulerState: DrawingRulerState) => {
       const dx = point.x - rulerState.center.x;
       const dy = point.y - rulerState.center.y;
-      return Math.abs(-Math.sin(rulerState.rotationRad) * dx + Math.cos(rulerState.rotationRad) * dy);
+      const localY = -Math.sin(rulerState.rotationRad) * dx + Math.cos(rulerState.rotationRad) * dy;
+      return Math.abs(localY + rulerState.height / 2);
     };
 
-    it('horizontal ruler: pen stroke drawn inside ruler body has all points.y equal to rulerCenterY', () => {
+    it('horizontal ruler: pen stroke drawn inside ruler body has all points.y equal to ruler tick edge', () => {
       const { host, onChange } = renderProjectedSurface({
         ruler: { enabled: true, state: horizontalRuler },
       });
@@ -6620,10 +6752,13 @@ describe('eraserCursorAndTrajectory', () => {
       ]);
 
       const points = expectCommittedPoints(onChange);
-      expect(points.map((point) => point.y)).toEqual([horizontalRuler.center.y, horizontalRuler.center.y]);
+      expect(points.map((point) => point.y)).toEqual([
+        horizontalRuler.center.y - horizontalRuler.height / 2,
+        horizontalRuler.center.y - horizontalRuler.height / 2,
+      ]);
     });
 
-    it('rotated 30° ruler: committed points lie on rotated centerline', () => {
+    it('rotated 30° ruler: committed points lie on rotated tick edge', () => {
       const rotatedRuler: DrawingRulerState = {
         center: { x: 80, y: 70 },
         rotationRad: Math.PI / 6,
@@ -6641,7 +6776,7 @@ describe('eraserCursorAndTrajectory', () => {
 
       const points = expectCommittedPoints(onChange);
       points.forEach((point) => {
-        expect(distanceToLine(point, rotatedRuler)).toBeCloseTo(0, 6);
+        expect(distanceToTickEdge(point, rotatedRuler)).toBeCloseTo(0, 6);
       });
     });
 
@@ -6930,13 +7065,14 @@ describe('eraserCursorAndTrajectory', () => {
       );
     };
 
-    const distanceToRulerCenterLine = (
+    const distanceToRulerTickEdge = (
       point: { readonly x: number; readonly y: number },
       rulerState: DrawingRulerState
     ) => {
       const dx = point.x - rulerState.center.x;
       const dy = point.y - rulerState.center.y;
-      return Math.abs(-Math.sin(rulerState.rotationRad) * dx + Math.cos(rulerState.rotationRad) * dy);
+      const localY = -Math.sin(rulerState.rotationRad) * dx + Math.cos(rulerState.rotationRad) * dy;
+      return Math.abs(localY + rulerState.height / 2);
     };
 
     const committedPointsFrom = (onChange: jest.Mock): DrawingStroke['points'] => {
@@ -7067,8 +7203,13 @@ describe('eraserCursorAndTrajectory', () => {
 
       const cursorElement = screen.getByTestId('projected-cursor');
       expect(cursorElement.getAttribute('data-canvas-x')).toBe('70');
-      expect(cursorElement.getAttribute('data-canvas-y')).toBe(String(horizontalRuler.center.y));
-      expect(observedStates.at(-1)?.screen).toEqual({ x: 70, y: horizontalRuler.center.y });
+      expect(cursorElement.getAttribute('data-canvas-y')).toBe(
+        String(horizontalRuler.center.y - horizontalRuler.height / 2)
+      );
+      expect(observedStates.at(-1)?.screen).toEqual({
+        x: 70,
+        y: horizontalRuler.center.y - horizontalRuler.height / 2,
+      });
     });
 
     it('stores horizontal and rotated projected pen points numerically', () => {
@@ -7092,7 +7233,7 @@ describe('eraserCursorAndTrajectory', () => {
       ]);
 
       committedPointsFrom(horizontalChange).forEach((point) => {
-        expect(point.y).toBe(horizontalRuler.center.y);
+        expect(point.y).toBe(horizontalRuler.center.y - horizontalRuler.height / 2);
       });
       unmount();
 
@@ -7116,7 +7257,7 @@ describe('eraserCursorAndTrajectory', () => {
       ]);
 
       committedPointsFrom(rotatedChange).forEach((point) => {
-        expect(distanceToRulerCenterLine(point, rotatedRuler)).toBeCloseTo(0, 6);
+        expect(distanceToRulerTickEdge(point, rotatedRuler)).toBeCloseTo(0, 6);
       });
     });
 
@@ -7157,8 +7298,8 @@ describe('eraserCursorAndTrajectory', () => {
       ], 3);
 
       expect(committedPointsFrom(onChange).map(({ x, y }) => ({ x, y }))).toEqual([
-        { x: 20, y: horizontalRuler.center.y },
-        { x: 70, y: horizontalRuler.center.y },
+        { x: 20, y: horizontalRuler.center.y - horizontalRuler.height / 2 },
+        { x: 70, y: horizontalRuler.center.y - horizontalRuler.height / 2 },
       ]);
     });
 

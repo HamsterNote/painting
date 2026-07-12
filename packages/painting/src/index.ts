@@ -50,6 +50,7 @@ export {
   isInsideRuler,
   normalizeAngle,
   projectOntoRuler,
+  projectOntoRulerTickEdge,
   radToDeg,
   toCanvasPoint,
   toLocalPoint,
