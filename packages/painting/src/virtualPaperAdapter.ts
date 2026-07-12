@@ -1,3 +1,5 @@
+/// <reference path="./types/virtual-paper.d.ts" />
+
 import type { ComponentType } from 'react';
 import {
   VirtualPaper,
@@ -8,15 +10,15 @@ import {
   type VirtualPaperTransform,
 } from '@hamster-note/virtual-paper';
 import {
-  virtualPaperTransformToViewport,
-  viewportToVirtualPaperTransform,
-  type DrawingViewport,
-} from './viewport';
-import {
   SAFE_DEFAULT_VIRTUAL_PAPER_INTERACTIONS,
   type DrawingSurfaceVirtualPaperInteraction,
   type DrawingSurfaceVirtualPaperOptions,
 } from './virtualPaperOptions';
+import {
+  virtualPaperTransformToViewport,
+  viewportToVirtualPaperTransform,
+  type DrawingViewport,
+} from './viewport';
 
 const INTERACTION_MODE_BY_OPTION = {
   mouseWheelZoom: VirtualPaperInteractionMode.MouseWheelZoom,
