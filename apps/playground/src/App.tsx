@@ -9,6 +9,7 @@ import {
   type DrawingRulerOptions,
 } from '@hamster-note/painting';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ExternalPropsDemo } from './ExternalPropsDemo';
 
 /**
  * Eraser commit mode union literal — mirrors the exported
@@ -103,6 +104,9 @@ const SEED_VALUE: DrawingValue = {
 export default function App() {
   const [tool, setTool] = useState<DrawingTool>('pen');
   const [rulerEnabled, setRulerEnabled] = useState(false);
+  // ===== Virtual-paper 滚动/平移模式开关 (Task 9) =====
+  // 启用后 DrawingSurface 将虚拟纸张交给 @hamster-note/virtual-paper 管理视口变换
+  const [virtualPaperEnabled, setVirtualPaperEnabled] = useState(false);
   const [rulerStateUncontrolled, setRulerStateUncontrolled] = useState<DrawingRulerState | undefined>(undefined);
   const [rulerStateControlled, setRulerStateControlled] = useState<DrawingRulerState | undefined>(undefined);
   const [color, setColor] = useState('#000000');
@@ -133,6 +137,11 @@ export default function App() {
   // 闭合形状允许 strokeWidth=0（纯填充无描边），此 toggle 强制 strokeWidth=0
   const [forceStrokeWidthZero, setForceStrokeWidthZero] = useState(false);
 
+  // ===== Snap 控制状态 (Task 5) =====
+  const [snapEndpoints, setSnapEndpoints] = useState(false);
+  const [snapLines, setSnapLines] = useState(false);
+  const [snapRadius, setSnapRadius] = useState(8);
+
   // ===== Cursor 控制状态 (Task 12) =====
   const [cursorEnabled, setCursorEnabled] = useState(true);
   const [cursorCustomRender, setCursorCustomRender] = useState(false);
@@ -142,7 +151,6 @@ export default function App() {
   const [eraserTrajectoryVisible, setEraserTrajectoryVisible] = useState(false);
   const [eraserTrajectoryColor, setEraserTrajectoryColor] = useState('#ccc');
   const [eraserTrajectoryOpacity, setEraserTrajectoryOpacity] = useState(0.5);
-  const [eraserTrajectoryLineWidth, setEraserTrajectoryLineWidth] = useState(3);
 
   // ===== 套索选择相关 ref 和状态 =====
   const uncontrolledSurfaceRef = useRef<DrawingSurfaceHandle>(null);
@@ -387,6 +395,15 @@ export default function App() {
         }
       : undefined;
 
+  const snapProp = useMemo(() => {
+    if (!snapEndpoints && !snapLines) return undefined;
+    return {
+      endpoints: snapEndpoints,
+      lines: snapLines,
+      radius: snapRadius,
+    };
+  }, [snapEndpoints, snapLines, snapRadius]);
+
   const rulerUncontrolledOptions: false | DrawingRulerOptions = rulerEnabled
     ? {
         enabled: true,
@@ -409,14 +426,9 @@ export default function App() {
       visible: eraserTrajectoryVisible,
       color: eraserTrajectoryColor,
       opacity: eraserTrajectoryOpacity,
-      lineWidth: eraserTrajectoryLineWidth,
+      lineWidth: effectiveStrokeWidth,
     }),
-    [
-      eraserTrajectoryVisible,
-      eraserTrajectoryColor,
-      eraserTrajectoryOpacity,
-      eraserTrajectoryLineWidth,
-    ]
+    [eraserTrajectoryVisible, eraserTrajectoryColor, eraserTrajectoryOpacity, effectiveStrokeWidth]
   );
 
   const toolInstruction = getToolInstruction(tool);
@@ -477,6 +489,20 @@ export default function App() {
           }}
         >
           {rulerEnabled ? '隐藏尺子' : '添加尺子'}
+        </button>
+
+        <button
+          type="button"
+          data-testid="drawing-virtualpaper-toggle"
+          onClick={() => setVirtualPaperEnabled((prev) => !prev)}
+          style={{
+            padding: '4px 10px',
+            cursor: 'pointer',
+            border: virtualPaperEnabled ? '2px solid #333' : '1px solid #aaa',
+            background: virtualPaperEnabled ? '#e0e0e0' : '#fff',
+          }}
+        >
+          {virtualPaperEnabled ? 'VirtualPaper ON' : 'VirtualPaper OFF'}
         </button>
 
         {toolInstruction && (
@@ -925,17 +951,59 @@ export default function App() {
                 style={{ width: '60px' }}
               />
             </label>
+          </div>
+        </fieldset>
+        <fieldset
+          data-testid="panel-snap"
+          style={{
+            margin: 0,
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            padding: '8px 12px',
+            flex: '1 1 320px',
+          }}
+        >
+          <legend>
+            <strong>Snap (Pen Tip Snapping)</strong>
+          </legend>
+          <div
+            style={{
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}
+          >
             <label>
-              Line width{' '}
+              <input
+                type="checkbox"
+                data-testid="snap-endpoints-toggle"
+                checked={snapEndpoints}
+                onChange={(e) => setSnapEndpoints(e.target.checked)}
+              />{' '}
+              Endpoints
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                data-testid="snap-lines-toggle"
+                checked={snapLines}
+                onChange={(e) => setSnapLines(e.target.checked)}
+              />{' '}
+              Lines
+            </label>
+            <label>
+              Radius{' '}
               <input
                 type="number"
-                data-testid="eraser-trajectory-line-width"
+                data-testid="snap-radius-input"
                 min={1}
                 step={1}
-                value={eraserTrajectoryLineWidth}
-                onChange={(e) =>
-                  setEraserTrajectoryLineWidth(Math.max(1, parseInt(e.target.value, 10) || 1))
-                }
+                value={snapRadius}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  setSnapRadius(Number.isNaN(val) || val <= 0 ? 8 : val);
+                }}
                 style={{ width: '60px' }}
               />
             </label>
@@ -967,8 +1035,10 @@ export default function App() {
               fillColor={resolvedFillColor}
               fillOpacity={resolvedFillOpacity}
               cursor={cursorProp}
+              snap={snapProp}
               eraserCommitMode={eraserCommitMode}
               eraserTrajectory={eraserTrajectoryProp}
+              virtualPaper={virtualPaperEnabled}
               testID="drawing-surface-uncontrolled"
             />
           </div>
@@ -1011,8 +1081,10 @@ export default function App() {
               fillColor={resolvedFillColor}
               fillOpacity={resolvedFillOpacity}
               cursor={cursorProp}
+              snap={snapProp}
               eraserCommitMode={eraserCommitMode}
               eraserTrajectory={eraserTrajectoryProp}
+              virtualPaper={virtualPaperEnabled}
               testID="drawing-surface-controlled"
             />
           </div>
@@ -1044,6 +1116,8 @@ export default function App() {
           </pre>
         </div>
       </div>
+
+      <ExternalPropsDemo />
 
       {/* ===== 采样率测试 Demo ===== */}
       <div

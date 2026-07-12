@@ -1,11 +1,14 @@
 export type {
   DrawingEraserCommitMode,
   DrawingEraserTrajectoryOptions,
+  DrawingEventTarget,
+  DrawingEventTargetRef,
   DrawingInputMethod,
   DrawingPoint,
   DrawingRulerOptions,
   DrawingRulerState,
   DrawingSelectionChange,
+  DrawingSnapOptions,
   DrawingStroke,
   DrawingSurfaceHandle,
   DrawingSurfaceProps,
@@ -39,9 +42,20 @@ export type {
 export { resolveStrokeStyle } from './render/resolveStrokeStyle';
 export type { RenderableStroke, StrokeRendererProps } from './render/StrokeRenderer';
 export { StrokeRenderer } from './render/StrokeRenderer';
+export type { RulerPoint, RulerTransform } from './ruler';
+export {
+  DEFAULT_TICK_OPTIONS,
+  degToRad,
+  generateTicks,
+  isInsideRuler,
+  normalizeAngle,
+  projectOntoRuler,
+  radToDeg,
+  toCanvasPoint,
+  toLocalPoint,
+} from './ruler';
 export type { DrawingStrokeSmoothingOptions } from './stroke-helpers';
 export type { LassoSelectionOptions } from './utils';
-export type { RulerTransform } from './ruler/geometry';
 export {
   addStroke,
   clearStrokes,
@@ -61,4 +75,12 @@ export {
   MIN_VIEWPORT_SCALE,
   resetViewport,
   screenToCanvas,
+  viewportToVirtualPaperTransform,
+  virtualPaperTransformToViewport,
 } from './viewport';
+export { isVirtualPaperEnabled, toVirtualPaperProps } from './virtualPaperAdapter';
+export type {
+  DrawingSurfaceVirtualPaperInteraction,
+  DrawingSurfaceVirtualPaperOptions,
+} from './virtualPaperOptions';
+export { SAFE_DEFAULT_VIRTUAL_PAPER_INTERACTIONS } from './virtualPaperOptions';

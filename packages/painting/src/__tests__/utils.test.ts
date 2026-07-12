@@ -10,6 +10,7 @@ import {
   pickStrokeIntersectingSegment,
   removeStroke,
   removeStrokes,
+  resolveSnapPoint,
   selectStrokesIntersectingLasso,
   updateStroke,
   updateStrokes,
@@ -896,6 +897,129 @@ describe('utils', () => {
     });
   });
 
+/* eslint-disable jest/expect-expect */
+  describe('resolveSnapPoint', () => {
+    const snapOptions = { enabled: true, endpoints: true, lines: true, radius: 5 };
+
+    const expectSnap = (
+      point: DrawingPoint,
+      strokes: readonly DrawingStroke[],
+      expected: { canvas: DrawingPoint; kind: 'endpoint' | 'line'; strokeId?: string } | null,
+      options = snapOptions,
+      viewportScale?: number,
+    ) => {
+      const result = resolveSnapPoint(point, strokes, options, viewportScale);
+
+      expect(result).toEqual(expected);
+    };
+
+    it('Given disabled snap options When resolving near a target Then returns null', () => {
+      const stroke = createMockStroke('pen', 'pen', [{ x: 0, y: 0 }, { x: 10, y: 0 }]);
+
+      expectSnap({ x: 1, y: 0 }, [stroke], null, { enabled: false, endpoints: true, lines: true, radius: 5 });
+    });
+
+    it('Given no radius When resolving near an endpoint Then uses the default canvas radius', () => {
+      const stroke = createMockStroke('pen', 'pen', [{ x: 0, y: 0 }, { x: 20, y: 0 }]);
+
+      expectSnap({ x: 7.5, y: 0 }, [stroke], { canvas: { x: 0, y: 0 }, kind: 'endpoint', strokeId: 'pen' }, { enabled: true, endpoints: true, lines: false });
+    });
+
+    it('Given invalid radius When resolving near an endpoint Then falls back to radius eight', () => {
+      const stroke = createMockStroke('pen', 'pen', [{ x: 0, y: 0 }, { x: 20, y: 0 }]);
+
+      expectSnap({ x: 7.5, y: 0 }, [stroke], { canvas: { x: 0, y: 0 }, kind: 'endpoint', strokeId: 'pen' }, { enabled: true, endpoints: true, lines: false, radius: Number.NaN });
+    });
+
+    it('Given zero radius When resolving near an endpoint Then falls back to radius eight', () => {
+      const stroke = createMockStroke('pen', 'pen', [{ x: 0, y: 0 }, { x: 20, y: 0 }]);
+
+      expectSnap({ x: 7.5, y: 0 }, [stroke], { canvas: { x: 0, y: 0 }, kind: 'endpoint', strokeId: 'pen' }, { enabled: true, endpoints: true, lines: false, radius: 0 });
+    });
+
+    it('Given negative radius When resolving near an endpoint Then falls back to radius eight', () => {
+      const stroke = createMockStroke('pen', 'pen', [{ x: 0, y: 0 }, { x: 20, y: 0 }]);
+
+      expectSnap({ x: 7.5, y: 0 }, [stroke], { canvas: { x: 0, y: 0 }, kind: 'endpoint', strokeId: 'pen' }, { enabled: true, endpoints: true, lines: false, radius: -1 });
+    });
+
+    it('Given viewport scale When resolving Then converts CSS radius to canvas units', () => {
+      const stroke = createMockStroke('line', 'line', [{ x: 0, y: 0 }, { x: 20, y: 0 }]);
+
+      expectSnap({ x: 10, y: 2.5 }, [stroke], { canvas: { x: 10, y: 0 }, kind: 'line', strokeId: 'line' }, { enabled: true, endpoints: false, lines: true, radius: 5 }, 2);
+      expectSnap({ x: 10, y: 2.51 }, [stroke], null, { enabled: true, endpoints: false, lines: true, radius: 5 }, 2);
+    });
+
+    it('Given boundary distances When resolving Then includes equal radius and excludes greater radius', () => {
+      const stroke = createMockStroke('line', 'line', [{ x: 0, y: 0 }, { x: 20, y: 0 }]);
+
+      expectSnap({ x: 10, y: 4.99 }, [stroke], { canvas: { x: 10, y: 0 }, kind: 'line', strokeId: 'line' });
+      expectSnap({ x: 10, y: 5 }, [stroke], { canvas: { x: 10, y: 0 }, kind: 'line', strokeId: 'line' });
+      expectSnap({ x: 10, y: 5.01 }, [stroke], null);
+    });
+
+    it('Given committed strokes for every tool When resolving endpoints Then extracts only required endpoint targets', () => {
+      const strokes = [
+        createMockStroke('pen', 'pen', [{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 10, y: 0 }]),
+        createMockStroke('line', 'line', [{ x: 20, y: 0 }, { x: 30, y: 0 }]),
+        createMockStroke('rect', 'rect', [{ x: 40, y: 0 }, { x: 50, y: 10 }]),
+        createMockStroke('ellipse', 'ellipse', [{ x: 60, y: 0 }, { x: 80, y: 20 }]),
+        createMockStroke('polygon', 'polygon', [{ x: 90, y: 0 }, { x: 100, y: 0 }, { x: 95, y: 10 }]),
+        createMockStroke('bezier', 'bezier', [{ x: 110, y: 0 }, { x: 120, y: 50 }, { x: 130, y: 50 }, { x: 140, y: 0 }]),
+      ];
+
+      expectSnap({ x: 10, y: 0 }, strokes, { canvas: { x: 10, y: 0 }, kind: 'endpoint', strokeId: 'pen' }, { enabled: true, endpoints: true, lines: false, radius: 1 });
+      expectSnap({ x: 30, y: 0 }, strokes, { canvas: { x: 30, y: 0 }, kind: 'endpoint', strokeId: 'line' }, { enabled: true, endpoints: true, lines: false, radius: 1 });
+      expectSnap({ x: 50, y: 10 }, strokes, { canvas: { x: 50, y: 10 }, kind: 'endpoint', strokeId: 'rect' }, { enabled: true, endpoints: true, lines: false, radius: 1 });
+      expectSnap({ x: 70, y: 10 }, strokes, { canvas: { x: 70, y: 10 }, kind: 'endpoint', strokeId: 'ellipse' }, { enabled: true, endpoints: true, lines: false, radius: 1 });
+      expectSnap({ x: 95, y: 10 }, strokes, { canvas: { x: 95, y: 10 }, kind: 'endpoint', strokeId: 'polygon' }, { enabled: true, endpoints: true, lines: false, radius: 1 });
+      expectSnap({ x: 140, y: 0 }, strokes, { canvas: { x: 140, y: 0 }, kind: 'endpoint', strokeId: 'bezier' }, { enabled: true, endpoints: true, lines: false, radius: 1 });
+    });
+
+    it('Given non-endpoint samples When resolving endpoints Then rejects pen middle ellipse bbox corner and bezier controls', () => {
+      const strokes = [
+        createMockStroke('pen', 'pen', [{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 10, y: 0 }]),
+        createMockStroke('ellipse', 'ellipse', [{ x: 20, y: 0 }, { x: 40, y: 20 }]),
+        createMockStroke('bezier', 'bezier', [{ x: 50, y: 0 }, { x: 60, y: 30 }, { x: 70, y: 30 }, { x: 80, y: 0 }]),
+      ];
+
+      expectSnap({ x: 5, y: 0 }, strokes, null, { enabled: true, endpoints: true, lines: false, radius: 1 });
+      expectSnap({ x: 20, y: 0 }, strokes, null, { enabled: true, endpoints: true, lines: false, radius: 1 });
+      expectSnap({ x: 60, y: 30 }, strokes, null, { enabled: true, endpoints: true, lines: false, radius: 1 });
+    });
+
+    it('Given committed strokes for every tool When resolving line targets Then projects to required geometry', () => {
+      const cases: Array<{ stroke: DrawingStroke; point: DrawingPoint; expected: DrawingPoint }> = [
+        { stroke: createMockStroke('pen-line', 'pen', [{ x: 0, y: 0 }, { x: 10, y: 0 }]), point: { x: 5, y: 2 }, expected: { x: 5, y: 0 } },
+        { stroke: createMockStroke('line-line', 'line', [{ x: 20, y: 0 }, { x: 30, y: 0 }]), point: { x: 25, y: 2 }, expected: { x: 25, y: 0 } },
+        { stroke: createMockStroke('rect-line', 'rect', [{ x: 40, y: 0 }, { x: 50, y: 10 }]), point: { x: 45, y: -2 }, expected: { x: 45, y: 0 } },
+        { stroke: createMockStroke('ellipse-line', 'ellipse', [{ x: 60, y: 0 }, { x: 80, y: 20 }]), point: { x: 80, y: 10 }, expected: { x: 80, y: 10 } },
+        { stroke: createMockStroke('polygon-line', 'polygon', [{ x: 90, y: 0 }, { x: 100, y: 0 }, { x: 95, y: 10 }]), point: { x: 95, y: -2 }, expected: { x: 95, y: 0 } },
+        { stroke: createMockStroke('bezier-line', 'bezier', [{ x: 110, y: 0 }, { x: 120, y: 0 }, { x: 130, y: 0 }, { x: 140, y: 0 }]), point: { x: 125, y: 2 }, expected: { x: 125, y: 0 } },
+      ];
+
+      for (const { stroke, point, expected } of cases) {
+        expectSnap(point, [stroke], { canvas: expected, kind: 'line', strokeId: stroke.id }, { enabled: true, endpoints: false, lines: true, radius: 5 });
+      }
+    });
+
+    it('Given endpoint and line candidates When line projection is closer Then endpoint bucket still wins', () => {
+      const endpointStroke = createMockStroke('endpoint', 'pen', [{ x: 0, y: 0 }, { x: 20, y: 0 }]);
+      const lineStroke = createMockStroke('line', 'line', [{ x: -10, y: 3 }, { x: 20, y: 3 }]);
+
+      expectSnap({ x: 1, y: 2.9 }, [endpointStroke, lineStroke], { canvas: { x: 0, y: 0 }, kind: 'endpoint', strokeId: 'endpoint' }, { enabled: true, endpoints: true, lines: true, radius: 5 });
+    });
+
+    it('Given equal-distance candidates When resolving Then preserves stroke order and target extraction order', () => {
+      const strokeA = createMockStroke('a', 'line', [{ x: 0, y: 0 }, { x: 10, y: 0 }]);
+      const strokeB = createMockStroke('b', 'line', [{ x: 0, y: 10 }, { x: 10, y: 10 }]);
+      const rect = createMockStroke('rect', 'rect', [{ x: 20, y: 0 }, { x: 30, y: 10 }]);
+
+      expectSnap({ x: 5, y: 5 }, [strokeA, strokeB], { canvas: { x: 5, y: 0 }, kind: 'line', strokeId: 'a' }, { enabled: true, endpoints: false, lines: true, radius: 5 });
+      expectSnap({ x: 25, y: 5 }, [rect], { canvas: { x: 25, y: 0 }, kind: 'line', strokeId: 'rect' }, { enabled: true, endpoints: false, lines: true, radius: 5 });
+    });
+  });
+
   describe('selectStrokesIntersectingLasso', () => {
     it('selects a horizontal pen when a vertical lasso covers its middle', () => {
       const stroke = createMockStroke('pen-cross', 'pen', [
@@ -1270,4 +1394,5 @@ describe('utils', () => {
       expect(result).not.toBe(value);
     });
   });
+  /* eslint-enable jest/expect-expect */
 });
