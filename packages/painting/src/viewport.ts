@@ -12,6 +12,12 @@ export type DrawingViewport = {
   ty: number;
 };
 
+export type VirtualPaperLikeTransform = {
+  x: number;
+  y: number;
+  scale: number;
+};
+
 export const MIN_VIEWPORT_SCALE = 0.25;
 export const MAX_VIEWPORT_SCALE = 8;
 
@@ -43,6 +49,28 @@ export function clampScale(scale: number): number {
 
 export function resetViewport(): DrawingViewport {
   return { ...DEFAULT_DRAWING_VIEWPORT };
+}
+
+export function virtualPaperTransformToViewport(
+  transform: VirtualPaperLikeTransform
+): DrawingViewport {
+  return normalizeViewport({
+    scale: transform.scale,
+    tx: transform.x,
+    ty: transform.y,
+  });
+}
+
+export function viewportToVirtualPaperTransform(
+  viewport: DrawingViewport
+): VirtualPaperLikeTransform {
+  const normalized = normalizeViewport(viewport);
+
+  return {
+    x: normalized.tx,
+    y: normalized.ty,
+    scale: normalized.scale,
+  };
 }
 
 export function canvasToScreen(point: ViewportPoint, viewport: DrawingViewport): ViewportPoint {

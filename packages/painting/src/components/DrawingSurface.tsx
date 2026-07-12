@@ -2,13 +2,16 @@ import {
   forwardRef,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useImperativeHandle,
   useMemo,
   useReducer,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from 'react';
+import { DragOperationType, Mixin, MixinType, type Pose } from '@system-ui-js/multi-drag';
 import { useCanvas } from '../hooks/useCanvas';
 import { type CanvasPoint, createInitialState, interactionReducer } from '../interaction/reducer';
 import {
@@ -37,12 +40,29 @@ import {
   selectStrokesIntersectingLasso,
   type SnapPointResult,
 } from '../utils';
+import { isInsideRuler, projectOntoRuler, type RulerTransform } from '../ruler/geometry';
+import { generateTicks } from '../ruler/ticks';
 import {
   canvasToScreen,
   type DrawingViewport,
   resetViewport as createResetViewport,
   screenToCanvas,
 } from '../viewport';
+import { isVirtualPaperEnabled } from '../virtualPaperAdapter';
+import type { DrawingSurfaceVirtualPaperOptions } from '../virtualPaperOptions';
+import {
+  buildPointerInteractionInput,
+  classifyInteraction,
+  createGestureOwner,
+  isSafeInteractiveTarget,
+  type ClassifyInteractionOptions,
+} from '../interactionOwnership';
+import { VirtualPaperSurfaceFrame } from '../VirtualPaperSurfaceFrame';
+import { installCapturePhaseRulerPointerBridge } from '../rulerPointerBridge';
+import {
+  POINTER_DOWN_CAPTURE_OPTIONS,
+  shouldCaptureVirtualPaperPointerDown,
+} from '../virtualPaperPointerCapture';
 
 // Public drawing contract types
 export type DrawingTool =
@@ -141,17 +161,18 @@ export type DrawingCursorRenderState = {
   /** Whether the crosshair should be visible (hover for mouse/pen; down for touch). */
   visible: boolean;
   /**
-   * Eraser pickup radius in CSS pixels (screen-space). Defined ONLY when the
-   * active tool is `eraser`; `undefined` for every other tool. The default
-   * cursor renderer reads this to draw the eraser hover circle; custom
-   * `render` callbacks may also consult it to visualise the same radius.
+   * Eraser pickup radius in screen-space CSS pixels scaled by viewport.scale.
+   * Defined ONLY when the active tool is `eraser`; `undefined` for every other
+   * tool. The default cursor renderer reads this to draw the eraser hover
+   * circle; custom `render` callbacks may also consult it to visualise the same
+   * radius.
    */
   eraserRadius?: number;
 };
 
 /**
  * Cursor overlay configuration. Pass `false` to disable the overlay entirely.
- * When undefined (the default), the surface renders a 10px screen-pixel
+ * When undefined (the default), the surface renders a 20px screen-pixel
  * crosshair centered on the pointer.
  */
 export type DrawingCursorOptions = {
@@ -188,6 +209,56 @@ export type DrawingEraserTrajectoryOptions = {
   color?: string;
   opacity?: number;
   lineWidth?: number;
+};
+
+export type DrawingEventTargetRef = { readonly current: EventTarget | null };
+
+/**
+ * Pointer/mouse/touch listener target for drawing interactions.
+ * Defaults to the DrawingSurface host; pass a parent/container element ref to
+ * receive gestures there while strokes are still stored in this surface's
+ * local SVG coordinate system.
+ */
+export type DrawingEventTarget = EventTarget | DrawingEventTargetRef | null;
+
+/**
+ * Ruler 状态 — 描述 ruler 在画布中的位置、朝向和尺寸。
+ * 字段与 `RulerTransform`（ruler/geometry.ts）完全对齐，
+ * 供受控 / 非受控模式共用。
+ */
+export type DrawingRulerState = RulerTransform;
+
+/**
+ * Ruler overlay 配置项。
+ *
+ * - `ruler={false}` 或 `ruler` 省略 → 不显示 ruler
+ * - `ruler={{}}` 或 `ruler={{ enabled: true }}` → 启用 ruler，使用默认参数
+ * - 受控模式：传入 `state` + `onRulerChange`
+ * - 非受控模式：传入 `defaultState`（或都不传，使用内置默认值）
+ */
+export type DrawingRulerOptions = {
+  /** 是否启用 ruler。省略时默认 true（只要 `ruler` 对象存在即启用）。 */
+  readonly enabled?: boolean;
+  /** 受控的 ruler 变换状态。 */
+  readonly state?: DrawingRulerState;
+  /** 非受控模式下的初始 ruler 变换状态。 */
+  readonly defaultState?: DrawingRulerState;
+  /** Ruler 长度（画布坐标）。默认 `400`。 */
+  readonly length?: number;
+  /** Ruler 高度（画布坐标）。默认 `48`。 */
+  readonly height?: number;
+  /** Ruler 背景色。默认 `'#e0e0e0'`。 */
+  readonly backgroundColor?: string;
+  /** Ruler 背景不透明度。默认 `0.2`。 */
+  readonly backgroundOpacity?: number;
+  /** 次刻度间距（画布坐标）。默认 `10`。 */
+  readonly minorTickSpacing?: number;
+  /** 每隔 N 个次刻度绘制一个主刻度。默认 `5`。 */
+  readonly majorTickEvery?: number;
+  /** 拖拽手柄尺寸（画布坐标）。默认 `24`。 */
+  readonly dragGripSize?: number;
+  /** Test identifier 前缀，用于自动化测试。 */
+  readonly testID?: string;
 };
 
 type CursorPointer = { x: number; y: number };
@@ -266,12 +337,30 @@ export type DrawingSurfaceProps = {
   /** Test identifier. */
   testID?: string;
 
+  /**
+   * Element (or ref) that receives drawing pointer/mouse/touch events.
+   * Coordinates remain relative to this DrawingSurface's SVG host, so a parent
+   * can own the events and forward the resulting gesture into the child canvas.
+   */
+  eventTarget?: DrawingEventTarget;
+  /** CSS overflow value applied to the root SVG element. */
+  overflow?: CSSProperties['overflow'];
+
   /** 受控的选中 stroke id 列表。配合 onSelectionChange 实现受控选择模式。 */
   selectedStrokeIds?: readonly string[];
   /** 非受控模式下的初始选中 stroke id 列表。 */
   defaultSelectedStrokeIds?: readonly string[];
   /** 选择变化回调，当套索选择操作完成时触发。 */
   onSelectionChange?: DrawingSelectionChange;
+  /**
+   * Ruler overlay 配置。省略或 `false` → 不显示 ruler。
+   * 传入 options 对象 → 启用 ruler，可用 `enabled` 字段精细控制。
+   */
+  ruler?: false | DrawingRulerOptions;
+  /** Ruler 状态变化回调（受控模式）。当 ruler 位置/旋转/尺寸变化时触发。 */
+  onRulerChange?: (next: DrawingRulerState) => void;
+  /** Virtual paper pan/zoom layer. `true` enables safe default interactions. */
+  virtualPaper?: boolean | DrawingSurfaceVirtualPaperOptions;
 };
 
 type PointerInputEvent = {
@@ -452,6 +541,29 @@ function resolveDrawingSnapOptions(snap: DrawingSnapOptions | undefined): Resolv
   return { enabled, endpoints, lines, radius };
 }
 
+function isEventTargetLike(target: EventTarget | DrawingEventTargetRef): target is EventTarget {
+  return 'addEventListener' in target && typeof target.addEventListener === 'function';
+}
+
+function resolveDrawingEventTarget(target: DrawingEventTarget | undefined): EventTarget | null {
+  if (!target) {
+    return null;
+  }
+  return isEventTargetLike(target) ? target : target.current;
+}
+
+function containsEventTarget(container: EventTarget | null, target: EventTarget | null): boolean {
+  return container instanceof Node && target instanceof Node && container.contains(target);
+}
+
+function isPointerDomEvent(event: Event): event is PointerEvent {
+  return event.type.startsWith('pointer');
+}
+
+function isDoubleClickDomEvent(event: Event): event is MouseEvent {
+  return event.type === 'dblclick';
+}
+
 export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfaceProps>(
   function DrawingSurface(props, ref) {
     const {
@@ -475,17 +587,301 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       eraserCommitMode,
       eraserTrajectory,
       testID,
+      eventTarget,
+      overflow,
       selectedStrokeIds,
       defaultSelectedStrokeIds,
       onSelectionChange,
+      ruler,
+      onRulerChange,
+      virtualPaper,
     } = props;
     const hostRef = useRef<HTMLDivElement>(null);
-    const [viewport] = useState<DrawingViewport>(() => createResetViewport());
+    const eventTargetRef = useRef<DrawingEventTarget | undefined>(eventTarget);
+    const multiDragRef = useRef<InstanceType<typeof Mixin> | null>(null);
+    const gestureOwnerRef = useRef(createGestureOwner());
+    const [viewport, setViewport] = useState<DrawingViewport>(() => createResetViewport());
     const viewportRef = useRef<DrawingViewport>(viewport);
     viewportRef.current = viewport;
 
+    const handleVirtualPaperViewportChange = useCallback((nextViewport: DrawingViewport) => {
+      setViewport(nextViewport);
+    }, []);
+
+    const internalRulerStateRef = useRef<DrawingRulerState | null>(null);
+    const [rulerInitTick, setRulerInitTick] = useState(0);
+    const [, setRulerGestureTick] = useState(0);
+
+    const isRulerEnabled = ruler !== false && ruler !== undefined && (ruler.enabled ?? true);
+    const effectiveRulerOptions = typeof ruler === 'object' ? ruler : {};
+    const isVirtualPaperActive = isVirtualPaperEnabled(virtualPaper);
+    const resolvedVirtualPaperOptions = typeof virtualPaper === 'object' ? virtualPaper : {};
+
+    let currentRulerState: DrawingRulerState | null = null;
+
+    if (isRulerEnabled) {
+      if (effectiveRulerOptions.state) {
+        currentRulerState = effectiveRulerOptions.state;
+      } else {
+        if (!internalRulerStateRef.current) {
+          const defaultState = effectiveRulerOptions.defaultState ?? {
+            center: { x: 0, y: 0 },
+            rotationRad: 0,
+            length: effectiveRulerOptions.length ?? 400,
+            height: effectiveRulerOptions.height ?? 48,
+          };
+
+          internalRulerStateRef.current = defaultState;
+        }
+        currentRulerState = internalRulerStateRef.current;
+      }
+    }
+
+    // 始终保持最新 ruler 状态到 ref，供 Mixin effect 读取而无需将 currentRulerState 放入依赖。
+    // 核心修复：之前 effect 依赖 currentRulerState，每次拖拽 onRulerChange → 父组件 re-render
+    // → currentRulerState 变为新对象 → effect 清理重建 Mixin → 拖拽手势中断。
+    // 改用 ref 后 effect 只在 isRulerEnabled 切换时重建，拖拽过程不再被打断。
+    const currentRulerStateRef = useRef<DrawingRulerState | null>(null);
+    currentRulerStateRef.current = currentRulerState;
+
+    // onRulerChange 回调也用 ref 包装，避免 effect 因回调引用变化而重建
+    const onRulerChangeRef = useRef(onRulerChange);
+    onRulerChangeRef.current = onRulerChange;
+
+    const hasInitializedRulerCenter = useRef(false);
+
+    useLayoutEffect(() => {
+      if (!isRulerEnabled || !currentRulerState || effectiveRulerOptions.state || hasInitializedRulerCenter.current) {
+        return;
+      }
+
+      if (currentRulerState.center.x === 0 && currentRulerState.center.y === 0 && hostRef.current) {
+        hasInitializedRulerCenter.current = true;
+
+        const hostWidth = hostRef.current.clientWidth;
+        const hostHeight = hostRef.current.clientHeight;
+        const screenCenter = { x: hostWidth / 2, y: hostHeight / 2 };
+        const canvasCenter = screenToCanvas(screenCenter, viewportRef.current);
+
+        internalRulerStateRef.current = {
+          ...currentRulerState,
+          center: canvasCenter,
+        };
+
+        setRulerInitTick((t) => t + 1);
+      }
+    }, [isRulerEnabled, currentRulerState, effectiveRulerOptions.state]);
+
+    useEffect(() => {
+      if (rulerInitTick > 0 && onRulerChange && internalRulerStateRef.current) {
+        onRulerChange(internalRulerStateRef.current);
+      }
+    }, [rulerInitTick, onRulerChange]);
+
+    useEffect(() => {
+      const destroyExistingMixin = () => {
+        multiDragRef.current?.destroy();
+        multiDragRef.current = null;
+      };
+
+      if (!isRulerEnabled || !currentRulerStateRef.current || !hostRef.current) {
+        destroyExistingMixin();
+        return;
+      }
+
+      destroyExistingMixin();
+
+      const host = hostRef.current;
+      let gestureRegion: 'grip' | 'body' | null = null;
+      // 手势开始时的 ruler 状态快照；在 handleStart 中从 ref 捕获最新值，
+      // 使每次手势都基于按下瞬间的状态计算 delta
+      let gestureStartState: DrawingRulerState | null = currentRulerStateRef.current;
+
+      const getPose = (): Pose => {
+        const state = gestureStartState;
+        if (!state) {
+          return { position: { x: 0, y: 0 }, rotation: 0, width: 0, height: 0 };
+        }
+        return {
+          position: canvasToScreen(state.center, viewportRef.current),
+          rotation: state.rotationRad,
+          width: state.length,
+          height: state.height,
+        };
+      };
+
+      const normalizeRotationDelta = (delta: number) => {
+        if (delta > Math.PI) {
+          return delta - Math.PI * 2;
+        }
+        if (delta < -Math.PI) {
+          return delta + Math.PI * 2;
+        }
+        return delta;
+      };
+
+      const resolveBodyRotation = () => {
+        if (!gestureStartState) {
+          return null;
+        }
+        const fingers = multiDragRef.current?.getFingers() ?? [];
+        const firstFinger = fingers[0];
+        const secondFinger = fingers[1];
+        const firstStart = firstFinger?.getPath()[0]?.point;
+        const secondStart = secondFinger?.getPath()[0]?.point;
+        const firstCurrent = firstFinger?.getLastOperation()?.point;
+        const secondCurrent = secondFinger?.getLastOperation()?.point;
+
+        if (!firstStart || !secondStart || !firstCurrent || !secondCurrent) {
+          return null;
+        }
+
+        const center = canvasToScreen(gestureStartState.center, viewportRef.current);
+        const angleFromCenter = (point: { readonly x: number; readonly y: number }) =>
+          Math.atan2(point.y - center.y, point.x - center.x);
+        const firstDelta = normalizeRotationDelta(
+          angleFromCenter(firstCurrent) - angleFromCenter(firstStart)
+        );
+        const secondDelta = normalizeRotationDelta(
+          angleFromCenter(secondCurrent) - angleFromCenter(secondStart)
+        );
+
+        return gestureStartState.rotationRad + (firstDelta + secondDelta) / 2;
+      };
+
+      const commitRulerState = (pose: Partial<Pose>, shouldRender: boolean) => {
+        if (!gestureStartState) {
+          return;
+        }
+        let nextState: DrawingRulerState | null = null;
+
+        if (gestureRegion === 'grip' && pose.position) {
+          nextState = {
+            ...gestureStartState,
+            center: screenToCanvas(pose.position, viewportRef.current),
+          };
+        }
+
+        if (gestureRegion === 'body') {
+          const rotationRad = resolveBodyRotation();
+          if (rotationRad === null) {
+            return;
+          }
+          nextState = {
+            ...gestureStartState,
+            center: pose.position
+              ? screenToCanvas(pose.position, viewportRef.current)
+              : gestureStartState.center,
+            rotationRad,
+          };
+        }
+
+        if (!nextState) {
+          return;
+        }
+
+        internalRulerStateRef.current = nextState;
+        if (shouldRender) {
+          setRulerGestureTick((tick) => tick + 1);
+        }
+        onRulerChangeRef.current?.(nextState);
+      };
+
+      const multiDrag = new Mixin(
+        host,
+        {
+          inertial: false,
+          getPose,
+          setPose: (_element: HTMLElement, pose: Partial<Pose>) => {
+            commitRulerState(pose, false);
+          },
+          setPoseOnEnd: (_element: HTMLElement, pose: Partial<Pose>) => {
+            commitRulerState(pose, true);
+          },
+        },
+        [MixinType.Drag, MixinType.Rotate],
+        [MixinType.Drag]
+      );
+
+      const handleStart = () => {
+        // 手势开始时从 ref 捕获最新 ruler 状态作为基准快照，
+        // 确保整个拖拽过程中的 delta 计算都基于按下瞬间的状态
+        gestureStartState = currentRulerStateRef.current;
+        if (!gestureStartState) {
+          gestureRegion = null;
+          return;
+        }
+
+        const [finger] = multiDrag.getFingers();
+        const event = finger?.getLastOperation()?.event;
+        const target = event?.target;
+
+        if (!event || !(target instanceof Element)) {
+          gestureRegion = null;
+          return;
+        }
+
+        const owner = classifyInteraction({
+          input: buildPointerInteractionInput(event),
+          isDrawingEnabled: true,
+          isRulerEnabled,
+          virtualPaperEnabled: isVirtualPaperActive,
+          virtualPaperInteractions: resolvedVirtualPaperOptions.enabledInteractions,
+          allowedDrawingInputMethods: DEFAULT_INPUT_METHODS,
+        });
+        if (owner !== 'ruler') {
+          gestureRegion = null;
+          return;
+        }
+
+        if (target.closest('[data-testid="drawing-ruler-drag-grip"]')) {
+          gestureRegion = 'grip';
+          return;
+        }
+
+        if (target.closest('[data-testid="drawing-ruler"]')) {
+          gestureRegion = 'body';
+          return;
+        }
+
+        gestureRegion = null;
+      };
+
+      const handleMove = () => {
+        if (gestureRegion === 'grip' && multiDrag.getFingers().length !== 1) {
+          gestureRegion = null;
+          return;
+        }
+
+        if (gestureRegion === 'body' && multiDrag.getFingers().length < 2) {
+          return;
+        }
+      };
+
+      const handleAllEnd = () => {
+        gestureRegion = null;
+        multiDrag.setEnabled();
+      };
+
+      multiDrag.addEventListener(DragOperationType.Start, handleStart);
+      multiDrag.addEventListener(DragOperationType.Move, handleMove);
+      multiDrag.addEventListener(DragOperationType.AllEnd, handleAllEnd);
+      multiDragRef.current = multiDrag;
+
+      return () => {
+        multiDrag.removeEventListener(DragOperationType.Start, handleStart);
+        multiDrag.removeEventListener(DragOperationType.Move, handleMove);
+        multiDrag.removeEventListener(DragOperationType.AllEnd, handleAllEnd);
+        if (multiDragRef.current === multiDrag) {
+          multiDragRef.current = null;
+        }
+        multiDrag.destroy();
+      };
+    }, [isRulerEnabled, isVirtualPaperActive, resolvedVirtualPaperOptions.enabledInteractions]);
+
     const effectiveTool: DrawingTool = isDrawingToolSupported(tool) ? tool : 'pen';
     const isDrawingEnabled = tool === undefined || isDrawingToolSupported(tool);
+    eventTargetRef.current = eventTarget;
 
     const resolvedColor = strokeColor && strokeColor.trim() !== '' ? strokeColor : 'black';
     const resolvedOpenWidth =
@@ -580,7 +976,10 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       () => uniqueStrokeIds(isSelectionControlled ? selectedStrokeIds : internalSelectedIds),
       [internalSelectedIds, isSelectionControlled, selectedStrokeIds]
     );
-    const selectionBox = useMemo(() => computeSelectionBox(strokes, selectedIds), [strokes, selectedIds]);
+    const selectionBox = useMemo(
+      () => computeSelectionBox(strokes, selectedIds),
+      [strokes, selectedIds]
+    );
     const selectedIdsRef = useRef<readonly string[]>(selectedIds);
     const selectionBoxRef = useRef(selectionBox);
     const onSelectionChangeRef = useRef(onSelectionChange);
@@ -626,6 +1025,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     const effectiveToolRef = useRef(effectiveTool);
     const previousToolForCleanupRef = useRef(effectiveTool);
     const isDrawingEnabledRef = useRef(isDrawingEnabled);
+    // Ruler 启用状态 ref，供 drawing effect 内部读取最新值
+    // （drawing effect 依赖数组不含 isRulerEnabled，需通过 ref 避免闭包陈旧值）
+    const isRulerEnabledRef = useRef(isRulerEnabled);
+    const virtualPaperEnabledRef = useRef(isVirtualPaperActive);
+    const virtualPaperInteractionsRef = useRef(resolvedVirtualPaperOptions.enabledInteractions);
     const previousValueRef = useRef(value);
     const addStrokeRef = useRef(addStroke);
     const removeStrokeRef = useRef(removeStroke);
@@ -686,17 +1090,13 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     const handleDocumentPointerDown = useCallback(
       (event: PointerEvent) => {
         const host = hostRef.current;
-        if (host?.contains(event.target as Node)) {
+        const target = event.target;
+        const listenerTarget = resolveDrawingEventTarget(eventTargetRef.current);
+        if (containsEventTarget(host, target) || containsEventTarget(listenerTarget, target)) {
           return;
         }
         // 点击外部交互控件（如工具栏按钮）时不应取消套索选择，否则依赖选中的按钮（如删除）会失效。
-        const target = event.target;
-        if (
-          target instanceof Element &&
-          target.closest(
-            'button, input, textarea, select, a[href], [role="button"], [role="link"], [contenteditable="true"], [data-interactive]'
-          )
-        ) {
+        if (isSafeInteractiveTarget(target)) {
           return;
         }
         if (lassoModeRef.current !== 'idle' || selectionMoveRef.current !== null) {
@@ -705,6 +1105,19 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         commitSelection([]);
       },
       [commitSelection]
+    );
+
+    const getInteractionOwnerOptions = useCallback(
+      (input: ClassifyInteractionOptions['input'], activeTouchPointers = 1) => ({
+        input,
+        isDrawingEnabled: isDrawingEnabledRef.current,
+        isRulerEnabled: isRulerEnabledRef.current,
+        virtualPaperEnabled: virtualPaperEnabledRef.current,
+        virtualPaperInteractions: virtualPaperInteractionsRef.current,
+        allowedDrawingInputMethods: inputMethodsRef.current,
+        activeTouchPointers,
+      }),
+      []
     );
 
     // 当前橡皮手势在 canvas 坐标系下的轨迹点；空数组表示当前无活动手势。
@@ -732,6 +1145,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
 
     effectiveToolRef.current = effectiveTool;
     isDrawingEnabledRef.current = isDrawingEnabled;
+    isRulerEnabledRef.current = isRulerEnabled;
+    virtualPaperEnabledRef.current = isVirtualPaperActive;
+    virtualPaperInteractionsRef.current = resolvedVirtualPaperOptions.enabledInteractions;
     addStrokeRef.current = addStroke;
     removeStrokeRef.current = removeStroke;
     removeStrokesRef.current = removeStrokesFromCanvas;
@@ -758,6 +1174,26 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       const prunedIds = selectedIdsRef.current.filter((id) => existingStrokeIds.has(id));
       commitSelection(prunedIds);
     }, [commitSelection, strokes]);
+
+    useEffect(() => {
+      if (!isVirtualPaperActive) {
+        return undefined;
+      }
+      const host = hostRef.current;
+      if (!host) {
+        return undefined;
+      }
+      const listenerTarget = resolveDrawingEventTarget(eventTarget) ?? host;
+      if (!shouldCaptureVirtualPaperPointerDown(listenerTarget, host, true)) {
+        return undefined;
+      }
+
+      return installCapturePhaseRulerPointerBridge({
+        listenerTarget,
+        multiDragRef,
+        getInteractionOwnerOptions,
+      });
+    }, [eventTarget, getInteractionOwnerOptions, isVirtualPaperActive]);
 
     useEffect(() => {
       if (effectiveTool !== 'lasso' || selectedIds.length === 0) {
@@ -822,6 +1258,33 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       []
     );
 
+    const getProjectedCanvasPoint = useCallback(
+      (canvasPoint: DrawingPoint): DrawingPoint => {
+        if (!currentRulerState || !isInsideRuler(canvasPoint, currentRulerState)) {
+          return canvasPoint;
+        }
+        const projected = projectOntoRuler(canvasPoint, currentRulerState);
+        return projected ? { ...canvasPoint, x: projected.x, y: projected.y } : canvasPoint;
+      },
+      [currentRulerState]
+    );
+
+    const resolveInteractiveCanvasPoint = useCallback(
+      (
+        screenPoint: DrawingPoint,
+        tool: DrawingTool,
+        viewport: DrawingViewport,
+        snapOptions: ResolvedDrawingSnapOptions,
+        targetStrokes: DrawingStroke[]
+      ): DrawingPoint => {
+        const snappedOrRawCanvas = isSnapEligibleTool(tool)
+          ? resolvePointerSnap(screenPoint, viewport, snapOptions, targetStrokes).canvas
+          : screenToCanvas(screenPoint, viewport);
+        return getProjectedCanvasPoint(snappedOrRawCanvas);
+      },
+      [getProjectedCanvasPoint, resolvePointerSnap]
+    );
+
     const clearActiveStroke = useCallback(() => {
       clearActiveStrokeRef.current?.();
       isDrawingRef.current = false;
@@ -850,6 +1313,15 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       if (!host) {
         return undefined;
       }
+      const listenerTarget = resolveDrawingEventTarget(eventTarget) ?? host;
+      const pointerCaptureTarget = listenerTarget instanceof Element ? listenerTarget : host;
+      const pointerDownListenerOptions = shouldCaptureVirtualPaperPointerDown(
+        listenerTarget,
+        host,
+        isVirtualPaperActive
+      )
+        ? POINTER_DOWN_CAPTURE_OPTIONS
+        : undefined;
 
       type PointerSample = {
         pointerId: number;
@@ -862,6 +1334,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
 
       const pointerPaths = new Map<number, PointerSample[]>();
       const activeDrawingPointerIds = new Set<number>();
+      // 跟踪所有活跃触摸指针（包括落在 ruler 上的），
+      // 用于判断是否为多指手势以在 ruler 启用时阻止绘画
+      const activeTouchPointerIds = new Set<number>();
       const capturedPointerIds = new Set<number>();
       const eraserQueuedHits = eraserQueuedHitsRef.current;
       let currentActiveStroke: DrawingStroke | null = null;
@@ -1130,19 +1605,20 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           return;
         }
         if (
-          typeof host.releasePointerCapture === 'function' &&
-          (typeof host.hasPointerCapture !== 'function' || host.hasPointerCapture(pointerId))
+          typeof pointerCaptureTarget.releasePointerCapture === 'function' &&
+          (typeof pointerCaptureTarget.hasPointerCapture !== 'function' ||
+            pointerCaptureTarget.hasPointerCapture(pointerId))
         ) {
-          host.releasePointerCapture(pointerId);
+          pointerCaptureTarget.releasePointerCapture(pointerId);
         }
         capturedPointerIds.delete(pointerId);
       };
 
       const capturePointer = (event: PointerEvent) => {
-        if (typeof host.setPointerCapture !== 'function') {
+        if (typeof pointerCaptureTarget.setPointerCapture !== 'function') {
           return;
         }
-        host.setPointerCapture(event.pointerId);
+        pointerCaptureTarget.setPointerCapture(event.pointerId);
         capturedPointerIds.add(event.pointerId);
       };
 
@@ -1239,21 +1715,24 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           return;
         }
 
+        // 橡皮和套索在上面的分支中故意跳过投影：它们做的是命中测试/选区，必须使用原始指针位置。
+        const localPath = path.map((pathItem) =>
+          resolveInteractiveCanvasPoint(
+            pathItem.point,
+            effectiveToolRef.current,
+            viewportRef.current,
+            snapOptionsRef.current,
+            strokesRef.current
+          )
+        );
+
         // Line is click-to-place by default. Drag remains the shortcut, but only
         // after real movement: at least two path samples and >4 px total travel.
         if (effectiveToolRef.current === 'line' && !currentActiveStroke) {
           if (path.length < 2) {
             return;
           }
-          const thresholdPath = path.map((pathItem) =>
-            resolvePointerSnap(
-              pathItem.point,
-              viewportRef.current,
-              snapOptionsRef.current,
-              strokesRef.current
-            ).canvas
-          );
-          if (totalPathDistance(thresholdPath) <= LINE_DRAG_THRESHOLD_PX) {
+          if (totalPathDistance(localPath) <= LINE_DRAG_THRESHOLD_PX) {
             return;
           }
         }
@@ -1281,14 +1760,15 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           if (!pathItem) {
             continue;
           }
-          const localPoint = isSnapEligibleTool(effectiveToolRef.current)
-            ? resolvePointerSnap(
-                pathItem.point,
-                viewportRef.current,
-                snapOptionsRef.current,
-                strokesRef.current
-              ).canvas
-            : screenToCanvas(pathItem.point, viewportRef.current);
+          const localPoint =
+            localPath[index] ??
+            resolveInteractiveCanvasPoint(
+              pathItem.point,
+              effectiveToolRef.current,
+              viewportRef.current,
+              snapOptionsRef.current,
+              strokesRef.current
+            );
           const timedPoint: TimedDrawingPoint = {
             ...localPoint,
             timestamp: pathItem.timestamp || undefined,
@@ -1324,14 +1804,13 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           dispatchInteraction({
             type: 'POINTER_UP',
             pointerId: input.pointerId,
-            point: isSnapEligibleTool(effectiveToolRef.current)
-              ? resolvePointerSnap(
-                  input.point,
-                  viewportRef.current,
-                  snapOptionsRef.current,
-                  strokesRef.current
-                ).canvas
-              : screenToCanvas(input.point, viewportRef.current),
+            point: resolveInteractiveCanvasPoint(
+              input.point,
+              effectiveToolRef.current,
+              viewportRef.current,
+              snapOptionsRef.current,
+              strokesRef.current
+            ),
           });
         }
       };
@@ -1352,6 +1831,16 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (event.button !== undefined && event.button !== 0) {
           return;
         }
+        // 记录触摸指针（无论目标是否在 ruler 上），用于多指检测
+        if (event.pointerType === 'touch') {
+          activeTouchPointerIds.add(event.pointerId);
+        }
+        const owner = gestureOwnerRef.current.startPointer(
+          getInteractionOwnerOptions(buildPointerInteractionInput(event), activeTouchPointerIds.size)
+        );
+        if (owner !== 'drawing') {
+          return;
+        }
         capturePointer(event);
         const input = toPointerSample(event);
         const pointerEvent = readPointerEvent(event);
@@ -1362,10 +1851,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           return;
         }
         // 多指按下时清空 on-release 橡皮队列，避免多指误触把之前的待提交删除一起提交。
-        if (
-          activeDrawingPointerIds.size > 0 &&
-          eraserCommitModeRef.current === 'on-release'
-        ) {
+        if (activeDrawingPointerIds.size > 0 && eraserCommitModeRef.current === 'on-release') {
           eraserQueuedHitsRef.current.clear();
         }
         activeDrawingPointerIds.add(input.pointerId);
@@ -1381,9 +1867,17 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         }
         startLassoInteraction(input, event);
       };
+      const handlePointerDownEvent: EventListener = (event) => {
+        if (isPointerDomEvent(event)) {
+          handlePointerDown(event);
+        }
+      };
 
       const handlePointerMove = (event: PointerEvent) => {
         const input = toPointerSample(event);
+        if (gestureOwnerRef.current.getPointerOwner(input.pointerId) !== 'drawing') {
+          return;
+        }
         const path = pointerPaths.get(input.pointerId);
         if (!path) {
           return;
@@ -1394,22 +1888,32 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
 
       const handlePointerEnd = (event: PointerEvent) => {
         const input = toPointerSample(event);
+        const owner = isPlacementReducerTool(effectiveToolRef.current)
+          ? gestureOwnerRef.current.getPointerOwner(input.pointerId)
+          : gestureOwnerRef.current.endPointer(input.pointerId);
         releasePointerCapture(input.pointerId);
-        if (activeDrawingPointerIds.has(input.pointerId)) {
+        if (owner === 'drawing' && activeDrawingPointerIds.has(input.pointerId)) {
           finishPointerInteraction(input);
         }
         activeDrawingPointerIds.delete(input.pointerId);
         pointerPaths.delete(input.pointerId);
+        if (event.pointerType === 'touch') {
+          activeTouchPointerIds.delete(event.pointerId);
+        }
       };
 
       const handlePointerCancel = (event: PointerEvent) => {
         const input = toPointerSample(event);
+        const owner = gestureOwnerRef.current.endPointer(input.pointerId);
         releasePointerCapture(input.pointerId);
-        if (activeDrawingPointerIds.has(input.pointerId)) {
+        if (owner === 'drawing' && activeDrawingPointerIds.has(input.pointerId)) {
           cancelPointerInteraction(input);
         }
         activeDrawingPointerIds.delete(input.pointerId);
         pointerPaths.delete(input.pointerId);
+        if (event.pointerType === 'touch') {
+          activeTouchPointerIds.delete(event.pointerId);
+        }
       };
 
       const handleKeyChange = (event: KeyboardEvent) => {
@@ -1429,9 +1933,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         shiftPressedRef.current = false;
       };
 
-      host.addEventListener('pointerdown', handlePointerDown);
-      // pointerdown 必须从 host 开始；后续 move/end 绑到 document，保证指针离开
-      // surface 或运行环境不支持 pointer capture 时仍能结束手势并提交/清理状态。
+      listenerTarget.addEventListener('pointerdown', handlePointerDownEvent, pointerDownListenerOptions);
       document.addEventListener('pointermove', handlePointerMove);
       document.addEventListener('pointerup', handlePointerEnd);
       document.addEventListener('pointercancel', handlePointerCancel);
@@ -1443,7 +1945,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (clearActiveStrokeRef.current === clearCurrentActiveStroke) {
           clearActiveStrokeRef.current = null;
         }
-        host.removeEventListener('pointerdown', handlePointerDown);
+        listenerTarget.removeEventListener(
+          'pointerdown',
+          handlePointerDownEvent,
+          pointerDownListenerOptions
+        );
         document.removeEventListener('pointermove', handlePointerMove);
         document.removeEventListener('pointerup', handlePointerEnd);
         document.removeEventListener('pointercancel', handlePointerCancel);
@@ -1455,11 +1961,21 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         }
         activeDrawingPointerIds.clear();
         pointerPaths.clear();
+        activeTouchPointerIds.clear();
+        gestureOwnerRef.current.reset();
         eraserQueuedHits.clear();
         clearEraserTrajectoryRef.current();
         clearLassoInteractionRef.current();
       };
-    }, [commitSelection, getLocalCoordinates, resolvePointerSnap, setActiveStroke]);
+    }, [
+      commitSelection,
+      eventTarget,
+      getInteractionOwnerOptions,
+      getLocalCoordinates,
+      resolveInteractiveCanvasPoint,
+      isVirtualPaperActive,
+      setActiveStroke,
+    ]);
 
     // Tool switch: reset reducer state. Cancels any in-progress polygon placement
     // when user picks a different tool mid-draw (or vice versa).
@@ -1553,21 +2069,36 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       if (!host) {
         return undefined;
       }
+      const listenerTarget = resolveDrawingEventTarget(eventTarget) ?? host;
+      const pointerDownListenerOptions = shouldCaptureVirtualPaperPointerDown(
+        listenerTarget,
+        host,
+        isVirtualPaperActive
+      )
+        ? POINTER_DOWN_CAPTURE_OPTIONS
+        : undefined;
 
       const toCanvasPoint = (clientX: number, clientY: number) => {
         const screenPoint = getLocalCoordinates(clientX, clientY);
-        return resolvePointerSnap(
+        return resolveInteractiveCanvasPoint(
           screenPoint,
+          effectiveTool,
           viewportRef.current,
           snapOptionsRef.current,
           strokesRef.current
-        ).canvas;
+        );
       };
 
       let pendingLineClick: { point: DrawingPoint; pointerId?: number } | null = null;
 
       const handlePointerDown = (event: PointerEvent) => {
         if (event.button !== undefined && event.button !== 0) {
+          return;
+        }
+        const owner = gestureOwnerRef.current.startPointer(
+          getInteractionOwnerOptions(buildPointerInteractionInput(event))
+        );
+        if (owner !== 'drawing') {
           return;
         }
         const point = toCanvasPoint(event.clientX, event.clientY);
@@ -1582,8 +2113,28 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           detail: event.detail,
         });
       };
+      const handlePointerDownEvent: EventListener = (event) => {
+        if (isPointerDomEvent(event)) {
+          handlePointerDown(event);
+        }
+      };
 
       const handlePointerMove = (event: PointerEvent) => {
+        const lockedOwner = gestureOwnerRef.current.getPointerOwner(event.pointerId);
+        const moveOwner =
+          lockedOwner === 'none'
+            ? classifyInteraction(
+                getInteractionOwnerOptions(
+                  buildPointerInteractionInput(
+                    event,
+                    event.button === undefined || event.button === -1 ? 0 : event.button
+                  )
+                )
+              )
+            : lockedOwner;
+        if (moveOwner !== 'drawing') {
+          return;
+        }
         const point = toCanvasPoint(event.clientX, event.clientY);
         if (
           effectiveTool === 'line' &&
@@ -1601,6 +2152,10 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       };
 
       const handlePointerUp = (event: PointerEvent) => {
+        const owner = gestureOwnerRef.current.endPointer(event.pointerId);
+        if (owner !== 'drawing') {
+          return;
+        }
         if (effectiveTool === 'bezier') {
           dispatchInteraction({
             type: 'POINTER_UP',
@@ -1639,6 +2194,12 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (!isClickToPlaceTool(effectiveTool)) {
           return;
         }
+        const owner = classifyInteraction(
+          getInteractionOwnerOptions(buildPointerInteractionInput(event, event.button ?? 0))
+        );
+        if (owner !== 'drawing') {
+          return;
+        }
         pendingLineClick = null;
         // Forward as a POINTER_DOWN with detail=2 — the reducer recognises
         // that as the polygon/line finish signal.
@@ -1648,6 +2209,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           point,
           detail: 2,
         });
+      };
+      const handleDoubleClickEvent: EventListener = (event) => {
+        if (isDoubleClickDomEvent(event)) {
+          handleDoubleClick(event);
+        }
       };
 
       const handleKeyDown = (event: KeyboardEvent) => {
@@ -1661,24 +2227,37 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         dispatchInteraction({ type: 'BLUR' });
       };
 
-      host.addEventListener('pointerdown', handlePointerDown);
+      listenerTarget.addEventListener('pointerdown', handlePointerDownEvent, pointerDownListenerOptions);
       // Placement drags (line/bezier) must survive leaving the host between
       // pointerdown and pointerup; document listeners preserve that lifecycle.
       document.addEventListener('pointermove', handlePointerMove);
       document.addEventListener('pointerup', handlePointerUp);
-      host.addEventListener('dblclick', handleDoubleClick);
+      listenerTarget.addEventListener('dblclick', handleDoubleClickEvent);
       window.addEventListener('keydown', handleKeyDown);
       window.addEventListener('blur', handleBlur);
 
       return () => {
-        host.removeEventListener('pointerdown', handlePointerDown);
+        listenerTarget.removeEventListener(
+          'pointerdown',
+          handlePointerDownEvent,
+          pointerDownListenerOptions
+        );
         document.removeEventListener('pointermove', handlePointerMove);
         document.removeEventListener('pointerup', handlePointerUp);
-        host.removeEventListener('dblclick', handleDoubleClick);
+        listenerTarget.removeEventListener('dblclick', handleDoubleClickEvent);
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('blur', handleBlur);
+        gestureOwnerRef.current.reset();
       };
-    }, [effectiveTool, getLocalCoordinates, isDrawingEnabled, resolvePointerSnap]);
+    }, [
+      effectiveTool,
+      eventTarget,
+      getInteractionOwnerOptions,
+      getLocalCoordinates,
+      resolveInteractiveCanvasPoint,
+      isVirtualPaperActive,
+      isDrawingEnabled,
+    ]);
 
     const linePreviewStroke: LineStrokeV2 | null =
       interactionState.phase === 'placingLine'
@@ -1792,6 +2371,14 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       if (!cursorEnabled) return undefined;
       const host = hostRef.current;
       if (!host) return undefined;
+      const listenerTarget = resolveDrawingEventTarget(eventTarget) ?? host;
+      const pointerDownListenerOptions = shouldCaptureVirtualPaperPointerDown(
+        listenerTarget,
+        host,
+        isVirtualPaperActive
+      )
+        ? POINTER_DOWN_CAPTURE_OPTIONS
+        : undefined;
 
       const normalizePointerType = (value: string | undefined): DrawingInputMethod => {
         if (value === 'touch' || value === 'pen' || value === 'mouse') {
@@ -1801,18 +2388,16 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       };
 
       const computePositions = (clientX: number, clientY: number) => {
-        const screen = getLocalCoordinates(clientX, clientY);
-        if (!isSnapEligibleTool(effectiveToolRef.current)) {
-          const canvas = screenToCanvas(screen, viewportRef.current);
-          return { screen, canvas };
-        }
-        const snapped = resolvePointerSnap(
-          screen,
+        const rawScreen = getLocalCoordinates(clientX, clientY);
+        const canvas = resolveInteractiveCanvasPoint(
+          rawScreen,
+          effectiveToolRef.current,
           viewportRef.current,
           snapOptionsRef.current,
           strokesRef.current
         );
-        return { screen: snapped.screen, canvas: snapped.canvas };
+        const screen = canvasToScreen(canvas, viewportRef.current);
+        return { screen, canvas };
       };
 
       const readPointer = (
@@ -1850,6 +2435,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
 
       const handleMove = (event: Event) => {
         const { clientX, clientY, pointerId, pointerType } = readPointer(event);
+        const owner = gestureOwnerRef.current.getPointerOwner(pointerId);
+        if (owner === 'virtual-paper') {
+          setCursorState((prev) => ({ ...prev, visible: false }));
+          return;
+        }
         const { screen, canvas } = computePositions(clientX, clientY);
         if (pointerType === 'touch' && cursorPointerDownRef.current) {
           cursorPointersRef.current.set(pointerId, screen);
@@ -1868,8 +2458,16 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       };
 
       const handleDown = (event: Event) => {
+        const pointer = readPointer(event);
+        const owner = gestureOwnerRef.current.getPointerOwner(pointer.pointerId);
+        if (owner === 'virtual-paper') {
+          cursorPointerDownRef.current = false;
+          cursorPointersRef.current.delete(pointer.pointerId);
+          setCursorState((prev) => ({ ...prev, visible: false, pointerType: pointer.pointerType }));
+          return;
+        }
         cursorPointerDownRef.current = true;
-        const { clientX, clientY, pointerId, pointerType } = readPointer(event);
+        const { clientX, clientY, pointerId, pointerType } = pointer;
         const { screen, canvas } = computePositions(clientX, clientY);
         if (pointerType === 'touch') {
           cursorPointersRef.current.set(pointerId, screen);
@@ -1903,10 +2501,17 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
             return;
           }
 
+          const canvas = resolveInteractiveCanvasPoint(
+            nextTouchPointer,
+            effectiveToolRef.current,
+            viewportRef.current,
+            snapOptionsRef.current,
+            strokesRef.current
+          );
           setCursorState({
             visible: true,
-            screen: nextTouchPointer,
-            canvas: screenToCanvas(nextTouchPointer, viewportRef.current),
+            screen: canvasToScreen(canvas, viewportRef.current),
+            canvas,
             pointerType: pointer.pointerType,
           });
         }
@@ -1918,22 +2523,38 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         setCursorState((prev) => ({ ...prev, visible: false }));
       };
 
-      host.addEventListener('pointerenter', handleEnter);
-      host.addEventListener('pointermove', handleMove);
-      host.addEventListener('pointerleave', handleLeave);
-      host.addEventListener('pointerdown', handleDown);
-      host.addEventListener('pointerup', handleUp);
+      listenerTarget.addEventListener('pointerenter', handleEnter);
+      listenerTarget.addEventListener('pointermove', handleMove);
+      listenerTarget.addEventListener('pointerleave', handleLeave);
+      listenerTarget.addEventListener('pointerdown', handleDown, pointerDownListenerOptions);
+      listenerTarget.addEventListener('pointerup', handleUp);
       window.addEventListener('blur', handleWindowBlur);
 
       return () => {
-        host.removeEventListener('pointerenter', handleEnter);
-        host.removeEventListener('pointermove', handleMove);
-        host.removeEventListener('pointerleave', handleLeave);
-        host.removeEventListener('pointerdown', handleDown);
-        host.removeEventListener('pointerup', handleUp);
+        listenerTarget.removeEventListener('pointerenter', handleEnter);
+        listenerTarget.removeEventListener('pointermove', handleMove);
+        listenerTarget.removeEventListener('pointerleave', handleLeave);
+        listenerTarget.removeEventListener('pointerdown', handleDown, pointerDownListenerOptions);
+        listenerTarget.removeEventListener('pointerup', handleUp);
         window.removeEventListener('blur', handleWindowBlur);
       };
-    }, [cursorEnabled, getLocalCoordinates, resolvePointerSnap]);
+    }, [
+      cursorEnabled,
+      eventTarget,
+      getLocalCoordinates,
+      resolveInteractiveCanvasPoint,
+      isVirtualPaperActive,
+    ]);
+
+    const cursorStrokeRadius = (resolvedOpenWidth * viewport.scale) / 2;
+    const crosshairStrokeRadius =
+      ((isBboxShapeTool(effectiveTool) ? resolvedClosedWidth : resolvedOpenWidth) *
+        viewport.scale) /
+      2;
+    const crosshairCircleRadius = Math.min(
+      Math.max(crosshairStrokeRadius, 1),
+      Math.max(1, cursorSize / 2 - 1)
+    );
 
     const cursorRenderState: DrawingCursorRenderState = {
       screen: cursorState.screen,
@@ -1941,8 +2562,220 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       pointerType: cursorState.pointerType,
       activeTool: effectiveTool,
       visible: cursorState.visible,
-      eraserRadius: effectiveTool === 'eraser' ? resolvedOpenWidth / 2 : undefined,
+      eraserRadius: effectiveTool === 'eraser' ? cursorStrokeRadius : undefined,
     };
+
+    const svgContentTransform = isVirtualPaperActive
+      ? undefined
+      : `translate(${viewport.tx} ${viewport.ty}) scale(${viewport.scale})`;
+    // React Native Web (used by @hamster-note/virtual-paper under React 18)
+    // does not auto-size the absolutely-positioned VP container — it collapses
+    // to 0×0, making the inner SVG un-hit-testable. Explicitly force it to fill
+    // the wrapper so pointer interactions reach the drawing surface.
+    const virtualPaperContainerStyle: CSSProperties | undefined = isVirtualPaperActive
+      ? { width: '100%', height: '100%', ...(overflow !== undefined ? { overflow } : {}) }
+      : undefined;
+
+    const drawingSurfaceSvg = (
+      <svg
+        data-pressure-multiplier={String(resolvedPressureMultiplier)}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          overflow,
+        }}
+      >
+        <title>Drawing surface</title>
+        <g transform={svgContentTransform}>
+          {strokes.map((stroke) => (
+            <StrokeRenderer
+              key={stroke.id}
+              stroke={stroke}
+              isActive={selectedIdSet.has(stroke.id)}
+              fallbackColor={resolvedColor}
+              fallbackWidth={resolvedOpenWidth}
+              fallbackClosedWidth={resolvedClosedWidth}
+              fallbackDashArray={resolvedDashArray}
+              fallbackDashOffset={resolvedDashOffset}
+              fallbackFillColor={fillColor}
+              fallbackFillOpacity={resolvedFillOpacity}
+              pressureMultiplier={resolvedPressureMultiplier}
+            />
+          ))}
+
+          {activeStroke && (
+            <StrokeRenderer
+              stroke={activeStroke}
+              isActive={true}
+              fallbackColor={resolvedColor}
+              fallbackWidth={resolvedOpenWidth}
+              fallbackClosedWidth={resolvedClosedWidth}
+              fallbackDashArray={resolvedDashArray}
+              fallbackDashOffset={resolvedDashOffset}
+              fallbackFillColor={fillColor}
+              fallbackFillOpacity={resolvedFillOpacity}
+              pressureMultiplier={resolvedPressureMultiplier}
+            />
+          )}
+
+          {linePreviewStroke && (
+            <StrokeRenderer
+              stroke={linePreviewStroke}
+              isActive={true}
+              fallbackColor={resolvedColor}
+              fallbackWidth={resolvedOpenWidth}
+              fallbackClosedWidth={resolvedClosedWidth}
+              fallbackDashArray={resolvedDashArray}
+              fallbackDashOffset={resolvedDashOffset}
+              fallbackFillColor={fillColor}
+              fallbackFillOpacity={resolvedFillOpacity}
+              pressureMultiplier={resolvedPressureMultiplier}
+            />
+          )}
+
+          {polygonPreviewStroke && (
+            <StrokeRenderer
+              stroke={polygonPreviewStroke}
+              isActive={true}
+              fallbackColor={resolvedColor}
+              fallbackWidth={resolvedOpenWidth}
+              fallbackClosedWidth={resolvedClosedWidth}
+              fallbackDashArray={resolvedDashArray}
+              fallbackDashOffset={resolvedDashOffset}
+              fallbackFillColor={fillColor}
+              fallbackFillOpacity={resolvedFillOpacity}
+              pressureMultiplier={resolvedPressureMultiplier}
+            />
+          )}
+
+          {bezierPreviewStroke && (
+            <StrokeRenderer
+              stroke={bezierPreviewStroke}
+              isActive={true}
+              fallbackColor={resolvedColor}
+              fallbackWidth={resolvedOpenWidth}
+              fallbackClosedWidth={resolvedClosedWidth}
+              fallbackDashArray={resolvedDashArray}
+              fallbackDashOffset={resolvedDashOffset}
+              fallbackFillColor={fillColor}
+              fallbackFillOpacity={resolvedFillOpacity}
+              pressureMultiplier={resolvedPressureMultiplier}
+            />
+          )}
+
+          <g data-testid="eraser-trajectory-layer">
+            {resolvedEraserTrajectory.visible &&
+              effectiveTool === 'eraser' &&
+              eraserTrajectoryPoints.length > 0 && (
+                <polyline
+                  data-testid="eraser-trajectory"
+                  points={eraserTrajectoryPoints.map((point) => `${point.x},${point.y}`).join(' ')}
+                  stroke={resolvedEraserTrajectory.color}
+                  strokeWidth={resolvedEraserTrajectory.lineWidth}
+                  opacity={resolvedEraserTrajectory.opacity}
+                  fill="none"
+                  pointerEvents="none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              )}
+          </g>
+          {lassoPreviewPoints.length > 1 && (
+            <polyline
+              data-testid="lasso-preview"
+              points={lassoPreviewPoints.map((point) => `${point.x},${point.y}`).join(' ')}
+              fill="rgba(59,130,246,0.1)"
+              stroke="rgb(59,130,246)"
+              strokeWidth={2}
+              strokeDasharray="4 4"
+              pointerEvents="none"
+            />
+          )}
+          {effectiveTool === 'lasso' && selectedIds.length > 0 && selectionBox != null && (
+            <rect
+              data-testid="lasso-selection-box"
+              x={selectionBox.minX}
+              y={selectionBox.minY}
+              width={selectionBox.maxX - selectionBox.minX}
+              height={selectionBox.maxY - selectionBox.minY}
+              fill="rgba(59,130,246,0.2)"
+              stroke="rgb(59,130,246)"
+              strokeWidth={3}
+              strokeDasharray="4 4"
+              vectorEffect="non-scaling-stroke"
+              pointerEvents="none"
+              data-padding={SELECTION_BOX_PADDING}
+            />
+          )}
+
+          {isRulerEnabled && currentRulerState && (
+            <g
+              data-testid="drawing-ruler"
+              data-ruler-center-x={String(currentRulerState.center.x)}
+              data-ruler-center-y={String(currentRulerState.center.y)}
+              data-ruler-rotation={String(currentRulerState.rotationRad)}
+              data-ruler-length={String(currentRulerState.length)}
+              data-ruler-height={String(currentRulerState.height)}
+              transform={`translate(${currentRulerState.center.x} ${currentRulerState.center.y}) rotate(${(currentRulerState.rotationRad * 180) / Math.PI})`}
+            >
+              <rect
+                data-testid="drawing-ruler-background"
+                x={-currentRulerState.length / 2}
+                y={-currentRulerState.height / 2}
+                width={currentRulerState.length}
+                height={currentRulerState.height}
+                fill={effectiveRulerOptions.backgroundColor ?? '#e0e0e0'}
+                fillOpacity={String(effectiveRulerOptions.backgroundOpacity ?? 0.2)}
+              />
+              <circle
+                data-testid="drawing-ruler-drag-grip"
+                cx={0}
+                cy={0}
+                r={effectiveRulerOptions.dragGripSize ?? 24}
+                fill="white"
+                stroke="grey"
+                strokeWidth={2}
+              />
+              <g className="ruler-ticks">
+                {generateTicks(currentRulerState, {
+                  minorSpacing: effectiveRulerOptions.minorTickSpacing ?? 10,
+                  majorSpacing: (effectiveRulerOptions.minorTickSpacing ?? 10) * (effectiveRulerOptions.majorTickEvery ?? 5),
+                }).map((tick) => {
+                  const isCenter = tick.localX === 0;
+                  return (
+                    <g key={tick.localX.toFixed(6)} transform={`translate(${tick.localX} ${-currentRulerState.height / 2})`}>
+                      <line
+                        data-testid={isCenter ? 'drawing-ruler-center-tick' : 'drawing-ruler-tick'}
+                        x1={0}
+                        y1={0}
+                        x2={0}
+                        y2={tick.kind === 'major' ? 20 : 10}
+                        stroke="black"
+                        strokeWidth={1}
+                      />
+                      {tick.label && (
+                        <text
+                          x={0}
+                          y={35}
+                          fontSize={12}
+                          textAnchor="middle"
+                          fill="black"
+                        >
+                          {tick.label}
+                        </text>
+                      )}
+                    </g>
+                  );
+                })}
+              </g>
+            </g>
+          )}
+        </g>
+      </svg>
+    );
 
     return (
       <div
@@ -1965,142 +2798,15 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           cursor: cursorEnabled ? 'none' : undefined,
         }}
       >
-        <svg
-          data-pressure-multiplier={String(resolvedPressureMultiplier)}
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-          }}
+        <VirtualPaperSurfaceFrame
+          enabled={isVirtualPaperActive}
+          options={resolvedVirtualPaperOptions}
+          viewport={viewport}
+          onViewportChange={handleVirtualPaperViewportChange}
+          containerStyle={virtualPaperContainerStyle}
         >
-          <title>Drawing surface</title>
-          <g transform={`translate(${viewport.tx} ${viewport.ty}) scale(${viewport.scale})`}>
-            {strokes.map((stroke) => (
-              <StrokeRenderer
-                key={stroke.id}
-                stroke={stroke}
-                isActive={selectedIdSet.has(stroke.id)}
-                fallbackColor={resolvedColor}
-                fallbackWidth={resolvedOpenWidth}
-                fallbackClosedWidth={resolvedClosedWidth}
-                fallbackDashArray={resolvedDashArray}
-                fallbackDashOffset={resolvedDashOffset}
-                fallbackFillColor={fillColor}
-                fallbackFillOpacity={resolvedFillOpacity}
-                pressureMultiplier={resolvedPressureMultiplier}
-              />
-            ))}
-
-            {activeStroke && (
-              <StrokeRenderer
-                stroke={activeStroke}
-                isActive={true}
-                fallbackColor={resolvedColor}
-                fallbackWidth={resolvedOpenWidth}
-                fallbackClosedWidth={resolvedClosedWidth}
-                fallbackDashArray={resolvedDashArray}
-                fallbackDashOffset={resolvedDashOffset}
-                fallbackFillColor={fillColor}
-                fallbackFillOpacity={resolvedFillOpacity}
-                pressureMultiplier={resolvedPressureMultiplier}
-              />
-            )}
-
-            {linePreviewStroke && (
-              <StrokeRenderer
-                stroke={linePreviewStroke}
-                isActive={true}
-                fallbackColor={resolvedColor}
-                fallbackWidth={resolvedOpenWidth}
-                fallbackClosedWidth={resolvedClosedWidth}
-                fallbackDashArray={resolvedDashArray}
-                fallbackDashOffset={resolvedDashOffset}
-                fallbackFillColor={fillColor}
-                fallbackFillOpacity={resolvedFillOpacity}
-                pressureMultiplier={resolvedPressureMultiplier}
-              />
-            )}
-
-            {polygonPreviewStroke && (
-              <StrokeRenderer
-                stroke={polygonPreviewStroke}
-                isActive={true}
-                fallbackColor={resolvedColor}
-                fallbackWidth={resolvedOpenWidth}
-                fallbackClosedWidth={resolvedClosedWidth}
-                fallbackDashArray={resolvedDashArray}
-                fallbackDashOffset={resolvedDashOffset}
-                fallbackFillColor={fillColor}
-                fallbackFillOpacity={resolvedFillOpacity}
-                pressureMultiplier={resolvedPressureMultiplier}
-              />
-            )}
-
-            {bezierPreviewStroke && (
-              <StrokeRenderer
-                stroke={bezierPreviewStroke}
-                isActive={true}
-                fallbackColor={resolvedColor}
-                fallbackWidth={resolvedOpenWidth}
-                fallbackClosedWidth={resolvedClosedWidth}
-                fallbackDashArray={resolvedDashArray}
-                fallbackDashOffset={resolvedDashOffset}
-                fallbackFillColor={fillColor}
-                fallbackFillOpacity={resolvedFillOpacity}
-                pressureMultiplier={resolvedPressureMultiplier}
-              />
-            )}
-
-            <g data-testid="eraser-trajectory-layer">
-              {resolvedEraserTrajectory.visible &&
-                effectiveTool === 'eraser' &&
-                eraserTrajectoryPoints.length > 0 && (
-                  <polyline
-                    data-testid="eraser-trajectory"
-                    points={eraserTrajectoryPoints
-                      .map((point) => `${point.x},${point.y}`)
-                      .join(' ')}
-                    stroke={resolvedEraserTrajectory.color}
-                    strokeWidth={resolvedEraserTrajectory.lineWidth}
-                    opacity={resolvedEraserTrajectory.opacity}
-                    fill="none"
-                    pointerEvents="none"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                )}
-            </g>
-            {lassoPreviewPoints.length > 1 && (
-              <polyline
-                data-testid="lasso-preview"
-                points={lassoPreviewPoints.map((point) => `${point.x},${point.y}`).join(' ')}
-                fill="rgba(59,130,246,0.1)"
-                stroke="rgb(59,130,246)"
-                strokeWidth={2}
-                strokeDasharray="4 4"
-                pointerEvents="none"
-              />
-            )}
-            {effectiveTool === 'lasso' && selectedIds.length > 0 && selectionBox != null && (
-              <rect
-                data-testid="lasso-selection-box"
-                x={selectionBox.minX}
-                y={selectionBox.minY}
-                width={selectionBox.maxX - selectionBox.minX}
-                height={selectionBox.maxY - selectionBox.minY}
-                fill="rgba(59,130,246,0.2)"
-                stroke="rgb(59,130,246)"
-                strokeWidth={3}
-                strokeDasharray="4 4"
-                vectorEffect="non-scaling-stroke"
-                pointerEvents="none"
-                data-padding={SELECTION_BOX_PADDING}
-              />
-            )}
-          </g>
-        </svg>
+          {drawingSurfaceSvg}
+        </VirtualPaperSurfaceFrame>
         {cursorEnabled && cursorState.visible && (
           <div
             data-crosshair-layer
@@ -2176,7 +2882,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
                     data-testid="crosshair-center-circle"
                     cx={cursorSize / 2}
                     cy={cursorSize / 2}
-                    r={isBboxShapeTool(effectiveTool) ? resolvedClosedWidth / 2 : resolvedOpenWidth / 2}
+                    r={crosshairCircleRadius}
                     fill="none"
                     stroke={cursorColor}
                     strokeWidth={1}

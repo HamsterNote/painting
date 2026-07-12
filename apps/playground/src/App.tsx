@@ -5,8 +5,11 @@ import {
   type DrawingSurfaceHandle,
   type DrawingTool,
   type DrawingValue,
+  type DrawingRulerState,
+  type DrawingRulerOptions,
 } from '@hamster-note/painting';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ExternalPropsDemo } from './ExternalPropsDemo';
 
 /**
  * Eraser commit mode union literal — mirrors the exported
@@ -100,6 +103,12 @@ const SEED_VALUE: DrawingValue = {
 
 export default function App() {
   const [tool, setTool] = useState<DrawingTool>('pen');
+  const [rulerEnabled, setRulerEnabled] = useState(false);
+  // ===== Virtual-paper 滚动/平移模式开关 (Task 9) =====
+  // 启用后 DrawingSurface 将虚拟纸张交给 @hamster-note/virtual-paper 管理视口变换
+  const [virtualPaperEnabled, setVirtualPaperEnabled] = useState(false);
+  const [rulerStateUncontrolled, setRulerStateUncontrolled] = useState<DrawingRulerState | undefined>(undefined);
+  const [rulerStateControlled, setRulerStateControlled] = useState<DrawingRulerState | undefined>(undefined);
   const [color, setColor] = useState('#000000');
   const [width, setWidth] = useState(2);
   const [pressure, setPressure] = useState(false);
@@ -395,6 +404,22 @@ export default function App() {
     };
   }, [snapEndpoints, snapLines, snapRadius]);
 
+  const rulerUncontrolledOptions: false | DrawingRulerOptions = rulerEnabled
+    ? {
+        enabled: true,
+        state: rulerStateUncontrolled,
+        defaultState: rulerStateUncontrolled,
+      }
+    : false;
+
+  const rulerControlledOptions: false | DrawingRulerOptions = rulerEnabled
+    ? {
+        enabled: true,
+        state: rulerStateControlled,
+        defaultState: rulerStateControlled,
+      }
+    : false;
+
   // Memoize so DrawingSurface 不会因为父组件 re-render 而频繁触发 eraserTrajectory 副作用。
   const eraserTrajectoryProp = useMemo(
     () => ({
@@ -447,12 +472,38 @@ export default function App() {
               cursor: 'pointer',
               border: tool === t.value ? '2px solid #333' : '1px solid #aaa',
               background: tool === t.value ? '#e0e0e0' : '#fff',
-              borderRadius: '3px',
             }}
           >
             {t.label}
           </button>
         ))}
+        <button
+          type="button"
+          data-testid="drawing-ruler-toggle"
+          onClick={() => setRulerEnabled((prev) => !prev)}
+          style={{
+            padding: '4px 10px',
+            cursor: 'pointer',
+            border: rulerEnabled ? '2px solid #333' : '1px solid #aaa',
+            background: rulerEnabled ? '#e0e0e0' : '#fff',
+          }}
+        >
+          {rulerEnabled ? '隐藏尺子' : '添加尺子'}
+        </button>
+
+        <button
+          type="button"
+          data-testid="drawing-virtualpaper-toggle"
+          onClick={() => setVirtualPaperEnabled((prev) => !prev)}
+          style={{
+            padding: '4px 10px',
+            cursor: 'pointer',
+            border: virtualPaperEnabled ? '2px solid #333' : '1px solid #aaa',
+            background: virtualPaperEnabled ? '#e0e0e0' : '#fff',
+          }}
+        >
+          {virtualPaperEnabled ? 'VirtualPaper ON' : 'VirtualPaper OFF'}
+        </button>
 
         {toolInstruction && (
           <span
@@ -970,6 +1021,8 @@ export default function App() {
               onChange={handleUncontrolledChange}
               onSelectionChange={setUncontrolledSelectedIds}
               tool={tool}
+              ruler={rulerUncontrolledOptions}
+              onRulerChange={setRulerStateUncontrolled}
               strokeColor={color}
               strokeWidth={effectiveStrokeWidth}
               pressure={pressure}
@@ -985,6 +1038,7 @@ export default function App() {
               snap={snapProp}
               eraserCommitMode={eraserCommitMode}
               eraserTrajectory={eraserTrajectoryProp}
+              virtualPaper={virtualPaperEnabled}
               testID="drawing-surface-uncontrolled"
             />
           </div>
@@ -1013,6 +1067,8 @@ export default function App() {
               onChange={handleControlledChange}
               onSelectionChange={setControlledSelectedIds}
               tool={tool}
+              ruler={rulerControlledOptions}
+              onRulerChange={setRulerStateControlled}
               strokeColor={color}
               strokeWidth={effectiveStrokeWidth}
               pressure={pressure}
@@ -1028,6 +1084,7 @@ export default function App() {
               snap={snapProp}
               eraserCommitMode={eraserCommitMode}
               eraserTrajectory={eraserTrajectoryProp}
+              virtualPaper={virtualPaperEnabled}
               testID="drawing-surface-controlled"
             />
           </div>
@@ -1059,6 +1116,8 @@ export default function App() {
           </pre>
         </div>
       </div>
+
+      <ExternalPropsDemo />
 
       {/* ===== 采样率测试 Demo ===== */}
       <div

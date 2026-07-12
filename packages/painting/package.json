@@ -1,6 +1,6 @@
 {
   "name": "@hamster-note/painting",
-  "version": "0.1.1-beta-4",
+  "version": "0.1.1-beta-5",
   "private": false,
   "repository": {
     "type": "git",
@@ -50,5 +50,10 @@
       "module",
       "typescript"
     ]
+  },
+  "dependencies": {
+    "@system-ui-js/multi-drag": "0.4.0",
+    "@system-ui-js/multi-drag-core": "0.4.0",
+    "@hamster-note/virtual-paper": "0.1.0-beta.2"
   }
 }
