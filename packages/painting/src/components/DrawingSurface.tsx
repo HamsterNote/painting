@@ -792,10 +792,10 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         {
           inertial: false,
           getPose,
-          setPose: (_element, pose) => {
+          setPose: (_element: HTMLElement, pose: Partial<Pose>) => {
             commitRulerState(pose, false);
           },
-          setPoseOnEnd: (_element, pose) => {
+          setPoseOnEnd: (_element: HTMLElement, pose: Partial<Pose>) => {
             commitRulerState(pose, true);
           },
         },
