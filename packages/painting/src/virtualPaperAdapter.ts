@@ -1,22 +1,22 @@
-/// <reference path="./types/virtual-paper.d.ts" />
-import type * as React from 'react';
+import type { ComponentType } from 'react';
 import {
   VirtualPaper,
   VirtualPaperInitialPlacement,
   VirtualPaperInteractionMode,
+  VirtualPaperRenderMode,
   type VirtualPaperProps,
   type VirtualPaperTransform,
 } from '@hamster-note/virtual-paper';
-import {
-  SAFE_DEFAULT_VIRTUAL_PAPER_INTERACTIONS,
-  type DrawingSurfaceVirtualPaperInteraction,
-  type DrawingSurfaceVirtualPaperOptions,
-} from './virtualPaperOptions';
 import {
   virtualPaperTransformToViewport,
   viewportToVirtualPaperTransform,
   type DrawingViewport,
 } from './viewport';
+import {
+  SAFE_DEFAULT_VIRTUAL_PAPER_INTERACTIONS,
+  type DrawingSurfaceVirtualPaperInteraction,
+  type DrawingSurfaceVirtualPaperOptions,
+} from './virtualPaperOptions';
 
 const INTERACTION_MODE_BY_OPTION = {
   mouseWheelZoom: VirtualPaperInteractionMode.MouseWheelZoom,
@@ -32,7 +32,7 @@ const INTERACTION_MODE_BY_OPTION = {
   (typeof VirtualPaperInteractionMode)[keyof typeof VirtualPaperInteractionMode]
 >;
 
-export const VirtualPaperRenderer: React.ComponentType<VirtualPaperProps> = VirtualPaper;
+export const VirtualPaperRenderer: ComponentType<VirtualPaperProps> = VirtualPaper;
 
 export function isVirtualPaperEnabled(
   virtualPaper?: boolean | DrawingSurfaceVirtualPaperOptions
@@ -54,7 +54,7 @@ export function toVirtualPaperProps(
   onViewportChange: (viewport: DrawingViewport) => void
 ): VirtualPaperProps {
   return {
-    renderMode: 'Transform',
+    renderMode: VirtualPaperRenderMode.Transform,
     enabledInteractions: mapEnabledInteractions(options.enabledInteractions),
     ...(options.initialPlacement === undefined
       ? {}

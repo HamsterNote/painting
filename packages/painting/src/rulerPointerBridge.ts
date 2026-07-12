@@ -1,8 +1,5 @@
-import {
-  buildPointerInteractionInput,
-  classifyInteraction,
-  type ClassifyInteractionOptions,
-} from './interactionOwnership';
+import type { ClassifyInteractionOptions } from './interactionOwnership';
+import { buildPointerInteractionInput, classifyInteraction } from './interactionOwnership';
 import { POINTER_DOWN_CAPTURE_OPTIONS } from './virtualPaperPointerCapture';
 
 type MultiDragPointerDownBridge = {
@@ -30,9 +27,6 @@ export function installCapturePhaseRulerPointerBridge(
   options: RulerPointerBridgeOptions
 ): () => void {
   const handleRulerPointerDownBridge = (event: PointerEvent) => {
-    if (event.pointerType !== 'mouse') {
-      return;
-    }
     const owner = classifyInteraction(
       options.getInteractionOwnerOptions(buildPointerInteractionInput(event))
     );
