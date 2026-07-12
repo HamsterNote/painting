@@ -43,6 +43,7 @@ export { resolveStrokeStyle } from './render/resolveStrokeStyle';
 export type { RenderableStroke, StrokeRendererProps } from './render/StrokeRenderer';
 export { StrokeRenderer } from './render/StrokeRenderer';
 export type { DrawingStrokeSmoothingOptions } from './stroke-helpers';
+export type { DrawingSurfaceVirtualPaperOptions } from './virtualPaperOptions';
 export type { LassoSelectionOptions } from './utils';
 export type { RulerTransform } from './ruler/geometry';
 export {
