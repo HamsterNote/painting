@@ -4,16 +4,16 @@ import { createRef, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type {
   DrawingInputMethod,
-  DrawingSurfaceHandle,
-  DrawingStroke,
-  DrawingTool,
-  DrawingValue,
   DrawingRulerOptions,
   DrawingRulerState,
+  DrawingStroke,
+  DrawingSurfaceHandle,
+  DrawingTool,
+  DrawingValue,
 } from '../components/DrawingSurface';
 import { DrawingSurface } from '../components/DrawingSurface';
-import { classifyInteraction } from '../interactionOwnership';
-import type { InteractionOwner } from '../interactionOwnership';
+import { classifyInteraction, type InteractionOwner } from '../interactionOwnership';
+import type { DrawingViewport } from '../viewport';
 
 type MockInputEvent = {
   pointerType?: string;
@@ -5245,6 +5245,250 @@ describe('DrawingSurface', () => {
       expect(container.querySelector('[data-testid="lasso-preview"]')).toBeNull();
     });
 
+    it('renders eight resize handles around the lasso selection box', () => {
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          tool="lasso"
+          selectedStrokeIds={['lasso-target']}
+        />
+      );
+
+      const handles = Array.from(container.querySelectorAll('[data-lasso-resize-handle]'));
+      expect(handles).toHaveLength(8);
+      expect(handles.map((handle) => handle.getAttribute('data-lasso-resize-handle'))).toEqual([
+        'nw',
+        'n',
+        'ne',
+        'e',
+        'se',
+        's',
+        'sw',
+        'w',
+      ]);
+    });
+
+    it('resizes only the horizontal axis when dragging the east handle', () => {
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          onChange={onChange}
+          tool="lasso"
+          selectedStrokeIds={['lasso-target']}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      zeroHostRect(host);
+      const eastHandle = container.querySelector('[data-lasso-resize-handle="e"]');
+      expect(eastHandle).toBeTruthy();
+
+      if (eastHandle) {
+        dispatchElementPointerEvent(
+          eastHandle,
+          'pointerdown',
+          {
+            point: { x: 71, y: 20 },
+            event: { pointerType: 'mouse', button: 0, clientX: 71, clientY: 20 },
+          },
+          41
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointermove',
+          {
+            point: { x: 91, y: 20 },
+            event: { pointerType: 'mouse', button: 0, clientX: 91, clientY: 20 },
+          },
+          41
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointerup',
+          {
+            point: { x: 91, y: 20 },
+            event: { pointerType: 'mouse', button: 0, clientX: 91, clientY: 20 },
+          },
+          41
+        );
+      }
+
+      const resizedStroke = onChange.mock.calls.at(-1)?.[0].strokes.find(
+        (stroke: DrawingStroke) => stroke.id === 'lasso-target'
+      );
+      expect(resizedStroke?.points).toEqual([
+        { x: 20, y: 20 },
+        { x: 80, y: 20 },
+      ]);
+      expect(onChange).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not resize with an input method that is disabled', () => {
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          onChange={onChange}
+          tool="lasso"
+          inputMethods={['pen']}
+          selectedStrokeIds={['lasso-target']}
+        />
+      );
+      const eastHandle = container.querySelector('[data-lasso-resize-handle="e"]');
+      expect(eastHandle).toBeTruthy();
+
+      if (eastHandle) {
+        dispatchElementPointerEvent(
+          eastHandle,
+          'pointerdown',
+          {
+            point: { x: 71, y: 20 },
+            event: { pointerType: 'mouse', button: 0, clientX: 71, clientY: 20 },
+          },
+          43
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointermove',
+          {
+            point: { x: 91, y: 20 },
+            event: { pointerType: 'mouse', button: 0, clientX: 91, clientY: 20 },
+          },
+          43
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointerup',
+          {
+            point: { x: 91, y: 20 },
+            event: { pointerType: 'mouse', button: 0, clientX: 91, clientY: 20 },
+          },
+          43
+        );
+      }
+
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('does not resize when virtual paper owns the pointer gesture', () => {
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          onChange={onChange}
+          tool="lasso"
+          virtualPaper
+          selectedStrokeIds={['lasso-target']}
+        />
+      );
+      const eastHandle = container.querySelector('[data-lasso-resize-handle="e"]');
+      expect(eastHandle).toBeTruthy();
+
+      if (eastHandle) {
+        dispatchElementPointerEvent(
+          eastHandle,
+          'pointerdown',
+          {
+            point: { x: 71, y: 20 },
+            event: { pointerType: 'touch', button: 0, clientX: 71, clientY: 20 },
+          },
+          44
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointermove',
+          {
+            point: { x: 91, y: 20 },
+            event: { pointerType: 'touch', button: 0, clientX: 91, clientY: 20 },
+          },
+          44
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointerup',
+          {
+            point: { x: 91, y: 20 },
+            event: { pointerType: 'touch', button: 0, clientX: 91, clientY: 20 },
+          },
+          44
+        );
+      }
+
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('applies independent horizontal and vertical scales from a corner handle', () => {
+      const onChange = jest.fn();
+      const rectangleFixture: DrawingValue = {
+        strokes: [
+          {
+            id: 'resize-target',
+            tool: 'rect',
+            points: [
+              { x: 20, y: 20 },
+              { x: 60, y: 60 },
+            ],
+            strokeWidth: 4,
+          },
+        ],
+      };
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={rectangleFixture}
+          onChange={onChange}
+          tool="lasso"
+          selectedStrokeIds={['resize-target']}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      zeroHostRect(host);
+      const southeastHandle = container.querySelector('[data-lasso-resize-handle="se"]');
+      expect(southeastHandle).toBeTruthy();
+
+      if (southeastHandle) {
+        dispatchElementPointerEvent(
+          southeastHandle,
+          'pointerdown',
+          {
+            point: { x: 70, y: 70 },
+            event: { pointerType: 'mouse', button: 0, clientX: 70, clientY: 70 },
+          },
+          42
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointermove',
+          {
+            point: { x: 90, y: 110 },
+            event: { pointerType: 'mouse', button: 0, clientX: 90, clientY: 110 },
+          },
+          42
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointerup',
+          {
+            point: { x: 90, y: 110 },
+            event: { pointerType: 'mouse', button: 0, clientX: 90, clientY: 110 },
+          },
+          42
+        );
+      }
+
+      const resizedStroke = onChange.mock.calls.at(-1)?.[0].strokes.find(
+        (stroke: DrawingStroke) => stroke.id === 'resize-target'
+      );
+      expect(resizedStroke?.points).toEqual([
+        { x: 20, y: 20 },
+        { x: 80, y: 100 },
+      ]);
+    });
+
     it('does not render a selection box when lasso selection is empty', () => {
       const { container } = render(
         <DrawingSurface testID="drawing-surface-host" value={lassoFixture()} tool="lasso" />
@@ -7449,4 +7693,73 @@ describe('eraserCursorAndTrajectory', () => {
   });
 
   /* eslint-enable jest/expect-expect */
+
+  describe('controlled viewport', () => {
+    it('data-scale/data-tx/data-ty reflect the viewport prop', () => {
+      const viewport: DrawingViewport = { scale: 2, tx: 50, ty: -30 };
+      render(<DrawingSurface testID="ds-host" viewport={viewport} />);
+      const host = screen.getByTestId('ds-host');
+      expect(host.getAttribute('data-scale')).toBe('2');
+      expect(host.getAttribute('data-tx')).toBe('50');
+      expect(host.getAttribute('data-ty')).toBe('-30');
+    });
+
+    it('defaultViewport sets initial state in uncontrolled mode', () => {
+      const defaultViewport: DrawingViewport = { scale: 1.5, tx: 10, ty: 20 };
+      render(<DrawingSurface testID="ds-host" defaultViewport={defaultViewport} />);
+      const host = screen.getByTestId('ds-host');
+      expect(host.getAttribute('data-scale')).toBe('1.5');
+      expect(host.getAttribute('data-tx')).toBe('10');
+      expect(host.getAttribute('data-ty')).toBe('20');
+    });
+
+    it('falls back to default viewport when neither viewport nor defaultViewport is passed', () => {
+      render(<DrawingSurface testID="ds-host" />);
+      const host = screen.getByTestId('ds-host');
+      expect(host.getAttribute('data-scale')).toBe('1');
+      expect(host.getAttribute('data-tx')).toBe('0');
+      expect(host.getAttribute('data-ty')).toBe('0');
+    });
+
+    it('viewport prop takes precedence over defaultViewport', () => {
+      const viewport: DrawingViewport = { scale: 3, tx: 100, ty: 200 };
+      render(
+        <DrawingSurface
+          testID="ds-host"
+          viewport={viewport}
+          defaultViewport={{ scale: 0.5, tx: 1, ty: 2 }}
+        />
+      );
+      const host = screen.getByTestId('ds-host');
+      expect(host.getAttribute('data-scale')).toBe('3');
+      expect(host.getAttribute('data-tx')).toBe('100');
+      expect(host.getAttribute('data-ty')).toBe('200');
+    });
+
+    it('updating viewport prop updates data-scale/data-tx/data-ty (controlled re-render)', () => {
+      const { rerender } = render(<DrawingSurface testID="ds-host" viewport={{ scale: 1, tx: 0, ty: 0 }} />);
+      const host = screen.getByTestId('ds-host');
+      expect(host.getAttribute('data-scale')).toBe('1');
+      expect(host.getAttribute('data-tx')).toBe('0');
+      expect(host.getAttribute('data-ty')).toBe('0');
+
+      rerender(<DrawingSurface testID="ds-host" viewport={{ scale: 2.5, tx: 120, ty: -80 }} />);
+      expect(host.getAttribute('data-scale')).toBe('2.5');
+      expect(host.getAttribute('data-tx')).toBe('120');
+      expect(host.getAttribute('data-ty')).toBe('-80');
+    });
+
+    it('switching from controlled to uncontrolled reveals defaultViewport-initialized state', () => {
+      const { rerender } = render(
+        <DrawingSurface testID="ds-host" viewport={{ scale: 3, tx: 10, ty: 20 }} defaultViewport={{ scale: 0.5, tx: 1, ty: 2 }} />
+      );
+      const host = screen.getByTestId('ds-host');
+      expect(host.getAttribute('data-scale')).toBe('3');
+
+      rerender(<DrawingSurface testID="ds-host" defaultViewport={{ scale: 0.5, tx: 1, ty: 2 }} />);
+      expect(host.getAttribute('data-scale')).toBe('0.5');
+      expect(host.getAttribute('data-tx')).toBe('1');
+      expect(host.getAttribute('data-ty')).toBe('2');
+    });
+  });
 });
