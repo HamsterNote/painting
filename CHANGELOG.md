@@ -5,15 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.1-beta-5] - 2026-07-05
+## [0.2.0] - 2026-07-12
 
 ### Added
+- Virtual-paper integration with gesture ownership system (`feat(painting): integrate virtual-paper with gesture ownership system`)
 - Configurable `eventTarget` and `overflow` props for `DrawingSurface`, with exported `DrawingEventTarget` and `DrawingEventTargetRef` types (`feat(painting): add eventTarget and overflow props with playground demo`)
 - Ruler overlay support with playground controls and regression coverage (`feat(ruler): add non-exclusive ruler overlay`, `feat(playground): add ruler demo toggle`, `test(ruler): verify ruler overlay behavior`)
 - Crosshair center circle and improved cursor sizing for drawing tools (`feat(painting): improve crosshair size and add center circle`)
+- Enhanced crosshair and eraser cursor behavior (`feat(painting): enhance crosshair and eraser cursor behavior`)
+- Snap endpoints and lines functionality (`feat(painting): add snap endpoints and lines functionality`)
 
 ### Changed
 - Added the `@system-ui-js/multi-drag` dependency used by ruler overlay gestures (`build(deps): add multi-drag for ruler overlay`)
+
+### Fixed
+- Export runtime helpers, fix renderMode enum, unblock touch/pen ruler bridge (`fix(painting): export runtime helpers, fix renderMode enum, unblock touch/pen ruler bridge`)
+- Align multi-drag callback types (`fix(painting): align multi-drag callback types`)
+- Include virtual paper ambient types (`fix(painting): include virtual paper ambient types`)
+- Preserve ruler's public projection contract (`fix(ruler): preserve public projection contract`)
+- Ruler interaction: mouse modifier keys, snap edge correction, touch conflict fix (`fix(ruler): 优化尺子交互：鼠标修饰键支持、吸附边缘修正、触摸冲突修复`)
+- Replace global isNaN with Number.isNaN in snap radius input (`fix(painting): replace global isNaN with Number.isNaN in snap radius input`)
+
+### Test
+- Ruler overlay behavior verification (`test(ruler): verify ruler overlay behavior`)
+- Ruler modifier drag regression coverage for Ctrl move and Alt rotate (`test(painting): add ruler modifier drag regression coverage (Ctrl move, Alt rotate)`)
 
 ## [0.1.1-beta-4] - 2026-06-25
 

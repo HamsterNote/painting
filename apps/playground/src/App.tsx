@@ -7,6 +7,8 @@ import {
   type DrawingValue,
   type DrawingRulerState,
   type DrawingRulerOptions,
+  type DrawingViewport,
+  Minimap,
 } from '@hamster-note/painting';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalPropsDemo } from './ExternalPropsDemo';
@@ -123,6 +125,14 @@ export default function App() {
     strokes: [],
   });
   const [uncontrolledStrokes, setUncontrolledStrokes] = useState<DrawingValue>(SEED_VALUE);
+
+  // ===== Controlled DrawingSurface viewport (shared with Minimap) =====
+  const [controlledViewport, setControlledViewport] = useState<DrawingViewport>({
+    scale: 1,
+    tx: 0,
+    ty: 0,
+  });
+  const controlledContainerSize = { width: 400, height: 300 };
 
   // ===== Dash 控制状态 (Task 8/9 dashArray + dashOffset) =====
   const [dashEnabled, setDashEnabled] = useState(false);
@@ -1085,6 +1095,8 @@ export default function App() {
               eraserCommitMode={eraserCommitMode}
               eraserTrajectory={eraserTrajectoryProp}
               virtualPaper={virtualPaperEnabled}
+              viewport={controlledViewport}
+              onViewportChange={setControlledViewport}
               testID="drawing-surface-controlled"
             />
           </div>
@@ -1114,6 +1126,77 @@ export default function App() {
           >
             {JSON.stringify(controlledStrokes, null, 2)}
           </pre>
+        </div>
+      </div>
+
+      {/* ===== Minimap 演示 ===== */}
+      <div
+        style={{
+          marginTop: '30px',
+          borderTop: '1px solid #ddd',
+          paddingTop: '20px',
+        }}
+      >
+        <h2>Minimap (独立缩略图)</h2>
+        <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
+          Minimap 与上方 Controlled 画布共享视口状态。在画布上双指平移/缩放时，Minimap 的视口指示框实时联动；点击 Minimap 可平移画布。
+        </p>
+        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <div>
+            <h3 style={{ fontSize: '14px' }}>Controlled Value Minimap</h3>
+            <Minimap
+              value={controlledStrokes}
+              width={200}
+              height={150}
+              padding={10}
+              background="#fafafa"
+              viewportStroke="#2563eb"
+              viewportFill="rgba(37, 99, 235, 0.1)"
+              testId="playground-minimap-controlled"
+            />
+          </div>
+
+          <div>
+            <h3 style={{ fontSize: '14px' }}>视口指示框 + 点击平移 (与画布联动)</h3>
+            <Minimap
+              value={controlledStrokes}
+              width={200}
+              height={150}
+              padding={10}
+              background="#fafafa"
+              viewport={controlledViewport}
+              containerSize={controlledContainerSize}
+              onViewportChange={setControlledViewport}
+              testId="playground-minimap-viewport"
+            />
+            <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
+              <p>scale: {controlledViewport.scale.toFixed(2)}</p>
+              <p>tx: {controlledViewport.tx.toFixed(0)}</p>
+              <p>ty: {controlledViewport.ty.toFixed(0)}</p>
+              <p style={{ marginTop: '4px' }}>点击 minimap 平移 · 在画布上双指操作改变视口</p>
+            </div>
+            <div style={{ marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setControlledViewport({ scale: 1, tx: 0, ty: 0 })}
+                style={{ fontSize: '12px', padding: '2px 8px', cursor: 'pointer' }}
+              >
+                重置视口
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <h3 style={{ fontSize: '14px' }}>Uncontrolled Value Minimap</h3>
+            <Minimap
+              value={uncontrolledStrokes}
+              width={200}
+              height={150}
+              padding={10}
+              background="#fafafa"
+              testId="playground-minimap-uncontrolled"
+            />
+          </div>
         </div>
       </div>
 

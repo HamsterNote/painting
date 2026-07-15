@@ -905,6 +905,42 @@ export function updateStrokes(value: DrawingValue, strokes: readonly DrawingStro
 }
 
 /**
+ * 计算选中 strokes 的原始几何边界，不包含描边宽度和选区 padding。
+ * 缩放手势以此边界为锚点，保证拖动控制点时图形端点准确跟随指针。
+ */
+export function computeSelectionGeometryBox(
+  strokes: readonly (DrawingStroke | DrawingStrokeV2)[],
+  selectedIds: readonly string[],
+  options: LassoSelectionOptions = {},
+): SelectionBox | null {
+  if (strokes.length === 0 || selectedIds.length === 0) {
+    return null;
+  }
+
+  const resolvedOptions: Required<LassoSelectionOptions> = {
+    ellipseSegments: options.ellipseSegments ?? 48,
+    bezierSegments: options.bezierSegments ?? 48,
+  };
+  const selectedIdSet = new Set(selectedIds);
+  let unionBBox: BoundingBox | null = null;
+
+  for (const stroke of strokes) {
+    if (!selectedIdSet.has(stroke.id)) {
+      continue;
+    }
+
+    const geometry = buildStrokeSelectionGeometry(stroke, resolvedOptions);
+    if (geometry.bbox === null || !isValidBoundingBox(geometry.bbox)) {
+      continue;
+    }
+
+    unionBBox = unionBBox === null ? geometry.bbox : unionBoundingBoxes(unionBBox, geometry.bbox);
+  }
+
+  return unionBBox;
+}
+
+/**
  * 计算当前选中 strokes 的画布坐标选区框。
  *
  * 复用套索命中的 geometry 采样规则，确保 rect/ellipse/polygon/bezier 的边界
