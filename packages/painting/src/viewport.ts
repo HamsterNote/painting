@@ -31,7 +31,11 @@ function safeNumber(value: number, fallback: number): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
-function normalizeViewport(viewport: DrawingViewport): DrawingViewport {
+/**
+ * 将外部视口值收敛到 DrawingSurface 支持的有限平移与缩放范围。
+ * 公开组件在消费调用方传入的 viewport 前应统一走此边界。
+ */
+export function normalizeViewport(viewport: DrawingViewport): DrawingViewport {
   return {
     scale: clampScale(viewport.scale),
     tx: safeNumber(viewport.tx, DEFAULT_DRAWING_VIEWPORT.tx),

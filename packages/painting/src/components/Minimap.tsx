@@ -1,14 +1,14 @@
 import {
-  useCallback,
-  useMemo,
-  useRef,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useMemo,
+  useRef,
 } from 'react';
-import type { DrawingStroke, DrawingValue } from './DrawingSurface';
 import { StrokeRenderer } from '../render/StrokeRenderer';
-import type { DrawingViewport } from '../viewport';
+import { type DrawingViewport, normalizeViewport } from '../viewport';
+import type { DrawingStroke, DrawingValue } from './DrawingSurface';
 
 /**
  * Minimap 内容的包围盒（canvas 坐标空间）。
@@ -227,8 +227,26 @@ export function Minimap({
   style,
   testId = 'minimap',
 }: MinimapProps): React.ReactNode {
+  // 边界计算与实际渲染必须使用同一份有效点集，否则一个非法点会让整条 SVG path 失效。
+  const renderableStrokes = useMemo(
+    () =>
+      value.strokes
+        .map((stroke) => ({
+          ...stroke,
+          points: stroke.points.filter(
+            (point) => Number.isFinite(point.x) && Number.isFinite(point.y),
+          ),
+        }))
+        .filter((stroke) => stroke.points.length > 0),
+    [value.strokes],
+  );
+  const resolvedViewport = useMemo(
+    () => (viewport ? normalizeViewport(viewport) : undefined),
+    [viewport],
+  );
+
   // 1. 计算内容包围盒
-  const bbox = useMemo(() => computeContentBBox(value.strokes), [value.strokes]);
+  const bbox = useMemo(() => computeContentBBox(renderableStrokes), [renderableStrokes]);
 
   // 2. 计算适配变换（将内容居中缩放到 minimap 区域）
   const fit = useMemo(() => {
@@ -240,17 +258,17 @@ export function Minimap({
 
   // 3. 计算视口指示框（若提供了 viewport + containerSize）
   const viewportRect = useMemo(() => {
-    if (!viewport || !containerSize || !bbox) {
+    if (!resolvedViewport || !containerSize || !bbox) {
       return null;
     }
 
-    const scale = viewport.scale !== 0 ? viewport.scale : 1;
+    const scale = resolvedViewport.scale;
 
     // 主画布中可见的 canvas 空间范围
-    const visMinX = -viewport.tx / scale;
-    const visMinY = -viewport.ty / scale;
-    const visMaxX = (containerSize.width - viewport.tx) / scale;
-    const visMaxY = (containerSize.height - viewport.ty) / scale;
+    const visMinX = -resolvedViewport.tx / scale;
+    const visMinY = -resolvedViewport.ty / scale;
+    const visMaxX = (containerSize.width - resolvedViewport.tx) / scale;
+    const visMaxY = (containerSize.height - resolvedViewport.ty) / scale;
 
     // 转换到 minimap SVG 坐标
     const topLeft = canvasToMinimap(visMinX, visMinY, fit);
@@ -262,14 +280,21 @@ export function Minimap({
     const rectH = Math.abs(bottomRight.y - topLeft.y);
 
     return { x: rectX, y: rectY, width: rectW, height: rectH };
-  }, [viewport, containerSize, bbox, fit]);
+  }, [resolvedViewport, containerSize, bbox, fit]);
 
   // 4. 点击平移：将 minimap 点击位置映射为 canvas 坐标，再居中视口
   const svgRef = useRef<SVGSVGElement>(null);
 
   const handlePointerDown = useCallback(
     (event: ReactPointerEvent<SVGSVGElement>) => {
-      if (!onViewportChange || !viewport || !containerSize || !bbox) {
+      if (
+        !onViewportChange ||
+        !resolvedViewport ||
+        !containerSize ||
+        !bbox ||
+        event.button !== 0 ||
+        !event.isPrimary
+      ) {
         return;
       }
 
@@ -294,14 +319,14 @@ export function Minimap({
 
       // 居中视口到该 canvas 点：保持 scale 不变，调整 tx/ty
       const newViewport: DrawingViewport = {
-        scale: viewport.scale,
-        tx: containerSize.width / 2 - canvasPoint.x * viewport.scale,
-        ty: containerSize.height / 2 - canvasPoint.y * viewport.scale,
+        scale: resolvedViewport.scale,
+        tx: containerSize.width / 2 - canvasPoint.x * resolvedViewport.scale,
+        ty: containerSize.height / 2 - canvasPoint.y * resolvedViewport.scale,
       };
 
       onViewportChange(newViewport);
     },
-    [onViewportChange, viewport, containerSize, bbox, fit, width, height],
+    [onViewportChange, resolvedViewport, containerSize, bbox, fit, width, height],
   );
 
   // 阻止默认的 drag 行为，避免拖拽时选中文字
@@ -332,7 +357,7 @@ export function Minimap({
         {/* 笔画层：使用适配变换缩放渲染所有 stroke */}
         {bbox && (
           <g transform={`translate(${fit.tx} ${fit.ty}) scale(${fit.scale})`}>
-            {value.strokes.map((stroke) => (
+            {renderableStrokes.map((stroke) => (
               <StrokeRenderer
                 key={stroke.id}
                 stroke={stroke}

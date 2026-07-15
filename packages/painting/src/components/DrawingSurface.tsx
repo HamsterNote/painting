@@ -57,6 +57,7 @@ import {
   canvasToScreen,
   resetViewport as createResetViewport,
   type DrawingViewport,
+  normalizeViewport,
   screenToCanvas,
 } from '../viewport';
 import { isVirtualPaperEnabled } from '../virtualPaperAdapter';
@@ -734,10 +735,10 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     const gestureOwnerRef = useRef(createGestureOwner());
     // 受控视口：传入 viewportProp 时使用外部值，否则使用内部状态
     const isViewportControlled = viewportProp !== undefined;
-    const [internalViewport, setInternalViewport] = useState<DrawingViewport>(
-      () => defaultViewport ?? createResetViewport()
+    const [internalViewport, setInternalViewport] = useState<DrawingViewport>(() =>
+      defaultViewport ? normalizeViewport(defaultViewport) : createResetViewport()
     );
-    const viewport = isViewportControlled ? viewportProp : internalViewport;
+    const viewport = isViewportControlled ? normalizeViewport(viewportProp) : internalViewport;
     const viewportRef = useRef<DrawingViewport>(viewport);
     viewportRef.current = viewport;
 

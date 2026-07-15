@@ -7713,6 +7713,20 @@ describe('eraserCursorAndTrajectory', () => {
       expect(host.getAttribute('data-ty')).toBe('20');
     });
 
+    it('normalizes invalid controlled viewport values at the public boundary', () => {
+      render(
+        <DrawingSurface
+          testID="ds-host"
+          viewport={{ scale: 0, tx: Number.NaN, ty: Number.POSITIVE_INFINITY }}
+        />
+      );
+      const host = screen.getByTestId('ds-host');
+
+      expect(host.getAttribute('data-scale')).toBe('0.25');
+      expect(host.getAttribute('data-tx')).toBe('0');
+      expect(host.getAttribute('data-ty')).toBe('0');
+    });
+
     it('falls back to default viewport when neither viewport nor defaultViewport is passed', () => {
       render(<DrawingSurface testID="ds-host" />);
       const host = screen.getByTestId('ds-host');

@@ -1,4 +1,7 @@
-import { Minimap as MinimapFromIndex } from '@hamster-note/painting';
+import {
+  Minimap as MinimapFromIndex,
+  normalizeViewport as normalizeViewportFromIndex,
+} from '@hamster-note/painting';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { DrawingStroke, DrawingValue } from '../components/DrawingSurface';
 import { Minimap } from '../components/Minimap';
@@ -75,6 +78,16 @@ describe('Minimap', () => {
       expect(relContainer.querySelector('line, path, rect, ellipse, polygon')).toBeTruthy();
     });
 
+    it('从包入口导出视口归一化函数', () => {
+      expect(
+        normalizeViewportFromIndex({
+          scale: 0,
+          tx: Number.NaN,
+          ty: Number.POSITIVE_INFINITY,
+        }),
+      ).toEqual({ scale: 0.25, tx: 0, ty: 0 });
+    });
+
     it('使用自定义宽高', () => {
       const { container } = render(
         <Minimap value={makeValue([])} width={300} height={200} />,
@@ -138,7 +151,7 @@ describe('Minimap', () => {
       expect(rects.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('过滤掉含无效坐标的点', () => {
+    it('过滤掉含无效坐标的点后仍渲染有效路径', () => {
       const value = makeValue([
         makePenStroke('s1', [
           { x: NaN, y: 0 },
@@ -147,10 +160,10 @@ describe('Minimap', () => {
         ]),
       ]);
 
-      // 不应崩溃，且应渲染有效部分
       const { container } = render(<Minimap value={value} />);
-      const shapes = container.querySelectorAll('line, path, rect, ellipse, polygon');
-      expect(shapes.length).toBeGreaterThan(0);
+      const path = container.querySelector('path');
+      expect(path?.getAttribute('d')).toContain('M 0 0');
+      expect(path?.getAttribute('d')).not.toContain('NaN');
     });
   });
 
@@ -305,6 +318,58 @@ describe('Minimap', () => {
       expect(newViewport.scale).toBe(1);
       expect(Number.isFinite(newViewport.tx)).toBe(true);
       expect(Number.isFinite(newViewport.ty)).toBe(true);
+    });
+
+    it('忽略非主按钮和非主指针', () => {
+      const onViewportChange = jest.fn();
+      const value = makeValue([
+        makePenStroke('s1', [{ x: 0, y: 0 }, { x: 200, y: 200 }]),
+      ]);
+      render(
+        <Minimap
+          value={value}
+          viewport={{ scale: 1, tx: 0, ty: 0 }}
+          containerSize={{ width: 400, height: 300 }}
+          onViewportChange={onViewportChange}
+        />,
+      );
+      const svg = screen.getByTestId('minimap-svg');
+
+      fireEvent.pointerDown(svg, { button: 2, isPrimary: true, clientX: 50, clientY: 50 });
+      fireEvent.pointerDown(svg, { button: 0, isPrimary: false, clientX: 50, clientY: 50 });
+
+      expect(onViewportChange).not.toHaveBeenCalled();
+    });
+
+    it('归一化无效视口后再计算点击平移', () => {
+      const onViewportChange = jest.fn();
+      const value = makeValue([
+        makePenStroke('s1', [{ x: 0, y: 0 }, { x: 200, y: 200 }]),
+      ]);
+      render(
+        <Minimap
+          value={value}
+          viewport={{ scale: 0, tx: Number.NaN, ty: Number.POSITIVE_INFINITY }}
+          containerSize={{ width: 400, height: 300 }}
+          onViewportChange={onViewportChange}
+          width={200}
+          height={100}
+        />,
+      );
+
+      const pointerEvent = new Event('pointerdown', { bubbles: true, cancelable: true });
+      Object.assign(pointerEvent, {
+        button: 0,
+        isPrimary: true,
+        clientX: 100,
+        clientY: 50,
+      });
+      act(() => {
+        screen.getByTestId('minimap-svg').dispatchEvent(pointerEvent);
+      });
+
+      const nextViewport = onViewportChange.mock.calls[0]?.[0] as DrawingViewport | undefined;
+      expect(nextViewport).toEqual({ scale: 0.25, tx: 175, ty: 125 });
     });
 
     it('未提供 onViewportChange 时点击不报错', () => {
