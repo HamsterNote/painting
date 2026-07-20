@@ -615,6 +615,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       onViewportChange,
       minimap: minimapProp,
     } = props;
+    const minimapOptions = typeof minimapProp === 'object' ? minimapProp : {};
+    const minimapEnabled =
+      minimapProp !== false && minimapProp !== undefined && minimapOptions.enabled !== false;
     const hostRef = useRef<HTMLDivElement>(null);
     const eventTargetRef = useRef<DrawingEventTarget | undefined>(eventTarget);
     const multiDragRef = useRef<InstanceType<typeof Mixin> | null>(null);
@@ -1329,16 +1332,18 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     // 跟踪宿主元素尺寸，供 minimap 计算指示框大小
     const [hostSize, setHostSize] = useState({ width: 0, height: 0 });
     useLayoutEffect(() => {
+      if (!minimapEnabled) return undefined;
       const host = hostRef.current;
-      if (!host) return;
+      if (!host) return undefined;
       const updateSize = () => {
         setHostSize({ width: host.clientWidth, height: host.clientHeight });
       };
       updateSize();
+      if (typeof ResizeObserver === 'undefined') return undefined;
       const observer = new ResizeObserver(updateSize);
       observer.observe(host);
       return () => observer.disconnect();
-    }, []);
+    }, [minimapEnabled]);
 
     const resolvePointerSnap = useCallback(
       (
@@ -2680,8 +2685,6 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       : undefined;
 
     // ---- Minimap 配置解析 ----
-    const minimapEnabled = minimapProp !== false && minimapProp !== undefined;
-    const minimapOptions = typeof minimapProp === 'object' ? minimapProp : {};
     const minimapPosition = minimapOptions.position ?? 'bottom-right';
     const minimapPositionStyle: CSSProperties = (() => {
       const offset = 8;

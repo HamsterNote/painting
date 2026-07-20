@@ -217,6 +217,19 @@ function computeIndicatorBox(
   };
 }
 
+function clipIndicatorBox(
+  box: { x: number; y: number; width: number; height: number },
+  minimapWidth: number,
+  minimapHeight: number,
+): { x: number; y: number; width: number; height: number } {
+  const x = Math.max(0, Math.min(box.x, minimapWidth));
+  const y = Math.max(0, Math.min(box.y, minimapHeight));
+  const right = Math.max(x, Math.min(box.x + box.width, minimapWidth));
+  const bottom = Math.max(y, Math.min(box.y + box.height, minimapHeight));
+
+  return { x, y, width: right - x, height: bottom - y };
+}
+
 /**
  * 将客户端坐标（clientX/clientY）转换为 minimap 容器局部坐标。
  */
@@ -311,6 +324,12 @@ export function Minimap({
     () => computeIndicatorBox(viewport, hostSize, fit),
     [viewport, hostSize, fit],
   );
+  const visibleIndicatorBox = useMemo(
+    () => clipIndicatorBox(indicatorBox, width, height),
+    [height, indicatorBox, width],
+  );
+  const visibleIndicatorBoxRef = useRef(visibleIndicatorBox);
+  visibleIndicatorBoxRef.current = visibleIndicatorBox;
 
   // ---- 手势状态 refs ----
   type GestureMode = 'pan' | 'resize' | null;
@@ -357,11 +376,7 @@ export function Minimap({
 
     // 捕获手势起始状态
     gestureStartViewportRef.current = { ...viewportRef.current };
-    gestureStartIndicatorRef.current = computeIndicatorBox(
-      gestureStartViewportRef.current,
-      hostSizeRef.current,
-      fitRef.current,
-    );
+    gestureStartIndicatorRef.current = visibleIndicatorBoxRef.current;
 
     // 起始指针位置（minimap 局部坐标）
     const localPoint = clientToMinimapLocal(
@@ -521,10 +536,8 @@ export function Minimap({
         width,
         height,
         position: 'relative',
-        // 注意：不能用 overflow: hidden，否则当指示框大于 minimap 容器时，
-        // 超出容器边界的边缘手柄（edge handles）会被裁剪掉、无法接收指针事件，
-        // 导致用户无法拖拽右侧/下侧边缘进行缩放。
-        // 笔画预览的裁剪由 SVG 元素自身的 overflow: hidden 保证。
+        // 所有交互元素必须限制在 minimap 内，避免透明溢出区域拦截主画布输入。
+        overflow: 'hidden',
         border: '1px solid rgba(0, 0, 0, 0.15)',
         borderRadius: 4,
         backgroundColor: 'rgba(255, 255, 255, 0.95)',
@@ -564,10 +577,10 @@ export function Minimap({
         data-minimap-indicator
         style={{
           position: 'absolute',
-          left: indicatorBox.x,
-          top: indicatorBox.y,
-          width: indicatorBox.width,
-          height: indicatorBox.height,
+          left: visibleIndicatorBox.x,
+          top: visibleIndicatorBox.y,
+          width: visibleIndicatorBox.width,
+          height: visibleIndicatorBox.height,
           border: '2px solid rgba(59, 130, 246, 0.8)',
           backgroundColor: 'rgba(59, 130, 246, 0.08)',
           cursor: 'move',
@@ -579,7 +592,7 @@ export function Minimap({
           data-minimap-edge="top"
           style={{
             position: 'absolute',
-            top: -4,
+            top: 0,
             left: 0,
             right: 0,
             height: 8,
@@ -590,7 +603,7 @@ export function Minimap({
           data-minimap-edge="bottom"
           style={{
             position: 'absolute',
-            bottom: -4,
+            bottom: 0,
             left: 0,
             right: 0,
             height: 8,
@@ -601,7 +614,7 @@ export function Minimap({
           data-minimap-edge="left"
           style={{
             position: 'absolute',
-            left: -4,
+            left: 0,
             top: 0,
             bottom: 0,
             width: 8,
@@ -612,7 +625,7 @@ export function Minimap({
           data-minimap-edge="right"
           style={{
             position: 'absolute',
-            right: -4,
+            right: 0,
             top: 0,
             bottom: 0,
             width: 8,
@@ -624,8 +637,8 @@ export function Minimap({
           data-minimap-edge="corner-tl"
           style={{
             position: 'absolute',
-            top: -5,
-            left: -5,
+            top: 0,
+            left: 0,
             width: 10,
             height: 10,
             cursor: 'nwse-resize',
@@ -635,8 +648,8 @@ export function Minimap({
           data-minimap-edge="corner-tr"
           style={{
             position: 'absolute',
-            top: -5,
-            right: -5,
+            top: 0,
+            right: 0,
             width: 10,
             height: 10,
             cursor: 'nesw-resize',
@@ -646,8 +659,8 @@ export function Minimap({
           data-minimap-edge="corner-bl"
           style={{
             position: 'absolute',
-            bottom: -5,
-            left: -5,
+            bottom: 0,
+            left: 0,
             width: 10,
             height: 10,
             cursor: 'nesw-resize',
@@ -657,8 +670,8 @@ export function Minimap({
           data-minimap-edge="corner-br"
           style={{
             position: 'absolute',
-            bottom: -5,
-            right: -5,
+            bottom: 0,
+            right: 0,
             width: 10,
             height: 10,
             cursor: 'nwse-resize',
