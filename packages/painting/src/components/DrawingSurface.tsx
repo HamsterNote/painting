@@ -50,6 +50,7 @@ import {
 } from '../viewport';
 import { isVirtualPaperEnabled } from '../virtualPaperAdapter';
 import type { DrawingSurfaceVirtualPaperOptions } from '../virtualPaperOptions';
+import { Minimap, type MinimapOptions } from './Minimap';
 import {
   buildPointerInteractionInput,
   classifyInteraction,
@@ -113,6 +114,8 @@ export interface DrawingSurfaceHandle {
   clearSelection(): void;
   /** 获取当前选中的 stroke id 数组（快照） */
   getSelectedStrokeIds(): string[];
+  /** 获取画布宿主元素的尺寸（CSS 像素），用于 minimap 等外部组件 */
+  getHostSize(): { width: number; height: number };
 }
 
 export type DrawingPoint = {
@@ -361,6 +364,19 @@ export type DrawingSurfaceProps = {
   onRulerChange?: (next: DrawingRulerState) => void;
   /** Virtual paper pan/zoom layer. `true` enables safe default interactions. */
   virtualPaper?: boolean | DrawingSurfaceVirtualPaperOptions;
+  /**
+   * 受控视口状态。传入后视口变为受控模式，
+   * 配合 onViewportChange 可供外部读取/修改视口（如 minimap）。
+   * 省略时视口为内部状态（非受控）。
+   */
+  viewport?: DrawingViewport;
+  /** 视口变化回调（平移/缩放时触发）。受控和非受控模式均会调用。 */
+  onViewportChange?: (viewport: DrawingViewport) => void;
+  /**
+   * 小地图 overlay 配置。省略或 `false` -> 不显示 minimap。
+   * 传入 options 对象 -> 启用 minimap，可配置尺寸/位置等。
+   */
+  minimap?: false | MinimapOptions;
 };
 
 type PointerInputEvent = {
@@ -595,18 +611,39 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       ruler,
       onRulerChange,
       virtualPaper,
+      viewport: viewportProp,
+      onViewportChange,
+      minimap: minimapProp,
     } = props;
     const hostRef = useRef<HTMLDivElement>(null);
     const eventTargetRef = useRef<DrawingEventTarget | undefined>(eventTarget);
     const multiDragRef = useRef<InstanceType<typeof Mixin> | null>(null);
     const gestureOwnerRef = useRef(createGestureOwner());
-    const [viewport, setViewport] = useState<DrawingViewport>(() => createResetViewport());
+    // 视口状态：支持受控（viewport prop）和非受控（内部 state）两种模式。
+    // 受控模式供 minimap 等外部组件读取/修改视口。
+    const [internalViewport, setInternalViewport] = useState<DrawingViewport>(
+      () => createResetViewport(),
+    );
+    const isViewportControlled = viewportProp !== undefined;
+    const viewport = isViewportControlled ? viewportProp : internalViewport;
     const viewportRef = useRef<DrawingViewport>(viewport);
     viewportRef.current = viewport;
 
-    const handleVirtualPaperViewportChange = useCallback((nextViewport: DrawingViewport) => {
-      setViewport(nextViewport);
+    // 受控模式标志和回调的 refs（用于在 useCallback 中访问最新值）
+    const isViewportControlledRef = useRef(isViewportControlled);
+    isViewportControlledRef.current = isViewportControlled;
+    const onViewportChangeRef = useRef(onViewportChange);
+    onViewportChangeRef.current = onViewportChange;
+
+    // 视口变化统一处理：受控模式只回调，非受控模式更新内部状态
+    const handleViewportChange = useCallback((nextViewport: DrawingViewport) => {
+      if (!isViewportControlledRef.current) {
+        setInternalViewport(nextViewport);
+      }
+      onViewportChangeRef.current?.(nextViewport);
     }, []);
+
+    const handleVirtualPaperViewportChange = handleViewportChange;
 
     const internalRulerStateRef = useRef<DrawingRulerState | null>(null);
     const [rulerInitTick, setRulerInitTick] = useState(0);
@@ -1269,6 +1306,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         getSelectedStrokeIds() {
           return [...selectedIdsRef.current];
         },
+        getHostSize() {
+          const host = hostRef.current;
+          if (!host) return { width: 0, height: 0 };
+          return { width: host.clientWidth, height: host.clientHeight };
+        },
       }),
       [commitSelection, removeStrokesFromCanvas]
     );
@@ -1282,6 +1324,20 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         x: clientX - rect.left,
         y: clientY - rect.top,
       };
+    }, []);
+
+    // 跟踪宿主元素尺寸，供 minimap 计算指示框大小
+    const [hostSize, setHostSize] = useState({ width: 0, height: 0 });
+    useLayoutEffect(() => {
+      const host = hostRef.current;
+      if (!host) return;
+      const updateSize = () => {
+        setHostSize({ width: host.clientWidth, height: host.clientHeight });
+      };
+      updateSize();
+      const observer = new ResizeObserver(updateSize);
+      observer.observe(host);
+      return () => observer.disconnect();
     }, []);
 
     const resolvePointerSnap = useCallback(
@@ -2623,6 +2679,25 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       ? { width: '100%', height: '100%', ...(overflow !== undefined ? { overflow } : {}) }
       : undefined;
 
+    // ---- Minimap 配置解析 ----
+    const minimapEnabled = minimapProp !== false && minimapProp !== undefined;
+    const minimapOptions = typeof minimapProp === 'object' ? minimapProp : {};
+    const minimapPosition = minimapOptions.position ?? 'bottom-right';
+    const minimapPositionStyle: CSSProperties = (() => {
+      const offset = 8;
+      switch (minimapPosition) {
+        case 'top-left':
+          return { position: 'absolute', top: offset, left: offset, zIndex: 10 };
+        case 'top-right':
+          return { position: 'absolute', top: offset, right: offset, zIndex: 10 };
+        case 'bottom-left':
+          return { position: 'absolute', bottom: offset, left: offset, zIndex: 10 };
+        case 'bottom-right':
+        default:
+          return { position: 'absolute', bottom: offset, right: offset, zIndex: 10 };
+      }
+    })();
+
     const drawingSurfaceSvg = (
       <svg
         data-pressure-multiplier={String(resolvedPressureMultiplier)}
@@ -2938,6 +3013,18 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
               )}
             </div>
           </div>
+        )}
+        {minimapEnabled && hostSize.width > 0 && hostSize.height > 0 && (
+          <Minimap
+            strokes={strokes}
+            viewport={viewport}
+            onViewportChange={handleViewportChange}
+            hostSize={hostSize}
+            width={minimapOptions.width}
+            height={minimapOptions.height}
+            testID={minimapOptions.testID}
+            style={minimapPositionStyle}
+          />
         )}
       </div>
     );

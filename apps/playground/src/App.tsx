@@ -107,6 +107,7 @@ export default function App() {
   // ===== Virtual-paper 滚动/平移模式开关 (Task 9) =====
   // 启用后 DrawingSurface 将虚拟纸张交给 @hamster-note/virtual-paper 管理视口变换
   const [virtualPaperEnabled, setVirtualPaperEnabled] = useState(false);
+const [minimapEnabled, setMinimapEnabled] = useState(true);
   const [rulerStateUncontrolled, setRulerStateUncontrolled] = useState<DrawingRulerState | undefined>(undefined);
   const [rulerStateControlled, setRulerStateControlled] = useState<DrawingRulerState | undefined>(undefined);
   const [color, setColor] = useState('#000000');
@@ -503,6 +504,20 @@ export default function App() {
           }}
         >
           {virtualPaperEnabled ? 'VirtualPaper ON' : 'VirtualPaper OFF'}
+        </button>
+
+        <button
+          type="button"
+          data-testid="drawing-minimap-toggle"
+          onClick={() => setMinimapEnabled((prev) => !prev)}
+          style={{
+            padding: '4px 10px',
+            cursor: 'pointer',
+            border: minimapEnabled ? '2px solid #333' : '1px solid #aaa',
+            background: minimapEnabled ? '#e0e0e0' : '#fff',
+          }}
+        >
+          {minimapEnabled ? 'Minimap ON' : 'Minimap OFF'}
         </button>
 
         {toolInstruction && (
@@ -1039,6 +1054,7 @@ export default function App() {
               eraserCommitMode={eraserCommitMode}
               eraserTrajectory={eraserTrajectoryProp}
               virtualPaper={virtualPaperEnabled}
+              minimap={minimapEnabled ? { position: 'bottom-right' } : false}
               testID="drawing-surface-uncontrolled"
             />
           </div>
@@ -1085,6 +1101,7 @@ export default function App() {
               eraserCommitMode={eraserCommitMode}
               eraserTrajectory={eraserTrajectoryProp}
               virtualPaper={virtualPaperEnabled}
+              minimap={minimapEnabled ? { position: 'bottom-right' } : false}
               testID="drawing-surface-controlled"
             />
           </div>
