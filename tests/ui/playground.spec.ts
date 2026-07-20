@@ -324,7 +324,7 @@ test.describe('DrawingSurface playground', () => {
 
     const surface = page.getByTestId('drawing-surface-controlled');
     const box = await surface.boundingBox();
-    expect(box).not.toBeNull();
+    if (box === null) throw new Error('Controlled drawing surface has no bounding box');
 
     await page.evaluate((rect) => {
       const el = document.querySelector('[data-testid="drawing-surface-controlled"]');
@@ -372,7 +372,7 @@ test.describe('DrawingSurface playground', () => {
 
     const surface = page.getByTestId('drawing-surface-controlled');
     const box = await surface.boundingBox();
-    expect(box).not.toBeNull();
+    if (box === null) throw new Error('Controlled drawing surface has no bounding box');
 
     await page.evaluate((rect) => {
       const el = document.querySelector('[data-testid="drawing-surface-controlled"]');
@@ -1242,9 +1242,10 @@ test.describe('DrawingSurface playground', () => {
       await expect(deleteBtn).toBeEnabled();
       await expect(page.getByTestId('lasso-selection-count')).toHaveText('(1)');
 
-      // 第二次拖拽：从选区框外开始（seed stroke 位于画布 50~150, 50~100 区域，选区框会稍外扩）
+      // 第二次拖拽：从选区框外且不被右下角 minimap 覆盖的位置开始。
+      // seed stroke 位于画布 50~150, 50~100 区域，选区框会稍外扩。
       const startX2 = box!.x + 250;
-      const startY2 = box!.y + 200;
+      const startY2 = box!.y + 50;
       await page.mouse.move(startX2, startY2);
       await page.mouse.down();
       await page.mouse.move(startX2 + 60, startY2 + 60);
