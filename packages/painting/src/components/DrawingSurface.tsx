@@ -1,19 +1,26 @@
+import { DragOperationType, Mixin, MixinType, type Pose } from '@system-ui-js/multi-drag';
 import {
+  type CSSProperties,
   forwardRef,
+  type ReactNode,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useReducer,
   useRef,
   useState,
-  type CSSProperties,
-  type ReactNode,
 } from 'react';
-import { DragOperationType, Mixin, MixinType, type Pose } from '@system-ui-js/multi-drag';
 import { useCanvas } from '../hooks/useCanvas';
 import { type CanvasPoint, createInitialState, interactionReducer } from '../interaction/reducer';
+import {
+  buildPointerInteractionInput,
+  type ClassifyInteractionOptions,
+  classifyInteraction,
+  createGestureOwner,
+  isSafeInteractiveTarget,
+} from '../interactionOwnership';
 import {
   type BezierStrokeV2,
   DRAWING_STROKE_SCHEMA_VERSION,
@@ -21,6 +28,9 @@ import {
   type PolygonStrokeV2,
 } from '../model/strokes';
 import { StrokeRenderer } from '../render/StrokeRenderer';
+import { isInsideRuler, projectOntoRulerTickEdge, type RulerTransform } from '../ruler/geometry';
+import { generateTicks } from '../ruler/ticks';
+import { installCapturePhaseRulerPointerBridge } from '../rulerPointerBridge';
 import {
   appendPoint,
   createStroke,
@@ -31,35 +41,28 @@ import {
   type TimedDrawingPoint,
 } from '../stroke-helpers';
 import {
+  computeSelectionBox,
+  computeSelectionGeometryBox,
   pickRenderedStrokeIntersectingPolyline,
   pickRenderedStrokeIntersectingSegment,
-  computeSelectionBox,
-  resolveSnapPoint,
   type RenderedStrokeHitTestOptions,
+  resolveSnapPoint,
   SELECTION_BOX_PADDING,
-  selectStrokesIntersectingLasso,
+  type SelectionBox,
   type SnapPointResult,
+  selectStrokesIntersectingLasso,
 } from '../utils';
-import { isInsideRuler, projectOntoRulerTickEdge, type RulerTransform } from '../ruler/geometry';
-import { generateTicks } from '../ruler/ticks';
+import { VirtualPaperSurfaceFrame } from '../VirtualPaperSurfaceFrame';
 import {
   canvasToScreen,
-  type DrawingViewport,
   resetViewport as createResetViewport,
+  type DrawingViewport,
+  normalizeViewport,
   screenToCanvas,
 } from '../viewport';
 import { isVirtualPaperEnabled } from '../virtualPaperAdapter';
 import type { DrawingSurfaceVirtualPaperOptions } from '../virtualPaperOptions';
 import { Minimap, type MinimapOptions } from './Minimap';
-import {
-  buildPointerInteractionInput,
-  classifyInteraction,
-  createGestureOwner,
-  isSafeInteractiveTarget,
-  type ClassifyInteractionOptions,
-} from '../interactionOwnership';
-import { VirtualPaperSurfaceFrame } from '../VirtualPaperSurfaceFrame';
-import { installCapturePhaseRulerPointerBridge } from '../rulerPointerBridge';
 import {
   POINTER_DOWN_CAPTURE_OPTIONS,
   shouldCaptureVirtualPaperPointerDown,
@@ -365,12 +368,13 @@ export type DrawingSurfaceProps = {
   /** Virtual paper pan/zoom layer. `true` enables safe default interactions. */
   virtualPaper?: boolean | DrawingSurfaceVirtualPaperOptions;
   /**
-   * 受控视口状态。传入后视口变为受控模式，
-   * 配合 onViewportChange 可供外部读取/修改视口（如 minimap）。
-   * 省略时视口为内部状态（非受控）。
+   * 受控视口状态。传入后 DrawingSurface 将使用此值作为当前视口，
+   * 不再使用内部状态。配合 `onViewportChange` 可实现外部与主画布的双向视口同步。
    */
   viewport?: DrawingViewport;
-  /** 视口变化回调（平移/缩放时触发）。受控和非受控模式均会调用。 */
+  /** 非受控模式下的初始视口状态。仅在未传入 `viewport` 时生效。 */
+  defaultViewport?: DrawingViewport;
+  /** 视口变化回调（平移/缩放或 minimap 交互时触发）。 */
   onViewportChange?: (viewport: DrawingViewport) => void;
   /**
    * 小地图 overlay 配置。省略或 `false` -> 不显示 minimap。
@@ -423,7 +427,14 @@ function isBboxShapeTool(tool: DrawingTool): boolean {
 }
 
 function isSnapEligibleTool(tool: DrawingTool): boolean {
-  return tool === 'pen' || tool === 'line' || tool === 'rect' || tool === 'ellipse' || tool === 'polygon' || tool === 'bezier';
+  return (
+    tool === 'pen' ||
+    tool === 'line' ||
+    tool === 'rect' ||
+    tool === 'ellipse' ||
+    tool === 'polygon' ||
+    tool === 'bezier'
+  );
 }
 
 // Shift 约束：把首末两点收敛为正方形 bbox，保持原拖拽方向（dx/dy 符号不变），
@@ -454,6 +465,28 @@ function applyShiftConstraintToShape(stroke: DrawingStroke): DrawingStroke {
 
 const DEFAULT_INPUT_METHODS: DrawingInputMethod[] = ['touch', 'mouse', 'pen'];
 const LINE_DRAG_THRESHOLD_PX = 4;
+const LASSO_RESIZE_HANDLE_SIZE_PX = 10;
+const LASSO_RESIZE_MIN_SIZE = 1;
+
+type LassoResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
+
+type LassoResizeHandleDescriptor = {
+  handle: LassoResizeHandle;
+  xRatio: number;
+  yRatio: number;
+  cursor: CSSProperties['cursor'];
+};
+
+const LASSO_RESIZE_HANDLES: readonly LassoResizeHandleDescriptor[] = [
+  { handle: 'nw', xRatio: 0, yRatio: 0, cursor: 'nwse-resize' },
+  { handle: 'n', xRatio: 0.5, yRatio: 0, cursor: 'ns-resize' },
+  { handle: 'ne', xRatio: 1, yRatio: 0, cursor: 'nesw-resize' },
+  { handle: 'e', xRatio: 1, yRatio: 0.5, cursor: 'ew-resize' },
+  { handle: 'se', xRatio: 1, yRatio: 1, cursor: 'nwse-resize' },
+  { handle: 's', xRatio: 0.5, yRatio: 1, cursor: 'ns-resize' },
+  { handle: 'sw', xRatio: 0, yRatio: 1, cursor: 'nesw-resize' },
+  { handle: 'w', xRatio: 0, yRatio: 0.5, cursor: 'ew-resize' },
+];
 
 function generateStrokeId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -507,7 +540,89 @@ function cloneStrokeForLassoMove(stroke: DrawingStroke): DrawingStroke {
 function offsetStrokeForLassoMove(stroke: DrawingStroke, dx: number, dy: number): DrawingStroke {
   return {
     ...stroke,
-    points: stroke.points.map((point) => ({ ...point, x: point.x + dx, y: point.y + dy })),
+    points: stroke.points.map((point) => ({
+      ...point,
+      x: point.x + dx,
+      y: point.y + dy,
+    })),
+    dashArray: stroke.dashArray ? [...stroke.dashArray] : undefined,
+  };
+}
+
+function isLassoResizeHandle(value: string | null): value is LassoResizeHandle {
+  switch (value) {
+    case 'nw':
+    case 'n':
+    case 'ne':
+    case 'e':
+    case 'se':
+    case 's':
+    case 'sw':
+    case 'w':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function resizeDirectionForHandle(handle: LassoResizeHandle): {
+  x: -1 | 0 | 1;
+  y: -1 | 0 | 1;
+} {
+  switch (handle) {
+    case 'nw':
+      return { x: -1, y: -1 };
+    case 'n':
+      return { x: 0, y: -1 };
+    case 'ne':
+      return { x: 1, y: -1 };
+    case 'e':
+      return { x: 1, y: 0 };
+    case 'se':
+      return { x: 1, y: 1 };
+    case 's':
+      return { x: 0, y: 1 };
+    case 'sw':
+      return { x: -1, y: 1 };
+    case 'w':
+      return { x: -1, y: 0 };
+  }
+}
+
+function resolveLassoResizeAxis(
+  min: number,
+  max: number,
+  delta: number,
+  direction: -1 | 0 | 1
+): { anchor: number; scale: number } {
+  const size = max - min;
+  if (direction === 0 || size <= 0) {
+    return { anchor: min, scale: 1 };
+  }
+
+  if (direction === 1) {
+    const anchor = min;
+    const movingEdge = Math.max(anchor + LASSO_RESIZE_MIN_SIZE, max + delta);
+    return { anchor, scale: (movingEdge - anchor) / size };
+  }
+
+  const anchor = max;
+  const movingEdge = Math.min(anchor - LASSO_RESIZE_MIN_SIZE, min + delta);
+  return { anchor, scale: (movingEdge - anchor) / (min - anchor) };
+}
+
+function resizeStrokeForLasso(
+  stroke: DrawingStroke,
+  xAxis: { anchor: number; scale: number },
+  yAxis: { anchor: number; scale: number }
+): DrawingStroke {
+  return {
+    ...stroke,
+    points: stroke.points.map((point) => ({
+      ...point,
+      x: xAxis.anchor + (point.x - xAxis.anchor) * xAxis.scale,
+      y: yAxis.anchor + (point.y - yAxis.anchor) * yAxis.scale,
+    })),
     dashArray: stroke.dashArray ? [...stroke.dashArray] : undefined,
   };
 }
@@ -545,7 +660,9 @@ function normalizePointPressure(pressure: number | undefined): number {
     : 1;
 }
 
-function resolveDrawingSnapOptions(snap: DrawingSnapOptions | undefined): ResolvedDrawingSnapOptions {
+function resolveDrawingSnapOptions(
+  snap: DrawingSnapOptions | undefined
+): ResolvedDrawingSnapOptions {
   const endpoints = snap?.endpoints === true;
   const lines = snap?.lines === true;
   const enabled = endpoints || lines;
@@ -612,6 +729,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       onRulerChange,
       virtualPaper,
       viewport: viewportProp,
+      defaultViewport,
       onViewportChange,
       minimap: minimapProp,
     } = props;
@@ -621,24 +739,21 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     const hostRef = useRef<HTMLDivElement>(null);
     const eventTargetRef = useRef<DrawingEventTarget | undefined>(eventTarget);
     const multiDragRef = useRef<InstanceType<typeof Mixin> | null>(null);
+    const selectionResizeDragRef = useRef<InstanceType<typeof Mixin> | null>(null);
     const gestureOwnerRef = useRef(createGestureOwner());
-    // 视口状态：支持受控（viewport prop）和非受控（内部 state）两种模式。
-    // 受控模式供 minimap 等外部组件读取/修改视口。
-    const [internalViewport, setInternalViewport] = useState<DrawingViewport>(
-      () => createResetViewport(),
-    );
     const isViewportControlled = viewportProp !== undefined;
-    const viewport = isViewportControlled ? viewportProp : internalViewport;
+    const [internalViewport, setInternalViewport] = useState<DrawingViewport>(() =>
+      defaultViewport ? normalizeViewport(defaultViewport) : createResetViewport()
+    );
+    const viewport = isViewportControlled ? normalizeViewport(viewportProp) : internalViewport;
     const viewportRef = useRef<DrawingViewport>(viewport);
     viewportRef.current = viewport;
 
-    // 受控模式标志和回调的 refs（用于在 useCallback 中访问最新值）
     const isViewportControlledRef = useRef(isViewportControlled);
     isViewportControlledRef.current = isViewportControlled;
     const onViewportChangeRef = useRef(onViewportChange);
     onViewportChangeRef.current = onViewportChange;
 
-    // 视口变化统一处理：受控模式只回调，非受控模式更新内部状态
     const handleViewportChange = useCallback((nextViewport: DrawingViewport) => {
       if (!isViewportControlledRef.current) {
         setInternalViewport(nextViewport);
@@ -691,7 +806,12 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     const hasInitializedRulerCenter = useRef(false);
 
     useLayoutEffect(() => {
-      if (!isRulerEnabled || !currentRulerState || effectiveRulerOptions.state || hasInitializedRulerCenter.current) {
+      if (
+        !isRulerEnabled ||
+        !currentRulerState ||
+        effectiveRulerOptions.state ||
+        hasInitializedRulerCenter.current
+      ) {
         return;
       }
 
@@ -1261,6 +1381,132 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       const prunedIds = selectedIdsRef.current.filter((id) => existingStrokeIds.has(id));
       commitSelection(prunedIds);
     }, [commitSelection, strokes]);
+
+    useEffect(() => {
+      const host = hostRef.current;
+      if (!host) {
+        return undefined;
+      }
+
+      type ResizeGesture = {
+        handle: LassoResizeHandle;
+        geometryBox: SelectionBox;
+        originals: DrawingStroke[];
+        lastPosition: Pose['position'] | null;
+      };
+
+      let gesture: ResizeGesture | null = null;
+      const getPose = (): Pose => ({
+        position: { x: 0, y: 0 },
+        width: 0,
+        height: 0,
+      });
+      const applyResizePose = (pose: Partial<Pose>) => {
+        if (!gesture || !pose.position) {
+          return;
+        }
+
+        if (
+          gesture.lastPosition?.x === pose.position.x &&
+          gesture.lastPosition.y === pose.position.y
+        ) {
+          return;
+        }
+        gesture.lastPosition = pose.position;
+
+        const viewportScale = viewportRef.current.scale;
+        const direction = resizeDirectionForHandle(gesture.handle);
+        const xAxis = resolveLassoResizeAxis(
+          gesture.geometryBox.minX,
+          gesture.geometryBox.maxX,
+          pose.position.x / viewportScale,
+          direction.x
+        );
+        const yAxis = resolveLassoResizeAxis(
+          gesture.geometryBox.minY,
+          gesture.geometryBox.maxY,
+          pose.position.y / viewportScale,
+          direction.y
+        );
+        updateStrokesRef.current(
+          gesture.originals.map((stroke) => resizeStrokeForLasso(stroke, xAxis, yAxis))
+        );
+      };
+
+      const multiDrag = new Mixin(
+        host,
+        {
+          inertial: false,
+          getPose,
+          setPose: (_element: HTMLElement, pose: Partial<Pose>) => {
+            applyResizePose(pose);
+          },
+          setPoseOnEnd: (_element: HTMLElement, pose: Partial<Pose>) => {
+            applyResizePose(pose);
+          },
+        },
+        [MixinType.Drag],
+        [MixinType.Drag]
+      );
+
+      const handleStart = () => {
+        gesture = null;
+        if (effectiveToolRef.current !== 'lasso') {
+          return;
+        }
+
+        const [finger] = multiDrag.getFingers();
+        const operation = finger?.getLastOperation();
+        const event = operation?.event;
+        const target = event?.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+
+        const handleElement = target.closest('[data-lasso-resize-handle]');
+        const handle = handleElement?.getAttribute('data-lasso-resize-handle') ?? null;
+        if (!isLassoResizeHandle(handle)) {
+          return;
+        }
+
+        if (
+          !event ||
+          !isPointerDomEvent(event) ||
+          !isDrawingInput(event, inputMethodsRef.current) ||
+          classifyInteraction(getInteractionOwnerOptions(buildPointerInteractionInput(event))) !==
+            'drawing'
+        ) {
+          return;
+        }
+
+        const selectedIdSetAtStart = new Set(selectedIdsRef.current);
+        const originals = strokesRef.current
+          .filter((stroke) => selectedIdSetAtStart.has(stroke.id))
+          .map(cloneStrokeForLassoMove);
+        const geometryBox = computeSelectionGeometryBox(originals, selectedIdsRef.current);
+        if (originals.length === 0 || geometryBox === null) {
+          return;
+        }
+
+        gesture = { handle, geometryBox, originals, lastPosition: null };
+      };
+      const handleAllEnd = () => {
+        gesture = null;
+      };
+
+      multiDrag.addEventListener(DragOperationType.Start, handleStart);
+      multiDrag.addEventListener(DragOperationType.AllEnd, handleAllEnd);
+      selectionResizeDragRef.current = multiDrag;
+
+      return () => {
+        multiDrag.removeEventListener(DragOperationType.Start, handleStart);
+        multiDrag.removeEventListener(DragOperationType.AllEnd, handleAllEnd);
+        if (selectionResizeDragRef.current === multiDrag) {
+          selectionResizeDragRef.current = null;
+        }
+        multiDrag.destroy();
+      };
+    }, [getInteractionOwnerOptions]);
 
     useEffect(() => {
       if (!isVirtualPaperActive) {
@@ -1939,12 +2185,18 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (event.button !== undefined && event.button !== 0) {
           return;
         }
+        if (event.target instanceof Element && event.target.closest('[data-lasso-resize-handle]')) {
+          return;
+        }
         // 记录触摸指针（无论目标是否在 ruler 上），用于多指检测
         if (event.pointerType === 'touch') {
           activeTouchPointerIds.add(event.pointerId);
         }
         const owner = gestureOwnerRef.current.startPointer(
-          getInteractionOwnerOptions(buildPointerInteractionInput(event), activeTouchPointerIds.size)
+          getInteractionOwnerOptions(
+            buildPointerInteractionInput(event),
+            activeTouchPointerIds.size
+          )
         );
         if (owner !== 'drawing') {
           return;
@@ -2041,7 +2293,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         shiftPressedRef.current = false;
       };
 
-      listenerTarget.addEventListener('pointerdown', handlePointerDownEvent, pointerDownListenerOptions);
+      listenerTarget.addEventListener(
+        'pointerdown',
+        handlePointerDownEvent,
+        pointerDownListenerOptions
+      );
       document.addEventListener('pointermove', handlePointerMove);
       document.addEventListener('pointerup', handlePointerEnd);
       document.addEventListener('pointercancel', handlePointerCancel);
@@ -2335,7 +2591,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         dispatchInteraction({ type: 'BLUR' });
       };
 
-      listenerTarget.addEventListener('pointerdown', handlePointerDownEvent, pointerDownListenerOptions);
+      listenerTarget.addEventListener(
+        'pointerdown',
+        handlePointerDownEvent,
+        pointerDownListenerOptions
+      );
       // Placement drags (line/bezier) must survive leaving the host between
       // pointerdown and pointerup; document listeners preserve that lifecycle.
       document.addEventListener('pointermove', handlePointerMove);
@@ -2571,7 +2831,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (owner === 'virtual-paper') {
           cursorPointerDownRef.current = false;
           cursorPointersRef.current.delete(pointer.pointerId);
-          setCursorState((prev) => ({ ...prev, visible: false, pointerType: pointer.pointerType }));
+          setCursorState((prev) => ({
+            ...prev,
+            visible: false,
+            pointerType: pointer.pointerType,
+          }));
           return;
         }
         cursorPointerDownRef.current = true;
@@ -2681,7 +2945,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     // to 0×0, making the inner SVG un-hit-testable. Explicitly force it to fill
     // the wrapper so pointer interactions reach the drawing surface.
     const virtualPaperContainerStyle: CSSProperties | undefined = isVirtualPaperActive
-      ? { width: '100%', height: '100%', ...(overflow !== undefined ? { overflow } : {}) }
+      ? {
+          width: '100%',
+          height: '100%',
+          ...(overflow !== undefined ? { overflow } : {}),
+        }
       : undefined;
 
     // ---- Minimap 配置解析 ----
@@ -2820,20 +3088,46 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
             />
           )}
           {effectiveTool === 'lasso' && selectedIds.length > 0 && selectionBox != null && (
-            <rect
-              data-testid="lasso-selection-box"
-              x={selectionBox.minX}
-              y={selectionBox.minY}
-              width={selectionBox.maxX - selectionBox.minX}
-              height={selectionBox.maxY - selectionBox.minY}
-              fill="rgba(59,130,246,0.2)"
-              stroke="rgb(59,130,246)"
-              strokeWidth={3}
-              strokeDasharray="4 4"
-              vectorEffect="non-scaling-stroke"
-              pointerEvents="none"
-              data-padding={SELECTION_BOX_PADDING}
-            />
+            <g data-testid="lasso-selection-controls">
+              <rect
+                data-testid="lasso-selection-box"
+                x={selectionBox.minX}
+                y={selectionBox.minY}
+                width={selectionBox.maxX - selectionBox.minX}
+                height={selectionBox.maxY - selectionBox.minY}
+                fill="rgba(59,130,246,0.2)"
+                stroke="rgb(59,130,246)"
+                strokeWidth={3}
+                strokeDasharray="4 4"
+                vectorEffect="non-scaling-stroke"
+                pointerEvents="none"
+                data-padding={SELECTION_BOX_PADDING}
+              />
+              {LASSO_RESIZE_HANDLES.map(({ handle, xRatio, yRatio, cursor }) => {
+                const size = LASSO_RESIZE_HANDLE_SIZE_PX / viewport.scale;
+                const centerX =
+                  selectionBox.minX + (selectionBox.maxX - selectionBox.minX) * xRatio;
+                const centerY =
+                  selectionBox.minY + (selectionBox.maxY - selectionBox.minY) * yRatio;
+                return (
+                  <rect
+                    key={handle}
+                    data-testid={`lasso-resize-handle-${handle}`}
+                    data-lasso-resize-handle={handle}
+                    x={centerX - size / 2}
+                    y={centerY - size / 2}
+                    width={size}
+                    height={size}
+                    rx={1 / viewport.scale}
+                    fill="white"
+                    stroke="rgb(59,130,246)"
+                    strokeWidth={2}
+                    vectorEffect="non-scaling-stroke"
+                    style={{ cursor }}
+                  />
+                );
+              })}
+            </g>
           )}
 
           {isRulerEnabled && currentRulerState && (
@@ -2867,11 +3161,16 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
               <g className="ruler-ticks">
                 {generateTicks(currentRulerState, {
                   minorSpacing: effectiveRulerOptions.minorTickSpacing ?? 10,
-                  majorSpacing: (effectiveRulerOptions.minorTickSpacing ?? 10) * (effectiveRulerOptions.majorTickEvery ?? 5),
+                  majorSpacing:
+                    (effectiveRulerOptions.minorTickSpacing ?? 10) *
+                    (effectiveRulerOptions.majorTickEvery ?? 5),
                 }).map((tick) => {
                   const isCenter = tick.localX === 0;
                   return (
-                    <g key={tick.localX.toFixed(6)} transform={`translate(${tick.localX} ${-currentRulerState.height / 2})`}>
+                    <g
+                      key={tick.localX.toFixed(6)}
+                      transform={`translate(${tick.localX} ${-currentRulerState.height / 2})`}
+                    >
                       <line
                         data-testid={isCenter ? 'drawing-ruler-center-tick' : 'drawing-ruler-tick'}
                         x1={0}
@@ -2882,13 +3181,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
                         strokeWidth={1}
                       />
                       {tick.label && (
-                        <text
-                          x={0}
-                          y={35}
-                          fontSize={12}
-                          textAnchor="middle"
-                          fill="black"
-                        >
+                        <text x={0} y={35} fontSize={12} textAnchor="middle" fill="black">
                           {tick.label}
                         </text>
                       )}

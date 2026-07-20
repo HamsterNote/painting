@@ -76,6 +76,7 @@ export {
   DEFAULT_DRAWING_VIEWPORT,
   MAX_VIEWPORT_SCALE,
   MIN_VIEWPORT_SCALE,
+  normalizeViewport,
   resetViewport,
   screenToCanvas,
   viewportToVirtualPaperTransform,

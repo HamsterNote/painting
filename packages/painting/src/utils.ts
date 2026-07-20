@@ -70,7 +70,10 @@ function distanceSqPointToSegment(point: DrawingPoint, a: DrawingPoint, b: Drawi
     return px * px + py * py;
   }
 
-  const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy)));
+  const t = Math.max(
+    0,
+    Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy))
+  );
 
   const projX = a.x + t * dx;
   const projY = a.y + t * dy;
@@ -81,7 +84,11 @@ function distanceSqPointToSegment(point: DrawingPoint, a: DrawingPoint, b: Drawi
   return px * px + py * py;
 }
 
-function closestPointOnSegment(point: DrawingPoint, a: DrawingPoint, b: DrawingPoint): DrawingPoint {
+function closestPointOnSegment(
+  point: DrawingPoint,
+  a: DrawingPoint,
+  b: DrawingPoint
+): DrawingPoint {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
 
@@ -89,7 +96,10 @@ function closestPointOnSegment(point: DrawingPoint, a: DrawingPoint, b: DrawingP
     return { x: a.x, y: a.y };
   }
 
-  const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy)));
+  const t = Math.max(
+    0,
+    Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy))
+  );
   return {
     x: a.x + t * dx,
     y: a.y + t * dy,
@@ -125,7 +135,11 @@ function distanceSqPointToPolyline(point: DrawingPoint, points: DrawingPoint[]):
   return min;
 }
 
-function distanceSqPointToRect(point: DrawingPoint, first: DrawingPoint, last: DrawingPoint): number {
+function distanceSqPointToRect(
+  point: DrawingPoint,
+  first: DrawingPoint,
+  last: DrawingPoint
+): number {
   const minX = Math.min(first.x, last.x);
   const maxX = Math.max(first.x, last.x);
   const minY = Math.min(first.y, last.y);
@@ -140,7 +154,11 @@ function distanceSqPointToRect(point: DrawingPoint, first: DrawingPoint, last: D
   return dx * dx + dy * dy;
 }
 
-function distanceSqPointToRectOutline(point: DrawingPoint, first: DrawingPoint, last: DrawingPoint): number {
+function distanceSqPointToRectOutline(
+  point: DrawingPoint,
+  first: DrawingPoint,
+  last: DrawingPoint
+): number {
   if (!pointInRect(point, first, last)) {
     return distanceSqPointToRect(point, first, last);
   }
@@ -153,7 +171,7 @@ function distanceSqPointToRectOutline(point: DrawingPoint, first: DrawingPoint, 
     point.x - minX,
     maxX - point.x,
     point.y - minY,
-    maxY - point.y,
+    maxY - point.y
   );
 
   return nearestSideDistance * nearestSideDistance;
@@ -168,7 +186,11 @@ function pointInRect(point: DrawingPoint, first: DrawingPoint, last: DrawingPoin
   return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY;
 }
 
-function distanceSqPointToEllipse(point: DrawingPoint, first: DrawingPoint, last: DrawingPoint): number {
+function distanceSqPointToEllipse(
+  point: DrawingPoint,
+  first: DrawingPoint,
+  last: DrawingPoint
+): number {
   const centerX = (first.x + last.x) / 2;
   const centerY = (first.y + last.y) / 2;
   const rx = Math.abs(last.x - first.x) / 2;
@@ -228,7 +250,7 @@ function sampleCubicBezierPolyline(
   control1: DrawingPoint,
   control2: DrawingPoint,
   end: DrawingPoint,
-  segments: number,
+  segments: number
 ): DrawingPoint[] {
   const samples: DrawingPoint[] = new Array(segments + 1);
   for (let i = 0; i <= segments; i++) {
@@ -255,7 +277,7 @@ function distanceSqPointToBezier(point: DrawingPoint, points: DrawingPoint[]): n
     points[1],
     points[2],
     points[3],
-    BEZIER_HIT_TEST_SEGMENTS,
+    BEZIER_HIT_TEST_SEGMENTS
   );
   return distanceSqPointToPolyline(point, samples);
 }
@@ -361,7 +383,11 @@ function rectCornerPoints(first: DrawingPoint, last: DrawingPoint): DrawingPoint
   ];
 }
 
-function sampleEllipseFromBoundingBox(first: DrawingPoint, last: DrawingPoint, segments: number): DrawingPoint[] {
+function sampleEllipseFromBoundingBox(
+  first: DrawingPoint,
+  last: DrawingPoint,
+  segments: number
+): DrawingPoint[] {
   const centerX = (first.x + last.x) / 2;
   const centerY = (first.y + last.y) / 2;
   const rx = Math.abs(last.x - first.x) / 2;
@@ -380,7 +406,9 @@ function sampleEllipseFromBoundingBox(first: DrawingPoint, last: DrawingPoint, s
   return samples;
 }
 
-function closedSegments(points: readonly DrawingPoint[]): Array<readonly [DrawingPoint, DrawingPoint]> {
+function closedSegments(
+  points: readonly DrawingPoint[]
+): Array<readonly [DrawingPoint, DrawingPoint]> {
   const segments: Array<readonly [DrawingPoint, DrawingPoint]> = [];
   if (points.length < 2) {
     return segments;
@@ -393,7 +421,9 @@ function closedSegments(points: readonly DrawingPoint[]): Array<readonly [Drawin
   return segments;
 }
 
-function openSegments(points: readonly DrawingPoint[]): Array<readonly [DrawingPoint, DrawingPoint]> {
+function openSegments(
+  points: readonly DrawingPoint[]
+): Array<readonly [DrawingPoint, DrawingPoint]> {
   const segments: Array<readonly [DrawingPoint, DrawingPoint]> = [];
   for (let i = 0; i < points.length - 1; i++) {
     segments.push([points[i], points[i + 1]]);
@@ -419,7 +449,12 @@ function pointOnSegment(point: DrawingPoint, a: DrawingPoint, b: DrawingPoint): 
   );
 }
 
-function segmentsIntersect(a1: DrawingPoint, a2: DrawingPoint, b1: DrawingPoint, b2: DrawingPoint): boolean {
+function segmentsIntersect(
+  a1: DrawingPoint,
+  a2: DrawingPoint,
+  b1: DrawingPoint,
+  b2: DrawingPoint
+): boolean {
   const o1 = orientation(a1, a2, b1);
   const o2 = orientation(a1, a2, b2);
   const o3 = orientation(b1, b2, a1);
@@ -437,7 +472,12 @@ function segmentsIntersect(a1: DrawingPoint, a2: DrawingPoint, b1: DrawingPoint,
   );
 }
 
-function distanceSqSegmentToSegment(a1: DrawingPoint, a2: DrawingPoint, b1: DrawingPoint, b2: DrawingPoint): number {
+function distanceSqSegmentToSegment(
+  a1: DrawingPoint,
+  a2: DrawingPoint,
+  b1: DrawingPoint,
+  b2: DrawingPoint
+): number {
   if (segmentsIntersect(a1, a2, b1, b2)) {
     return 0;
   }
@@ -446,11 +486,14 @@ function distanceSqSegmentToSegment(a1: DrawingPoint, a2: DrawingPoint, b1: Draw
     distanceSqPointToSegment(a1, b1, b2),
     distanceSqPointToSegment(a2, b1, b2),
     distanceSqPointToSegment(b1, a1, a2),
-    distanceSqPointToSegment(b2, a1, a2),
+    distanceSqPointToSegment(b2, a1, a2)
   );
 }
 
-function buildStrokeSelectionGeometry(stroke: PickableStroke, options: Required<LassoSelectionOptions>): StrokeSelectionGeometry {
+function buildStrokeSelectionGeometry(
+  stroke: PickableStroke,
+  options: Required<LassoSelectionOptions>
+): StrokeSelectionGeometry {
   const { points, tool } = stroke;
 
   if (points.length === 0) {
@@ -468,7 +511,11 @@ function buildStrokeSelectionGeometry(stroke: PickableStroke, options: Required<
   }
 
   if (tool === 'ellipse' && points.length >= 2) {
-    const samples = sampleEllipseFromBoundingBox(points[0], points[points.length - 1], options.ellipseSegments);
+    const samples = sampleEllipseFromBoundingBox(
+      points[0],
+      points[points.length - 1],
+      options.ellipseSegments
+    );
     return {
       samples,
       segments: closedSegments(samples),
@@ -487,7 +534,13 @@ function buildStrokeSelectionGeometry(stroke: PickableStroke, options: Required<
   }
 
   if (tool === 'bezier' && points.length === 4) {
-    const samples = sampleCubicBezierPolyline(points[0], points[1], points[2], points[3], options.bezierSegments);
+    const samples = sampleCubicBezierPolyline(
+      points[0],
+      points[1],
+      points[2],
+      points[3],
+      options.bezierSegments
+    );
     return {
       samples,
       segments: openSegments(samples),
@@ -505,7 +558,11 @@ function buildStrokeSelectionGeometry(stroke: PickableStroke, options: Required<
   };
 }
 
-function lassoPointInsideClosedStroke(point: DrawingPoint, stroke: DrawingStroke, closedShapePoints: DrawingPoint[]): boolean {
+function lassoPointInsideClosedStroke(
+  point: DrawingPoint,
+  stroke: DrawingStroke,
+  closedShapePoints: DrawingPoint[]
+): boolean {
   if (stroke.points.length < 2) {
     return false;
   }
@@ -538,11 +595,15 @@ function normalizePointPressure(pressure: number | undefined): number {
     return 0;
   }
 
-  return typeof pressure === 'number' && Number.isFinite(pressure) && pressure >= 0 && pressure <= 1 ? pressure : 1;
+  return typeof pressure === 'number' && Number.isFinite(pressure) && pressure >= 0 && pressure <= 1
+    ? pressure
+    : 1;
 }
 
 function normalizePressureMultiplier(pressureMultiplier: number): number {
-  return typeof pressureMultiplier === 'number' && Number.isFinite(pressureMultiplier) && pressureMultiplier > 0
+  return typeof pressureMultiplier === 'number' &&
+    Number.isFinite(pressureMultiplier) &&
+    pressureMultiplier > 0
     ? pressureMultiplier
     : 1;
 }
@@ -551,13 +612,21 @@ function hasPressureData(stroke: PickableStroke): boolean {
   return stroke.tool === 'pen' && stroke.points.some((point) => point.pressure !== undefined);
 }
 
-function resolveRenderedStrokeWidth(stroke: PickableStroke, options: RenderedStrokeHitTestOptions): number {
-  const fallbackWidth = isClosedStrokeTool(stroke.tool) ? options.closedFallbackWidth : options.openFallbackWidth;
+function resolveRenderedStrokeWidth(
+  stroke: PickableStroke,
+  options: RenderedStrokeHitTestOptions
+): number {
+  const fallbackWidth = isClosedStrokeTool(stroke.tool)
+    ? options.closedFallbackWidth
+    : options.openFallbackWidth;
   const resolvedWidth = stroke.strokeWidth ?? fallbackWidth;
   return Number.isFinite(resolvedWidth) ? Math.max(0, resolvedWidth) : 0;
 }
 
-function targetHalfWidthForStroke(stroke: PickableStroke, options: RenderedStrokeHitTestOptions): number {
+function targetHalfWidthForStroke(
+  stroke: PickableStroke,
+  options: RenderedStrokeHitTestOptions
+): number {
   return resolveRenderedStrokeWidth(stroke, options) / 2;
 }
 
@@ -565,11 +634,12 @@ function targetHalfWidthForPressureSegment(
   stroke: PickableStroke,
   a: DrawingPoint,
   b: DrawingPoint,
-  options: RenderedStrokeHitTestOptions,
+  options: RenderedStrokeHitTestOptions
 ): number {
   const baseWidth = resolveRenderedStrokeWidth(stroke, options);
   const pressure = Math.max(normalizePointPressure(a.pressure), normalizePointPressure(b.pressure));
-  const segmentWidth = baseWidth * pressure * normalizePressureMultiplier(options.pressureMultiplier);
+  const segmentWidth =
+    baseWidth * pressure * normalizePressureMultiplier(options.pressureMultiplier);
   return Math.max(0, segmentWidth) / 2;
 }
 
@@ -629,7 +699,10 @@ function distanceSqPointToStroke(point: DrawingPoint, stroke: PickableStroke): n
   return distanceSqPointToPolyline(point, points);
 }
 
-function renderedOutlineDistanceSqPointToStroke(point: DrawingPoint, stroke: PickableStroke): number {
+function renderedOutlineDistanceSqPointToStroke(
+  point: DrawingPoint,
+  stroke: PickableStroke
+): number {
   const { points, tool } = stroke;
 
   if (points.length === 0) {
@@ -663,7 +736,11 @@ function renderedOutlineDistanceSqPointToStroke(point: DrawingPoint, stroke: Pic
   return distanceSqPointToPolyline(point, points);
 }
 
-function renderedDistanceToPressurePen(point: DrawingPoint, stroke: PickableStroke, options: RenderedStrokeHitTestOptions): number {
+function renderedDistanceToPressurePen(
+  point: DrawingPoint,
+  stroke: PickableStroke,
+  options: RenderedStrokeHitTestOptions
+): number {
   const { points } = stroke;
 
   if (points.length === 0) {
@@ -673,7 +750,10 @@ function renderedDistanceToPressurePen(point: DrawingPoint, stroke: PickableStro
   if (points.length === 1) {
     const dx = point.x - points[0].x;
     const dy = point.y - points[0].y;
-    const pointWidth = resolveRenderedStrokeWidth(stroke, options) * normalizePointPressure(points[0].pressure) * normalizePressureMultiplier(options.pressureMultiplier);
+    const pointWidth =
+      resolveRenderedStrokeWidth(stroke, options) *
+      normalizePointPressure(points[0].pressure) *
+      normalizePressureMultiplier(options.pressureMultiplier);
     return Math.hypot(dx, dy) - Math.max(0, pointWidth) / 2;
   }
 
@@ -681,7 +761,12 @@ function renderedDistanceToPressurePen(point: DrawingPoint, stroke: PickableStro
 
   for (let i = 0; i < points.length - 1; i++) {
     const centerDistance = Math.sqrt(distanceSqPointToSegment(point, points[i], points[i + 1]));
-    const targetHalfWidth = targetHalfWidthForPressureSegment(stroke, points[i], points[i + 1], options);
+    const targetHalfWidth = targetHalfWidthForPressureSegment(
+      stroke,
+      points[i],
+      points[i + 1],
+      options
+    );
     const renderedDistance = centerDistance - targetHalfWidth;
     if (renderedDistance < minDistance) {
       minDistance = renderedDistance;
@@ -691,7 +776,11 @@ function renderedDistanceToPressurePen(point: DrawingPoint, stroke: PickableStro
   return minDistance;
 }
 
-function renderedDistanceToStroke(point: DrawingPoint, stroke: PickableStroke, options: RenderedStrokeHitTestOptions): number {
+function renderedDistanceToStroke(
+  point: DrawingPoint,
+  stroke: PickableStroke,
+  options: RenderedStrokeHitTestOptions
+): number {
   if (hasPressureData(stroke)) {
     return renderedDistanceToPressurePen(point, stroke, options);
   }
@@ -700,18 +789,23 @@ function renderedDistanceToStroke(point: DrawingPoint, stroke: PickableStroke, o
     return 0;
   }
 
-  return Math.sqrt(renderedOutlineDistanceSqPointToStroke(point, stroke)) - targetHalfWidthForStroke(stroke, options);
+  return (
+    Math.sqrt(renderedOutlineDistanceSqPointToStroke(point, stroke)) -
+    targetHalfWidthForStroke(stroke, options)
+  );
 }
 
 function safeEraserRadius(eraserRadius: number): number {
-  return typeof eraserRadius === 'number' && Number.isFinite(eraserRadius) ? Math.max(0, eraserRadius) : 0;
+  return typeof eraserRadius === 'number' && Number.isFinite(eraserRadius)
+    ? Math.max(0, eraserRadius)
+    : 0;
 }
 
 function pickRenderedStrokeAtPoint<TStroke extends PickableStroke>(
   point: DrawingPoint,
   strokes: TStroke[],
   options: RenderedStrokeHitTestOptions,
-  currentBest: { stroke: TStroke | null; distance: number; strokeIndex: number },
+  currentBest: { stroke: TStroke | null; distance: number; strokeIndex: number }
 ): { stroke: TStroke | null; distance: number; strokeIndex: number } {
   let best = currentBest;
 
@@ -730,8 +824,14 @@ function pickRenderedStrokeAtPoint<TStroke extends PickableStroke>(
 }
 
 function snapRadiusInCanvas(options: SnapOptions, viewportScale: number | undefined): number {
-  const safeRadius = typeof options.radius === 'number' && Number.isFinite(options.radius) && options.radius > 0 ? options.radius : 8;
-  const safeScale = typeof viewportScale === 'number' && Number.isFinite(viewportScale) && viewportScale > 0 ? viewportScale : 1;
+  const safeRadius =
+    typeof options.radius === 'number' && Number.isFinite(options.radius) && options.radius > 0
+      ? options.radius
+      : 8;
+  const safeScale =
+    typeof viewportScale === 'number' && Number.isFinite(viewportScale) && viewportScale > 0
+      ? viewportScale
+      : 1;
   return safeRadius / safeScale;
 }
 
@@ -749,7 +849,12 @@ function endpointTargetsForStroke(stroke: DrawingStroke): DrawingPoint[] {
       return points.length >= 2 ? rectCornerPoints(points[0], points[points.length - 1]) : [];
     case 'ellipse':
       return points.length >= 2
-        ? [{ x: (points[0].x + points[points.length - 1].x) / 2, y: (points[0].y + points[points.length - 1].y) / 2 }]
+        ? [
+            {
+              x: (points[0].x + points[points.length - 1].x) / 2,
+              y: (points[0].y + points[points.length - 1].y) / 2,
+            },
+          ]
         : [];
     case 'polygon':
       return [...points];
@@ -761,7 +866,9 @@ function endpointTargetsForStroke(stroke: DrawingStroke): DrawingPoint[] {
   }
 }
 
-function lineSegmentsForStroke(stroke: DrawingStroke): Array<readonly [DrawingPoint, DrawingPoint]> {
+function lineSegmentsForStroke(
+  stroke: DrawingStroke
+): Array<readonly [DrawingPoint, DrawingPoint]> {
   const { points, tool } = stroke;
   if (points.length < 2) {
     return [];
@@ -778,7 +885,9 @@ function lineSegmentsForStroke(stroke: DrawingStroke): Array<readonly [DrawingPo
     case 'polygon':
       return closedSegments(points);
     case 'bezier':
-      return points.length === 4 ? openSegments(sampleCubicBezierPolyline(points[0], points[1], points[2], points[3], 64)) : openSegments(points);
+      return points.length === 4
+        ? openSegments(sampleCubicBezierPolyline(points[0], points[1], points[2], points[3], 64))
+        : openSegments(points);
     case 'eraser':
     case 'lasso':
       return [];
@@ -789,7 +898,7 @@ function chooseNearestSnapCandidate(
   best: SnapSearchResult | null,
   candidate: SnapCandidate,
   distanceSq: number,
-  radiusSq: number,
+  radiusSq: number
 ): SnapSearchResult | null {
   if (distanceSq > radiusSq) {
     return best;
@@ -802,7 +911,11 @@ function chooseNearestSnapCandidate(
   return best;
 }
 
-function resolveEndpointSnap(point: DrawingPoint, strokes: readonly DrawingStroke[], radiusSq: number): SnapSearchResult | null {
+function resolveEndpointSnap(
+  point: DrawingPoint,
+  strokes: readonly DrawingStroke[],
+  radiusSq: number
+): SnapSearchResult | null {
   let best: SnapSearchResult | null = null;
 
   for (const stroke of strokes) {
@@ -811,7 +924,7 @@ function resolveEndpointSnap(point: DrawingPoint, strokes: readonly DrawingStrok
         best,
         { canvas: { x: target.x, y: target.y }, kind: 'endpoint', strokeId: stroke.id },
         distanceSqBetweenPoints(point, target),
-        radiusSq,
+        radiusSq
       );
     }
   }
@@ -819,7 +932,11 @@ function resolveEndpointSnap(point: DrawingPoint, strokes: readonly DrawingStrok
   return best;
 }
 
-function resolveLineSnap(point: DrawingPoint, strokes: readonly DrawingStroke[], radiusSq: number): SnapSearchResult | null {
+function resolveLineSnap(
+  point: DrawingPoint,
+  strokes: readonly DrawingStroke[],
+  radiusSq: number
+): SnapSearchResult | null {
   let best: SnapSearchResult | null = null;
 
   for (const stroke of strokes) {
@@ -829,7 +946,7 @@ function resolveLineSnap(point: DrawingPoint, strokes: readonly DrawingStroke[],
         best,
         { canvas, kind: 'line', strokeId: stroke.id },
         distanceSqBetweenPoints(point, canvas),
-        radiusSq,
+        radiusSq
       );
     }
   }
@@ -841,7 +958,7 @@ export function resolveSnapPoint(
   point: DrawingPoint,
   strokes: readonly DrawingStroke[],
   options: SnapOptions,
-  viewportScale?: number,
+  viewportScale?: number
 ): SnapPointResult {
   if (!options.enabled) {
     return null;
@@ -895,13 +1012,52 @@ export function updateStroke(value: DrawingValue, stroke: DrawingStroke): Drawin
   };
 }
 
-export function updateStrokes(value: DrawingValue, strokes: readonly DrawingStroke[]): DrawingValue {
+export function updateStrokes(
+  value: DrawingValue,
+  strokes: readonly DrawingStroke[]
+): DrawingValue {
   const replacementById = new Map(strokes.map((stroke) => [stroke.id, stroke]));
 
   return {
     ...value,
     strokes: value.strokes.map((stroke) => replacementById.get(stroke.id) ?? stroke),
   };
+}
+
+/**
+ * 计算选中 strokes 的原始几何边界，不包含描边宽度和选区 padding。
+ * 缩放手势以此边界为锚点，保证拖动控制点时图形端点准确跟随指针。
+ */
+export function computeSelectionGeometryBox(
+  strokes: readonly (DrawingStroke | DrawingStrokeV2)[],
+  selectedIds: readonly string[],
+  options: LassoSelectionOptions = {}
+): SelectionBox | null {
+  if (strokes.length === 0 || selectedIds.length === 0) {
+    return null;
+  }
+
+  const resolvedOptions: Required<LassoSelectionOptions> = {
+    ellipseSegments: options.ellipseSegments ?? 48,
+    bezierSegments: options.bezierSegments ?? 48,
+  };
+  const selectedIdSet = new Set(selectedIds);
+  let unionBBox: BoundingBox | null = null;
+
+  for (const stroke of strokes) {
+    if (!selectedIdSet.has(stroke.id)) {
+      continue;
+    }
+
+    const geometry = buildStrokeSelectionGeometry(stroke, resolvedOptions);
+    if (geometry.bbox === null || !isValidBoundingBox(geometry.bbox)) {
+      continue;
+    }
+
+    unionBBox = unionBBox === null ? geometry.bbox : unionBoundingBoxes(unionBBox, geometry.bbox);
+  }
+
+  return unionBBox;
 }
 
 /**
@@ -914,7 +1070,7 @@ export function updateStrokes(value: DrawingValue, strokes: readonly DrawingStro
 export function computeSelectionBox(
   strokes: readonly (DrawingStroke | DrawingStrokeV2)[],
   selectedIds: readonly string[],
-  options: LassoSelectionOptions = {},
+  options: LassoSelectionOptions = {}
 ): SelectionBox | null {
   if (strokes.length === 0 || selectedIds.length === 0) {
     return null;
@@ -959,7 +1115,7 @@ export function computeSelectionBox(
 export function selectStrokesIntersectingLasso(
   strokes: readonly DrawingStroke[],
   lassoPoints: readonly DrawingPoint[],
-  options: LassoSelectionOptions = {},
+  options: LassoSelectionOptions = {}
 ): string[] {
   // 套索必须至少包含 3 个不同坐标点，否则无法构成有效多边形。
   if (strokes.length === 0 || uniquePointCount(lassoPoints) < 3) {
@@ -1006,7 +1162,9 @@ export function selectStrokesIntersectingLasso(
     if (
       geometry.closedShapePoints !== null &&
       hasRenderedFill(stroke) &&
-      lassoPolygon.some((point) => lassoPointInsideClosedStroke(point, stroke, geometry.closedShapePoints ?? []))
+      lassoPolygon.some((point) =>
+        lassoPointInsideClosedStroke(point, stroke, geometry.closedShapePoints ?? [])
+      )
     ) {
       selectedIds.push(stroke.id);
       continue;
@@ -1024,7 +1182,8 @@ export function selectStrokesIntersectingLasso(
         // 条件 D：所有可见描边按 strokeWidth 半径与套索边做距离命中。
         if (
           strokeHalfWidth > 0 &&
-          distanceSqSegmentToSegment(strokeStart, strokeEnd, lassoStart, lassoEnd) < strokeHalfWidth * strokeHalfWidth
+          distanceSqSegmentToSegment(strokeStart, strokeEnd, lassoStart, lassoEnd) <
+            strokeHalfWidth * strokeHalfWidth
         ) {
           intersects = true;
           break;
@@ -1062,7 +1221,11 @@ export function clearStrokes(value: DrawingValue): DrawingValue {
  * @param maxDistance - Optional maximum distance threshold. If the closest stroke
  *   is farther than this distance, returns `null`. Used for object eraser radius.
  */
-export function pick<TStroke extends PickableStroke>(point: DrawingPoint, strokes: TStroke[], maxDistance?: number): TStroke | null {
+export function pick<TStroke extends PickableStroke>(
+  point: DrawingPoint,
+  strokes: TStroke[],
+  maxDistance?: number
+): TStroke | null {
   if (strokes.length === 0) {
     return null;
   }
@@ -1101,7 +1264,7 @@ export function pickStrokeIntersectingSegment<TStroke extends PickableStroke>(
   start: DrawingPoint,
   end: DrawingPoint,
   strokes: TStroke[],
-  radius: number,
+  radius: number
 ): TStroke | null {
   if (strokes.length === 0) {
     return null;
@@ -1151,7 +1314,7 @@ export function pickRenderedStrokeIntersectingSegment<TStroke extends PickableSt
   start: DrawingPoint,
   end: DrawingPoint,
   strokes: TStroke[],
-  options: RenderedStrokeHitTestOptions,
+  options: RenderedStrokeHitTestOptions
 ): TStroke | null {
   if (strokes.length === 0) {
     return null;
@@ -1183,7 +1346,7 @@ export function pickRenderedStrokeIntersectingSegment<TStroke extends PickableSt
 export function pickStrokeIntersectingPolyline<TStroke extends PickableStroke>(
   points: DrawingPoint[],
   strokes: TStroke[],
-  radius: number,
+  radius: number
 ): TStroke | null {
   if (points.length === 0) {
     return null;
@@ -1238,7 +1401,7 @@ export function pickStrokeIntersectingPolyline<TStroke extends PickableStroke>(
 export function pickRenderedStrokeIntersectingPolyline<TStroke extends PickableStroke>(
   points: DrawingPoint[],
   strokes: TStroke[],
-  options: RenderedStrokeHitTestOptions,
+  options: RenderedStrokeHitTestOptions
 ): TStroke | null {
   if (points.length === 0 || strokes.length === 0) {
     return null;

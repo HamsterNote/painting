@@ -1,15 +1,10 @@
-import {
-  useCallback,
-  useMemo,
-  useRef,
-  type CSSProperties,
-  type ReactElement,
-} from 'react';
+import { useCallback, useMemo, useRef, type CSSProperties, type ReactElement } from 'react';
 import { StrokeRenderer } from '../render/StrokeRenderer';
 import {
   type DrawingViewport,
   type ViewportPoint,
   clampScale,
+  normalizeViewport,
   screenToCanvas,
 } from '../viewport';
 import type { DrawingStroke } from './DrawingSurface';
@@ -146,7 +141,7 @@ function fitBounds(
   bounds: Bounds,
   minimapWidth: number,
   minimapHeight: number,
-  padding: number,
+  padding: number
 ): MinimapFit {
   const contentWidth = bounds.maxX - bounds.minX;
   const contentHeight = bounds.maxY - bounds.minY;
@@ -159,18 +154,13 @@ function fitBounds(
   const safeContentHeight = Math.max(contentHeight, 1);
 
   // 取宽高比中较小的缩放比，保证内容完全可见
-  const scale = Math.min(
-    availableWidth / safeContentWidth,
-    availableHeight / safeContentHeight,
-  );
+  const scale = Math.min(availableWidth / safeContentWidth, availableHeight / safeContentHeight);
 
   // 居中内容
   const scaledContentWidth = safeContentWidth * scale;
   const scaledContentHeight = safeContentHeight * scale;
-  const offsetX =
-    padding + (availableWidth - scaledContentWidth) / 2 - bounds.minX * scale;
-  const offsetY =
-    padding + (availableHeight - scaledContentHeight) / 2 - bounds.minY * scale;
+  const offsetX = padding + (availableWidth - scaledContentWidth) / 2 - bounds.minX * scale;
+  const offsetY = padding + (availableHeight - scaledContentHeight) / 2 - bounds.minY * scale;
 
   return { scale, offsetX, offsetY };
 }
@@ -198,7 +188,7 @@ function minimapToCanvas(point: ViewportPoint, fit: MinimapFit): ViewportPoint {
 function computeIndicatorBox(
   viewport: DrawingViewport,
   hostSize: { width: number; height: number },
-  fit: MinimapFit,
+  fit: MinimapFit
 ): { x: number; y: number; width: number; height: number } {
   // 视口左上角在画布坐标系中的位置
   const canvasTopLeft = screenToCanvas({ x: 0, y: 0 }, viewport);
@@ -220,7 +210,7 @@ function computeIndicatorBox(
 function clipIndicatorBox(
   box: { x: number; y: number; width: number; height: number },
   minimapWidth: number,
-  minimapHeight: number,
+  minimapHeight: number
 ): { x: number; y: number; width: number; height: number } {
   const x = Math.max(0, Math.min(box.x, minimapWidth));
   const y = Math.max(0, Math.min(box.y, minimapHeight));
@@ -236,7 +226,7 @@ function clipIndicatorBox(
 function clientToMinimapLocal(
   clientX: number,
   clientY: number,
-  container: HTMLElement,
+  container: HTMLElement
 ): { x: number; y: number } {
   const rect = container.getBoundingClientRect();
   return {
@@ -278,10 +268,23 @@ export function Minimap({
   testID,
 }: MinimapProps): ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
+  const renderableStrokes = useMemo(
+    () =>
+      strokes
+        .map((stroke) => ({
+          ...stroke,
+          points: stroke.points.filter(
+            (point) => Number.isFinite(point.x) && Number.isFinite(point.y)
+          ),
+        }))
+        .filter((stroke) => stroke.points.length > 0),
+    [strokes]
+  );
+  const resolvedViewport = useMemo(() => normalizeViewport(viewport), [viewport]);
 
   // ---- Refs：在指针事件回调中访问最新值（避免重建监听器）----
-  const viewportRef = useRef(viewport);
-  viewportRef.current = viewport;
+  const viewportRef = useRef(resolvedViewport);
+  viewportRef.current = resolvedViewport;
   const hostSizeRef = useRef(hostSize);
   hostSizeRef.current = hostSize;
   const onViewportChangeRef = useRef(onViewportChange);
@@ -290,7 +293,7 @@ export function Minimap({
   // ---- 计算内容包围盒 ----
   // 仅基于笔画，不包含视口可见区域，保证平移时 minimap 视图稳定
   const contentBounds = useMemo((): Bounds => {
-    const strokesBounds = computeStrokesBounds(strokes);
+    const strokesBounds = computeStrokesBounds(renderableStrokes);
     let bounds: Bounds = strokesBounds ?? DEFAULT_CONTENT_BOUNDS;
 
     // 确保最小尺寸，避免退化情况（所有点在同一位置等）
@@ -307,12 +310,12 @@ export function Minimap({
 
     // 向外扩展 50px 留白
     return expandBounds(bounds, 50);
-  }, [strokes]);
+  }, [renderableStrokes]);
 
   // ---- 计算 minimap 拟合参数 ----
   const fit = useMemo(
     () => fitBounds(contentBounds, width, height, MINIMAP_PADDING),
-    [contentBounds, width, height],
+    [contentBounds, width, height]
   );
 
   // fit ref 用于 multi-drag 回调中读取最新值
@@ -321,12 +324,12 @@ export function Minimap({
 
   // ---- 计算视口指示框 ----
   const indicatorBox = useMemo(
-    () => computeIndicatorBox(viewport, hostSize, fit),
-    [viewport, hostSize, fit],
+    () => computeIndicatorBox(resolvedViewport, hostSize, fit),
+    [resolvedViewport, hostSize, fit]
   );
   const visibleIndicatorBox = useMemo(
     () => clipIndicatorBox(indicatorBox, width, height),
-    [height, indicatorBox, width],
+    [height, indicatorBox, width]
   );
   const visibleIndicatorBoxRef = useRef(visibleIndicatorBox);
   visibleIndicatorBoxRef.current = visibleIndicatorBox;
@@ -335,9 +338,12 @@ export function Minimap({
   type GestureMode = 'pan' | 'resize' | null;
   const gestureModeRef = useRef<GestureMode>(null);
   const gestureStartViewportRef = useRef<DrawingViewport | null>(null);
-  const gestureStartIndicatorRef = useRef<
-    { x: number; y: number; width: number; height: number } | null
-  >(null);
+  const gestureStartIndicatorRef = useRef<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
   const gestureStartPointRef = useRef<{ x: number; y: number } | null>(null);
   // 指针 ID 用于追踪当前活跃的指针（-1 表示无活跃指针）
   const activePointerIdRef = useRef<number>(-1);
@@ -363,7 +369,7 @@ export function Minimap({
     event.stopPropagation();
 
     // 仅处理左键鼠标 / 触摸 / 笔
-    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if (event.isPrimary === false || (event.pointerType === 'mouse' && event.button !== 0)) return;
     // 同一时间只允许一个指针
     if (activePointerIdRef.current !== -1) return;
 
@@ -379,11 +385,7 @@ export function Minimap({
     gestureStartIndicatorRef.current = visibleIndicatorBoxRef.current;
 
     // 起始指针位置（minimap 局部坐标）
-    const localPoint = clientToMinimapLocal(
-      event.clientX,
-      event.clientY,
-      container,
-    );
+    const localPoint = clientToMinimapLocal(event.clientX, event.clientY, container);
     gestureStartPointRef.current = localPoint;
 
     // 通过事件目标判断手势类型
@@ -415,7 +417,7 @@ export function Minimap({
     gestureStartIndicatorRef.current = computeIndicatorBox(
       newViewport,
       hostSizeRef.current,
-      fitRef.current,
+      fitRef.current
     );
     gestureModeRef.current = 'pan';
   }, []);
@@ -434,11 +436,7 @@ export function Minimap({
     const startPoint = gestureStartPointRef.current;
     if (!startViewport || !startIndicator || !startPoint) return;
 
-    const localPoint = clientToMinimapLocal(
-      event.clientX,
-      event.clientY,
-      container,
-    );
+    const localPoint = clientToMinimapLocal(event.clientX, event.clientY, container);
 
     if (mode === 'pan') {
       // 平移模式：拖动指示框 -> 移动主视图
@@ -474,10 +472,7 @@ export function Minimap({
       const newScale = clampScale(startViewport.scale / ratio);
 
       // 保持指示框中心对应的画布坐标不变
-      const centerCanvas = minimapToCanvas(
-        { x: centerX, y: centerY },
-        fitRef.current,
-      );
+      const centerCanvas = minimapToCanvas({ x: centerX, y: centerY }, fitRef.current);
 
       const newTx = hostSizeRef.current.width / 2 - centerCanvas.x * newScale;
       const newTy = hostSizeRef.current.height / 2 - centerCanvas.y * newScale;
@@ -559,7 +554,7 @@ export function Minimap({
       >
         <title>Minimap stroke preview</title>
         <g transform={contentTransform}>
-          {strokes.map((stroke) => (
+          {renderableStrokes.map((stroke) => (
             <StrokeRenderer
               key={stroke.id}
               stroke={stroke}

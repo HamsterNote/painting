@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import { normalizeViewport as normalizeViewportFromIndex } from '@hamster-note/painting';
 import { DrawingSurface } from '../components/DrawingSurface';
 import { Minimap } from '../components/Minimap';
 
@@ -41,6 +42,41 @@ describe('minimap regression coverage', () => {
     expect(screen.queryByTestId('minimap')).toBeNull();
     expect(resizeObserver).not.toHaveBeenCalled();
     expect(observe).not.toHaveBeenCalled();
+  });
+
+  it('exports viewport normalization from the package entry point', () => {
+    expect(
+      normalizeViewportFromIndex({
+        scale: 0,
+        tx: Number.NaN,
+        ty: Number.POSITIVE_INFINITY,
+      })
+    ).toEqual({ scale: 0.25, tx: 0, ty: 0 });
+  });
+
+  it('filters invalid stroke points while preserving valid minimap geometry', () => {
+    const { container } = render(
+      <Minimap
+        strokes={[
+          {
+            id: 'pen-with-invalid-point',
+            tool: 'pen',
+            points: [
+              { x: Number.NaN, y: 0 },
+              { x: 0, y: 0 },
+              { x: 50, y: 50 },
+            ],
+          },
+        ]}
+        viewport={{ scale: 1, tx: 0, ty: 0 }}
+        onViewportChange={jest.fn()}
+        hostSize={{ width: 400, height: 300 }}
+      />
+    );
+
+    const path = container.querySelector('path');
+    expect(path?.getAttribute('d')).toContain('M 0 0');
+    expect(path?.getAttribute('d')).not.toContain('NaN');
   });
 
   it('clips an oversized viewport indicator and its handles to the minimap bounds', () => {
