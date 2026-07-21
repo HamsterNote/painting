@@ -2948,7 +2948,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       ? {
           width: '100%',
           height: '100%',
-          ...(overflow !== undefined ? { overflow } : {}),
+          // Virtual-Paper 开启时默认 overflow: visible（笔迹可溢出纸张边界显示），
+          // 调用方显式传入 overflow 时优先使用。
+          overflow: overflow ?? 'visible',
         }
       : undefined;
 
@@ -2978,7 +2980,8 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           left: 0,
           width: '100%',
           height: '100%',
-          overflow,
+          // Virtual-Paper 开启时默认 overflow: visible；显式传入的 overflow 优先。
+          overflow: isVirtualPaperActive ? (overflow ?? 'visible') : overflow,
         }}
       >
         <title>Drawing surface</title>

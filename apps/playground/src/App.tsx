@@ -1055,6 +1055,7 @@ const [minimapEnabled, setMinimapEnabled] = useState(true);
               eraserTrajectory={eraserTrajectoryProp}
               virtualPaper={virtualPaperEnabled}
               minimap={minimapEnabled ? { position: 'bottom-right' } : false}
+              overflow="visible"
               testID="drawing-surface-uncontrolled"
             />
           </div>
@@ -1102,6 +1103,7 @@ const [minimapEnabled, setMinimapEnabled] = useState(true);
               eraserTrajectory={eraserTrajectoryProp}
               virtualPaper={virtualPaperEnabled}
               minimap={minimapEnabled ? { position: 'bottom-right' } : false}
+              overflow="visible"
               testID="drawing-surface-controlled"
             />
           </div>
