@@ -7,8 +7,6 @@ import {
   type DrawingValue,
   type DrawingRulerState,
   type DrawingRulerOptions,
-  type DrawingViewport,
-  Minimap,
 } from '@hamster-note/painting';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalPropsDemo } from './ExternalPropsDemo';
@@ -109,6 +107,7 @@ export default function App() {
   // ===== Virtual-paper 滚动/平移模式开关 (Task 9) =====
   // 启用后 DrawingSurface 将虚拟纸张交给 @hamster-note/virtual-paper 管理视口变换
   const [virtualPaperEnabled, setVirtualPaperEnabled] = useState(false);
+const [minimapEnabled, setMinimapEnabled] = useState(true);
   const [rulerStateUncontrolled, setRulerStateUncontrolled] = useState<DrawingRulerState | undefined>(undefined);
   const [rulerStateControlled, setRulerStateControlled] = useState<DrawingRulerState | undefined>(undefined);
   const [color, setColor] = useState('#000000');
@@ -125,14 +124,6 @@ export default function App() {
     strokes: [],
   });
   const [uncontrolledStrokes, setUncontrolledStrokes] = useState<DrawingValue>(SEED_VALUE);
-
-  // ===== Controlled DrawingSurface viewport (shared with Minimap) =====
-  const [controlledViewport, setControlledViewport] = useState<DrawingViewport>({
-    scale: 1,
-    tx: 0,
-    ty: 0,
-  });
-  const controlledContainerSize = { width: 400, height: 300 };
 
   // ===== Dash 控制状态 (Task 8/9 dashArray + dashOffset) =====
   const [dashEnabled, setDashEnabled] = useState(false);
@@ -513,6 +504,20 @@ export default function App() {
           }}
         >
           {virtualPaperEnabled ? 'VirtualPaper ON' : 'VirtualPaper OFF'}
+        </button>
+
+        <button
+          type="button"
+          data-testid="drawing-minimap-toggle"
+          onClick={() => setMinimapEnabled((prev) => !prev)}
+          style={{
+            padding: '4px 10px',
+            cursor: 'pointer',
+            border: minimapEnabled ? '2px solid #333' : '1px solid #aaa',
+            background: minimapEnabled ? '#e0e0e0' : '#fff',
+          }}
+        >
+          {minimapEnabled ? 'Minimap ON' : 'Minimap OFF'}
         </button>
 
         {toolInstruction && (
@@ -1049,6 +1054,7 @@ export default function App() {
               eraserCommitMode={eraserCommitMode}
               eraserTrajectory={eraserTrajectoryProp}
               virtualPaper={virtualPaperEnabled}
+              minimap={minimapEnabled ? { position: 'bottom-right' } : false}
               testID="drawing-surface-uncontrolled"
             />
           </div>
@@ -1095,8 +1101,7 @@ export default function App() {
               eraserCommitMode={eraserCommitMode}
               eraserTrajectory={eraserTrajectoryProp}
               virtualPaper={virtualPaperEnabled}
-              viewport={controlledViewport}
-              onViewportChange={setControlledViewport}
+              minimap={minimapEnabled ? { position: 'bottom-right' } : false}
               testID="drawing-surface-controlled"
             />
           </div>
@@ -1126,77 +1131,6 @@ export default function App() {
           >
             {JSON.stringify(controlledStrokes, null, 2)}
           </pre>
-        </div>
-      </div>
-
-      {/* ===== Minimap 演示 ===== */}
-      <div
-        style={{
-          marginTop: '30px',
-          borderTop: '1px solid #ddd',
-          paddingTop: '20px',
-        }}
-      >
-        <h2>Minimap (独立缩略图)</h2>
-        <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
-          Minimap 与上方 Controlled 画布共享视口状态。在画布上双指平移/缩放时，Minimap 的视口指示框实时联动；点击 Minimap 可平移画布。
-        </p>
-        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-          <div>
-            <h3 style={{ fontSize: '14px' }}>Controlled Value Minimap</h3>
-            <Minimap
-              value={controlledStrokes}
-              width={200}
-              height={150}
-              padding={10}
-              background="#fafafa"
-              viewportStroke="#2563eb"
-              viewportFill="rgba(37, 99, 235, 0.1)"
-              testId="playground-minimap-controlled"
-            />
-          </div>
-
-          <div>
-            <h3 style={{ fontSize: '14px' }}>视口指示框 + 点击平移 (与画布联动)</h3>
-            <Minimap
-              value={controlledStrokes}
-              width={200}
-              height={150}
-              padding={10}
-              background="#fafafa"
-              viewport={controlledViewport}
-              containerSize={controlledContainerSize}
-              onViewportChange={setControlledViewport}
-              testId="playground-minimap-viewport"
-            />
-            <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
-              <p>scale: {controlledViewport.scale.toFixed(2)}</p>
-              <p>tx: {controlledViewport.tx.toFixed(0)}</p>
-              <p>ty: {controlledViewport.ty.toFixed(0)}</p>
-              <p style={{ marginTop: '4px' }}>点击 minimap 平移 · 在画布上双指操作改变视口</p>
-            </div>
-            <div style={{ marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={() => setControlledViewport({ scale: 1, tx: 0, ty: 0 })}
-                style={{ fontSize: '12px', padding: '2px 8px', cursor: 'pointer' }}
-              >
-                重置视口
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <h3 style={{ fontSize: '14px' }}>Uncontrolled Value Minimap</h3>
-            <Minimap
-              value={uncontrolledStrokes}
-              width={200}
-              height={150}
-              padding={10}
-              background="#fafafa"
-              testId="playground-minimap-uncontrolled"
-            />
-          </div>
         </div>
       </div>
 

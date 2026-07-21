@@ -62,6 +62,7 @@ import {
 } from '../viewport';
 import { isVirtualPaperEnabled } from '../virtualPaperAdapter';
 import type { DrawingSurfaceVirtualPaperOptions } from '../virtualPaperOptions';
+import { Minimap, type MinimapOptions } from './Minimap';
 import {
   POINTER_DOWN_CAPTURE_OPTIONS,
   shouldCaptureVirtualPaperPointerDown,
@@ -116,6 +117,8 @@ export interface DrawingSurfaceHandle {
   clearSelection(): void;
   /** 获取当前选中的 stroke id 数组（快照） */
   getSelectedStrokeIds(): string[];
+  /** 获取画布宿主元素的尺寸（CSS 像素），用于 minimap 等外部组件 */
+  getHostSize(): { width: number; height: number };
 }
 
 export type DrawingPoint = {
@@ -366,17 +369,18 @@ export type DrawingSurfaceProps = {
   virtualPaper?: boolean | DrawingSurfaceVirtualPaperOptions;
   /**
    * 受控视口状态。传入后 DrawingSurface 将使用此值作为当前视口，
-   * 不再使用内部状态。配合 `onViewportChange` 可实现外部（如 Minimap）
-   * 与主画布的双向视口同步。
+   * 不再使用内部状态。配合 `onViewportChange` 可实现外部与主画布的双向视口同步。
    */
   viewport?: DrawingViewport;
   /** 非受控模式下的初始视口状态。仅在未传入 `viewport` 时生效。 */
   defaultViewport?: DrawingViewport;
-  /**
-   * 视口变化回调。当用户通过 virtual-paper 平移/缩放导致视口变化时触发。
-   * 在受控模式下，外部应在此回调中更新 `viewport` prop。
-   */
+  /** 视口变化回调（平移/缩放或 minimap 交互时触发）。 */
   onViewportChange?: (viewport: DrawingViewport) => void;
+  /**
+   * 小地图 overlay 配置。省略或 `false` -> 不显示 minimap。
+   * 传入 options 对象 -> 启用 minimap，可配置尺寸/位置等。
+   */
+  minimap?: false | MinimapOptions;
 };
 
 type PointerInputEvent = {
@@ -727,13 +731,16 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       viewport: viewportProp,
       defaultViewport,
       onViewportChange,
+      minimap: minimapProp,
     } = props;
+    const minimapOptions = typeof minimapProp === 'object' ? minimapProp : {};
+    const minimapEnabled =
+      minimapProp !== false && minimapProp !== undefined && minimapOptions.enabled !== false;
     const hostRef = useRef<HTMLDivElement>(null);
     const eventTargetRef = useRef<DrawingEventTarget | undefined>(eventTarget);
     const multiDragRef = useRef<InstanceType<typeof Mixin> | null>(null);
     const selectionResizeDragRef = useRef<InstanceType<typeof Mixin> | null>(null);
     const gestureOwnerRef = useRef(createGestureOwner());
-    // 受控视口：传入 viewportProp 时使用外部值，否则使用内部状态
     const isViewportControlled = viewportProp !== undefined;
     const [internalViewport, setInternalViewport] = useState<DrawingViewport>(() =>
       defaultViewport ? normalizeViewport(defaultViewport) : createResetViewport()
@@ -742,19 +749,19 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     const viewportRef = useRef<DrawingViewport>(viewport);
     viewportRef.current = viewport;
 
-    // onViewportChange 回调用 ref 包装，避免 handleVirtualPaperViewportChange 因引用变化而重建
+    const isViewportControlledRef = useRef(isViewportControlled);
+    isViewportControlledRef.current = isViewportControlled;
     const onViewportChangeRef = useRef(onViewportChange);
     onViewportChangeRef.current = onViewportChange;
 
-    const handleVirtualPaperViewportChange = useCallback(
-      (nextViewport: DrawingViewport) => {
-        if (!isViewportControlled) {
-          setInternalViewport(nextViewport);
-        }
-        onViewportChangeRef.current?.(nextViewport);
-      },
-      [isViewportControlled]
-    );
+    const handleViewportChange = useCallback((nextViewport: DrawingViewport) => {
+      if (!isViewportControlledRef.current) {
+        setInternalViewport(nextViewport);
+      }
+      onViewportChangeRef.current?.(nextViewport);
+    }, []);
+
+    const handleVirtualPaperViewportChange = handleViewportChange;
 
     const internalRulerStateRef = useRef<DrawingRulerState | null>(null);
     const [rulerInitTick, setRulerInitTick] = useState(0);
@@ -1548,6 +1555,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         getSelectedStrokeIds() {
           return [...selectedIdsRef.current];
         },
+        getHostSize() {
+          const host = hostRef.current;
+          if (!host) return { width: 0, height: 0 };
+          return { width: host.clientWidth, height: host.clientHeight };
+        },
       }),
       [commitSelection, removeStrokesFromCanvas]
     );
@@ -1562,6 +1574,22 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         y: clientY - rect.top,
       };
     }, []);
+
+    // 跟踪宿主元素尺寸，供 minimap 计算指示框大小
+    const [hostSize, setHostSize] = useState({ width: 0, height: 0 });
+    useLayoutEffect(() => {
+      if (!minimapEnabled) return undefined;
+      const host = hostRef.current;
+      if (!host) return undefined;
+      const updateSize = () => {
+        setHostSize({ width: host.clientWidth, height: host.clientHeight });
+      };
+      updateSize();
+      if (typeof ResizeObserver === 'undefined') return undefined;
+      const observer = new ResizeObserver(updateSize);
+      observer.observe(host);
+      return () => observer.disconnect();
+    }, [minimapEnabled]);
 
     const resolvePointerSnap = useCallback(
       (
@@ -2924,6 +2952,23 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         }
       : undefined;
 
+    // ---- Minimap 配置解析 ----
+    const minimapPosition = minimapOptions.position ?? 'bottom-right';
+    const minimapPositionStyle: CSSProperties = (() => {
+      const offset = 8;
+      switch (minimapPosition) {
+        case 'top-left':
+          return { position: 'absolute', top: offset, left: offset, zIndex: 10 };
+        case 'top-right':
+          return { position: 'absolute', top: offset, right: offset, zIndex: 10 };
+        case 'bottom-left':
+          return { position: 'absolute', bottom: offset, left: offset, zIndex: 10 };
+        case 'bottom-right':
+        default:
+          return { position: 'absolute', bottom: offset, right: offset, zIndex: 10 };
+      }
+    })();
+
     const drawingSurfaceSvg = (
       <svg
         data-pressure-multiplier={String(resolvedPressureMultiplier)}
@@ -3264,6 +3309,18 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
               )}
             </div>
           </div>
+        )}
+        {minimapEnabled && hostSize.width > 0 && hostSize.height > 0 && (
+          <Minimap
+            strokes={strokes}
+            viewport={viewport}
+            onViewportChange={handleViewportChange}
+            hostSize={hostSize}
+            width={minimapOptions.width}
+            height={minimapOptions.height}
+            testID={minimapOptions.testID}
+            style={minimapPositionStyle}
+          />
         )}
       </div>
     );

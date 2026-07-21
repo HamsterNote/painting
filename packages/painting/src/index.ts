@@ -16,7 +16,7 @@ export type {
   DrawingValue,
 } from './components/DrawingSurface';
 export { DrawingSurface } from './components/DrawingSurface';
-export type { MinimapProps } from './components/Minimap';
+export type { MinimapOptions, MinimapProps } from './components/Minimap';
 export { Minimap } from './components/Minimap';
 export type { UseCanvasOptions, UseCanvasReturn } from './hooks/useCanvas';
 export { useCanvas } from './hooks/useCanvas';

@@ -166,8 +166,12 @@ function mockHostRect(element: HTMLElement) {
 }
 
 function mockElementClientSize(width: number, height: number) {
-  const clientWidthSpy = jest.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(width);
-  const clientHeightSpy = jest.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(height);
+  const clientWidthSpy = jest
+    .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+    .mockReturnValue(width);
+  const clientHeightSpy = jest
+    .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+    .mockReturnValue(height);
 
   return () => {
     clientWidthSpy.mockRestore();
@@ -310,7 +314,9 @@ describe('DrawingSurface', () => {
     expect(querySvgContentGroup(objectDisabled.container)?.getAttribute('transform')).toBe(
       'translate(0 0) scale(1)'
     );
-    expect(objectDisabled.container.querySelector('[data-testid="virtual-paper-wrapper"]')).toBeNull();
+    expect(
+      objectDisabled.container.querySelector('[data-testid="virtual-paper-wrapper"]')
+    ).toBeNull();
   });
 
   it('uses virtualPaper as the sole visual transform when enabled', () => {
@@ -318,9 +324,10 @@ describe('DrawingSurface', () => {
 
     expect(querySvgContentGroup(container)?.hasAttribute('transform')).toBe(false);
     expect(container.querySelector('[data-testid="virtual-paper-wrapper"]')).toBeTruthy();
-    expect(container.querySelector<HTMLElement>('[data-testid="virtual-paper-container"]')?.style.overflow).toBe(
-      'visible'
-    );
+    expect(
+      container.querySelector<HTMLElement>('[data-testid="virtual-paper-container"]')?.style
+        .overflow
+    ).toBe('visible');
   });
 
   it('commits a mouse stroke from SVG content when virtualPaper stops bubbling pointerdown', () => {
@@ -346,19 +353,28 @@ describe('DrawingSurface', () => {
     dispatchElementPointerEvent(
       svg,
       'pointerdown',
-      { point: { x: 15, y: 25 }, event: { pointerType: 'mouse', button: 0, clientX: 15, clientY: 25 } },
+      {
+        point: { x: 15, y: 25 },
+        event: { pointerType: 'mouse', button: 0, clientX: 15, clientY: 25 },
+      },
       1
     );
     dispatchElementPointerEvent(
       document,
       'pointermove',
-      { point: { x: 20, y: 35 }, event: { pointerType: 'mouse', button: -1, clientX: 20, clientY: 35 } },
+      {
+        point: { x: 20, y: 35 },
+        event: { pointerType: 'mouse', button: -1, clientX: 20, clientY: 35 },
+      },
       1
     );
     dispatchElementPointerEvent(
       document,
       'pointerup',
-      { point: { x: 20, y: 35 }, event: { pointerType: 'mouse', button: 0, clientX: 20, clientY: 35 } },
+      {
+        point: { x: 20, y: 35 },
+        event: { pointerType: 'mouse', button: 0, clientX: 20, clientY: 35 },
+      },
       1
     );
 
@@ -377,7 +393,10 @@ describe('DrawingSurface', () => {
         testID="drawing-surface-host"
         value={{ strokes: [] }}
         onChange={onChange}
-        ruler={{ enabled: true, state: { center: { x: 50, y: 40 }, rotationRad: 0, length: 160, height: 30 } }}
+        ruler={{
+          enabled: true,
+          state: { center: { x: 50, y: 40 }, rotationRad: 0, length: 160, height: 30 },
+        }}
         onRulerChange={onRulerChange}
         virtualPaper={true}
       />
@@ -389,19 +408,28 @@ describe('DrawingSurface', () => {
     dispatchElementPointerEvent(
       grip,
       'pointerdown',
-      { point: { x: 60, y: 60 }, event: { pointerType: 'mouse', button: 0, clientX: 60, clientY: 60 } },
+      {
+        point: { x: 60, y: 60 },
+        event: { pointerType: 'mouse', button: 0, clientX: 60, clientY: 60 },
+      },
       1
     );
     dispatchElementPointerEvent(
       document,
       'pointermove',
-      { point: { x: 80, y: 90 }, event: { pointerType: 'mouse', button: -1, clientX: 80, clientY: 90 } },
+      {
+        point: { x: 80, y: 90 },
+        event: { pointerType: 'mouse', button: -1, clientX: 80, clientY: 90 },
+      },
       1
     );
     dispatchElementPointerEvent(
       document,
       'pointerup',
-      { point: { x: 80, y: 90 }, event: { pointerType: 'mouse', button: 0, clientX: 80, clientY: 90 } },
+      {
+        point: { x: 80, y: 90 },
+        event: { pointerType: 'mouse', button: 0, clientX: 80, clientY: 90 },
+      },
       1
     );
 
@@ -417,7 +445,10 @@ describe('DrawingSurface', () => {
         testID="drawing-surface-host"
         value={{ strokes: [] }}
         onChange={onChange}
-        ruler={{ enabled: true, state: { center: { x: 50, y: 40 }, rotationRad: 0, length: 160, height: 30 } }}
+        ruler={{
+          enabled: true,
+          state: { center: { x: 50, y: 40 }, rotationRad: 0, length: 160, height: 30 },
+        }}
         onRulerChange={onRulerChange}
         virtualPaper={true}
       />
@@ -480,7 +511,10 @@ describe('DrawingSurface', () => {
         testID="drawing-surface-host"
         value={{ strokes: [] }}
         onChange={onChange}
-        ruler={{ enabled: true, state: { center: { x: 50, y: 40 }, rotationRad: 0, length: 160, height: 30 } }}
+        ruler={{
+          enabled: true,
+          state: { center: { x: 50, y: 40 }, rotationRad: 0, length: 160, height: 30 },
+        }}
         onRulerChange={onRulerChange}
         virtualPaper={true}
       />
@@ -714,19 +748,28 @@ describe('DrawingSurface', () => {
       dispatchElementPointerEvent(
         rulerBody,
         'pointerdown',
-        { point: { x: 50, y: 40 }, event: { pointerType: 'pen', button: 0, clientX: 60, clientY: 60 } },
+        {
+          point: { x: 50, y: 40 },
+          event: { pointerType: 'pen', button: 0, clientX: 60, clientY: 60 },
+        },
         1
       );
       dispatchElementPointerEvent(
         document,
         'pointermove',
-        { point: { x: 80, y: 80 }, event: { pointerType: 'pen', button: -1, clientX: 80, clientY: 80 } },
+        {
+          point: { x: 80, y: 80 },
+          event: { pointerType: 'pen', button: -1, clientX: 80, clientY: 80 },
+        },
         1
       );
       dispatchElementPointerEvent(
         document,
         'pointerup',
-        { point: { x: 80, y: 80 }, event: { pointerType: 'pen', button: 0, clientX: 80, clientY: 80 } },
+        {
+          point: { x: 80, y: 80 },
+          event: { pointerType: 'pen', button: 0, clientX: 80, clientY: 80 },
+        },
         1
       );
 
@@ -752,13 +795,19 @@ describe('DrawingSurface', () => {
       dispatchElementPointerEvent(
         polygonHost,
         'pointerdown',
-        { point: { x: 20, y: 30 }, event: { pointerType: 'touch', button: 0, clientX: 20, clientY: 30 } },
+        {
+          point: { x: 20, y: 30 },
+          event: { pointerType: 'touch', button: 0, clientX: 20, clientY: 30 },
+        },
         1
       );
       dispatchElementPointerEvent(
         document,
         'pointermove',
-        { point: { x: 60, y: 60 }, event: { pointerType: 'touch', button: 0, clientX: 60, clientY: 60 } },
+        {
+          point: { x: 60, y: 60 },
+          event: { pointerType: 'touch', button: 0, clientX: 60, clientY: 60 },
+        },
         1
       );
 
@@ -842,7 +891,11 @@ describe('DrawingSurface', () => {
       }));
     };
 
-    const dispatchClick = (target: Element, point: { readonly x: number; readonly y: number }, pointerId = 1) => {
+    const dispatchClick = (
+      target: Element,
+      point: { readonly x: number; readonly y: number },
+      pointerId = 1
+    ) => {
       const item: PointerPathItem = {
         point,
         event: { pointerType: 'pen', button: 0, clientX: point.x, clientY: point.y },
@@ -855,19 +908,28 @@ describe('DrawingSurface', () => {
       dispatchElementPointerEvent(
         target,
         'pointerdown',
-        { point: { x: 60, y: 60 }, event: { pointerType: 'mouse', button: 0, clientX: 60, clientY: 60 } },
+        {
+          point: { x: 60, y: 60 },
+          event: { pointerType: 'mouse', button: 0, clientX: 60, clientY: 60 },
+        },
         1
       );
       dispatchElementPointerEvent(
         document,
         'pointermove',
-        { point: { x: 80, y: 90 }, event: { pointerType: 'mouse', button: -1, clientX: 80, clientY: 90 } },
+        {
+          point: { x: 80, y: 90 },
+          event: { pointerType: 'mouse', button: -1, clientX: 80, clientY: 90 },
+        },
         1
       );
       dispatchElementPointerEvent(
         document,
         'pointerup',
-        { point: { x: 80, y: 90 }, event: { pointerType: 'mouse', button: 0, clientX: 80, clientY: 90 } },
+        {
+          point: { x: 80, y: 90 },
+          event: { pointerType: 'mouse', button: 0, clientX: 80, clientY: 90 },
+        },
         1
       );
     };
@@ -876,42 +938,69 @@ describe('DrawingSurface', () => {
       dispatchElementPointerEvent(
         target,
         'pointerdown',
-        { point: { x: 100, y: 60 }, event: { pointerType: 'touch', isPrimary: true }, timestamp: 0 },
+        {
+          point: { x: 100, y: 60 },
+          event: { pointerType: 'touch', isPrimary: true },
+          timestamp: 0,
+        },
         1
       );
       dispatchElementPointerEvent(
         target,
         'pointerdown',
-        { point: { x: 20, y: 60 }, event: { pointerType: 'touch', isPrimary: false }, timestamp: 1 },
+        {
+          point: { x: 20, y: 60 },
+          event: { pointerType: 'touch', isPrimary: false },
+          timestamp: 1,
+        },
         2
       );
       dispatchElementPointerEvent(
         document,
         'pointermove',
-        { point: { x: 130, y: 90 }, event: { pointerType: 'touch', isPrimary: true }, timestamp: 10 },
+        {
+          point: { x: 130, y: 90 },
+          event: { pointerType: 'touch', isPrimary: true },
+          timestamp: 10,
+        },
         1
       );
       dispatchElementPointerEvent(
         document,
         'pointermove',
-        { point: { x: 50, y: 40 }, event: { pointerType: 'touch', isPrimary: false }, timestamp: 11 },
+        {
+          point: { x: 50, y: 40 },
+          event: { pointerType: 'touch', isPrimary: false },
+          timestamp: 11,
+        },
         2
       );
       dispatchElementPointerEvent(
         document,
         'pointerup',
-        { point: { x: 130, y: 90 }, event: { pointerType: 'touch', isPrimary: true }, timestamp: 20 },
+        {
+          point: { x: 130, y: 90 },
+          event: { pointerType: 'touch', isPrimary: true },
+          timestamp: 20,
+        },
         1
       );
       dispatchElementPointerEvent(
         document,
         'pointerup',
-        { point: { x: 50, y: 40 }, event: { pointerType: 'touch', isPrimary: false }, timestamp: 21 },
+        {
+          point: { x: 50, y: 40 },
+          event: { pointerType: 'touch', isPrimary: false },
+          timestamp: 21,
+        },
         2
       );
     };
 
-    const dispatchTouchSweep = (host: HTMLElement, path: readonly { readonly x: number; readonly y: number }[]) => {
+    const dispatchTouchSweep = (
+      host: HTMLElement,
+      path: readonly { readonly x: number; readonly y: number }[]
+    ) => {
       dispatchDragMove(host, [
         finger(
           path.map((point) => ({
@@ -1031,7 +1120,10 @@ describe('DrawingSurface', () => {
       dispatchElementPointerEvent(
         document,
         'pointermove',
-        { point: { x: 60, y: 80 }, event: { pointerType: 'pen', button: -1, clientX: 60, clientY: 80 } },
+        {
+          point: { x: 60, y: 80 },
+          event: { pointerType: 'pen', button: -1, clientX: 60, clientY: 80 },
+        },
         1
       );
 
@@ -1062,7 +1154,9 @@ describe('DrawingSurface', () => {
       ]);
 
       expect(virtualPaperChange).not.toHaveBeenCalled();
-      expect(virtualPaperRender.container.querySelector('[data-testid="eraser-trajectory"]')).toBeNull();
+      expect(
+        virtualPaperRender.container.querySelector('[data-testid="eraser-trajectory"]')
+      ).toBeNull();
       virtualPaperRender.unmount();
 
       const disabledChange = jest.fn();
@@ -1111,8 +1205,12 @@ describe('DrawingSurface', () => {
       ]);
 
       expect(virtualPaperSelectionChange).not.toHaveBeenCalled();
-      expect(virtualPaperRender.container.querySelector('[data-testid="lasso-preview"]')).toBeNull();
-      expect(virtualPaperRender.container.querySelector('[data-testid="lasso-selection-box"]')).toBeNull();
+      expect(
+        virtualPaperRender.container.querySelector('[data-testid="lasso-preview"]')
+      ).toBeNull();
+      expect(
+        virtualPaperRender.container.querySelector('[data-testid="lasso-selection-box"]')
+      ).toBeNull();
       virtualPaperRender.unmount();
 
       const omittedSelectionChange = jest.fn();
@@ -4267,7 +4365,7 @@ describe('DrawingSurface', () => {
     });
   });
 
-/* eslint-disable jest/expect-expect */
+  /* eslint-disable jest/expect-expect */
   describe('pen-tip snapping integration', () => {
     const snapTargetValue: DrawingValue = {
       strokes: [
@@ -5315,9 +5413,9 @@ describe('DrawingSurface', () => {
         );
       }
 
-      const resizedStroke = onChange.mock.calls.at(-1)?.[0].strokes.find(
-        (stroke: DrawingStroke) => stroke.id === 'lasso-target'
-      );
+      const resizedStroke = onChange.mock.calls
+        .at(-1)?.[0]
+        .strokes.find((stroke: DrawingStroke) => stroke.id === 'lasso-target');
       expect(resizedStroke?.points).toEqual([
         { x: 20, y: 20 },
         { x: 80, y: 20 },
@@ -5480,9 +5578,9 @@ describe('DrawingSurface', () => {
         );
       }
 
-      const resizedStroke = onChange.mock.calls.at(-1)?.[0].strokes.find(
-        (stroke: DrawingStroke) => stroke.id === 'resize-target'
-      );
+      const resizedStroke = onChange.mock.calls
+        .at(-1)?.[0]
+        .strokes.find((stroke: DrawingStroke) => stroke.id === 'resize-target');
       expect(resizedStroke?.points).toEqual([
         { x: 20, y: 20 },
         { x: 80, y: 100 },
@@ -7188,43 +7286,69 @@ describe('eraserCursorAndTrajectory', () => {
       dispatchElementPointerEvent(
         body,
         'pointerdown',
-        { point: { x: 100, y: 60 }, event: { pointerType: 'touch', isPrimary: true }, timestamp: 0 },
+        {
+          point: { x: 100, y: 60 },
+          event: { pointerType: 'touch', isPrimary: true },
+          timestamp: 0,
+        },
         1
       );
       dispatchElementPointerEvent(
         body,
         'pointerdown',
-        { point: { x: 20, y: 60 }, event: { pointerType: 'touch', isPrimary: false }, timestamp: 1 },
+        {
+          point: { x: 20, y: 60 },
+          event: { pointerType: 'touch', isPrimary: false },
+          timestamp: 1,
+        },
         2
       );
       dispatchElementPointerEvent(
         document,
         'pointermove',
-        { point: { x: 130, y: 90 }, event: { pointerType: 'touch', isPrimary: true }, timestamp: 10 },
+        {
+          point: { x: 130, y: 90 },
+          event: { pointerType: 'touch', isPrimary: true },
+          timestamp: 10,
+        },
         1
       );
       dispatchElementPointerEvent(
         document,
         'pointermove',
-        { point: { x: 50, y: 40 }, event: { pointerType: 'touch', isPrimary: false }, timestamp: 11 },
+        {
+          point: { x: 50, y: 40 },
+          event: { pointerType: 'touch', isPrimary: false },
+          timestamp: 11,
+        },
         2
       );
       dispatchElementPointerEvent(
         document,
         'pointerup',
-        { point: { x: 130, y: 90 }, event: { pointerType: 'touch', isPrimary: true }, timestamp: 20 },
+        {
+          point: { x: 130, y: 90 },
+          event: { pointerType: 'touch', isPrimary: true },
+          timestamp: 20,
+        },
         1
       );
       dispatchElementPointerEvent(
         document,
         'pointerup',
-        { point: { x: 50, y: 40 }, event: { pointerType: 'touch', isPrimary: false }, timestamp: 21 },
+        {
+          point: { x: 50, y: 40 },
+          event: { pointerType: 'touch', isPrimary: false },
+          timestamp: 21,
+        },
         2
       );
 
       expect(onRulerChange).toHaveBeenCalled();
       expect(onChange).not.toHaveBeenCalled();
-      expect(container.querySelector('svg')?.getAttribute('data-stroke-count')).toBe(initialStrokeCount);
+      expect(container.querySelector('svg')?.getAttribute('data-stroke-count')).toBe(
+        initialStrokeCount
+      );
 
       const nextState = onRulerChange.mock.calls.at(-1)?.[0] as DrawingRulerState;
       rerender(
@@ -7251,7 +7375,9 @@ describe('eraserCursorAndTrajectory', () => {
       expect(ruler.getAttribute('data-ruler-center-x')).not.toBe(String(rulerState.center.x));
       expect(ruler.getAttribute('data-ruler-center-y')).not.toBe(String(rulerState.center.y));
       expect(ruler.getAttribute('data-ruler-rotation')).not.toBe(String(rulerState.rotationRad));
-      expect(container.querySelector('svg')?.getAttribute('data-stroke-count')).toBe(initialStrokeCount);
+      expect(container.querySelector('svg')?.getAttribute('data-stroke-count')).toBe(
+        initialStrokeCount
+      );
     });
   });
 
@@ -7304,7 +7430,10 @@ describe('eraserCursorAndTrajectory', () => {
       dispatchElementPointerEvent(
         document,
         'pointerup',
-        { point: toClientPoint(points[points.length - 1] ?? firstPoint), event: { pointerType: 'pen', button: 0 } },
+        {
+          point: toClientPoint(points[points.length - 1] ?? firstPoint),
+          event: { pointerType: 'pen', button: 0 },
+        },
         pointerId
       );
     };
@@ -7387,8 +7516,12 @@ describe('eraserCursorAndTrajectory', () => {
         <DrawingSurface ruler={{ enabled: true, state: horizontalRuler }} />
       );
 
-      expect(screen.getByTestId('drawing-ruler-background').getAttribute('fill-opacity')).toBe('0.2');
-      const labels = Array.from(container.querySelectorAll('text')).map((element) => element.textContent ?? '');
+      expect(screen.getByTestId('drawing-ruler-background').getAttribute('fill-opacity')).toBe(
+        '0.2'
+      );
+      const labels = Array.from(container.querySelectorAll('text')).map(
+        (element) => element.textContent ?? ''
+      );
       expect(labels.length).toBeGreaterThan(0);
       labels.forEach((label) => {
         expect(label.startsWith('-')).toBe(false);
@@ -7402,7 +7535,9 @@ describe('eraserCursorAndTrajectory', () => {
         />
       );
 
-      expect(screen.getByTestId('drawing-ruler-background').getAttribute('fill-opacity')).toBe('0.45');
+      expect(screen.getByTestId('drawing-ruler-background').getAttribute('fill-opacity')).toBe(
+        '0.45'
+      );
     });
 
     it('projects accessible cursor state while hovering inside the ruler', () => {
@@ -7529,17 +7664,25 @@ describe('eraserCursorAndTrajectory', () => {
       expect(onChange).not.toHaveBeenCalled();
 
       const body = screen.getByTestId('drawing-ruler-background');
-      dispatchPenPath(body, [
-        { x: 20, y: 50 },
-        { x: 70, y: 50 },
-      ], 2);
+      dispatchPenPath(
+        body,
+        [
+          { x: 20, y: 50 },
+          { x: 70, y: 50 },
+        ],
+        2
+      );
 
       expect(onChange).not.toHaveBeenCalled();
 
-      dispatchPenPath(host, [
-        { x: 20, y: 50 },
-        { x: 70, y: 50 },
-      ], 3);
+      dispatchPenPath(
+        host,
+        [
+          { x: 20, y: 50 },
+          { x: 70, y: 50 },
+        ],
+        3
+      );
 
       expect(committedPointsFrom(onChange).map(({ x, y }) => ({ x, y }))).toEqual([
         { x: 20, y: horizontalRuler.center.y - horizontalRuler.height / 2 },
@@ -7549,17 +7692,25 @@ describe('eraserCursorAndTrajectory', () => {
 
     it('mounts and unmounts enabled ruler gesture integration without duplicate rulers', () => {
       const first = render(
-        <DrawingSurface testID="drawing-surface-host" ruler={{ enabled: true, state: horizontalRuler }} />
+        <DrawingSurface
+          testID="drawing-surface-host"
+          ruler={{ enabled: true, state: horizontalRuler }}
+        />
       );
       expect(first.container.querySelectorAll('[data-testid="drawing-ruler"]')).toHaveLength(1);
       expect(() => first.unmount()).not.toThrow();
 
       const second = render(
-        <DrawingSurface testID="drawing-surface-host" ruler={{ enabled: true, state: horizontalRuler }} />
+        <DrawingSurface
+          testID="drawing-surface-host"
+          ruler={{ enabled: true, state: horizontalRuler }}
+        />
       );
 
       expect(second.container.querySelectorAll('[data-testid="drawing-ruler"]')).toHaveLength(1);
-      expect(screen.getByTestId('drawing-ruler').getAttribute('data-ruler-length')).toBe(String(horizontalRuler.length));
+      expect(screen.getByTestId('drawing-ruler').getAttribute('data-ruler-length')).toBe(
+        String(horizontalRuler.length)
+      );
       expect(() => second.unmount()).not.toThrow();
     });
 
@@ -7662,14 +7813,17 @@ describe('eraserCursorAndTrajectory', () => {
 
       const zeroLabels = queryAllByText('0');
       expect(zeroLabels.length).toBeGreaterThan(0);
-      const textContents = Array.from(document.querySelectorAll('text'), (text) =>
-        text.textContent ?? ''
+      const textContents = Array.from(
+        document.querySelectorAll('text'),
+        (text) => text.textContent ?? ''
       );
       expect(textContents.every((text) => !text.startsWith('-'))).toBe(true);
     });
 
     it('ruler={false} 卸载后不改变 data-stroke-count 也不出现在 value 中', () => {
-      const { rerender, container, getByTestId } = render(<DrawingSurface ruler={{ enabled: true }} />);
+      const { rerender, container, getByTestId } = render(
+        <DrawingSurface ruler={{ enabled: true }} />
+      );
       expect(getByTestId('drawing-ruler')).not.toBeNull();
       const initialCount = container.querySelector('svg')?.getAttribute('data-stroke-count');
 
@@ -7751,7 +7905,9 @@ describe('eraserCursorAndTrajectory', () => {
     });
 
     it('updating viewport prop updates data-scale/data-tx/data-ty (controlled re-render)', () => {
-      const { rerender } = render(<DrawingSurface testID="ds-host" viewport={{ scale: 1, tx: 0, ty: 0 }} />);
+      const { rerender } = render(
+        <DrawingSurface testID="ds-host" viewport={{ scale: 1, tx: 0, ty: 0 }} />
+      );
       const host = screen.getByTestId('ds-host');
       expect(host.getAttribute('data-scale')).toBe('1');
       expect(host.getAttribute('data-tx')).toBe('0');
@@ -7765,7 +7921,11 @@ describe('eraserCursorAndTrajectory', () => {
 
     it('switching from controlled to uncontrolled reveals defaultViewport-initialized state', () => {
       const { rerender } = render(
-        <DrawingSurface testID="ds-host" viewport={{ scale: 3, tx: 10, ty: 20 }} defaultViewport={{ scale: 0.5, tx: 1, ty: 2 }} />
+        <DrawingSurface
+          testID="ds-host"
+          viewport={{ scale: 3, tx: 10, ty: 20 }}
+          defaultViewport={{ scale: 0.5, tx: 1, ty: 2 }}
+        />
       );
       const host = screen.getByTestId('ds-host');
       expect(host.getAttribute('data-scale')).toBe('3');
