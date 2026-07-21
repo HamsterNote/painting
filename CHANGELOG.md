@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-21
+
+### Added
+- 添加小地图（Minimap）画布导航和预览功能（`feat(painting): add lasso resize handles, controlled viewport, and minimap`）
+
+### Changed
+- 将小地图作为 DrawingSurface 内部 Overlay 集成，完善生命周期管理（`refactor(painting): integrate minimap as internal DrawingSurface overlay`）
+
+### Fixed
+- 加固小地图生命周期、边界条件及视口输入处理（`fix(painting): harden minimap lifecycle and bounds`, `fix(painting): harden minimap and viewport inputs`）
+
+### Test
+- 小地图单元测试（`test(painting): add minimap test coverage`）
+- 避免小地图在套索拖拽场景中产生干扰（`test(ui): avoid minimap in lasso drag scenario`）
+
 ## [0.2.0] - 2026-07-12
 
 ### Added
