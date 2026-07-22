@@ -760,7 +760,10 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     const [internalViewport, setInternalViewport] = useState<DrawingViewport>(() =>
       defaultViewport ? normalizeViewport(defaultViewport) : createResetViewport()
     );
-    const viewport = isViewportControlled ? normalizeViewport(viewportProp) : internalViewport;
+    const viewport = useMemo(
+      () => (viewportProp === undefined ? internalViewport : normalizeViewport(viewportProp)),
+      [internalViewport, viewportProp]
+    );
     const viewportRef = useRef<DrawingViewport>(viewport);
     viewportRef.current = viewport;
 

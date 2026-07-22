@@ -12,6 +12,7 @@ import type {
   DrawingValue,
 } from '../components/DrawingSurface';
 import { DrawingSurface } from '../components/DrawingSurface';
+import { PaintingBoard } from '../components/PaintingBoard';
 import { classifyInteraction, type InteractionOwner } from '../interactionOwnership';
 import type { DrawingViewport } from '../viewport';
 
@@ -5315,6 +5316,47 @@ describe('DrawingSurface', () => {
       dispatchDragEnd(host);
 
       expect(onSelectionOverlayChange).toHaveBeenLastCalledWith(null);
+    });
+
+    it('does not repeat an unchanged selection overlay when one tool controls multiple boards', () => {
+      // Given: 两个画板共享同一个套索工具，并且各自已有一个选区。
+      const value = lassoFixture();
+      let overlayNotificationCount = 0;
+      const onSelectionOverlayChange = jest.fn(() => {
+        overlayNotificationCount += 1;
+        if (overlayNotificationCount > 4) {
+          throw new Error('selection overlay entered a render feedback loop');
+        }
+      });
+
+      // When: PaintingBoard 挂载并接收 DrawingSurface 的选区浮层坐标。
+      render(
+        <>
+          <PaintingBoard
+            testID="drawing-surface-host-a"
+            value={value}
+            tool="lasso"
+            toolbar={false}
+            selectionPopover={false}
+            virtualPaper={false}
+            defaultSelectedStrokeIds={['lasso-target']}
+            onSelectionOverlayChange={onSelectionOverlayChange}
+          />
+          <PaintingBoard
+            testID="drawing-surface-host-b"
+            value={value}
+            tool="lasso"
+            toolbar={false}
+            selectionPopover={false}
+            virtualPaper={false}
+            defaultSelectedStrokeIds={['lasso-target']}
+            onSelectionOverlayChange={onSelectionOverlayChange}
+          />
+        </>
+      );
+
+      // Then: 每个画板只通知一次初始 overlay，不会因自身 setState 反复触发。
+      expect(onSelectionOverlayChange).toHaveBeenCalledTimes(2);
     });
 
     it('moves selected strokes as one lasso selection', () => {
