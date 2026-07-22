@@ -17,6 +17,7 @@ type StrokeLike = {
   readonly dashOffset?: unknown;
   readonly fillColor?: unknown;
   readonly fillOpacity?: unknown;
+  readonly rotationRad?: unknown;
 };
 
 type ValueLike = {
@@ -101,6 +102,9 @@ function buildStroke(stroke: StrokeLike, tool: DrawingStrokeToolV2): DrawingStro
     ...(typeof stroke.fillColor === 'string' ? { fillColor: stroke.fillColor } : {}),
     ...(typeof stroke.fillOpacity === 'number' && Number.isFinite(stroke.fillOpacity)
       ? { fillOpacity: stroke.fillOpacity }
+      : {}),
+    ...(typeof stroke.rotationRad === 'number' && Number.isFinite(stroke.rotationRad)
+      ? { rotationRad: stroke.rotationRad }
       : {}),
   };
 

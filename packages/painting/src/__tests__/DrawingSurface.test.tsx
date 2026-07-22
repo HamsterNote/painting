@@ -5281,6 +5281,42 @@ describe('DrawingSurface', () => {
       expect(onSelectionChange).toHaveBeenCalledWith([]);
     });
 
+    it('reports the selection overlay box in host-local screen coordinates', () => {
+      const onSelectionOverlayChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          tool="lasso"
+          onSelectionOverlayChange={onSelectionOverlayChange}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      zeroHostRect(host);
+
+      // 初始无选区：回调 null
+      expect(onSelectionOverlayChange).toHaveBeenLastCalledWith(null);
+
+      // 套索圈选 lasso-target（点 (20,20)-(60,20)）后应回调非空包围盒；
+      // 默认视口为恒等变换（scale=1, tx=ty=0），屏幕坐标即画布坐标。
+      dispatchDragMove(host, [finger(lassoPathAroundTarget())]);
+      dispatchDragEnd(host);
+
+      const overlay = onSelectionOverlayChange.mock.lastCall?.[0];
+      expect(overlay).not.toBeNull();
+      // 包围盒需完整覆盖目标笔迹所在区域（含 padding，故边界外扩）
+      expect(overlay.x).toBeLessThan(20);
+      expect(overlay.y).toBeLessThan(20);
+      expect(overlay.x + overlay.width).toBeGreaterThan(60);
+      expect(overlay.y + overlay.height).toBeGreaterThan(20);
+
+      // 再次套索空白区域清空选区后，应回调 null（Popover 随之消失）
+      dispatchDragMove(host, [finger(lassoPathAwayFromStrokes())]);
+      dispatchDragEnd(host);
+
+      expect(onSelectionOverlayChange).toHaveBeenLastCalledWith(null);
+    });
+
     it('moves selected strokes as one lasso selection', () => {
       const onChange = jest.fn();
       render(
@@ -5365,6 +5401,550 @@ describe('DrawingSurface', () => {
         'sw',
         'w',
       ]);
+    });
+
+    it('rotates selected strokes around the selection center from the top rotation handle', () => {
+      // Given: one horizontal stroke selected by the lasso tool.
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={lassoFixture()}
+          onChange={onChange}
+          tool="lasso"
+          selectedStrokeIds={['lasso-target']}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const rotateHandle = container.querySelector('[data-lasso-rotate-handle]');
+      expect(rotateHandle).toBeTruthy();
+
+      // When: the top handle moves clockwise by a quarter turn while the host is offset on-page.
+      if (rotateHandle) {
+        dispatchElementPointerEvent(
+          rotateHandle,
+          'pointerdown',
+          {
+            point: { x: 50, y: 5 },
+            event: { pointerType: 'mouse', button: 0, clientX: 50, clientY: 5 },
+          },
+          45
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointermove',
+          {
+            point: { x: 67.5, y: 9.69 },
+            event: { pointerType: 'mouse', button: 0, clientX: 67.5, clientY: 9.69 },
+          },
+          45
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointermove',
+          {
+            point: { x: 80.31, y: 22.5 },
+            event: { pointerType: 'mouse', button: 0, clientX: 80.31, clientY: 22.5 },
+          },
+          45
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointermove',
+          {
+            point: { x: 85, y: 40 },
+            event: { pointerType: 'mouse', button: 0, clientX: 85, clientY: 40 },
+          },
+          45
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointerup',
+          {
+            point: { x: 85, y: 40 },
+            event: { pointerType: 'mouse', button: 0, clientX: 85, clientY: 40 },
+          },
+          45
+        );
+      }
+
+      // Then: both endpoints rotate around the fixed selection center.
+      const lastChange = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0];
+      const rotatedStroke = lastChange?.strokes.find(
+        (stroke: DrawingStroke) => stroke.id === 'lasso-target'
+      );
+      expect(rotatedStroke?.points[0]?.x).toBeCloseTo(40);
+      expect(rotatedStroke?.points[0]?.y).toBeCloseTo(0);
+      expect(rotatedStroke?.points[1]?.x).toBeCloseTo(40);
+      expect(rotatedStroke?.points[1]?.y).toBeCloseTo(40);
+      expect(onChange).toHaveBeenCalledTimes(3);
+    });
+
+    it('rotates the selection frame and resizes from its rotated east handle', () => {
+      // Given: an uncontrolled horizontal stroke with an active orthogonal lasso frame.
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          defaultValue={lassoFixture()}
+          onChange={onChange}
+          tool="lasso"
+          defaultSelectedStrokeIds={['lasso-target']}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      zeroHostRect(host);
+      const rotateHandle = container.querySelector('[data-lasso-rotate-handle]');
+      expect(rotateHandle).toBeTruthy();
+
+      // When: the top handle rotates the frame clockwise by 90 degrees.
+      if (rotateHandle) {
+        dispatchElementPointerEvent(
+          rotateHandle,
+          'pointerdown',
+          {
+            point: { x: 40, y: -15 },
+            event: { pointerType: 'mouse', button: 0, clientX: 40, clientY: -15 },
+          },
+          47
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointermove',
+          {
+            point: { x: 75, y: 20 },
+            event: { pointerType: 'mouse', button: 0, clientX: 75, clientY: 20 },
+          },
+          47
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointerup',
+          {
+            point: { x: 75, y: 20 },
+            event: { pointerType: 'mouse', button: 0, clientX: 75, clientY: 20 },
+          },
+          47
+        );
+      }
+
+      // Then: the frame keeps its local width/height and carries the same rotation as the stroke.
+      const rotatedFrame = container.querySelector('[data-testid="lasso-selection-controls"]');
+      const rotatedBox = container.querySelector('[data-testid="lasso-selection-box"]');
+      expect(Number(rotatedFrame?.getAttribute('data-rotation-rad'))).toBeCloseTo(Math.PI / 2);
+      expect(rotatedFrame?.getAttribute('transform')).toContain('rotate(90 40 20)');
+      expect(rotatedBox?.getAttribute('x')).toBe('9');
+      expect(rotatedBox?.getAttribute('y')).toBe('9');
+      expect(rotatedBox?.getAttribute('width')).toBe('62');
+      expect(rotatedBox?.getAttribute('height')).toBe('22');
+
+      // When: the visually rotated east handle is dragged outward along the frame's local X axis.
+      const eastHandle = container.querySelector('[data-lasso-resize-handle="e"]');
+      expect(eastHandle).toBeTruthy();
+      if (eastHandle) {
+        dispatchElementPointerEvent(
+          eastHandle,
+          'pointerdown',
+          {
+            point: { x: 40, y: 51 },
+            event: { pointerType: 'mouse', button: 0, clientX: 40, clientY: 51 },
+          },
+          48
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointermove',
+          {
+            point: { x: 40, y: 71 },
+            event: { pointerType: 'mouse', button: 0, clientX: 40, clientY: 71 },
+          },
+          48
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointerup',
+          {
+            point: { x: 40, y: 71 },
+            event: { pointerType: 'mouse', button: 0, clientX: 40, clientY: 71 },
+          },
+          48
+        );
+      }
+
+      // Then: the opposite local edge stays anchored and only local width changes.
+      const resizedStroke = onChange.mock.calls
+        .at(-1)?.[0]
+        .strokes.find((stroke: DrawingStroke) => stroke.id === 'lasso-target');
+      expect(resizedStroke?.points[0]?.x).toBeCloseTo(40);
+      expect(resizedStroke?.points[0]?.y).toBeCloseTo(0);
+      expect(resizedStroke?.points[1]?.x).toBeCloseTo(40);
+      expect(resizedStroke?.points[1]?.y).toBeCloseTo(60);
+      expect(Number(rotatedFrame?.getAttribute('data-rotation-rad'))).toBeCloseTo(Math.PI / 2);
+    });
+
+    it.each([
+      {
+        handle: 'nw',
+        start: { x: 70, y: 10 },
+        delta: { x: 20, y: -20 },
+        center: { x: 50, y: 30 },
+        size: { width: 60, height: 60 },
+      },
+      {
+        handle: 'n',
+        start: { x: 70, y: 40 },
+        delta: { x: 20, y: 0 },
+        center: { x: 50, y: 40 },
+        size: { width: 40, height: 60 },
+      },
+      {
+        handle: 'ne',
+        start: { x: 70, y: 70 },
+        delta: { x: 20, y: 20 },
+        center: { x: 50, y: 50 },
+        size: { width: 60, height: 60 },
+      },
+      {
+        handle: 'e',
+        start: { x: 40, y: 70 },
+        delta: { x: 0, y: 20 },
+        center: { x: 40, y: 50 },
+        size: { width: 60, height: 40 },
+      },
+      {
+        handle: 'se',
+        start: { x: 10, y: 70 },
+        delta: { x: -20, y: 20 },
+        center: { x: 30, y: 50 },
+        size: { width: 60, height: 60 },
+      },
+      {
+        handle: 's',
+        start: { x: 10, y: 40 },
+        delta: { x: -20, y: 0 },
+        center: { x: 30, y: 40 },
+        size: { width: 40, height: 60 },
+      },
+      {
+        handle: 'sw',
+        start: { x: 10, y: 10 },
+        delta: { x: -20, y: -20 },
+        center: { x: 30, y: 30 },
+        size: { width: 60, height: 60 },
+      },
+      {
+        handle: 'w',
+        start: { x: 40, y: 10 },
+        delta: { x: 0, y: -20 },
+        center: { x: 40, y: 30 },
+        size: { width: 60, height: 40 },
+      },
+    ] as const)(
+      'resizes from the rotated $handle handle in selection-local axes',
+      ({ handle, start, delta, center, size }) => {
+        // Given: a square shape and its selection frame are both rotated clockwise by 90 degrees.
+        const onChange = jest.fn();
+        const { container } = render(
+          <DrawingSurface
+            testID="drawing-surface-host"
+            defaultValue={{
+              strokes: [
+                {
+                  id: 'rotated-resize-target',
+                  tool: 'rect',
+                  points: [
+                    { x: 20, y: 20 },
+                    { x: 60, y: 60 },
+                  ],
+                  strokeWidth: 4,
+                },
+              ],
+            }}
+            onChange={onChange}
+            tool="lasso"
+            defaultSelectedStrokeIds={['rotated-resize-target']}
+          />
+        );
+        const host = screen.getByTestId('drawing-surface-host');
+        zeroHostRect(host);
+        const rotateHandle = container.querySelector('[data-lasso-rotate-handle]');
+        expect(rotateHandle).toBeTruthy();
+        if (rotateHandle) {
+          dispatchElementPointerEvent(
+            rotateHandle,
+            'pointerdown',
+            {
+              point: { x: 40, y: -14 },
+              event: { pointerType: 'mouse', button: 0, clientX: 40, clientY: -14 },
+            },
+            60
+          );
+          dispatchElementPointerEvent(
+            document,
+            'pointermove',
+            {
+              point: { x: 94, y: 40 },
+              event: { pointerType: 'mouse', button: 0, clientX: 94, clientY: 40 },
+            },
+            60
+          );
+          dispatchElementPointerEvent(
+            document,
+            'pointerup',
+            {
+              point: { x: 94, y: 40 },
+              event: { pointerType: 'mouse', button: 0, clientX: 94, clientY: 40 },
+            },
+            60
+          );
+        }
+
+        // When: one visual handle moves outward along its rotated frame-local direction.
+        const resizeHandle = container.querySelector(`[data-lasso-resize-handle="${handle}"]`);
+        expect(resizeHandle).toBeTruthy();
+        if (resizeHandle) {
+          dispatchElementPointerEvent(
+            resizeHandle,
+            'pointerdown',
+            {
+              point: start,
+              event: {
+                pointerType: 'mouse',
+                button: 0,
+                clientX: start.x,
+                clientY: start.y,
+              },
+            },
+            61
+          );
+          const end = { x: start.x + delta.x, y: start.y + delta.y };
+          dispatchElementPointerEvent(
+            document,
+            'pointermove',
+            {
+              point: end,
+              event: { pointerType: 'mouse', button: 0, clientX: end.x, clientY: end.y },
+            },
+            61
+          );
+          dispatchElementPointerEvent(
+            document,
+            'pointerup',
+            {
+              point: end,
+              event: { pointerType: 'mouse', button: 0, clientX: end.x, clientY: end.y },
+            },
+            61
+          );
+        }
+
+        // Then: only the axes owned by that handle grow, with the opposite local edges fixed.
+        const resizedStroke = onChange.mock.calls
+          .at(-1)?.[0]
+          .strokes.find((stroke: DrawingStroke) => stroke.id === 'rotated-resize-target');
+        const first = resizedStroke?.points[0];
+        const last = resizedStroke?.points.at(-1);
+        expect(((first?.x ?? 0) + (last?.x ?? 0)) / 2).toBeCloseTo(center.x);
+        expect(((first?.y ?? 0) + (last?.y ?? 0)) / 2).toBeCloseTo(center.y);
+        expect(Math.abs((last?.x ?? 0) - (first?.x ?? 0))).toBeCloseTo(size.width);
+        expect(Math.abs((last?.y ?? 0) - (first?.y ?? 0))).toBeCloseTo(size.height);
+        expect(resizedStroke?.rotationRad).toBeCloseTo(Math.PI / 2);
+      }
+    );
+
+    it('resets the selection frame to orthogonal after clearing and drawing a new lasso', () => {
+      // Given: a selected stroke whose active frame has been rotated by 90 degrees.
+      const surfaceRef = createRef<DrawingSurfaceHandle>();
+      const { container } = render(
+        <DrawingSurface
+          ref={surfaceRef}
+          testID="drawing-surface-host"
+          defaultValue={lassoFixture()}
+          tool="lasso"
+          defaultSelectedStrokeIds={['lasso-target']}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      zeroHostRect(host);
+      const rotateHandle = container.querySelector('[data-lasso-rotate-handle]');
+      if (rotateHandle) {
+        dispatchElementPointerEvent(
+          rotateHandle,
+          'pointerdown',
+          {
+            point: { x: 40, y: -15 },
+            event: { pointerType: 'mouse', button: 0, clientX: 40, clientY: -15 },
+          },
+          49
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointermove',
+          {
+            point: { x: 75, y: 20 },
+            event: { pointerType: 'mouse', button: 0, clientX: 75, clientY: 20 },
+          },
+          49
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointerup',
+          {
+            point: { x: 75, y: 20 },
+            event: { pointerType: 'mouse', button: 0, clientX: 75, clientY: 20 },
+          },
+          49
+        );
+      }
+      expect(
+        Number(
+          container
+            .querySelector('[data-testid="lasso-selection-controls"]')
+            ?.getAttribute('data-rotation-rad')
+        )
+      ).toBeCloseTo(Math.PI / 2);
+
+      // When: the selection is cancelled and the now-vertical stroke is selected again.
+      act(() => surfaceRef.current?.clearSelection());
+      dispatchDragMove(host, [
+        finger([
+          { point: { x: 25, y: -10 } },
+          { point: { x: 55, y: -10 } },
+          { point: { x: 55, y: 50 } },
+          { point: { x: 25, y: 50 } },
+          { point: { x: 25, y: -10 } },
+        ]),
+      ]);
+      dispatchDragEnd(host);
+
+      // Then: the new frame is world-axis aligned even though the selected stroke remains rotated.
+      const newFrame = container.querySelector('[data-testid="lasso-selection-controls"]');
+      expect(newFrame).toBeTruthy();
+      expect(Number(newFrame?.getAttribute('data-rotation-rad'))).toBe(0);
+      expect(newFrame?.getAttribute('transform')).toBeNull();
+    });
+
+    it('accumulates rotation past a half turn without collapsing to the shortest arc', () => {
+      // Given: an axis-aligned rectangle selected in an offset host.
+      const onChange = jest.fn();
+      const rectangle: DrawingValue = {
+        strokes: [
+          {
+            id: 'rotating-rectangle',
+            tool: 'rect',
+            points: [
+              { x: 20, y: 10 },
+              { x: 60, y: 30 },
+            ],
+            strokeWidth: 2,
+          },
+        ],
+      };
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={rectangle}
+          onChange={onChange}
+          tool="lasso"
+          selectedStrokeIds={['rotating-rectangle']}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      const rotateHandle = container.querySelector('[data-lasso-rotate-handle]');
+      expect(rotateHandle).toBeTruthy();
+
+      // When: one continuous clockwise drag travels from the top to the left through 270 degrees.
+      if (rotateHandle) {
+        const pointerId = 46;
+        const points = [
+          { x: 50, y: 5 },
+          { x: 85, y: 40 },
+          { x: 50, y: 75 },
+          { x: 15, y: 40 },
+        ];
+        dispatchElementPointerEvent(
+          rotateHandle,
+          'pointerdown',
+          {
+            point: points[0],
+            event: { pointerType: 'mouse', button: 0, clientX: points[0].x, clientY: points[0].y },
+          },
+          pointerId
+        );
+        for (const point of points.slice(1)) {
+          dispatchElementPointerEvent(
+            document,
+            'pointermove',
+            {
+              point,
+              event: { pointerType: 'mouse', button: 0, clientX: point.x, clientY: point.y },
+            },
+            pointerId
+          );
+        }
+        const finalPoint = points[points.length - 1];
+        dispatchElementPointerEvent(
+          document,
+          'pointerup',
+          {
+            point: finalPoint,
+            event: {
+              pointerType: 'mouse',
+              button: 0,
+              clientX: finalPoint.x,
+              clientY: finalPoint.y,
+            },
+          },
+          pointerId
+        );
+      }
+
+      // Then: the persisted angle records the full drag rather than the equivalent negative quarter turn.
+      const lastChange = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0];
+      const rotatedStroke = lastChange?.strokes.find(
+        (stroke: DrawingStroke) => stroke.id === 'rotating-rectangle'
+      );
+      expect(rotatedStroke?.rotationRad).toBeCloseTo((Math.PI * 3) / 2);
+    });
+
+    it('keeps a rotated rectangle undistorted and bounds its rendered rotation', () => {
+      // Given: a 40 by 20 rectangle persisted with a 45 degree rotation.
+      const rotatedRectangle: DrawingValue = {
+        strokes: [
+          {
+            id: 'rotated-rectangle',
+            tool: 'rect',
+            points: [
+              { x: 20, y: 20 },
+              { x: 60, y: 40 },
+            ],
+            strokeWidth: 4,
+            rotationRad: Math.PI / 4,
+          },
+        ],
+      };
+
+      // When: the rotated shape is rendered as the active lasso selection.
+      const { container } = render(
+        <DrawingSurface
+          value={rotatedRectangle}
+          tool="lasso"
+          selectedStrokeIds={['rotated-rectangle']}
+        />
+      );
+
+      // Then: local dimensions stay intact while the selection uses the rotated extent.
+      const rectangle = Array.from(container.querySelectorAll('rect')).find((element) =>
+        element.getAttribute('transform')?.startsWith('rotate(')
+      );
+      const selectionBox = container.querySelector('[data-testid="lasso-selection-box"]');
+      expect(rectangle?.getAttribute('width')).toBe('40');
+      expect(rectangle?.getAttribute('height')).toBe('20');
+      expect(rectangle?.getAttribute('transform')).toContain('rotate(45');
+      expect(Number(selectionBox?.getAttribute('width'))).toBeCloseTo(62.4264, 3);
+      expect(Number(selectionBox?.getAttribute('height'))).toBeCloseTo(62.4264, 3);
     });
 
     it('resizes only the horizontal axis when dragging the east handle', () => {

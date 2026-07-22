@@ -8,6 +8,7 @@ export type {
   DrawingRulerOptions,
   DrawingRulerState,
   DrawingSelectionChange,
+  DrawingSelectionOverlay,
   DrawingSnapOptions,
   DrawingStroke,
   DrawingSurfaceHandle,
@@ -16,6 +17,14 @@ export type {
   DrawingValue,
 } from './components/DrawingSurface';
 export { DrawingSurface } from './components/DrawingSurface';
+export type {
+  PaintingBoardProps,
+  PaintingBoardSelectionPopoverOptions,
+  PaintingBoardToolbarOptions,
+} from './components/PaintingBoard';
+export { PAINTING_BOARD_DEFAULT_TOOLS, PaintingBoard } from './components/PaintingBoard';
+export type { PaintingControllerData, PaintingControllerProps } from './components/PaintingController';
+export { PaintingController } from './components/PaintingController';
 export type { MinimapOptions, MinimapProps } from './components/Minimap';
 export { Minimap } from './components/Minimap';
 export type { UseCanvasOptions, UseCanvasReturn } from './hooks/useCanvas';

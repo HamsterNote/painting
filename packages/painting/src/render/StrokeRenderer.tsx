@@ -73,6 +73,16 @@ function getBbox(points: StrokePoint[]) {
 	};
 }
 
+function shapeRotationTransform(stroke: RenderableStroke, bbox: ReturnType<typeof getBbox>): string | undefined {
+	const rotationRad = stroke.rotationRad;
+	if (!bbox || typeof rotationRad !== "number" || !Number.isFinite(rotationRad) || rotationRad === 0) {
+		return undefined;
+	}
+	const centerX = bbox.x + bbox.width / 2;
+	const centerY = bbox.y + bbox.height / 2;
+	return `rotate(${(rotationRad * 180) / Math.PI} ${centerX} ${centerY})`;
+}
+
 function pointList(points: StrokePoint[]): string {
 	return points.map((point) => `${point.x},${point.y}`).join(" ");
 }
@@ -199,6 +209,7 @@ function renderV1Stroke(
 				strokeDasharray={style.strokeDasharray}
 				strokeDashoffset={style.strokeDashoffset}
 				fillOpacity={style.fillOpacity}
+				transform={shapeRotationTransform(stroke, bbox)}
 				opacity={opacity}
 			/>
 		);
@@ -223,6 +234,7 @@ function renderV1Stroke(
 				strokeDasharray={style.strokeDasharray}
 				strokeDashoffset={style.strokeDashoffset}
 				fillOpacity={style.fillOpacity}
+				transform={shapeRotationTransform(stroke, bbox)}
 				opacity={opacity}
 			/>
 		);
@@ -324,6 +336,7 @@ function renderV2Stroke(
 					strokeDasharray={style.strokeDasharray}
 					strokeDashoffset={style.strokeDashoffset}
 					fillOpacity={style.fillOpacity}
+					transform={shapeRotationTransform(stroke, bbox)}
 					opacity={opacity}
 				/>
 			);
@@ -347,6 +360,7 @@ function renderV2Stroke(
 					strokeDasharray={style.strokeDasharray}
 					strokeDashoffset={style.strokeDashoffset}
 					fillOpacity={style.fillOpacity}
+					transform={shapeRotationTransform(stroke, bbox)}
 					opacity={opacity}
 				/>
 			);

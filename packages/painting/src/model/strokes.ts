@@ -21,6 +21,7 @@ type DrawingStrokeBaseV2<Tool extends DrawingStrokeToolV2> = {
   dashOffset?: number;
   fillColor?: string;
   fillOpacity?: number;
+  rotationRad?: number;
 };
 
 export type PenStrokeV2 = DrawingStrokeBaseV2<'pen'>;

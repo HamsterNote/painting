@@ -1,5 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+// @hamster-note/components 的全局样式（Popover / Button / Icon 等）
+import '@hamster-note/components/styles.css';
 import App from './App';
 
 const container = document.getElementById('root');

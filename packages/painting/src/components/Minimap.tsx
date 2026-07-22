@@ -535,7 +535,9 @@ export function Minimap({
         overflow: 'hidden',
         border: '1px solid rgba(0, 0, 0, 0.15)',
         borderRadius: 4,
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
         touchAction: 'none',
         ...style,
       }}

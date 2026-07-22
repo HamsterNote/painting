@@ -1144,7 +1144,7 @@ test.describe('DrawingSurface playground', () => {
 
   test.describe('lasso tool integration', () => {
     test('lasso tool is exposed in toolbar and select', async ({ page }) => {
-      const lassoBtn = page.locator('button[data-tool="lasso"]');
+      const lassoBtn = page.locator('button[data-tool="lasso"]').first();
       await expect(lassoBtn).toBeVisible();
 
       const toolSelect = page.getByTestId('drawing-tool-select');
@@ -1153,7 +1153,7 @@ test.describe('DrawingSurface playground', () => {
       await expect(toolSelect).toHaveValue('lasso');
 
       // 选中 lasso 后应显示对应的工具说明
-      await expect(page.getByTestId('tool-instruction')).toHaveText(/Drag to lasso strokes/);
+      await expect(page.getByTestId('tool-instruction')).toHaveText(/top handle to rotate/);
     });
 
     test('delete selected button is present and initially disabled', async ({ page }) => {

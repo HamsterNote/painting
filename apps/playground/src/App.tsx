@@ -7,6 +7,9 @@ import {
   type DrawingValue,
   type DrawingRulerState,
   type DrawingRulerOptions,
+  PaintingBoard,
+  PaintingController,
+  type PaintingControllerData,
 } from '@hamster-note/painting';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalPropsDemo } from './ExternalPropsDemo';
@@ -45,7 +48,7 @@ function getToolInstruction(tool: DrawingTool): string | null {
     case 'bezier':
       return 'Drag 1 sets the start/end line, drag 2 sets the first control point, drag 3 sets the second control point and commits';
     case 'lasso':
-      return 'Drag to lasso strokes (any intersection selects); drag selected strokes to move them';
+      return 'Drag to select strokes; drag the selection to move, its handles to resize, or the top handle to rotate';
     default:
       return null;
   }
@@ -103,6 +106,12 @@ const SEED_VALUE: DrawingValue = {
 
 export default function App() {
   const [tool, setTool] = useState<DrawingTool>('pen');
+  // PaintingController 共享受控 data：同一份 data 分发给下方所有 PaintingBoard，
+  // 实现「一个底部栏控制多个画板」。右侧实时展示 data 便于 debug。
+  const [controllerData, setControllerData] = useState<PaintingControllerData>({
+    tool: 'pen',
+    minimap: false,
+  });
   const [rulerEnabled, setRulerEnabled] = useState(false);
   // ===== Virtual-paper 滚动/平移模式开关 (Task 9) =====
   // 启用后 DrawingSurface 将虚拟纸张交给 @hamster-note/virtual-paper 管理视口变换
@@ -1137,6 +1146,64 @@ const [minimapEnabled, setMinimapEnabled] = useState(true);
       </div>
 
       <ExternalPropsDemo />
+
+      {/* ===== PaintingController Demo（共享底部栏控制多个 PaintingBoard） ===== */}
+      <div
+        style={{
+          marginTop: '30px',
+          borderTop: '1px solid #ddd',
+          paddingTop: '20px',
+        }}
+      >
+        <h2>PaintingController（一个底部栏控制多个 PaintingBoard）</h2>
+        <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
+          两个 PaintingBoard 均传 <code>toolbar=&#123;false&#125;</code>
+          ，由底部共享的 PaintingController 统一控制；受控 data 实时展示在右侧，方便 debug。
+        </p>
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          {/* 左侧：共享同一份 controllerData 的两个画板 */}
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <div style={{ width: '400px', height: '320px', border: '1px solid #ddd' }}>
+              <PaintingBoard
+                testID="painting-board-demo-a"
+                toolbar={false}
+                tool={controllerData.tool}
+                minimapVisible={controllerData.minimap}
+                strokeColor={color}
+                strokeWidth={width}
+              />
+            </div>
+            <div style={{ width: '400px', height: '320px', border: '1px solid #ddd' }}>
+              <PaintingBoard
+                testID="painting-board-demo-b"
+                toolbar={false}
+                tool={controllerData.tool}
+                minimapVisible={controllerData.minimap}
+                strokeColor={color}
+                strokeWidth={width}
+              />
+            </div>
+          </div>
+          {/* 右侧：实时展示受控 data，便于 debug */}
+          <div style={{ flex: 1, minWidth: '240px' }}>
+            <h3 style={{ marginTop: 0 }}>controllerData</h3>
+            <pre
+              data-testid="painting-controller-data-preview"
+              style={{
+                backgroundColor: '#1f102e',
+                color: '#f5e8ff',
+                padding: '12px',
+                borderRadius: '8px',
+                fontSize: '13px',
+              }}
+            >
+              {JSON.stringify(controllerData, null, 2)}
+            </pre>
+          </div>
+        </div>
+        {/* Popover 以 position: fixed 吸附视口底部，组件放置位置不影响展示 */}
+        <PaintingController data={controllerData} onDataChange={setControllerData} />
+      </div>
 
       {/* ===== 采样率测试 Demo ===== */}
       <div
