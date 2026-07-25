@@ -491,6 +491,7 @@ const [minimapEnabled, setMinimapEnabled] = useState(true);
       <h1 style={{ marginBottom: '20px' }}>DrawingSurface Playground</h1>
 
       <div
+        data-testid="drawing-tool-toolbar"
         style={{
           display: 'flex',
           gap: '12px',

@@ -364,7 +364,11 @@ export function PaintingController({
         edge={edge}
         edgeOffset={edgeOffset}
         orientation="horizontal"
-        style={relative ? { ...style, position: 'absolute' } : style}
+        style={
+          relative
+            ? { ...style, position: 'absolute' }
+            : { zIndex: 1000, ...style }
+        }
       >
         {history ? (
           <>
