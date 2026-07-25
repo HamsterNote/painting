@@ -1,7 +1,9 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
-import type { DrawingTool } from '../DrawingSurface';
+import { usePaintingHistory } from '../../hooks/usePaintingHistory';
+import type { DrawingTool, DrawingValue } from '../DrawingSurface';
 import { PaintingBoard } from '../PaintingBoard';
+import type { PaintingControllerData } from '../PaintingController';
 
 /** mock getBoundingClientRect，让 DrawingSurface 能正确计算画布坐标 */
 function mockHostRect(element: HTMLElement) {
@@ -289,6 +291,85 @@ describe('PaintingBoard', () => {
     fireEvent.click(screen.getByTestId('painting-board-clear-canvas'));
 
     expect(onChange).toHaveBeenCalledWith({ strokes: [] });
+  });
+
+  it('受控 value 未被父组件接受时继续渲染父组件提供的内容', () => {
+    // Given: 父组件固定提供一条线，并故意不在 onChange 后回写候选值。
+    const controlledValue: DrawingValue = {
+      strokes: [
+        {
+          id: 'controlled-line',
+          tool: 'line',
+          points: [
+            { x: 10, y: 10 },
+            { x: 80, y: 80 },
+          ],
+        },
+      ],
+    };
+    const onChange = jest.fn();
+    render(
+      <div style={{ width: 400, height: 300 }}>
+        <PaintingBoard testID="board" value={controlledValue} onChange={onChange} />
+      </div>
+    );
+    const host = screen.getByTestId('board');
+    expect(host.querySelector('svg > g line')).not.toBeNull();
+
+    // When: 用户请求清空，但父组件拒绝该候选值并保持 value 不变。
+    fireEvent.click(screen.getByTestId('painting-board-clear-canvas'));
+
+    // Then: 回调收到候选空值，实际画布仍以受控 value 为唯一渲染真值。
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith({ strokes: [] });
+    expect(host.querySelector('svg > g line')).not.toBeNull();
+  });
+
+  it('显式共享 history 时由 history 接收变更并驱动画板 value', () => {
+    const staleValue: DrawingValue = {
+      strokes: [
+        {
+          id: 'shared-line',
+          tool: 'line',
+          points: [
+            { x: 10, y: 10 },
+            { x: 80, y: 80 },
+          ],
+        },
+      ],
+    };
+
+    function SharedHistoryHost() {
+      const history = usePaintingHistory({
+        shared: staleValue,
+      });
+      const [data, setData] = useState<PaintingControllerData>({
+        tool: 'pen',
+        minimap: false,
+        selection: null,
+      });
+
+      return (
+        <div style={{ width: 400, height: 300 }}>
+          <PaintingBoard
+            testID="board"
+            value={staleValue}
+            controller={{ boardId: 'shared', data, onDataChange: setData, history }}
+          />
+        </div>
+      );
+    }
+
+    // Given: 显式共享 history 与一个不会随 history 更新的旧 value 同时传入。
+    render(<SharedHistoryHost />);
+    const host = screen.getByTestId('board');
+    expect(host.querySelector('svg > g line')).not.toBeNull();
+
+    // When: 画板内置控制器请求清空当前画板。
+    fireEvent.click(screen.getByTestId('painting-board-clear-canvas'));
+
+    // Then: 显式 history 是渲染真值，旧 value 不能覆盖清空结果。
+    expect(host.querySelector('svg > g line')).toBeNull();
   });
 
   it('非受控模式：点击手写笔模式按钮翻转 aria-pressed 并触发 onStylusModeChange', () => {

@@ -44,6 +44,33 @@ function SharedHistoryHarness() {
       <button type="button" onClick={() => history.setValue('boardB', BOARD_B_VALUE)}>
         Draw B
       </button>
+      <button
+        type="button"
+        onClick={() => {
+          history.setValue('boardA', BOARD_A_VALUE);
+          history.setValue('boardB', BOARD_B_VALUE);
+        }}
+      >
+        Draw Both
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          history.setValues({ boardA: BOARD_A_VALUE, boardB: EMPTY_VALUE });
+          history.setValue('boardB', BOARD_B_VALUE);
+        }}
+      >
+        Replace Then Draw B
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          history.reset({ boardA: BOARD_A_VALUE, boardB: EMPTY_VALUE });
+          history.setValue('boardB', BOARD_B_VALUE);
+        }}
+      >
+        Reset Then Draw B
+      </button>
       <button type="button" onClick={history.undo} disabled={!history.canUndo}>
         Undo
       </button>
@@ -72,4 +99,31 @@ describe('usePaintingHistory', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
     expect(screen.getByTestId('board-a-count').textContent).toBe('1');
   });
+
+  it('preserves every board update dispatched in the same React batch', () => {
+    // Given: 两块空画板绑定同一个历史对象。
+    render(<SharedHistoryHarness />);
+
+    // When: 同一个事件处理器连续更新 A、B 两块画板。
+    fireEvent.click(screen.getByRole('button', { name: 'Draw Both' }));
+
+    // Then: 第二次更新必须基于第一次更新后的最新快照，不能覆盖 A 的内容。
+    expect(screen.getByTestId('board-a-count').textContent).toBe('1');
+    expect(screen.getByTestId('board-b-count').textContent).toBe('1');
+  });
+
+  it.each(['Replace Then Draw B', 'Reset Then Draw B'])(
+    'merges a board update from the latest values after %s in the same React batch',
+    (actionName) => {
+      // Given: 两块空画板绑定同一个历史对象。
+      render(<SharedHistoryHarness />);
+
+      // When: 整体替换历史当前值后，在同一事件中继续更新 B。
+      fireEvent.click(screen.getByRole('button', { name: actionName }));
+
+      // Then: 后续更新必须从整体替换后的 A 值继续合并。
+      expect(screen.getByTestId('board-a-count').textContent).toBe('1');
+      expect(screen.getByTestId('board-b-count').textContent).toBe('1');
+    }
+  );
 });

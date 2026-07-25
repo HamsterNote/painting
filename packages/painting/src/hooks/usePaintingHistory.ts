@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import useUndo from 'use-undo';
 import type { DrawingValue } from '../components/DrawingSurface';
 
@@ -21,24 +21,42 @@ export interface PaintingHistory extends PaintingHistoryControls {
 /** 创建可由一个或多个 PaintingBoard 共用的按操作排序历史栈。 */
 export function usePaintingHistory(initialValues: PaintingHistoryValues): PaintingHistory {
   const [state, actions] = useUndo<PaintingHistoryValues>(initialValues);
+  const presentRef = useRef(state.present);
+  presentRef.current = state.present;
   const setValue = useCallback(
     (boardId: string, value: DrawingValue) => {
-      actions.set({ ...state.present, [boardId]: value });
+      const nextValues = { ...presentRef.current, [boardId]: value };
+      presentRef.current = nextValues;
+      actions.set(nextValues);
     },
-    [actions, state.present]
+    [actions]
+  );
+  const setValues = useCallback(
+    (values: PaintingHistoryValues) => {
+      presentRef.current = values;
+      actions.set(values);
+    },
+    [actions]
+  );
+  const reset = useCallback(
+    (values: PaintingHistoryValues) => {
+      presentRef.current = values;
+      actions.reset(values);
+    },
+    [actions]
   );
 
   return useMemo(
     () => ({
       values: state.present,
       setValue,
-      setValues: actions.set,
-      reset: actions.reset,
+      setValues,
+      reset,
       undo: actions.undo,
       redo: actions.redo,
       canUndo: actions.canUndo,
       canRedo: actions.canRedo,
     }),
-    [actions, setValue, state.present]
+    [actions, reset, setValue, setValues, state.present]
   );
 }

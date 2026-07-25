@@ -307,9 +307,9 @@ describe('PaintingController', () => {
     }
   });
 
-  // ===== Changes B+C: compact 工具菜单 accent 高亮 + 图标/占位 =====
-  it('highlights the active tool with accent background and renders icons/spacers in the compact tools menu', () => {
-    // Given: compact 模式，当前工具为 pen（有图标），工具列表含 polygon（无图标）。
+  // ===== Changes B+C: compact 工具菜单 accent 高亮 + 图标 =====
+  it('highlights the active tool with accent background and renders icons in the compact tools menu', () => {
+    // Given: compact 模式，当前工具为 pen，工具列表同时包含 polygon。
     const originalMatchMedia = window.matchMedia;
     window.matchMedia = jest.fn().mockImplementation((query: string) => ({
       matches: true,
@@ -345,10 +345,7 @@ describe('PaintingController', () => {
       // pen 有图标（Icon 渲染为 svg 元素）。
       expect(activeItem.querySelector('svg')).not.toBeNull();
 
-      // polygon 无图标，渲染占位 span（aria-hidden + width: 14）。
-      const spacer = inactiveItem.querySelector('span[aria-hidden="true"]');
-      expect(spacer).not.toBeNull();
-      expect(spacer?.getAttribute('style') ?? '').toContain('width: 14px');
+      expect(inactiveItem.querySelector('svg')).not.toBeNull();
     } finally {
       window.matchMedia = originalMatchMedia;
     }

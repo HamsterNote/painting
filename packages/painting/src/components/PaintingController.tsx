@@ -79,10 +79,6 @@ export const PAINTING_BOARD_DEFAULT_TOOLS: readonly DrawingTool[] = [
   'lasso',
 ];
 
-/**
- * 工具 → 图标映射。组件库第一期图标集（见 ICON_NAMES）没有 polygon / lasso
- * 专用图标，这两类工具回退为纯文字按钮；后续图标集补齐后在此处补充即可。
- */
 const TOOL_ICON_MAP: Partial<Record<DrawingTool, IconName>> = {
   pen: 'pen',
   line: 'line',

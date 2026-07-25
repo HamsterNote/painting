@@ -188,8 +188,10 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
     const history = controller?.history ?? localHistory;
     const historyBoardId = controller?.boardId ?? '__painting_board__';
     const historyValue = history.values[historyBoardId] ?? valueProp ?? EMPTY_DRAWING_VALUE;
-    const historyValueRef = useRef(historyValue);
-    historyValueRef.current = historyValue;
+    const isValueControlled = valueProp !== undefined && controller?.history === undefined;
+    const renderedValue = isValueControlled ? (valueProp ?? historyValue) : historyValue;
+    const historyValueRef = useRef(renderedValue);
+    historyValueRef.current = renderedValue;
 
     // ===== 受控 / 非受控 tool 状态 =====
     const [innerTool, setInnerTool] = useState<DrawingTool>(defaultTool);
@@ -427,7 +429,7 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
       surfaceRef.current?.deleteSelectedStrokes();
     }, []);
 
-    const strokes = historyValue.strokes;
+    const strokes = renderedValue.strokes;
 
     // 追踪 viewport：受控时使用 viewportProp，非受控时通过 onViewportChange 同步。
     // 初始值同样尊重 defaultViewport，保证与 DrawingSurface 的非受控初始值一致。
@@ -457,16 +459,21 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
     }, [controller?.history, historyValue, localHistory, valueProp]);
 
     useEffect(() => {
+      if (isValueControlled) return;
       if (historyValue === lastNotifiedValueRef.current) return;
       lastNotifiedValueRef.current = historyValue;
       onChangeProp?.(historyValue);
-    }, [historyValue, onChangeProp]);
+    }, [historyValue, isValueControlled, onChangeProp]);
 
     const handleChange = useCallback(
       (nextValue: DrawingValue) => {
+        if (isValueControlled) {
+          onChangeProp?.(nextValue);
+          return;
+        }
         history.setValue(historyBoardId, nextValue);
       },
-      [history, historyBoardId]
+      [history, historyBoardId, isValueControlled, onChangeProp]
     );
 
     // 拦截 onViewportChange，同步内部 viewport 状态
@@ -621,7 +628,7 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
             fontSize={activeFontSize}
             pressure={activePressure}
             virtualPaper={resolvedVirtualPaper}
-            value={historyValue}
+            value={renderedValue}
             onChange={handleChange}
             // 始终回传解析后的 viewport（而非仅受控时的 viewportProp），
             // 形成闭环：Minimap 拖拽 → handleViewportChange → setInternalViewport → 此处回传，
