@@ -1,15 +1,21 @@
-import { type CSSProperties, useCallback, useEffect, useState } from 'react';
 import {
   Button,
   Icon,
+  type IconName,
   Menu,
   MenuItem,
+  MenuSeparator,
   Popover,
-  type IconName,
   type PopoverEdge,
   type PopoverTheme,
 } from '@hamster-note/components';
+import { type CSSProperties, useCallback, useEffect, useState } from 'react';
+import type { PaintingHistoryControls } from '../hooks/usePaintingHistory';
+import { resolveTextFontSize } from '../model/text';
 import type { DrawingTool } from './DrawingSurface';
+import { PaintingFontSizeControl } from './PaintingFontSizeControl';
+import { PaintingStrokeColorControl } from './PaintingStrokeColorControl';
+import { PaintingStrokeWidthControl } from './PaintingStrokeWidthControl';
 
 /**
  * PaintingController — 从 PaintingBoard 抽离的底部工具栏
@@ -20,16 +26,44 @@ import type { DrawingTool } from './DrawingSurface';
  * 实现「一个底部栏控制所有 PaintingBoard」：
  *
  * ```tsx
- * const [data, setData] = useState<PaintingControllerData>({ tool: 'pen', minimap: false });
+ * const [data, setData] = useState<PaintingControllerData>({
+ *   tool: 'pen',
+ *   minimap: false,
+ *   selection: null,
+ * });
  *
  * <PaintingController data={data} onDataChange={setData} />
- * <PaintingBoard toolbar={false} tool={data.tool} minimap={data.minimap} />
- * <PaintingBoard toolbar={false} tool={data.tool} minimap={data.minimap} />
+ * <PaintingBoard
+ *   toolbar={false}
+ *   controller={{ boardId: 'board-a', data, onDataChange: setData }}
+ * />
+ * <PaintingBoard
+ *   toolbar={false}
+ *   controller={{ boardId: 'board-b', data, onDataChange: setData }}
+ * />
  * ```
  *
  * ⚠️ Web-only：Popover 依赖 react-dom（createPortal），不支持 react-native。
  * 工具栏默认 `edge="bottom"`，Popover 内部以 position: fixed 吸附视口底部，
  * 因此组件在 DOM 树中的位置不影响展示位置。
+ *
+ * ### multiBoard 模式（一个底栏控制多个 PaintingBoard）
+ *
+ * 当 `multiBoard` 为 `true` 时，底栏会隐藏「重置视角」「清空画布」按钮以及
+ * More 菜单里的 MiniMap 开关。原因：这三个入口在语义上都「作用于单个画板」--
+ * 重置视角只能重置一块画板的视口、清空画布只能清空一块画板的内容、MiniMap 也
+ * 只反映单块画板的缩略图。当共享底栏同时控制多块画板时，让这些入口出现会引发
+ * 歧义（用户无法预期它到底作用于哪一块），因此在多画板共享场景下统一隐藏。
+ * 单画板场景（包括 PaintingBoard 内部自渲染的 PaintingController）不传
+ * `multiBoard`，走默认值 `false`，行为不变。
+ *
+ * ### compact 模式（屏幕宽度 < 768px）
+ *
+ * 屏幕宽度 < 768px 时工具栏进入 compact 模式：工具合并为单按钮下拉菜单，
+ * 「压感」「手写笔」「清空画布」三个按钮从工具栏内联位置收纳进 More 菜单。
+ * compact 模式下 More 按钮即使 multiBoard 也展示（用于承载收纳项），但
+ * MiniMap 与「清空画布」在 multiBoard + compact 下仍隐藏（语义只作用于单画板），
+ * 「压感」「手写笔」保留（它们是全局笔触设置，与具体画板无关）。
  */
 
 /** 底部栏默认展示的全部工具（顺序即展示顺序） */
@@ -40,6 +74,7 @@ export const PAINTING_BOARD_DEFAULT_TOOLS: readonly DrawingTool[] = [
   'ellipse',
   'polygon',
   'bezier',
+  'text',
   'eraser',
   'lasso',
 ];
@@ -53,8 +88,11 @@ const TOOL_ICON_MAP: Partial<Record<DrawingTool, IconName>> = {
   line: 'line',
   rect: 'rectangle',
   ellipse: 'ellipse',
+  polygon: 'polygon',
   bezier: 'curve',
+  text: 'type',
   eraser: 'eraser',
+  lasso: 'lasso',
 };
 
 /** 工具默认文字标签（无图标工具的回退展示 + 图标按钮的 aria-label） */
@@ -65,6 +103,7 @@ const TOOL_LABEL_MAP: Record<DrawingTool, string> = {
   ellipse: 'Ellipse',
   polygon: 'Polygon',
   bezier: 'Bezier',
+  text: 'Text',
   eraser: 'Eraser',
   lasso: 'Lasso',
 };
@@ -72,13 +111,33 @@ const TOOL_LABEL_MAP: Record<DrawingTool, string> = {
 /**
  * PaintingController 的受控数据。这份 data 同时也是分发给各个
  * PaintingBoard 的控制面：`tool` 决定画板当前工具，`minimap` 决定
- * 画板是否展示 Minimap。后续期次（颜色 / 线宽 / 撤销重做）在此扩展字段即可。
+ * 画板是否展示 Minimap，`strokeWidth` / `strokeColor` 决定绘制笔触样式，`selection`
+ * 保证多个受控画板之间的套索选区互斥，`stylusMode` 决定单指触摸的归属（绘图 or 平移画布）。
+ * 后续期次（撤销重做）在此扩展字段即可。
  */
 export interface PaintingControllerData {
   /** 当前激活工具 */
   readonly tool: DrawingTool;
   /** 是否展示 Minimap */
   readonly minimap: boolean;
+  /** 当前笔触宽度；未传或无效时按 DrawingSurface 的默认值 2 展示 */
+  readonly strokeWidth?: number;
+  /** 当前笔触颜色；未传或为空时按 DrawingSurface 的默认黑色展示 */
+  readonly strokeColor?: string;
+  /** 当前文字字号；未传或无效时按 DrawingSurface 的默认值 24 展示 */
+  readonly fontSize?: number;
+  /** 当前由哪个画板持有套索选区；null 表示所有受控画板均未选中 */
+  readonly selection?: PaintingControllerSelection | null;
+  /** 手写笔模式：true=手写笔绘图+单指拖动画布（默认）；false=单指绘图+双指拖动画布 */
+  readonly stylusMode?: boolean;
+  /** 压感开关：true=pen 笔画宽度随手写笔压力变化；false/未传=均匀线宽（默认，与 DrawingSurface 安全默认对齐） */
+  readonly pressure?: boolean;
+}
+
+/** 多画板共享套索选区，boardId 用于隔离不同画板中可能重复的 stroke id。 */
+export interface PaintingControllerSelection {
+  readonly boardId: string;
+  readonly strokeIds: readonly string[];
 }
 
 export interface PaintingControllerProps {
@@ -98,6 +157,32 @@ export interface PaintingControllerProps {
   readonly showLabels?: boolean;
   /** 透传给工具栏 Popover 的样式 */
   readonly style?: CSSProperties;
+  /** 重置视角回调。传入后底栏展示「重置视角」按钮 */
+  readonly onResetView?: () => void;
+  /** 清空画布回调。传入后底栏展示「清空画布」按钮 */
+  readonly onClearCanvas?: () => void;
+  /** 导入图片回调。单画板工具栏传入后展示一次性的 Image 文件选择入口。 */
+  readonly onInsertImage?: () => void;
+  /** 撤销与恢复命令；传入后在底栏最左侧展示两个始终可发现的入口。 */
+  readonly history?: PaintingHistoryControls;
+  /**
+   * 是否处于「一个底栏控制多个 PaintingBoard」的多画板共享模式，默认 false。
+   * 为 true 时隐藏「重置视角」「清空画布」按钮及 More 菜单（含 MiniMap 开关），
+   * 因为这三者在语义上只作用于单个画板，共享控制多画板时出现会引发歧义。
+   * 详见组件顶部 doc comment 的 multiBoard 章节。
+   */
+  readonly multiBoard?: boolean;
+  /**
+   * 工具栏 Popover 是否以「相对定位模式」渲染，
+   * 默认 false，保持原有 position: fixed 吸附视口底部行为不变。
+   *
+   * 传入 true 后贴边改用 position: absolute：工具栏脱离视口吸附，改为贴在
+   * 「最近的定位祖先」对应边缘并跟随其滚动/裁切。适用于把工具栏嵌入到一个
+   * 已有定位上下文（position: relative/absolute 等）的容器内的场景（例如
+   * PaintingBoard 内部自渲染的底部栏：画板根 div 已是 position: relative，
+   * 工具栏即可自然贴在画板底部，随画板容器走）。
+   */
+  readonly relative?: boolean;
 }
 
 /**
@@ -143,8 +228,27 @@ export function PaintingController({
   edgeOffset = 16,
   showLabels = false,
   style,
+  onResetView,
+  onClearCanvas,
+  onInsertImage,
+  history,
+  multiBoard = false,
+  relative = false,
 }: PaintingControllerProps) {
-  const { tool: activeTool, minimap: showMinimap } = data;
+  const { tool: activeTool, minimap: showMinimap, stylusMode: stylusModeFromData } = data;
+  // stylusMode 默认 true（手写笔模式），与 DrawingSurface 的安全默认对齐
+  const stylusMode = stylusModeFromData ?? true;
+  // pressure 默认 false（均匀线宽），与 DrawingSurface 的安全默认对齐
+  const pressure = data.pressure ?? false;
+  const strokeWidth =
+    typeof data.strokeWidth === 'number' &&
+    Number.isFinite(data.strokeWidth) &&
+    data.strokeWidth >= 1
+      ? data.strokeWidth
+      : 2;
+  const strokeColor = data.strokeColor?.trim() || '#000000';
+  const fontSize = resolveTextFontSize(data.fontSize);
+  const activeToolIcon = TOOL_ICON_MAP[activeTool];
 
   // ===== 纯 UI 状态（不进 data，与画板控制无关） =====
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -161,7 +265,15 @@ export function PaintingController({
   // ===== data 变更回调：基于现有 data 生成新 data，保持未修改字段不变 =====
   const handleSelectTool = useCallback(
     (next: DrawingTool) => {
-      onDataChange({ ...data, tool: next });
+      onDataChange({
+        ...data,
+        tool: next,
+        selection:
+          (next === 'lasso' || next === 'text') &&
+          (data.tool === 'lasso' || data.tool === 'text')
+            ? (data.selection ?? null)
+            : null,
+      });
     },
     [data, onDataChange]
   );
@@ -169,6 +281,43 @@ export function PaintingController({
   const handleToggleMinimap = useCallback(() => {
     onDataChange({ ...data, minimap: !data.minimap });
   }, [data, onDataChange]);
+
+  useEffect(() => {
+    if (multiBoard && data.minimap) {
+      onDataChange({ ...data, minimap: false });
+    }
+  }, [multiBoard, data.minimap, data, onDataChange]);
+
+  const handleStrokeWidthChange = useCallback(
+    (nextStrokeWidth: number) => {
+      onDataChange({ ...data, strokeWidth: nextStrokeWidth });
+    },
+    [data, onDataChange]
+  );
+
+  const handleStrokeColorChange = useCallback(
+    (nextStrokeColor: string) => {
+      onDataChange({ ...data, strokeColor: nextStrokeColor });
+    },
+    [data, onDataChange]
+  );
+
+  const handleFontSizeChange = useCallback(
+    (nextFontSize: number) => {
+      onDataChange({ ...data, fontSize: nextFontSize });
+    },
+    [data, onDataChange]
+  );
+
+  // 切换手写笔模式：翻转 data.stylusMode，走与 tool/minimap 相同的 data 回写通道
+  const handleToggleStylusMode = useCallback(() => {
+    onDataChange({ ...data, stylusMode: !stylusMode });
+  }, [data, onDataChange, stylusMode]);
+
+  // 切换压感：翻转 data.pressure，走与 stylusMode 相同的 data 回写通道
+  const handleTogglePressure = useCallback(() => {
+    onDataChange({ ...data, pressure: !pressure });
+  }, [data, onDataChange, pressure]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -219,8 +368,36 @@ export function PaintingController({
         edge={edge}
         edgeOffset={edgeOffset}
         orientation="horizontal"
-        style={style}
+        style={relative ? { ...style, position: 'absolute' } : style}
       >
+        {history ? (
+          <>
+            <Button
+              type="button"
+              size="small"
+              variant="ghost"
+              data-testid="painting-board-undo"
+              aria-label="Undo"
+              disabled={!history.canUndo}
+              onClick={history.undo}
+            >
+              <Icon name="undo" style={{ width: 16, height: 16 }} />
+              {showLabels ? 'Undo' : null}
+            </Button>
+            <Button
+              type="button"
+              size="small"
+              variant="ghost"
+              data-testid="painting-board-redo"
+              aria-label="Redo"
+              disabled={!history.canRedo}
+              onClick={history.redo}
+            >
+              <Icon name="redo" style={{ width: 16, height: 16 }} />
+              {showLabels ? 'Redo' : null}
+            </Button>
+          </>
+        ) : null}
         {isCompact ? (
           <Button
             type="button"
@@ -235,37 +412,144 @@ export function PaintingController({
               setCompactMenuOpen((v) => !v);
             }}
           >
-            {TOOL_ICON_MAP[activeTool] ? (
-              <Icon name={TOOL_ICON_MAP[activeTool]!} style={{ width: 16, height: 16 }} />
+            {activeToolIcon ? (
+              <Icon name={activeToolIcon} style={{ width: 16, height: 16 }} />
             ) : null}
             {TOOL_LABEL_MAP[activeTool]}
           </Button>
         ) : (
-          tools.map((tool) => (
-            <ToolButton
-              key={tool}
-              tool={tool}
-              active={tool === activeTool}
-              showLabel={showLabels}
-              onSelect={handleSelectTool}
-            />
-          ))
+          <>
+            {tools.map((tool) => (
+              <ToolButton
+                key={tool}
+                tool={tool}
+                active={tool === activeTool}
+                showLabel={showLabels}
+                onSelect={handleSelectTool}
+              />
+            ))}
+            {onInsertImage && !multiBoard ? (
+              <Button
+                type="button"
+                size="small"
+                variant="ghost"
+                data-testid="painting-board-image-tool"
+                aria-label="Image"
+                onClick={onInsertImage}
+              >
+                <Icon name="image" style={{ width: 16, height: 16 }} />
+                {showLabels ? 'Image' : null}
+              </Button>
+            ) : null}
+          </>
         )}
-        <Button
-          type="button"
-          size="small"
-          variant="ghost"
-          data-testid="painting-board-more-btn"
-          aria-haspopup="menu"
-          aria-expanded={moreMenuOpen}
-          aria-label="More"
-          onClick={(event) => {
-            setMoreMenuAnchor(event.currentTarget);
-            setMoreMenuOpen((v) => !v);
-          }}
-        >
-          <Icon name="more" style={{ width: 16, height: 16 }} />
-        </Button>
+        {activeTool === 'text' ? (
+          <>
+            <PaintingStrokeColorControl
+              strokeColor={strokeColor}
+              theme={theme}
+              onStrokeColorChange={handleStrokeColorChange}
+            />
+            <PaintingFontSizeControl
+              fontSize={fontSize}
+              theme={theme}
+              onFontSizeChange={handleFontSizeChange}
+            />
+          </>
+        ) : activeTool !== 'lasso' ? (
+          <>
+            <PaintingStrokeColorControl
+              strokeColor={strokeColor}
+              theme={theme}
+              onStrokeColorChange={handleStrokeColorChange}
+            />
+            <PaintingStrokeWidthControl
+              strokeWidth={strokeWidth}
+              theme={theme}
+              onStrokeWidthChange={handleStrokeWidthChange}
+            />
+            {/* 压感开关：仅影响 pen 笔画，与颜色/宽度同属笔触样式组。
+                compact 模式下收纳进 More 菜单（见 painting-board-more-pressure）。 */}
+            {!isCompact ? (
+              <Button
+                type="button"
+                size="small"
+                variant={pressure ? 'primary' : 'ghost'}
+                data-testid="painting-board-pressure-toggle"
+                aria-pressed={pressure}
+                aria-label="Pressure sensitivity"
+                onClick={handleTogglePressure}
+              >
+                <Icon name="edit" style={{ width: 16, height: 16 }} />
+                {showLabels ? 'Pressure' : null}
+              </Button>
+            ) : null}
+          </>
+        ) : null}
+        {/* 手写笔模式切换：属 data 契约。compact 模式下收纳进 More 菜单
+            （见 painting-board-more-stylus），非 compact 时常驻工具栏。 */}
+        {!isCompact ? (
+          <Button
+            type="button"
+            size="small"
+            variant={stylusMode ? 'primary' : 'ghost'}
+            data-testid="painting-board-stylus-toggle"
+            aria-pressed={stylusMode}
+            aria-label="Stylus mode"
+            onClick={handleToggleStylusMode}
+          >
+            <Icon name="touch" style={{ width: 16, height: 16 }} />
+            {showLabels ? 'Stylus' : null}
+          </Button>
+        ) : null}
+        {/* 重置视角：仅当传入 onResetView 且非多画板共享模式时渲染 */}
+        {onResetView && !multiBoard ? (
+          <Button
+            type="button"
+            size="small"
+            variant="ghost"
+            data-testid="painting-board-reset-view"
+            aria-label="Reset view"
+            onClick={onResetView}
+          >
+            <Icon name="locate" style={{ width: 16, height: 16 }} />
+            {showLabels ? 'Reset' : null}
+          </Button>
+        ) : null}
+        {/* 清空画布：仅当传入 onClearCanvas 且非多画板共享模式时渲染。
+            compact 模式下收纳进 More 菜单（见 painting-board-more-clear-canvas）。 */}
+        {onClearCanvas && !multiBoard && !isCompact ? (
+          <Button
+            type="button"
+            size="small"
+            variant="ghost"
+            data-testid="painting-board-clear-canvas"
+            aria-label="Clear canvas"
+            onClick={onClearCanvas}
+          >
+            <Icon name="delete" style={{ width: 16, height: 16 }} />
+            {showLabels ? 'Clear' : null}
+          </Button>
+        ) : null}
+        {/* More 菜单按钮：单画板模式始终展示；compact 模式下即使 multiBoard
+            也展示（用于收纳压感/手写笔等按钮）。multiBoard + 非 compact 时不渲染。 */}
+        {!multiBoard || isCompact ? (
+          <Button
+            type="button"
+            size="small"
+            variant="ghost"
+            data-testid="painting-board-more-btn"
+            aria-haspopup="menu"
+            aria-expanded={moreMenuOpen}
+            aria-label="More"
+            onClick={(event) => {
+              setMoreMenuAnchor(event.currentTarget);
+              setMoreMenuOpen((v) => !v);
+            }}
+          >
+            <Icon name="more" style={{ width: 16, height: 16 }} />
+          </Button>
+        ) : null}
       </Popover>
       {compactMenuOpen && compactMenuAnchor && (
         <Popover
@@ -275,23 +559,56 @@ export function PaintingController({
           data-testid="painting-board-compact-menu"
         >
           <Menu>
-            {tools.map((tool) => (
+            {tools.map((tool) => {
+              const iconName = TOOL_ICON_MAP[tool];
+              const isActive = tool === activeTool;
+              return (
+                <MenuItem
+                  key={tool}
+                  data-testid={`painting-board-compact-tool-${tool}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    ...(isActive
+                      ? { background: 'var(--hn-color-accent)', color: '#09090b' }
+                      : {}),
+                  }}
+                  onClick={() => {
+                    handleSelectTool(tool);
+                    setCompactMenuOpen(false);
+                  }}
+                >
+                  {iconName ? (
+                    <Icon name={iconName} style={{ width: 14, height: 14 }} />
+                  ) : (
+                    <span
+                      aria-hidden="true"
+                      style={{ display: 'inline-block', width: 14, height: 14 }}
+                    />
+                  )}
+                  {TOOL_LABEL_MAP[tool]}
+                </MenuItem>
+              );
+            })}
+            {onInsertImage && !multiBoard ? (
               <MenuItem
-                key={tool}
-                data-testid={`painting-board-compact-tool-${tool}`}
+                data-testid="painting-board-compact-tool-image"
                 onClick={() => {
-                  handleSelectTool(tool);
+                  onInsertImage();
                   setCompactMenuOpen(false);
                 }}
               >
-                {tool === activeTool ? '✓ ' : ''}{TOOL_LABEL_MAP[tool]}
+                <Icon name="image" style={{ width: 14, height: 14 }} />
+                Image
               </MenuItem>
-            ))}
+            ) : null}
           </Menu>
         </Popover>
       )}
-      {/* 更多菜单：通过 anchor 定位到 body 下，避免被 overflow 裁剪 */}
-      {moreMenuOpen && moreMenuAnchor && (
+      {/* 更多菜单：通过 anchor 定位到 body 下，避免被 overflow 裁剪。
+          单画板模式或 compact 模式下渲染；multiBoard + 非 compact 时不渲染。 */}
+      {(!multiBoard || isCompact) && moreMenuOpen && moreMenuAnchor && (
         <Popover
           anchor={moreMenuAnchor}
           placement="top-end"
@@ -299,20 +616,81 @@ export function PaintingController({
           data-testid="painting-board-more-menu"
         >
           <Menu>
-            <MenuItem
-              data-testid="painting-board-minimap-toggle"
-              style={
-                showMinimap
-                  ? { background: 'var(--hn-color-accent)', color: '#09090b' }
-                  : undefined
-              }
-              onClick={() => {
-                handleToggleMinimap();
-                setMoreMenuOpen(false);
-              }}
-            >
-              MiniMap
-            </MenuItem>
+            {/* MiniMap 开关：仅单画板模式展示 */}
+            {!multiBoard ? (
+              <MenuItem
+                data-testid="painting-board-minimap-toggle"
+                style={
+                  showMinimap
+                    ? { background: 'var(--hn-color-accent)', color: '#09090b' }
+                    : undefined
+                }
+                onClick={() => {
+                  handleToggleMinimap();
+                  setMoreMenuOpen(false);
+                }}
+              >
+                <Icon name="minimap" style={{ width: 14, height: 14 }} />
+                MiniMap
+              </MenuItem>
+            ) : null}
+            {/* compact 模式下把压感/手写笔/清空收纳进 More 菜单 */}
+            {!multiBoard && isCompact ? <MenuSeparator /> : null}
+            {isCompact && activeTool !== 'lasso' && activeTool !== 'text' ? (
+              <MenuItem
+                data-testid="painting-board-more-pressure"
+                aria-pressed={pressure}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  ...(pressure ? { background: 'var(--hn-color-accent)', color: '#09090b' } : {}),
+                }}
+                onClick={() => {
+                  handleTogglePressure();
+                  setMoreMenuOpen(false);
+                }}
+              >
+                <Icon name="edit" style={{ width: 14, height: 14 }} />
+                Pressure
+              </MenuItem>
+            ) : null}
+            {isCompact ? (
+              <MenuItem
+                data-testid="painting-board-more-stylus"
+                aria-pressed={stylusMode}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  ...(stylusMode ? { background: 'var(--hn-color-accent)', color: '#09090b' } : {}),
+                }}
+                onClick={() => {
+                  handleToggleStylusMode();
+                  setMoreMenuOpen(false);
+                }}
+              >
+                <Icon name="touch" style={{ width: 14, height: 14 }} />
+                Stylus
+              </MenuItem>
+            ) : null}
+            {isCompact && onClearCanvas && !multiBoard ? (
+              <MenuItem
+                data-testid="painting-board-more-clear-canvas"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+                onClick={() => {
+                  onClearCanvas?.();
+                  setMoreMenuOpen(false);
+                }}
+              >
+                <Icon name="delete" style={{ width: 14, height: 14 }} />
+                Clear
+              </MenuItem>
+            ) : null}
           </Menu>
         </Popover>
       )}

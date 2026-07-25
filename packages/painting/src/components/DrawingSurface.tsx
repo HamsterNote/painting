@@ -27,6 +27,15 @@ import {
   type LineStrokeV2,
   type PolygonStrokeV2,
 } from '../model/strokes';
+import {
+  createTextBoxPoints,
+  MIN_TEXT_BOX_WIDTH,
+  resizeTextBoxHeight,
+  resolveTextBoxHeight,
+  resolveTextFontSize,
+  TEXT_LINE_HEIGHT,
+  textBoxFromPoints,
+} from '../model/text';
 import { StrokeRenderer } from '../render/StrokeRenderer';
 import {
   isPointInsideSelectionFrame,
@@ -53,8 +62,10 @@ import {
 import {
   computeSelectionBox,
   computeSelectionGeometryBox,
+  pickImageStrokeAtPoint,
   pickRenderedStrokeIntersectingPolyline,
   pickRenderedStrokeIntersectingSegment,
+  pickTextStrokeAtPoint,
   type RenderedStrokeHitTestOptions,
   resolveSnapPoint,
   SELECTION_BOX_PADDING,
@@ -86,6 +97,7 @@ export type DrawingTool =
   | 'ellipse'
   | 'polygon'
   | 'bezier'
+  | 'text'
   | 'eraser'
   | 'lasso';
 export type DrawingInputMethod = 'touch' | 'mouse' | 'pen';
@@ -150,7 +162,7 @@ export type DrawingPoint = {
 
 export type DrawingStroke = {
   id: string;
-  tool: DrawingTool;
+  tool: DrawingTool | 'image';
   points: DrawingPoint[];
   strokeColor?: string;
   strokeWidth?: number;
@@ -159,6 +171,10 @@ export type DrawingStroke = {
   fillColor?: string;
   fillOpacity?: number;
   rotationRad?: number;
+  text?: string;
+  fontSize?: number;
+  /** 图片元素的数据地址；导入时使用 data URL，随画布值一并持久化。 */
+  src?: string;
 };
 
 export type DrawingStrokeStyle = Pick<
@@ -317,6 +333,8 @@ export type DrawingSurfaceProps = {
   strokeColor?: string;
   /** Stroke width. Defaults to 2. Non-finite or < 1 values resolve to 2. */
   strokeWidth?: number;
+  /** Text font size in canvas units. Defaults to 24. */
+  fontSize?: number;
   /** Numeric SVG dash segments. Invalid arrays render as a solid stroke. */
   dashArray?: number[];
   /** Numeric SVG dash offset. Non-finite values are ignored. */
@@ -426,6 +444,7 @@ function isDrawingToolSupported(tool: unknown): tool is DrawingTool {
     tool === 'ellipse' ||
     tool === 'polygon' ||
     tool === 'bezier' ||
+    tool === 'text' ||
     tool === 'eraser' ||
     tool === 'lasso'
   );
@@ -443,13 +462,13 @@ function isPlacementReducerTool(tool: DrawingTool): boolean {
   return isClickToPlaceTool(tool) || tool === 'bezier';
 }
 
-function isClosedShapeTool(tool: DrawingTool): boolean {
+function isClosedShapeTool(tool: DrawingStroke['tool']): boolean {
   return tool === 'rect' || tool === 'ellipse' || tool === 'polygon';
 }
 
 // Shift constraint only applies to bbox-defined shapes (rect/ellipse).
 // Polygon is closed but defined by vertex list, not bbox; shift has no meaning there.
-function isBboxShapeTool(tool: DrawingTool): boolean {
+function isBboxShapeTool(tool: DrawingStroke['tool']): boolean {
   return tool === 'rect' || tool === 'ellipse';
 }
 
@@ -623,7 +642,8 @@ function resolveLassoResizeAxis(
   min: number,
   max: number,
   delta: number,
-  direction: -1 | 0 | 1
+  direction: -1 | 0 | 1,
+  minimumSize = LASSO_RESIZE_MIN_SIZE
 ): { anchor: number; scale: number } {
   const size = max - min;
   if (direction === 0 || size <= 0) {
@@ -632,12 +652,12 @@ function resolveLassoResizeAxis(
 
   if (direction === 1) {
     const anchor = min;
-    const movingEdge = Math.max(anchor + LASSO_RESIZE_MIN_SIZE, max + delta);
+    const movingEdge = Math.max(anchor + minimumSize, max + delta);
     return { anchor, scale: (movingEdge - anchor) / size };
   }
 
   const anchor = max;
-  const movingEdge = Math.min(anchor - LASSO_RESIZE_MIN_SIZE, min + delta);
+  const movingEdge = Math.min(anchor - minimumSize, min + delta);
   return { anchor, scale: (movingEdge - anchor) / (min - anchor) };
 }
 
@@ -720,6 +740,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       onChange,
       strokeColor,
       strokeWidth,
+      fontSize,
       dashArray,
       dashOffset,
       fillColor,
@@ -1109,6 +1130,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     eventTargetRef.current = eventTarget;
 
     const resolvedColor = strokeColor && strokeColor.trim() !== '' ? strokeColor : 'black';
+    const resolvedFontSize = resolveTextFontSize(fontSize);
     const resolvedOpenWidth =
       typeof strokeWidth === 'number' && Number.isFinite(strokeWidth) && strokeWidth >= 1
         ? strokeWidth
@@ -1201,13 +1223,48 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       () => uniqueStrokeIds(isSelectionControlled ? selectedStrokeIds : internalSelectedIds),
       [internalSelectedIds, isSelectionControlled, selectedStrokeIds]
     );
+    const selectedTextStroke = useMemo(() => {
+      if (selectedIds.length !== 1) {
+        return null;
+      }
+      return (
+        strokes.find((stroke) => stroke.id === selectedIds[0] && stroke.tool === 'text') ?? null
+      );
+    }, [selectedIds, strokes]);
     const selectionBox = useMemo(
       () => computeSelectionBox(strokes, selectedIds),
       [strokes, selectedIds]
     );
+    const selectionFrameFromTextStroke = useCallback((textStroke: DrawingStroke) => {
+        const textBox = textBoxFromPoints(textStroke.points);
+        if (textBox === null) {
+          return null;
+        }
+        return {
+          center: {
+            x: textBox.x + textBox.width / 2,
+            y: textBox.y + textBox.height / 2,
+          },
+          width: textBox.width + SELECTION_BOX_PADDING * 2,
+          height: textBox.height + SELECTION_BOX_PADDING * 2,
+          rotationRad:
+            typeof textStroke.rotationRad === 'number' && Number.isFinite(textStroke.rotationRad)
+              ? textStroke.rotationRad
+              : 0,
+        };
+    }, []);
+    const resolveSelectionFrame = useCallback(
+      (box: SelectionBox | null): SelectionFrame | null => {
+        if (selectedTextStroke === null) {
+          return box === null ? null : selectionFrameFromBox(box);
+        }
+        return selectionFrameFromTextStroke(selectedTextStroke);
+      },
+      [selectedTextStroke, selectionFrameFromTextStroke]
+    );
     const selectionIdentity = selectedIds.join('\u0000');
     const [selectionFrame, setSelectionFrame] = useState<SelectionFrame | null>(() =>
-      selectionBox === null ? null : selectionFrameFromBox(selectionBox)
+      resolveSelectionFrame(selectionBox)
     );
     const selectedIdsRef = useRef<readonly string[]>(selectedIds);
     const selectionBoxRef = useRef(selectionBox);
@@ -1215,6 +1272,17 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     const previousSelectionIdentityRef = useRef(selectionIdentity);
     const onSelectionChangeRef = useRef(onSelectionChange);
     const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+    const [editingTextId, setEditingTextId] = useState<string | null>(null);
+    const editingTextIdRef = useRef<string | null>(editingTextId);
+    const textEditorRef = useRef<HTMLTextAreaElement>(null);
+
+    editingTextIdRef.current = editingTextId;
+
+    useEffect(() => {
+      if (editingTextId !== null) {
+        textEditorRef.current?.focus();
+      }
+    }, [editingTextId]);
 
     const commitSelectionFrame = useCallback((nextFrame: SelectionFrame | null) => {
       selectionFrameRef.current = nextFrame;
@@ -1226,13 +1294,13 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         return;
       }
       previousSelectionIdentityRef.current = selectionIdentity;
-      commitSelectionFrame(selectionBox === null ? null : selectionFrameFromBox(selectionBox));
-    }, [commitSelectionFrame, selectionBox, selectionIdentity]);
+      commitSelectionFrame(resolveSelectionFrame(selectionBox));
+    }, [commitSelectionFrame, resolveSelectionFrame, selectionBox, selectionIdentity]);
 
     const activeSelectionFrame =
       selectionBox === null
         ? null
-        : (selectionFrame ?? selectionFrameFromBox(selectionBox));
+        : (selectionFrame ?? resolveSelectionFrame(selectionBox));
     selectionFrameRef.current = activeSelectionFrame;
 
     useEffect(() => {
@@ -1262,6 +1330,25 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       [commitSelectionFrame, isSelectionControlled]
     );
 
+    const finishEditingText = useCallback((): string | null => {
+      const textId = editingTextIdRef.current;
+      if (textId === null) {
+        return null;
+      }
+      const textStroke = strokesRef.current.find(
+        (stroke) => stroke.id === textId && stroke.tool === 'text'
+      );
+      let removedTextId: string | null = null;
+      if (textStroke !== undefined && !(textStroke.text ?? '').trim()) {
+        removeStrokeRef.current(textId);
+        commitSelection(selectedIdsRef.current.filter((id) => id !== textId));
+        removedTextId = textId;
+      }
+      editingTextIdRef.current = null;
+      setEditingTextId(null);
+      return removedTextId;
+    }, [commitSelection]);
+
     // Click-to-place interaction state (polygon tool). The standalone reducer from Task 5
     // owns all vertex/cursor bookkeeping and completion semantics; we only translate native
     // pointer events to reducer actions and observe `completedStroke` to commit.
@@ -1288,6 +1375,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     const updateStrokesRef = useRef(updateStrokesInCanvas);
     const clearActiveStrokeRef = useRef<(() => void) | null>(null);
     const resolvedColorRef = useRef(resolvedColor);
+    const resolvedFontSizeRef = useRef(resolvedFontSize);
     const resolvedOpenWidthRef = useRef(resolvedOpenWidth);
     const resolvedClosedWidthRef = useRef(resolvedClosedWidth);
     const resolvedPressureMultiplierRef = useRef(resolvedPressureMultiplier);
@@ -1406,6 +1494,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     updateStrokesRef.current = updateStrokesInCanvas;
     strokesRef.current = strokes;
     resolvedColorRef.current = resolvedColor;
+    resolvedFontSizeRef.current = resolvedFontSize;
     resolvedOpenWidthRef.current = resolvedOpenWidth;
     resolvedClosedWidthRef.current = resolvedClosedWidth;
     resolvedPressureMultiplierRef.current = resolvedPressureMultiplier;
@@ -1426,6 +1515,42 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       const prunedIds = selectedIdsRef.current.filter((id) => existingStrokeIds.has(id));
       commitSelection(prunedIds);
     }, [commitSelection, strokes]);
+
+    const previousTextStyleRef = useRef({ color: resolvedColor, fontSize: resolvedFontSize });
+    useEffect(() => {
+      const previous = previousTextStyleRef.current;
+      previousTextStyleRef.current = { color: resolvedColor, fontSize: resolvedFontSize };
+      if (
+        effectiveTool !== 'text' ||
+        selectedTextStroke === null ||
+        (previous.color === resolvedColor && previous.fontSize === resolvedFontSize)
+      ) {
+        return;
+      }
+      const nextStroke = {
+        ...selectedTextStroke,
+        strokeColor: resolvedColor,
+        fontSize: resolvedFontSize,
+        points: resizeTextBoxHeight(
+          selectedTextStroke.points,
+          resolveTextBoxHeight(
+            selectedTextStroke.text ?? '',
+            resolvedFontSize,
+            textBoxFromPoints(selectedTextStroke.points)?.width ?? MIN_TEXT_BOX_WIDTH
+          )
+        ),
+      };
+      updateStrokesInCanvas([nextStroke]);
+      commitSelectionFrame(selectionFrameFromTextStroke(nextStroke));
+    }, [
+      commitSelectionFrame,
+      effectiveTool,
+      resolvedColor,
+      resolvedFontSize,
+      selectedTextStroke,
+      selectionFrameFromTextStroke,
+      updateStrokesInCanvas,
+    ]);
 
     const onSelectionOverlayChangeRef = useRef(onSelectionOverlayChange);
     useEffect(() => {
@@ -1474,6 +1599,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         geometryBox: SelectionBox;
         originals: DrawingStroke[];
         lastPosition: Pose['position'] | null;
+        minimumWidth: number;
       };
 
       type RotateGesture = {
@@ -1486,7 +1612,14 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         accumulatedRotationRad: number;
       };
 
-      type SelectionTransformGesture = ResizeGesture | RotateGesture;
+      type MoveGesture = {
+        kind: 'move';
+        originals: DrawingStroke[];
+        frame: SelectionFrame;
+        lastPosition: Pose['position'] | null;
+      };
+
+      type SelectionTransformGesture = MoveGesture | ResizeGesture | RotateGesture;
 
       let gesture: SelectionTransformGesture | null = null;
       const getPose = (): Pose => ({
@@ -1543,6 +1676,32 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           return;
         }
 
+        if (gesture.kind === 'move') {
+          const moveGesture = gesture;
+          if (
+            moveGesture.lastPosition?.x === pose.position.x &&
+            moveGesture.lastPosition.y === pose.position.y
+          ) {
+            return;
+          }
+          moveGesture.lastPosition = pose.position;
+
+          const viewportScale = viewportRef.current.scale;
+          const dx = pose.position.x / viewportScale;
+          const dy = pose.position.y / viewportScale;
+          updateStrokesRef.current(
+            moveGesture.originals.map((stroke) => offsetStrokeForLassoMove(stroke, dx, dy))
+          );
+          commitSelectionFrame({
+            ...moveGesture.frame,
+            center: {
+              x: moveGesture.frame.center.x + dx,
+              y: moveGesture.frame.center.y + dy,
+            },
+          });
+          return;
+        }
+
         const resizeGesture = gesture;
 
         if (
@@ -1565,7 +1724,8 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           resizeGesture.geometryBox.minX,
           resizeGesture.geometryBox.maxX,
           localDeltaX,
-          direction.x
+          direction.x,
+          resizeGesture.minimumWidth
         );
         const yAxis = resolveLassoResizeAxis(
           resizeGesture.geometryBox.minY,
@@ -1573,13 +1733,31 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           localDeltaY,
           direction.y
         );
-        const nextStrokes = resizeGesture.originals.map((stroke) =>
-          resizeStrokeInSelectionFrame(stroke, {
+        const nextStrokes = resizeGesture.originals.map((stroke) => {
+          const resizedStroke = resizeStrokeInSelectionFrame(stroke, {
             frame: resizeGesture.frame,
             xAxis,
             yAxis,
-          })
-        );
+          });
+          if (resizeGesture.originals.length !== 1 || resizedStroke.tool !== 'text') {
+            return resizedStroke;
+          }
+          const resizedTextBox = textBoxFromPoints(resizedStroke.points);
+          if (resizedTextBox === null) {
+            return resizedStroke;
+          }
+          return {
+            ...resizedStroke,
+            points: resizeTextBoxHeight(
+              resizedStroke.points,
+              resolveTextBoxHeight(
+                resizedStroke.text ?? '',
+                resolveTextFontSize(resizedStroke.fontSize),
+                resizedTextBox.width
+              )
+            ),
+          };
+        });
         updateStrokesRef.current(nextStrokes);
         const localStrokes = nextStrokes.map((stroke) =>
           rotateStrokeAroundSelection(
@@ -1617,10 +1795,6 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
 
       const handleStart = () => {
         gesture = null;
-        if (effectiveToolRef.current !== 'lasso') {
-          return;
-        }
-
         const [finger] = multiDrag.getFingers();
         const operation = finger?.getLastOperation();
         const event = operation?.event;
@@ -1632,7 +1806,31 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         const rotateHandle = target.closest('[data-lasso-rotate-handle]');
         const handleElement = target.closest('[data-lasso-resize-handle]');
         const handle = handleElement?.getAttribute('data-lasso-resize-handle') ?? null;
-        if (!rotateHandle && !isLassoResizeHandle(handle)) {
+        const textSelectionEdge =
+          rotateHandle === null && handleElement === null
+            ? target.closest('[data-text-selection-edge]')
+            : null;
+        if (!rotateHandle && !isLassoResizeHandle(handle) && textSelectionEdge === null) {
+          return;
+        }
+
+        const activeTool = effectiveToolRef.current;
+        const selectedText =
+          selectedIdsRef.current.length === 1
+            ? strokesRef.current.find(
+                (stroke) => stroke.id === selectedIdsRef.current[0] && stroke.tool === 'text'
+              )
+            : undefined;
+        const canResizeText =
+          activeTool === 'text' && selectedText !== undefined && (handle === 'w' || handle === 'e');
+        const canMoveText =
+          (activeTool === 'text' || activeTool === 'lasso') &&
+          selectedText !== undefined &&
+          textSelectionEdge !== null;
+        if (activeTool !== 'lasso' && !canResizeText && !canMoveText) {
+          return;
+        }
+        if (activeTool === 'text' && rotateHandle) {
           return;
         }
 
@@ -1685,6 +1883,16 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           return;
         }
 
+        if (canMoveText) {
+          gesture = {
+            kind: 'move',
+            originals,
+            frame,
+            lastPosition: null,
+          };
+          return;
+        }
+
         if (isLassoResizeHandle(handle)) {
           const localOriginals = originals.map((stroke) =>
             rotateStrokeAroundSelection(stroke, frame.center, -frame.rotationRad)
@@ -1703,6 +1911,10 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
             geometryBox: localGeometryBox,
             originals,
             lastPosition: null,
+            minimumWidth:
+              originals.length === 1 && originals[0]?.tool === 'text'
+                ? MIN_TEXT_BOX_WIDTH
+                : LASSO_RESIZE_MIN_SIZE,
           };
         }
       };
@@ -1724,7 +1936,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (!(target instanceof Element)) {
           return;
         }
-        if (!target.closest('[data-lasso-resize-handle], [data-lasso-rotate-handle]')) {
+        if (
+          !target.closest(
+            '[data-lasso-resize-handle], [data-lasso-rotate-handle], [data-text-selection-edge]'
+          )
+        ) {
           return;
         }
         // @system-ui-js/multi-drag 在运行期暴露 handlePointerDown 箭头属性，但声明里标记为
@@ -1732,6 +1948,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         const bridge = multiDrag as object as {
           readonly handlePointerDown?: (event: PointerEvent) => void;
         };
+        // 选框边缘不是新的焦点目标；阻止浏览器把焦点从文字编辑器移走，
+        // 否则空文字会因 textarea blur 触发既有清理逻辑而在拖动开始前被删除。
+        event.preventDefault();
         bridge.handlePointerDown?.(event);
         event.stopPropagation();
       };
@@ -1769,7 +1988,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     }, [eventTarget, getInteractionOwnerOptions, isVirtualPaperActive]);
 
     useEffect(() => {
-      if (effectiveTool !== 'lasso' || selectedIds.length === 0) {
+      if ((effectiveTool !== 'lasso' && effectiveTool !== 'text') || selectedIds.length === 0) {
         return undefined;
       }
       document.addEventListener('pointerdown', handleDocumentPointerDown);
@@ -2138,11 +2357,39 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           setLassoMode('moving');
           setLassoPreviewPoints((prev) => (prev.length === 0 ? prev : []));
         } else {
-          selectionMoveRef.current = null;
-          lassoPointsRef.current = [canvasPoint];
-          lassoModeRef.current = 'drawing';
-          setLassoMode('drawing');
-          setLassoPreviewPoints([canvasPoint]);
+          const hitBoxStroke =
+            pickImageStrokeAtPoint(canvasPoint, strokesRef.current) ??
+            pickTextStrokeAtPoint(canvasPoint, strokesRef.current);
+          if (hitBoxStroke !== null) {
+            const boxSelection = [hitBoxStroke.id];
+            commitSelection(boxSelection);
+            const moveBox = computeSelectionBox([hitBoxStroke], boxSelection);
+            const moveFrame =
+              hitBoxStroke.tool === 'text'
+                ? selectionFrameFromTextStroke(hitBoxStroke)
+                : moveBox === null
+                  ? null
+                  : selectionFrameFromBox(moveBox);
+            if (moveBox === null || moveFrame === null) {
+              return;
+            }
+            selectionMoveRef.current = {
+              pointerId: input.pointerId,
+              startCanvasPoint: canvasPoint,
+              originals: [cloneStrokeForLassoMove(hitBoxStroke)],
+              frame: moveFrame,
+            };
+            lassoPointsRef.current = [];
+            lassoModeRef.current = 'moving';
+            setLassoMode('moving');
+            setLassoPreviewPoints((previous) => (previous.length === 0 ? previous : []));
+          } else {
+            selectionMoveRef.current = null;
+            lassoPointsRef.current = [canvasPoint];
+            lassoModeRef.current = 'drawing';
+            setLassoMode('drawing');
+            setLassoPreviewPoints([canvasPoint]);
+          }
         }
         processedPathLengthRef.current = 1;
       };
@@ -2234,7 +2481,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           return;
         }
 
-        if (effectiveToolRef.current === 'polygon' || effectiveToolRef.current === 'bezier') {
+        if (
+          effectiveToolRef.current === 'polygon' ||
+          effectiveToolRef.current === 'bezier' ||
+          effectiveToolRef.current === 'text'
+        ) {
           return;
         }
 
@@ -2400,6 +2651,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       };
 
       const finishPointerInteraction = (input: PointerSample) => {
+        if (effectiveToolRef.current === 'text') {
+          return;
+        }
         if (effectiveToolRef.current === 'eraser') {
           commitQueuedEraserHits();
           clearEraserTrajectoryRef.current();
@@ -2442,7 +2696,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         }
         if (
           event.target instanceof Element &&
-          event.target.closest('[data-lasso-resize-handle], [data-lasso-rotate-handle]')
+          event.target.closest(
+            '[data-lasso-resize-handle], [data-lasso-rotate-handle], [data-text-selection-edge], [data-text-editor]'
+          )
         ) {
           return;
         }
@@ -2459,7 +2715,6 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (owner !== 'drawing') {
           return;
         }
-        capturePointer(event);
         const input = toPointerSample(event);
         const pointerEvent = readPointerEvent(event);
         if (
@@ -2468,6 +2723,43 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         ) {
           return;
         }
+        if (effectiveToolRef.current === 'text') {
+          event.preventDefault();
+          const canvasPoint = screenToCanvas(input.point, viewportRef.current);
+          const hadSelectedText = selectedIdsRef.current.some((selectedId) =>
+            strokesRef.current.some(
+              (stroke) => stroke.id === selectedId && stroke.tool === 'text'
+            )
+          );
+          const removedTextId = finishEditingText();
+          if (removedTextId !== null) {
+            gestureOwnerRef.current.endPointer(input.pointerId);
+            return;
+          }
+          const hitTextStroke = pickTextStrokeAtPoint(canvasPoint, strokesRef.current);
+          if (hitTextStroke !== null) {
+            commitSelection([hitTextStroke.id]);
+            setEditingTextId(hitTextStroke.id);
+          } else if (hadSelectedText) {
+            commitSelection([]);
+          } else {
+            const textStroke: DrawingStroke = {
+              id: generateStrokeId(),
+              tool: 'text',
+              points: createTextBoxPoints(canvasPoint, resolvedFontSizeRef.current),
+              strokeColor: resolvedColorRef.current,
+              strokeWidth: 0,
+              text: '',
+              fontSize: resolvedFontSizeRef.current,
+            };
+            addStrokeRef.current(textStroke);
+            commitSelection([textStroke.id]);
+            setEditingTextId(textStroke.id);
+          }
+          gestureOwnerRef.current.endPointer(input.pointerId);
+          return;
+        }
+        capturePointer(event);
         // 多指按下时清空 on-release 橡皮队列，避免多指误触把之前的待提交删除一起提交。
         if (activeDrawingPointerIds.size > 0 && eraserCommitModeRef.current === 'on-release') {
           eraserQueuedHitsRef.current.clear();
@@ -2593,10 +2885,12 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       commitSelection,
       commitSelectionFrame,
       eventTarget,
+      finishEditingText,
       getInteractionOwnerOptions,
       getLocalCoordinates,
       resolveInteractiveCanvasPoint,
       isVirtualPaperActive,
+      selectionFrameFromTextStroke,
       setActiveStroke,
     ]);
 
@@ -2612,15 +2906,19 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         clearEraserTrajectoryRef.current();
       }
       if (
-        previousTool === 'lasso' &&
+        (previousTool === 'lasso' || previousTool === 'text') &&
         effectiveTool !== 'lasso' &&
+        effectiveTool !== 'text' &&
         selectedIdsRef.current.length > 0
       ) {
         commitSelection([]);
       }
       clearLassoInteractionRef.current();
+      if (effectiveTool !== 'text') {
+        finishEditingText();
+      }
       previousToolForCleanupRef.current = effectiveTool;
-    }, [commitSelection, effectiveTool]);
+    }, [commitSelection, effectiveTool, finishEditingText]);
 
     useEffect(() => {
       eraserCommitModeRef.current = resolvedEraserCommitMode;
@@ -3224,7 +3522,6 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           return { position: 'absolute', top: offset, right: offset, zIndex: 10 };
         case 'bottom-left':
           return { position: 'absolute', bottom: offset, left: offset, zIndex: 10 };
-        case 'bottom-right':
         default:
           return { position: 'absolute', bottom: offset, right: offset, zIndex: 10 };
       }
@@ -3237,6 +3534,16 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       activeSelectionFrame === null || activeSelectionFrame.rotationRad === 0
         ? undefined
         : `rotate(${selectionControlsRotationDeg} ${activeSelectionFrame.center.x} ${activeSelectionFrame.center.y})`;
+    const selectedTextBox =
+      selectedTextStroke === null ? null : textBoxFromPoints(selectedTextStroke.points);
+    const selectedTextRotationDeg =
+      typeof selectedTextStroke?.rotationRad === 'number'
+        ? (selectedTextStroke.rotationRad * 180) / Math.PI
+        : 0;
+    const selectedTextTransform =
+      selectedTextBox === null || selectedTextRotationDeg === 0
+        ? undefined
+        : `rotate(${selectedTextRotationDeg} ${selectedTextBox.x + selectedTextBox.width / 2} ${selectedTextBox.y + selectedTextBox.height / 2})`;
 
     const drawingSurfaceSvg = (
       <svg
@@ -3253,21 +3560,85 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       >
         <title>Drawing surface</title>
         <g transform={svgContentTransform}>
-          {strokes.map((stroke) => (
-            <StrokeRenderer
-              key={stroke.id}
-              stroke={stroke}
-              isActive={selectedIdSet.has(stroke.id)}
-              fallbackColor={resolvedColor}
-              fallbackWidth={resolvedOpenWidth}
-              fallbackClosedWidth={resolvedClosedWidth}
-              fallbackDashArray={resolvedDashArray}
-              fallbackDashOffset={resolvedDashOffset}
-              fallbackFillColor={fillColor}
-              fallbackFillOpacity={resolvedFillOpacity}
-              pressureMultiplier={resolvedPressureMultiplier}
-            />
-          ))}
+          {strokes.map((stroke) =>
+            effectiveTool === 'text' && editingTextId === stroke.id ? null : (
+              <StrokeRenderer
+                key={stroke.id}
+                stroke={stroke}
+                isActive={selectedIdSet.has(stroke.id)}
+                fallbackColor={resolvedColor}
+                fallbackWidth={resolvedOpenWidth}
+                fallbackClosedWidth={resolvedClosedWidth}
+                fallbackDashArray={resolvedDashArray}
+                fallbackDashOffset={resolvedDashOffset}
+                fallbackFillColor={fillColor}
+                fallbackFillOpacity={resolvedFillOpacity}
+                pressureMultiplier={resolvedPressureMultiplier}
+              />
+            )
+          )}
+
+          {effectiveTool === 'text' &&
+            selectedTextStroke !== null &&
+            selectedTextBox !== null &&
+            editingTextId === selectedTextStroke.id && (
+              <foreignObject
+                x={selectedTextBox.x}
+                y={selectedTextBox.y}
+                width={selectedTextBox.width}
+                height={selectedTextBox.height}
+                transform={selectedTextTransform}
+              >
+                <textarea
+                  ref={textEditorRef}
+                  data-text-editor
+                  data-testid="text-editor"
+                  aria-label="Text content"
+                  value={selectedTextStroke.text ?? ''}
+                  placeholder="输入文字"
+                  onChange={(event) => {
+                    const currentStroke = strokesRef.current.find(
+                      (stroke) => stroke.id === selectedTextStroke.id && stroke.tool === 'text'
+                    );
+                    if (currentStroke !== undefined) {
+                      const nextText = event.currentTarget.value;
+                      const nextStroke = {
+                        ...currentStroke,
+                        text: nextText,
+                        points: resizeTextBoxHeight(
+                          currentStroke.points,
+                          resolveTextBoxHeight(
+                            nextText,
+                            resolveTextFontSize(currentStroke.fontSize),
+                            textBoxFromPoints(currentStroke.points)?.width ?? MIN_TEXT_BOX_WIDTH,
+                            event.currentTarget.scrollHeight
+                          )
+                        ),
+                      };
+                      updateStrokesRef.current([nextStroke]);
+                      commitSelectionFrame(selectionFrameFromTextStroke(nextStroke));
+                    }
+                  }}
+                  onBlur={finishEditingText}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    boxSizing: 'border-box',
+                    padding: 0,
+                    border: 0,
+                    outline: 'none',
+                    resize: 'none',
+                    overflow: 'hidden',
+                    background: 'transparent',
+                    color: selectedTextStroke.strokeColor ?? resolvedColor,
+                    fontSize: resolveTextFontSize(selectedTextStroke.fontSize),
+                    lineHeight: TEXT_LINE_HEIGHT,
+                    fontFamily: 'inherit',
+                  }}
+                />
+              </foreignObject>
+            )}
 
           {activeStroke && (
             <StrokeRenderer
@@ -3359,6 +3730,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           )}
           {effectiveTool === 'lasso' &&
             selectedIds.length > 0 &&
+            selectedTextStroke === null &&
             activeSelectionFrame != null &&
             selectionControlsBox != null && (
             <g
@@ -3440,6 +3812,71 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
               })}
             </g>
           )}
+
+          {(effectiveTool === 'text' || effectiveTool === 'lasso') &&
+            selectedTextStroke !== null &&
+            selectedTextBox !== null &&
+            selectionControlsBox !== null &&
+            activeSelectionFrame !== null && (
+              <g
+                data-testid="text-selection-controls"
+                data-rotation-rad={activeSelectionFrame.rotationRad}
+                transform={selectionControlsTransform}
+              >
+                <rect
+                  data-testid="text-selection-box"
+                  x={selectionControlsBox.minX}
+                  y={selectionControlsBox.minY}
+                  width={selectionControlsBox.maxX - selectionControlsBox.minX}
+                  height={selectionControlsBox.maxY - selectionControlsBox.minY}
+                  fill="rgba(59,130,246,0.2)"
+                  stroke="rgb(59,130,246)"
+                  strokeWidth={3}
+                  strokeDasharray="4 4"
+                  vectorEffect="non-scaling-stroke"
+                  pointerEvents="none"
+                  data-padding={SELECTION_BOX_PADDING}
+                />
+                <rect
+                  data-testid="text-selection-edge"
+                  data-text-selection-edge="true"
+                  x={selectionControlsBox.minX}
+                  y={selectionControlsBox.minY}
+                  width={selectionControlsBox.maxX - selectionControlsBox.minX}
+                  height={selectionControlsBox.maxY - selectionControlsBox.minY}
+                  fill="none"
+                  stroke="transparent"
+                  strokeWidth={12}
+                  vectorEffect="non-scaling-stroke"
+                  pointerEvents="stroke"
+                  style={{ cursor: 'move' }}
+                />
+                {([
+                  ['left', 'w', selectedTextBox.x],
+                  ['right', 'e', selectedTextBox.x + selectedTextBox.width],
+                ] as const).map(([side, handle, centerX]) => {
+                  const size = LASSO_RESIZE_HANDLE_SIZE_PX / viewport.scale;
+                  const centerY = selectedTextBox.y + selectedTextBox.height / 2;
+                  return (
+                    <rect
+                      key={side}
+                      data-testid={`text-resize-handle-${side}`}
+                      data-lasso-resize-handle={handle}
+                      x={centerX - size / 2}
+                      y={centerY - size / 2}
+                      width={size}
+                      height={size}
+                      rx={1 / viewport.scale}
+                      fill="white"
+                      stroke="rgb(59,130,246)"
+                      strokeWidth={2}
+                      vectorEffect="non-scaling-stroke"
+                      style={{ cursor: 'ew-resize' }}
+                    />
+                  );
+                })}
+              </g>
+            )}
 
           {isRulerEnabled && currentRulerState && (
             <g

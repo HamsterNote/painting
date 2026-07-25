@@ -415,7 +415,10 @@ type RotatedShapeTransform = {
 function rotatedShapeTransform(stroke: PickableStroke): RotatedShapeTransform | null {
   const rotationRad = stroke.rotationRad;
   if (
-    (stroke.tool !== 'rect' && stroke.tool !== 'ellipse') ||
+    (stroke.tool !== 'rect' &&
+      stroke.tool !== 'ellipse' &&
+      stroke.tool !== 'text' &&
+      stroke.tool !== 'image') ||
     stroke.points.length < 2 ||
     typeof rotationRad !== 'number' ||
     !Number.isFinite(rotationRad) ||
@@ -548,7 +551,7 @@ function buildStrokeSelectionGeometry(
     return { samples: [], segments: [], closedShapePoints: null, bbox: null };
   }
 
-  if (tool === 'rect' && points.length >= 2) {
+  if ((tool === 'rect' || tool === 'text' || tool === 'image') && points.length >= 2) {
     const corners = rotateShapeGeometry(
       rectCornerPoints(points[0], points[points.length - 1]),
       stroke
@@ -621,7 +624,7 @@ function lassoPointInsideClosedStroke(
     return false;
   }
 
-  if (stroke.tool === 'rect') {
+  if (stroke.tool === 'rect' || stroke.tool === 'text' || stroke.tool === 'image') {
     return pointInRect(
       localPointForRotatedShape(point, stroke),
       stroke.points[0],
@@ -649,7 +652,13 @@ function hasRenderedFill(stroke: PickableStroke): boolean {
 }
 
 function isClosedStrokeTool(tool: PickableStroke['tool'] | string): boolean {
-  return tool === 'rect' || tool === 'ellipse' || tool === 'polygon';
+  return (
+    tool === 'rect' ||
+    tool === 'ellipse' ||
+    tool === 'polygon' ||
+    tool === 'text' ||
+    tool === 'image'
+  );
 }
 
 function normalizePointPressure(pressure: number | undefined): number {
@@ -712,7 +721,7 @@ function pointInClosedShape(point: DrawingPoint, stroke: PickableStroke): boolea
     return false;
   }
 
-  if (tool === 'rect') {
+  if (tool === 'rect' || tool === 'text' || tool === 'image') {
     return pointInRect(localPointForRotatedShape(point, stroke), points[0], points[points.length - 1]);
   }
 
@@ -738,7 +747,7 @@ function distanceSqPointToStroke(point: DrawingPoint, stroke: PickableStroke): n
     return Infinity;
   }
 
-  if (tool === 'rect' && points.length >= 2) {
+  if ((tool === 'rect' || tool === 'text' || tool === 'image') && points.length >= 2) {
     return distanceSqPointToRect(
       localPointForRotatedShape(point, stroke),
       points[0],
@@ -785,6 +794,14 @@ function renderedOutlineDistanceSqPointToStroke(
 
   if (hasRenderedFill(stroke) && pointInClosedShape(point, stroke)) {
     return 0;
+  }
+
+  if ((tool === 'text' || tool === 'image') && points.length >= 2) {
+    return distanceSqPointToRect(
+      localPointForRotatedShape(point, stroke),
+      points[0],
+      points[points.length - 1]
+    );
   }
 
   if (tool === 'rect' && points.length >= 2) {
@@ -944,6 +961,8 @@ function endpointTargetsForStroke(stroke: DrawingStroke): DrawingPoint[] {
       return [...points];
     case 'bezier':
       return points.length === 4 ? [points[0], points[3]] : [];
+    case 'text':
+    case 'image':
     case 'eraser':
     case 'lasso':
       return [];
@@ -979,6 +998,8 @@ function lineSegmentsForStroke(
       return points.length === 4
         ? openSegments(sampleCubicBezierPolyline(points[0], points[1], points[2], points[3], 64))
         : openSegments(points);
+    case 'text':
+    case 'image':
     case 'eraser':
     case 'lasso':
       return [];
@@ -1185,7 +1206,10 @@ export function computeSelectionBox(
     }
 
     // 每条 stroke 用自己的宽度半径外扩，不能退回到当前激活工具宽度。
-    const strokeHalfWidth = Math.max(0, stroke.strokeWidth ?? 0) / 2;
+    const strokeHalfWidth =
+      stroke.tool === 'text' || stroke.tool === 'image'
+        ? 0
+        : Math.max(0, stroke.strokeWidth ?? 0) / 2;
     const strokeBBox = expandBoundingBox(geometry.bbox, strokeHalfWidth);
 
     if (strokeBBox === null || !isValidBoundingBox(strokeBBox)) {
@@ -1235,7 +1259,10 @@ export function selectStrokesIntersectingLasso(
 
     // 粗描边（包含 rect/ellipse/polygon 的轮廓）可能只因 strokeWidth 与套索边“擦到”而命中，
     // bbox 需要按半宽外扩避免误剔除。
-    const strokeHalfWidth = Math.max(0, stroke.strokeWidth ?? 0) / 2;
+    const strokeHalfWidth =
+      stroke.tool === 'text' || stroke.tool === 'image'
+        ? 0
+        : Math.max(0, stroke.strokeWidth ?? 0) / 2;
     const strokeBBox = expandBoundingBox(geometry.bbox, strokeHalfWidth);
 
     if (strokeBBox === null || !boundingBoxesOverlap(lassoBBox, strokeBBox)) {
@@ -1252,7 +1279,7 @@ export function selectStrokesIntersectingLasso(
     // 空心图形的内部不可视，不能因内部套索而被误选。
     if (
       geometry.closedShapePoints !== null &&
-      hasRenderedFill(stroke) &&
+      (hasRenderedFill(stroke) || stroke.tool === 'text' || stroke.tool === 'image') &&
       lassoPolygon.some((point) =>
         lassoPointInsideClosedStroke(point, stroke, geometry.closedShapePoints ?? [])
       )
@@ -1341,6 +1368,50 @@ export function pick<TStroke extends PickableStroke>(
   }
 
   return bestStroke;
+}
+
+export function pickTextStrokeAtPoint(
+  point: DrawingPoint,
+  strokes: readonly DrawingStroke[]
+): DrawingStroke | null {
+  for (let index = strokes.length - 1; index >= 0; index -= 1) {
+    const stroke = strokes[index];
+    if (
+      stroke.tool === 'text' &&
+      stroke.points.length >= 2 &&
+      pointInRect(
+        localPointForRotatedShape(point, stroke),
+        stroke.points[0],
+        stroke.points[stroke.points.length - 1]
+      )
+    ) {
+      return stroke;
+    }
+  }
+
+  return null;
+}
+
+export function pickImageStrokeAtPoint(
+  point: DrawingPoint,
+  strokes: readonly DrawingStroke[]
+): DrawingStroke | null {
+  for (let index = strokes.length - 1; index >= 0; index -= 1) {
+    const stroke = strokes[index];
+    if (
+      stroke.tool === 'image' &&
+      stroke.points.length >= 2 &&
+      pointInRect(
+        localPointForRotatedShape(point, stroke),
+        stroke.points[0],
+        stroke.points[stroke.points.length - 1]
+      )
+    ) {
+      return stroke;
+    }
+  }
+
+  return null;
 }
 
 /**

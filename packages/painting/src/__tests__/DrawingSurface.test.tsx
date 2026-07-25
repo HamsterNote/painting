@@ -13,6 +13,7 @@ import type {
 } from '../components/DrawingSurface';
 import { DrawingSurface } from '../components/DrawingSurface';
 import { PaintingBoard } from '../components/PaintingBoard';
+import type { PaintingControllerData } from '../components/PaintingController';
 import { classifyInteraction, type InteractionOwner } from '../interactionOwnership';
 import type { DrawingViewport } from '../viewport';
 
@@ -5359,6 +5360,77 @@ describe('DrawingSurface', () => {
       expect(onSelectionOverlayChange).toHaveBeenCalledTimes(2);
     });
 
+    function SharedLassoBoards() {
+      const [data, setData] = useState<PaintingControllerData>({
+        tool: 'lasso',
+        minimap: false,
+        selection: null,
+      });
+
+      return (
+        <>
+          <PaintingBoard
+            testID="shared-lasso-board-a"
+            value={lassoFixture()}
+            toolbar={false}
+            selectionPopover={false}
+            virtualPaper={false}
+            controller={{ boardId: 'board-a', data, onDataChange: setData }}
+          />
+          <PaintingBoard
+            testID="shared-lasso-board-b"
+            value={lassoFixture()}
+            toolbar={false}
+            selectionPopover={false}
+            virtualPaper={false}
+            controller={{ boardId: 'board-b', data, onDataChange: setData }}
+          />
+        </>
+      );
+    }
+
+    it('keeps lasso selections mutually exclusive across controlled boards', () => {
+      // Given: 两个画板由同一份 PaintingControllerData 管理套索选区。
+      render(<SharedLassoBoards />);
+      const boardA = screen.getByTestId('shared-lasso-board-a');
+      const boardB = screen.getByTestId('shared-lasso-board-b');
+      zeroHostRect(boardA);
+      zeroHostRect(boardB);
+
+      // When: 先后在 A、B 中圈选各自的笔迹。
+      dispatchDragMove(boardA, [finger(lassoPathAroundTarget())]);
+      dispatchDragEnd(boardA);
+      expect(boardA.querySelector('[data-testid="lasso-selection-box"]')).not.toBeNull();
+
+      dispatchDragMove(boardB, [finger(lassoPathAroundTarget())]);
+      dispatchDragEnd(boardB);
+
+      // Then: 选区所有权转移给 B，A 的选区同步消失。
+      expect(boardA.querySelector('[data-testid="lasso-selection-box"]')).toBeNull();
+      expect(boardB.querySelector('[data-testid="lasso-selection-box"]')).not.toBeNull();
+    });
+
+    it('clears another controlled board selection on blank pointer down', () => {
+      // Given: B 已持有共享套索选区。
+      render(<SharedLassoBoards />);
+      const boardA = screen.getByTestId('shared-lasso-board-a');
+      const boardB = screen.getByTestId('shared-lasso-board-b');
+      zeroHostRect(boardA);
+      zeroHostRect(boardB);
+      dispatchDragMove(boardB, [finger(lassoPathAroundTarget())]);
+      dispatchDragEnd(boardB);
+      expect(boardB.querySelector('[data-testid="lasso-selection-box"]')).not.toBeNull();
+
+      // When: 用户只在 A 的空白处按下，不需要等套索手势结束。
+      dispatchPointerDown(boardA, {
+        point: { x: 180, y: 180 },
+        event: { pointerType: 'mouse', button: 0, clientX: 180, clientY: 180 },
+      });
+
+      // Then: B 的选区立即被共享控制层清除。
+      expect(boardB.querySelector('[data-testid="lasso-selection-box"]')).toBeNull();
+    });
+
     it('moves selected strokes as one lasso selection', () => {
       const onChange = jest.fn();
       render(
@@ -5395,6 +5467,62 @@ describe('DrawingSurface', () => {
         { x: 30, y: 30 },
         { x: 70, y: 30 },
       ]);
+    });
+
+    it('selects an image by clicking its content and moves it without a prior lasso', () => {
+      const onChange = jest.fn();
+      const onSelectionChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{
+            strokes: [
+              {
+                id: 'image-target',
+                tool: 'image',
+                points: [
+                  { x: 20, y: 20 },
+                  { x: 60, y: 60 },
+                ],
+                src: 'data:image/png;base64,cGFpbnRpbmc=',
+              },
+            ],
+          }}
+          onChange={onChange}
+          onSelectionChange={onSelectionChange}
+          tool="lasso"
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      zeroHostRect(host);
+
+      dispatchDragMove(host, [
+        finger([
+          {
+            point: { x: 30, y: 30 },
+            event: { pointerType: 'mouse', button: 0, clientX: 30, clientY: 30 },
+          },
+          {
+            point: { x: 40, y: 45 },
+            event: { pointerType: 'mouse', button: 0, clientX: 40, clientY: 45 },
+          },
+        ]),
+      ]);
+      dispatchDragEnd(host);
+
+      expect(onSelectionChange).toHaveBeenCalledWith(['image-target']);
+      expect(onChange).toHaveBeenCalledWith({
+        strokes: [
+          expect.objectContaining({
+            id: 'image-target',
+            tool: 'image',
+            points: [
+              { x: 30, y: 35 },
+              { x: 70, y: 75 },
+            ],
+          }),
+        ],
+      });
     });
 
     it('renders a padded selection box after lasso selection and clears the preview', () => {
@@ -6207,6 +6335,74 @@ describe('DrawingSurface', () => {
         { x: 20, y: 20 },
         { x: 80, y: 100 },
       ]);
+    });
+
+    it('resizes an image from a corner handle while preserving the image element', () => {
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{
+            strokes: [
+              {
+                id: 'image-resize-target',
+                tool: 'image',
+                points: [
+                  { x: 20, y: 20 },
+                  { x: 60, y: 60 },
+                ],
+                src: 'data:image/png;base64,cGFpbnRpbmc=',
+              },
+            ],
+          }}
+          onChange={onChange}
+          tool="lasso"
+          selectedStrokeIds={['image-resize-target']}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      zeroHostRect(host);
+      const southeastHandle = container.querySelector('[data-lasso-resize-handle="se"]');
+      expect(southeastHandle).toBeTruthy();
+
+      if (southeastHandle) {
+        dispatchElementPointerEvent(
+          southeastHandle,
+          'pointerdown',
+          {
+            point: { x: 68, y: 68 },
+            event: { pointerType: 'mouse', button: 0, clientX: 68, clientY: 68 },
+          },
+          48
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointermove',
+          {
+            point: { x: 88, y: 108 },
+            event: { pointerType: 'mouse', button: 0, clientX: 88, clientY: 108 },
+          },
+          48
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointerup',
+          {
+            point: { x: 88, y: 108 },
+            event: { pointerType: 'mouse', button: 0, clientX: 88, clientY: 108 },
+          },
+          48
+        );
+      }
+
+      const lastChange = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0];
+      const resizedStroke = lastChange?.strokes.find(
+        (stroke: DrawingStroke) => stroke.id === 'image-resize-target'
+      );
+      expect(resizedStroke?.tool).toBe('image');
+      expect(resizedStroke?.src).toBe('data:image/png;base64,cGFpbnRpbmc=');
+      expect(Math.abs(resizedStroke.points[1].x - resizedStroke.points[0].x)).toBeGreaterThan(40);
+      expect(Math.abs(resizedStroke.points[1].y - resizedStroke.points[0].y)).toBeGreaterThan(40);
     });
 
     it('does not render a selection box when lasso selection is empty', () => {

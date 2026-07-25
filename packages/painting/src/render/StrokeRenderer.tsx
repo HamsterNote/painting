@@ -3,7 +3,9 @@ import type { DrawingStroke } from "../components/DrawingSurface";
 import { assertNever } from "../model/assertNever";
 import type { DrawingPointV2, DrawingStrokeV2 } from "../model/strokes";
 import { pointsToSvgPath } from "../stroke-helpers";
+import { ImageRenderer } from "./ImageRenderer";
 import { resolveStrokeStyle, type StrokeStyleFields } from "./resolveStrokeStyle";
+import { TextRenderer } from "./TextRenderer";
 
 type StrokePoint = DrawingPointV2;
 
@@ -189,6 +191,14 @@ function renderV1Stroke(
 	}
 
 	const [first, last] = endpoints;
+
+	if (stroke.tool === "text") {
+		return <TextRenderer stroke={stroke} fallbackColor={fallbackColor} fallbackFontSize={24} />;
+	}
+
+	if (stroke.tool === "image") {
+		return <ImageRenderer id={stroke.id} points={stroke.points} src={stroke.src} rotationRad={stroke.rotationRad} opacity={opacity} />;
+	}
 
 	if (stroke.tool === "rect") {
 		const bbox = getBbox(stroke.points);
@@ -402,6 +412,10 @@ function renderV2Stroke(
 				/>
 			);
 		}
+		case "text":
+			return <TextRenderer stroke={stroke} fallbackColor={fallbackColor} fallbackFontSize={24} />;
+		case "image":
+			return <ImageRenderer id={stroke.id} points={stroke.points} src={stroke.src} rotationRad={stroke.rotationRad} opacity={opacity} />;
 		default:
 			return assertNever(stroke);
 	}

@@ -6,9 +6,17 @@ export type DrawingPointV2 = {
   pressure?: number;
 };
 
-export type DrawingStrokeToolV2 = 'pen' | 'line' | 'rect' | 'ellipse' | 'polygon' | 'bezier';
-/** 所有可用的工具模式，包含不产生存储 stroke 的工具（eraser、lasso） */
-export type DrawingToolModeV2 = DrawingStrokeToolV2 | 'eraser' | 'lasso';
+export type DrawingStrokeToolV2 =
+  | 'pen'
+  | 'line'
+  | 'rect'
+  | 'ellipse'
+  | 'polygon'
+  | 'bezier'
+  | 'text'
+  | 'image';
+/** 连续指针交互使用的工具模式；图片通过一次性导入动作创建。 */
+export type DrawingToolModeV2 = Exclude<DrawingStrokeToolV2, 'image'> | 'eraser' | 'lasso';
 
 type DrawingStrokeBaseV2<Tool extends DrawingStrokeToolV2> = {
   schemaVersion: typeof DRAWING_STROKE_SCHEMA_VERSION;
@@ -30,6 +38,13 @@ export type RectStrokeV2 = DrawingStrokeBaseV2<'rect'>;
 export type EllipseStrokeV2 = DrawingStrokeBaseV2<'ellipse'>;
 export type PolygonStrokeV2 = DrawingStrokeBaseV2<'polygon'>;
 export type BezierStrokeV2 = DrawingStrokeBaseV2<'bezier'>;
+export type TextStrokeV2 = DrawingStrokeBaseV2<'text'> & {
+  text: string;
+  fontSize: number;
+};
+export type ImageStrokeV2 = DrawingStrokeBaseV2<'image'> & {
+  src: string;
+};
 
 export type DrawingStrokeV2 =
   | PenStrokeV2
@@ -37,7 +52,9 @@ export type DrawingStrokeV2 =
   | RectStrokeV2
   | EllipseStrokeV2
   | PolygonStrokeV2
-  | BezierStrokeV2;
+  | BezierStrokeV2
+  | TextStrokeV2
+  | ImageStrokeV2;
 
 export type DrawingValueV2 = {
   schemaVersion: typeof DRAWING_STROKE_SCHEMA_VERSION;

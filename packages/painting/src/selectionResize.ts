@@ -104,6 +104,13 @@ function resizedRectangle(
   ].map((point) =>
     resizePointInSelectionFrame(rotatePointAroundCenter(point, center, rotationRad), transform)
   );
+  if (stroke.tool === 'image') {
+    return {
+      ...stroke,
+      points: stroke.points.map((point) => resizePointInSelectionFrame(point, transform)),
+      dashArray: stroke.dashArray ? [...stroke.dashArray] : undefined,
+    };
+  }
   return {
     ...stroke,
     tool: 'polygon',
@@ -158,7 +165,7 @@ export function resizeStrokeInSelectionFrame(
   stroke: DrawingStroke,
   transform: SelectionResizeTransform
 ): DrawingStroke {
-  if (stroke.tool === 'rect' && stroke.points.length >= 2) {
+  if ((stroke.tool === 'rect' || stroke.tool === 'image') && stroke.points.length >= 2) {
     return resizedRectangle(stroke, transform);
   }
   if (stroke.tool === 'ellipse' && stroke.points.length >= 2) {

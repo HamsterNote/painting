@@ -18,6 +18,9 @@ type StrokeLike = {
   readonly fillColor?: unknown;
   readonly fillOpacity?: unknown;
   readonly rotationRad?: unknown;
+  readonly text?: unknown;
+  readonly fontSize?: unknown;
+  readonly src?: unknown;
 };
 
 type ValueLike = {
@@ -33,6 +36,8 @@ const persistedStrokeTools: readonly DrawingStrokeToolV2[] = [
   'ellipse',
   'polygon',
   'bezier',
+  'text',
+  'image',
 ];
 
 function isObject(value: unknown): value is Record<PropertyKey, unknown> {
@@ -121,6 +126,22 @@ function buildStroke(stroke: StrokeLike, tool: DrawingStrokeToolV2): DrawingStro
       return { ...base, tool };
     case 'bezier':
       return { ...base, tool };
+    case 'text':
+      return {
+        ...base,
+        tool,
+        text: typeof stroke.text === 'string' ? stroke.text : '',
+        fontSize:
+          typeof stroke.fontSize === 'number' && Number.isFinite(stroke.fontSize) && stroke.fontSize > 0
+            ? stroke.fontSize
+            : 24,
+      };
+    case 'image':
+      return {
+        ...base,
+        tool,
+        src: typeof stroke.src === 'string' ? stroke.src : '',
+      };
     default:
       return assertNever(tool);
   }

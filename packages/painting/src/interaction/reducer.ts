@@ -267,9 +267,10 @@ function enterFromIdle(
         dragging: true,
         shiftHeld: false,
       };
+    case 'text':
     case 'lasso':
     case 'eraser':
-      // eraser 和 lasso 由 DrawingSurface 外部处理，reducer 不产生新状态
+      // 文字放置、橡皮擦与套索由 DrawingSurface 外部处理，reducer 不产生新状态。
       return state;
     default:
       return assertNever(state.tool);

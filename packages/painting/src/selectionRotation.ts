@@ -31,7 +31,13 @@ export function rotateStrokeAroundSelection(
   center: RotationCenter,
   rotationRad: number
 ): DrawingStroke {
-  if ((stroke.tool === 'rect' || stroke.tool === 'ellipse') && stroke.points.length >= 2) {
+  if (
+    (stroke.tool === 'rect' ||
+      stroke.tool === 'ellipse' ||
+      stroke.tool === 'text' ||
+      stroke.tool === 'image') &&
+    stroke.points.length >= 2
+  ) {
     const first = stroke.points[0];
     const last = stroke.points[stroke.points.length - 1];
     const shapeCenter = { x: (first.x + last.x) / 2, y: (first.y + last.y) / 2 };
