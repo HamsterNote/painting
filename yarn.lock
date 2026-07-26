@@ -1358,6 +1358,20 @@
     "@eslint/core" "^0.17.0"
     levn "^0.4.1"
 
+"@hamster-note/components@0.2.1-beta.3":
+  version "0.2.1-beta.3"
+  resolved "https://registry.yarnpkg.com/@hamster-note/components/-/components-0.2.1-beta.3.tgz#99f7c315ca72433754ac9dec56097a0d66fb8831"
+  integrity sha512-HLCIR9AAZjN6L6vjzqnTxGrj32D8KvVHTwg6J1SKRo17eI5972x/ZEOaLUMqoV4sc1diWM1mbwbSp5DwvcqXcQ==
+
+"@hamster-note/painting@^0.2.0":
+  version "0.2.0"
+  resolved "https://registry.yarnpkg.com/@hamster-note/painting/-/painting-0.2.0.tgz#508eed5910357e95460525950effbe2941d124bb"
+  integrity sha512-GUNh6EBFLr01LwCSpJrt0xNalOOUAHZZOu31+ZIivUJscoQHq9P8PWYcYMjBHkVVHPGThXo0+z3/9NtvBCVepQ==
+  dependencies:
+    "@hamster-note/virtual-paper" "0.1.0-beta.2"
+    "@system-ui-js/multi-drag" "0.4.0"
+    "@system-ui-js/multi-drag-core" "0.4.0"
+
 "@hamster-note/virtual-paper@0.1.0-beta.2":
   version "0.1.0-beta.2"
   resolved "https://registry.yarnpkg.com/@hamster-note/virtual-paper/-/virtual-paper-0.1.0-beta.2.tgz#2cff4d99116c9665dc9eef94c57a3a97d7f2c580"
@@ -7352,6 +7366,11 @@ uri-js@^4.2.2:
   integrity sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==
   dependencies:
     punycode "^2.1.0"
+
+use-undo@1.2.0:
+  version "1.2.0"
+  resolved "https://registry.yarnpkg.com/use-undo/-/use-undo-1.2.0.tgz#fed1ed5e698b07acaa3e6ea828fd1ea989682914"
+  integrity sha512-ZzrdoHH67DCMuWbTQ14MKX2YRhzzCZMd9dtiaSu3mLzxd/iXfvKY6m6qCIAlU/Psmq328o2o4PvM/keGijXCIA==
 
 utils-merge@1.0.1:
   version "1.0.1"

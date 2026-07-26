@@ -1,4 +1,4 @@
-import { test, expect, type Locator } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
 
 test.describe('DrawingSurface playground', () => {
   test.beforeEach(async ({ page }) => {
@@ -53,6 +53,10 @@ test.describe('DrawingSurface playground', () => {
 
   function pointCount(pointsAttr: string | null) {
     return pointsAttr?.trim().split(/\s+/).filter(Boolean).length ?? 0;
+  }
+
+  function drawingToolButton(page: Page, tool: string) {
+    return page.getByTestId('drawing-tool-toolbar').locator(`button[data-tool="${tool}"]`);
   }
 
   test('uncontrolled demo shows committed stroke data after drawing', async ({ page }) => {
@@ -492,7 +496,7 @@ test.describe('DrawingSurface playground', () => {
 
   test('exposes all 8 tool buttons with data-tool selectors', async ({ page }) => {
     for (const tool of ['pen', 'line', 'rect', 'ellipse', 'polygon', 'bezier', 'eraser', 'lasso']) {
-      const btn = page.locator(`button[data-tool="${tool}"]`);
+      const btn = drawingToolButton(page, tool);
       await expect(btn).toBeVisible();
     }
   });
@@ -542,20 +546,20 @@ test.describe('DrawingSurface playground', () => {
   });
 
   test('shows shift instruction for rect / ellipse', async ({ page }) => {
-    await page.locator('button[data-tool="rect"]').click();
+    await drawingToolButton(page, 'rect').click();
     await expect(page.getByTestId('tool-instruction')).toHaveText(/Hold Shift to draw square\/circle/);
 
-    await page.locator('button[data-tool="ellipse"]').click();
+    await drawingToolButton(page, 'ellipse').click();
     await expect(page.getByTestId('tool-instruction')).toHaveText(/Hold Shift to draw square\/circle/);
   });
 
   test('shows click-to-place instruction for line / polygon and three-drag instruction for bezier', async ({ page }) => {
     for (const tool of ['line', 'polygon']) {
-      await page.locator(`button[data-tool="${tool}"]`).click();
+      await drawingToolButton(page, tool).click();
       await expect(page.getByTestId('tool-instruction')).toHaveText(/Click to add points, double-click or Esc to finish/);
     }
 
-    await page.locator('button[data-tool="bezier"]').click();
+    await drawingToolButton(page, 'bezier').click();
     await expect(page.getByTestId('tool-instruction')).toHaveText(/Drag 1 sets the start\/end line, drag 2 sets the first control point, drag 3 sets the second control point and commits/);
   });
 
@@ -611,7 +615,7 @@ test.describe('DrawingSurface playground', () => {
   });
 
   test('draws ellipse via drag and commits to JSON preview', async ({ page }) => {
-    await page.locator('button[data-tool="ellipse"]').click();
+    await drawingToolButton(page, 'ellipse').click();
 
     const surface = page.getByTestId('drawing-surface-controlled');
     const preview = page.getByTestId('drawing-preview-controlled');
@@ -632,7 +636,7 @@ test.describe('DrawingSurface playground', () => {
   });
 
   test('draws polygon via 4 clicks + dblclick and commits to JSON preview', async ({ page }) => {
-    await page.locator('button[data-tool="polygon"]').click();
+    await drawingToolButton(page, 'polygon').click();
 
     const surface = page.getByTestId('drawing-surface-controlled');
     const preview = page.getByTestId('drawing-preview-controlled');
@@ -690,7 +694,7 @@ test.describe('DrawingSurface playground', () => {
 
     await page.getByTestId('drawing-stroke-width-input').fill('20');
 
-    await page.locator('button[data-tool="pen"]').click();
+    await drawingToolButton(page, 'pen').click();
     await dispatchPointerDrag(surface, {
       pointerId: 61,
       pointerType: 'pen',
@@ -698,7 +702,7 @@ test.describe('DrawingSurface playground', () => {
       moves: [{ x: 120, y: 50 }],
     });
 
-    await page.locator('button[data-tool="rect"]').click();
+    await drawingToolButton(page, 'rect').click();
     await dispatchPointerDrag(surface, {
       pointerId: 62,
       pointerType: 'mouse',
@@ -706,7 +710,7 @@ test.describe('DrawingSurface playground', () => {
       moves: [{ x: 240, y: 150 }],
     });
 
-    await page.locator('button[data-tool="bezier"]').click();
+    await drawingToolButton(page, 'bezier').click();
     await dispatchPointerDrag(surface, {
       pointerId: 63,
       pointerType: 'mouse',
@@ -730,7 +734,7 @@ test.describe('DrawingSurface playground', () => {
     let parsed = await readPreview(preview);
     expect(parsed.strokes.map((stroke: { tool: string }) => stroke.tool).sort()).toEqual(['bezier', 'pen', 'rect']);
 
-    await page.locator('button[data-tool="eraser"]').click();
+    await drawingToolButton(page, 'eraser').click();
     await page.getByTestId('drawing-stroke-width-input').fill('2');
     await expect(surface).toHaveAttribute('data-active-tool', 'eraser');
 
@@ -809,7 +813,7 @@ test.describe('DrawingSurface playground', () => {
   });
 
   test('draws bezier via three drags and commits one cubic SVG path to JSON preview', async ({ page }) => {
-    await page.locator('button[data-tool="bezier"]').click();
+    await drawingToolButton(page, 'bezier').click();
 
     const surface = page.getByTestId('drawing-surface-controlled');
     const preview = page.getByTestId('drawing-preview-controlled');
@@ -874,7 +878,7 @@ test.describe('DrawingSurface playground', () => {
     await page.mouse.up();
     await expect(surface).toHaveAttribute('data-stroke-count', '1');
 
-    await page.locator('button[data-tool="eraser"]').click();
+    await drawingToolButton(page, 'eraser').click();
     await trajectoryVisible.check();
     await trajectoryColor.fill('#ff0000');
     // The trajectory line width now follows the shared top Width control.
@@ -945,7 +949,7 @@ test.describe('DrawingSurface playground', () => {
     await widthInput.fill('24');
     await expect(widthInput).toHaveValue('24');
     await page.getByTestId('eraser-commit-mode').selectOption('while-sliding');
-    await page.locator('button[data-tool="eraser"]').click();
+    await drawingToolButton(page, 'eraser').click();
     await expect(surface).toHaveAttribute('data-active-tool', 'eraser');
     await surface.evaluate(
       (el, points) => {
@@ -1006,7 +1010,7 @@ test.describe('DrawingSurface playground', () => {
     await expect(surface).toBeVisible();
     await expect(surface).toHaveAttribute('data-stroke-count', '1');
 
-    await page.locator('button[data-tool="eraser"]').click();
+    await drawingToolButton(page, 'eraser').click();
     await page.getByTestId('drawing-stroke-width-input').fill('20');
     await page.getByTestId('eraser-trajectory-visible').check();
     await expect(page.getByTestId('eraser-trajectory-color')).toHaveValue('#ccc');
@@ -1067,7 +1071,7 @@ test.describe('DrawingSurface playground', () => {
     await widthInput.fill('24');
     await expect(widthInput).toHaveValue('24');
     await page.getByTestId('eraser-commit-mode').selectOption('on-release');
-    await page.locator('button[data-tool="eraser"]').click();
+    await drawingToolButton(page, 'eraser').click();
     await expect(surface).toHaveAttribute('data-active-tool', 'eraser');
     await surface.evaluate(
       (el, points) => {
@@ -1117,10 +1121,12 @@ test.describe('DrawingSurface playground', () => {
   });
 
   test('draws continuous line via 3 clicks + dblclick and commits to JSON preview', async ({ page }) => {
-    await page.locator('button[data-tool="line"]').click();
+    await drawingToolButton(page, 'line').click();
 
     const surface = page.getByTestId('drawing-surface-controlled');
     const preview = page.getByTestId('drawing-preview-controlled');
+    // 固定底栏会正确覆盖视口底部；将画布顶边对齐，避免测试坐标点到底栏按钮。
+    await surface.evaluate((element) => element.scrollIntoView({ block: 'start' }));
     const box = await surface.boundingBox();
     expect(box).not.toBeNull();
 
@@ -1144,7 +1150,7 @@ test.describe('DrawingSurface playground', () => {
 
   test.describe('lasso tool integration', () => {
     test('lasso tool is exposed in toolbar and select', async ({ page }) => {
-      const lassoBtn = page.locator('button[data-tool="lasso"]');
+      const lassoBtn = drawingToolButton(page, 'lasso');
       await expect(lassoBtn).toBeVisible();
 
       const toolSelect = page.getByTestId('drawing-tool-select');
@@ -1153,7 +1159,7 @@ test.describe('DrawingSurface playground', () => {
       await expect(toolSelect).toHaveValue('lasso');
 
       // 选中 lasso 后应显示对应的工具说明
-      await expect(page.getByTestId('tool-instruction')).toHaveText(/Drag to lasso strokes/);
+      await expect(page.getByTestId('tool-instruction')).toHaveText(/top handle to rotate/);
     });
 
     test('delete selected button is present and initially disabled', async ({ page }) => {
@@ -1174,7 +1180,7 @@ test.describe('DrawingSurface playground', () => {
       await expect(preview).toContainText('seed-1');
 
       // 切到 lasso 工具
-      await page.locator('button[data-tool="lasso"]').click();
+      await drawingToolButton(page, 'lasso').click();
       await expect(surface).toHaveAttribute('data-active-tool', 'lasso');
 
       const box = await surface.boundingBox();
@@ -1220,7 +1226,7 @@ test.describe('DrawingSurface playground', () => {
       const surface = page.getByTestId('drawing-surface-uncontrolled');
       const deleteBtn = page.getByTestId('lasso-delete-selected');
 
-      await page.locator('button[data-tool="lasso"]').click();
+      await drawingToolButton(page, 'lasso').click();
       await expect(surface).toHaveAttribute('data-active-tool', 'lasso');
 
       const box = await surface.boundingBox();
@@ -1263,7 +1269,7 @@ test.describe('DrawingSurface playground', () => {
     const surface = page.getByTestId('drawing-surface-uncontrolled');
     const deleteBtn = page.getByTestId('lasso-delete-selected');
 
-    await page.locator('button[data-tool="lasso"]').click();
+    await drawingToolButton(page, 'lasso').click();
     await expect(surface).toHaveAttribute('data-active-tool', 'lasso');
 
     const box = await surface.boundingBox();
@@ -1304,7 +1310,7 @@ test.describe('DrawingSurface playground', () => {
 
     await expect(surface).toHaveAttribute('data-stroke-count', '1');
 
-    await page.locator('button[data-tool="lasso"]').click();
+    await drawingToolButton(page, 'lasso').click();
     await expect(surface).toHaveAttribute('data-active-tool', 'lasso');
 
     const box = await surface.boundingBox();
@@ -1325,7 +1331,7 @@ test.describe('DrawingSurface playground', () => {
     const selectionBox = surface.locator('[data-testid="lasso-selection-box"]');
     await expect(selectionBox).toHaveCount(1);
 
-    await page.locator('button[data-tool="pen"]').click();
+    await drawingToolButton(page, 'pen').click();
     await expect(surface).toHaveAttribute('data-active-tool', 'pen');
 
     await expect(selectionBox).toHaveCount(0);
@@ -1335,7 +1341,7 @@ test.describe('DrawingSurface playground', () => {
     );
     expect(pathOpacity).toBeNull();
 
-    await page.locator('button[data-tool="lasso"]').click();
+    await drawingToolButton(page, 'lasso').click();
     await expect(deleteBtn).toBeDisabled();
   });
 
@@ -1352,7 +1358,7 @@ test.describe('DrawingSurface playground', () => {
       const surface = page.getByTestId('drawing-surface-controlled');
       const preview = page.getByTestId('drawing-preview-controlled');
 
-      await page.locator('button[data-tool="pen"]').click();
+      await drawingToolButton(page, 'pen').click();
       await page.getByTestId('snap-endpoints-toggle').check();
 
       const box = await surface.boundingBox();
@@ -1388,7 +1394,7 @@ test.describe('DrawingSurface playground', () => {
       const surface = page.getByTestId('drawing-surface-controlled');
       const preview = page.getByTestId('drawing-preview-controlled');
 
-      await page.locator('button[data-tool="pen"]').click();
+      await drawingToolButton(page, 'pen').click();
       await page.getByTestId('snap-lines-toggle').check();
 
       const box = await surface.boundingBox();
@@ -1422,7 +1428,7 @@ test.describe('DrawingSurface playground', () => {
       const surface = page.getByTestId('drawing-surface-controlled');
       const preview = page.getByTestId('drawing-preview-controlled');
 
-      await page.locator('button[data-tool="ellipse"]').click();
+      await drawingToolButton(page, 'ellipse').click();
 
       await dispatchPointerDrag(surface, {
         pointerId: 81,
@@ -1431,7 +1437,7 @@ test.describe('DrawingSurface playground', () => {
         moves: [{ x: 220, y: 180 }],
       });
 
-      await page.locator('button[data-tool="pen"]').click();
+      await drawingToolButton(page, 'pen').click();
       await page.getByTestId('snap-lines-toggle').check();
 
       await dispatchPointerDrag(surface, {
@@ -1454,7 +1460,7 @@ test.describe('DrawingSurface playground', () => {
       const surface = page.getByTestId('drawing-surface-controlled');
       const preview = page.getByTestId('drawing-preview-controlled');
 
-      await page.locator('button[data-tool="pen"]').click();
+      await drawingToolButton(page, 'pen').click();
 
       await dispatchPointerDrag(surface, {
         pointerId: 83,
@@ -1486,7 +1492,7 @@ test.describe('DrawingSurface playground', () => {
       const surface = page.getByTestId('drawing-surface-controlled');
       const preview = page.getByTestId('drawing-preview-controlled');
 
-      await page.locator('button[data-tool="pen"]').click();
+      await drawingToolButton(page, 'pen').click();
       await page.getByTestId('snap-endpoints-toggle').check();
       await page.getByTestId('snap-radius-input').fill('20');
 
@@ -1534,7 +1540,7 @@ test.describe('DrawingSurface playground', () => {
       const surface = page.getByTestId('drawing-surface-controlled');
       const preview = page.getByTestId('drawing-preview-controlled');
 
-      await page.locator('button[data-tool="pen"]').click();
+      await drawingToolButton(page, 'pen').click();
       await expect(page.getByTestId('snap-endpoints-toggle')).not.toBeChecked();
       await expect(page.getByTestId('snap-lines-toggle')).not.toBeChecked();
 

@@ -8,6 +8,7 @@ export type {
   DrawingRulerOptions,
   DrawingRulerState,
   DrawingSelectionChange,
+  DrawingSelectionOverlay,
   DrawingSnapOptions,
   DrawingStroke,
   DrawingSurfaceHandle,
@@ -18,8 +19,27 @@ export type {
 export { DrawingSurface } from './components/DrawingSurface';
 export type { MinimapOptions, MinimapProps } from './components/Minimap';
 export { Minimap } from './components/Minimap';
+export type {
+  PaintingBoardControllerBinding,
+  PaintingBoardProps,
+  PaintingBoardSelectionPopoverOptions,
+  PaintingBoardToolbarOptions,
+} from './components/PaintingBoard';
+export { PAINTING_BOARD_DEFAULT_TOOLS, PaintingBoard } from './components/PaintingBoard';
+export type {
+  PaintingControllerData,
+  PaintingControllerProps,
+  PaintingControllerSelection,
+} from './components/PaintingController';
+export { PaintingController } from './components/PaintingController';
 export type { UseCanvasOptions, UseCanvasReturn } from './hooks/useCanvas';
 export { useCanvas } from './hooks/useCanvas';
+export type {
+  PaintingHistory,
+  PaintingHistoryControls,
+  PaintingHistoryValues,
+} from './hooks/usePaintingHistory';
+export { usePaintingHistory } from './hooks/usePaintingHistory';
 export { assertNever } from './model/assertNever';
 export { migrateStroke, normalizeDrawingValue } from './model/strokeMigration';
 export type {
@@ -30,10 +50,12 @@ export type {
   DrawingToolModeV2,
   DrawingValueV2,
   EllipseStrokeV2,
+  ImageStrokeV2,
   LineStrokeV2,
   PenStrokeV2,
   PolygonStrokeV2,
   RectStrokeV2,
+  TextStrokeV2,
 } from './model/strokes';
 export { DRAWING_STROKE_SCHEMA_VERSION } from './model/strokes';
 export type {
@@ -63,6 +85,7 @@ export {
   addStroke,
   clearStrokes,
   pick,
+  pickTextStrokeAtPoint,
   removeStroke,
   removeStrokes,
   selectStrokesIntersectingLasso,

@@ -3,7 +3,9 @@ import type { DrawingStroke } from "../components/DrawingSurface";
 import { assertNever } from "../model/assertNever";
 import type { DrawingPointV2, DrawingStrokeV2 } from "../model/strokes";
 import { pointsToSvgPath } from "../stroke-helpers";
+import { ImageRenderer } from "./ImageRenderer";
 import { resolveStrokeStyle, type StrokeStyleFields } from "./resolveStrokeStyle";
+import { TextRenderer } from "./TextRenderer";
 
 type StrokePoint = DrawingPointV2;
 
@@ -71,6 +73,16 @@ function getBbox(points: StrokePoint[]) {
 		width: Math.abs(last.x - first.x),
 		height: Math.abs(last.y - first.y),
 	};
+}
+
+function shapeRotationTransform(stroke: RenderableStroke, bbox: ReturnType<typeof getBbox>): string | undefined {
+	const rotationRad = stroke.rotationRad;
+	if (!bbox || typeof rotationRad !== "number" || !Number.isFinite(rotationRad) || rotationRad === 0) {
+		return undefined;
+	}
+	const centerX = bbox.x + bbox.width / 2;
+	const centerY = bbox.y + bbox.height / 2;
+	return `rotate(${(rotationRad * 180) / Math.PI} ${centerX} ${centerY})`;
 }
 
 function pointList(points: StrokePoint[]): string {
@@ -180,6 +192,14 @@ function renderV1Stroke(
 
 	const [first, last] = endpoints;
 
+	if (stroke.tool === "text") {
+		return <TextRenderer stroke={stroke} fallbackColor={fallbackColor} fallbackFontSize={24} />;
+	}
+
+	if (stroke.tool === "image") {
+		return <ImageRenderer id={stroke.id} points={stroke.points} src={stroke.src} rotationRad={stroke.rotationRad} opacity={opacity} />;
+	}
+
 	if (stroke.tool === "rect") {
 		const bbox = getBbox(stroke.points);
 		if (!bbox) {
@@ -199,6 +219,7 @@ function renderV1Stroke(
 				strokeDasharray={style.strokeDasharray}
 				strokeDashoffset={style.strokeDashoffset}
 				fillOpacity={style.fillOpacity}
+				transform={shapeRotationTransform(stroke, bbox)}
 				opacity={opacity}
 			/>
 		);
@@ -223,6 +244,7 @@ function renderV1Stroke(
 				strokeDasharray={style.strokeDasharray}
 				strokeDashoffset={style.strokeDashoffset}
 				fillOpacity={style.fillOpacity}
+				transform={shapeRotationTransform(stroke, bbox)}
 				opacity={opacity}
 			/>
 		);
@@ -324,6 +346,7 @@ function renderV2Stroke(
 					strokeDasharray={style.strokeDasharray}
 					strokeDashoffset={style.strokeDashoffset}
 					fillOpacity={style.fillOpacity}
+					transform={shapeRotationTransform(stroke, bbox)}
 					opacity={opacity}
 				/>
 			);
@@ -347,6 +370,7 @@ function renderV2Stroke(
 					strokeDasharray={style.strokeDasharray}
 					strokeDashoffset={style.strokeDashoffset}
 					fillOpacity={style.fillOpacity}
+					transform={shapeRotationTransform(stroke, bbox)}
 					opacity={opacity}
 				/>
 			);
@@ -388,6 +412,10 @@ function renderV2Stroke(
 				/>
 			);
 		}
+		case "text":
+			return <TextRenderer stroke={stroke} fallbackColor={fallbackColor} fallbackFontSize={24} />;
+		case "image":
+			return <ImageRenderer id={stroke.id} points={stroke.points} src={stroke.src} rotationRad={stroke.rotationRad} opacity={opacity} />;
 		default:
 			return assertNever(stroke);
 	}

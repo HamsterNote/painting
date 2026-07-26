@@ -52,8 +52,10 @@
     ]
   },
   "dependencies": {
+    "@hamster-note/components": "0.2.1-beta.3",
+    "@hamster-note/virtual-paper": "0.1.0-beta.2",
     "@system-ui-js/multi-drag": "0.4.0",
     "@system-ui-js/multi-drag-core": "0.4.0",
-    "@hamster-note/virtual-paper": "0.1.0-beta.2"
+    "use-undo": "1.2.0"
   }
 }
