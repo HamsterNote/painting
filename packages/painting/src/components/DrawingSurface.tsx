@@ -398,6 +398,10 @@ export type DrawingSurfaceProps = {
   defaultSelectedStrokeIds?: readonly string[];
   /** 选择变化回调，当套索选择操作完成时触发。 */
   onSelectionChange?: DrawingSelectionChange;
+  /** 选区开始移动、缩放或旋转时触发。 */
+  onSelectionTransformStart?: () => void;
+  /** 选区移动、缩放或旋转手势结束时触发。 */
+  onSelectionTransformEnd?: () => void;
   /**
    * 套索选区包围盒变化回调。坐标为宿主元素本地屏幕像素（已含视口变换），
    * 选区出现/移动/缩放/视口变化时触发；无选区或非 lasso 工具时回调 null。
@@ -760,6 +764,8 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       selectedStrokeIds,
       defaultSelectedStrokeIds,
       onSelectionChange,
+      onSelectionTransformStart,
+      onSelectionTransformEnd,
       onSelectionOverlayChange,
       ruler,
       onRulerChange,
@@ -776,6 +782,10 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     const eventTargetRef = useRef<DrawingEventTarget | undefined>(eventTarget);
     const multiDragRef = useRef<InstanceType<typeof Mixin> | null>(null);
     const selectionTransformDragRef = useRef<InstanceType<typeof Mixin> | null>(null);
+    const onSelectionTransformStartRef = useRef(onSelectionTransformStart);
+    const onSelectionTransformEndRef = useRef(onSelectionTransformEnd);
+    onSelectionTransformStartRef.current = onSelectionTransformStart;
+    onSelectionTransformEndRef.current = onSelectionTransformEnd;
     const gestureOwnerRef = useRef(createGestureOwner());
     const isViewportControlled = viewportProp !== undefined;
     const [internalViewport, setInternalViewport] = useState<DrawingViewport>(() =>
@@ -1416,8 +1426,21 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       frame: SelectionFrame;
     } | null>(null);
     const lassoModeRef = useRef<'idle' | 'drawing' | 'moving'>(lassoMode);
+    const lassoMoveTransactionActiveRef = useRef(false);
+
+    const beginLassoMoveTransaction = useCallback(() => {
+      if (lassoMoveTransactionActiveRef.current) {
+        return;
+      }
+      lassoMoveTransactionActiveRef.current = true;
+      onSelectionTransformStartRef.current?.();
+    }, []);
 
     const clearLassoInteraction = useCallback(() => {
+      if (lassoMoveTransactionActiveRef.current) {
+        lassoMoveTransactionActiveRef.current = false;
+        onSelectionTransformEndRef.current?.();
+      }
       lassoPointsRef.current = [];
       selectionMoveRef.current = null;
       lassoModeRef.current = 'idle';
@@ -1604,6 +1627,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
 
       type RotateGesture = {
         kind: 'rotate';
+        pointerId: number;
         center: DrawingPoint;
         centerScreen: DrawingPoint;
         originals: DrawingStroke[];
@@ -1622,6 +1646,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       type SelectionTransformGesture = MoveGesture | ResizeGesture | RotateGesture;
 
       let gesture: SelectionTransformGesture | null = null;
+      let finalPointer: { readonly pointerId: number; readonly point: DrawingPoint } | null = null;
       const getPose = (): Pose => ({
         position: { x: 0, y: 0 },
         width: 0,
@@ -1635,7 +1660,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (gesture.kind === 'rotate') {
           const rotateGesture = gesture;
           const [finger] = multiDrag.getFingers();
-          const current = finger?.getLastOperation()?.point;
+          const current =
+            finger?.getLastOperation()?.point ??
+            (finalPointer?.pointerId === rotateGesture.pointerId ? finalPointer.point : undefined);
           if (!current) {
             return;
           }
@@ -1794,7 +1821,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       );
 
       const handleStart = () => {
-        gesture = null;
+        if (gesture !== null) {
+          return;
+        }
         const [finger] = multiDrag.getFingers();
         const operation = finger?.getLastOperation();
         const event = operation?.event;
@@ -1870,6 +1899,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           }
           gesture = {
             kind: 'rotate',
+            pointerId: event.pointerId,
             center,
             centerScreen,
             originals,
@@ -1880,6 +1910,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
             ),
             accumulatedRotationRad: 0,
           };
+          onSelectionTransformStartRef.current?.();
           return;
         }
 
@@ -1890,6 +1921,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
             frame,
             lastPosition: null,
           };
+          onSelectionTransformStartRef.current?.();
           return;
         }
 
@@ -1916,14 +1948,28 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
                 ? MIN_TEXT_BOX_WIDTH
                 : LASSO_RESIZE_MIN_SIZE,
           };
+          onSelectionTransformStartRef.current?.();
         }
       };
-      const handleAllEnd = () => {
+      const handleEnd = () => {
+        if (gesture !== null) {
+          onSelectionTransformEndRef.current?.();
+        }
         gesture = null;
+        finalPointer = null;
+      };
+
+      const captureFinalPointer = (event: PointerEvent) => {
+        finalPointer = {
+          pointerId: event.pointerId,
+          point: { x: event.clientX, y: event.clientY },
+        };
       };
 
       multiDrag.addEventListener(DragOperationType.Start, handleStart);
-      multiDrag.addEventListener(DragOperationType.AllEnd, handleAllEnd);
+      multiDrag.addEventListener(DragOperationType.End, handleEnd);
+      document.addEventListener('pointerup', captureFinalPointer, true);
+      document.addEventListener('pointercancel', captureFinalPointer, true);
       selectionTransformDragRef.current = multiDrag;
 
       // VirtualPaper 激活时会在内部容器上 stopPropagation 拦截鼠标 pointerdown 冒泡，
@@ -1957,9 +2003,15 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       host.addEventListener('pointerdown', handleBridgePointerDown, true);
 
       return () => {
+        if (gesture !== null) {
+          onSelectionTransformEndRef.current?.();
+          gesture = null;
+        }
         host.removeEventListener('pointerdown', handleBridgePointerDown, true);
+        document.removeEventListener('pointerup', captureFinalPointer, true);
+        document.removeEventListener('pointercancel', captureFinalPointer, true);
         multiDrag.removeEventListener(DragOperationType.Start, handleStart);
-        multiDrag.removeEventListener(DragOperationType.AllEnd, handleAllEnd);
+        multiDrag.removeEventListener(DragOperationType.End, handleEnd);
         if (selectionTransformDragRef.current === multiDrag) {
           selectionTransformDragRef.current = null;
         }
@@ -2356,6 +2408,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           lassoModeRef.current = 'moving';
           setLassoMode('moving');
           setLassoPreviewPoints((prev) => (prev.length === 0 ? prev : []));
+          beginLassoMoveTransaction();
         } else {
           const hitBoxStroke =
             pickImageStrokeAtPoint(canvasPoint, strokesRef.current) ??
@@ -2383,6 +2436,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
             lassoModeRef.current = 'moving';
             setLassoMode('moving');
             setLassoPreviewPoints((previous) => (previous.length === 0 ? previous : []));
+            beginLassoMoveTransaction();
           } else {
             selectionMoveRef.current = null;
             lassoPointsRef.current = [canvasPoint];
@@ -2884,6 +2938,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     }, [
       commitSelection,
       commitSelectionFrame,
+      beginLassoMoveTransaction,
       eventTarget,
       finishEditingText,
       getInteractionOwnerOptions,
@@ -3723,8 +3778,8 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
               points={lassoPreviewPoints.map((point) => `${point.x},${point.y}`).join(' ')}
               fill="rgba(59,130,246,0.1)"
               stroke="rgb(59,130,246)"
-              strokeWidth={2}
-              strokeDasharray="4 4"
+              strokeWidth={2 / viewport.scale}
+              strokeDasharray={`${4 / viewport.scale} ${4 / viewport.scale}`}
               pointerEvents="none"
             />
           )}
@@ -3746,9 +3801,8 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
                 height={selectionControlsBox.maxY - selectionControlsBox.minY}
                 fill="rgba(59,130,246,0.2)"
                 stroke="rgb(59,130,246)"
-                strokeWidth={3}
-                strokeDasharray="4 4"
-                vectorEffect="non-scaling-stroke"
+                strokeWidth={3 / viewport.scale}
+                strokeDasharray={`${4 / viewport.scale} ${4 / viewport.scale}`}
                 pointerEvents="none"
                 data-padding={SELECTION_BOX_PADDING}
               />
@@ -3758,8 +3812,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
                 x2={activeSelectionFrame.center.x}
                 y2={selectionControlsBox.minY - LASSO_ROTATE_HANDLE_OFFSET_PX / viewport.scale}
                 stroke="rgb(59,130,246)"
-                strokeWidth={2}
-                vectorEffect="non-scaling-stroke"
+                strokeWidth={2 / viewport.scale}
                 pointerEvents="none"
               />
               <g
@@ -3779,8 +3832,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
                   r={LASSO_ROTATE_HANDLE_SIZE_PX / 2 / viewport.scale}
                   fill="white"
                   stroke="rgb(59,130,246)"
-                  strokeWidth={2}
-                  vectorEffect="non-scaling-stroke"
+                  strokeWidth={2 / viewport.scale}
                   pointerEvents="none"
                 />
               </g>
@@ -3804,8 +3856,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
                     rx={1 / viewport.scale}
                     fill="white"
                     stroke="rgb(59,130,246)"
-                    strokeWidth={2}
-                    vectorEffect="non-scaling-stroke"
+                    strokeWidth={2 / viewport.scale}
                     style={{ cursor }}
                   />
                 );
@@ -3831,9 +3882,8 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
                   height={selectionControlsBox.maxY - selectionControlsBox.minY}
                   fill="rgba(59,130,246,0.2)"
                   stroke="rgb(59,130,246)"
-                  strokeWidth={3}
-                  strokeDasharray="4 4"
-                  vectorEffect="non-scaling-stroke"
+                  strokeWidth={3 / viewport.scale}
+                  strokeDasharray={`${4 / viewport.scale} ${4 / viewport.scale}`}
                   pointerEvents="none"
                   data-padding={SELECTION_BOX_PADDING}
                 />
@@ -3847,7 +3897,6 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
                   fill="none"
                   stroke="transparent"
                   strokeWidth={12}
-                  vectorEffect="non-scaling-stroke"
                   pointerEvents="stroke"
                   style={{ cursor: 'move' }}
                 />
@@ -3869,8 +3918,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
                       rx={1 / viewport.scale}
                       fill="white"
                       stroke="rgb(59,130,246)"
-                      strokeWidth={2}
-                      vectorEffect="non-scaling-stroke"
+                      strokeWidth={2 / viewport.scale}
                       style={{ cursor: 'ew-resize' }}
                     />
                   );

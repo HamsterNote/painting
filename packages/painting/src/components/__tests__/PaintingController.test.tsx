@@ -181,6 +181,40 @@ describe('PaintingController', () => {
     expect(redo).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ['undo', 'painting-board-undo'],
+    ['redo', 'painting-board-redo'],
+  ] as const)('clears the shared selection before %s', (action, testId) => {
+    // Given: 共享底栏持有跨画板选框，且对应历史命令可执行。
+    const data: PaintingControllerData = {
+      tool: 'lasso',
+      minimap: false,
+      selection: { boardId: 'board-a', strokeIds: ['stroke-1'] },
+    };
+    const onDataChange = jest.fn();
+    const history = {
+      canUndo: true,
+      canRedo: true,
+      undo: jest.fn(),
+      redo: jest.fn(),
+    };
+    render(
+      <PaintingController
+        data={data}
+        onDataChange={onDataChange}
+        tools={['lasso']}
+        history={history}
+      />
+    );
+
+    // When: 用户点击共享底栏的撤销或恢复按钮。
+    fireEvent.click(screen.getByTestId(testId));
+
+    // Then: 先通过共享 data 通道取消选框，再执行对应历史命令。
+    expect(onDataChange).toHaveBeenCalledWith({ ...data, selection: null });
+    expect(history[action]).toHaveBeenCalledTimes(1);
+  });
+
   it('disables unavailable undo and redo actions', () => {
     // Given / When: 历史栈没有过去或未来状态。
     render(

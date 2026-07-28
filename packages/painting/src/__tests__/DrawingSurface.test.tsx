@@ -5469,6 +5469,60 @@ describe('DrawingSurface', () => {
       ]);
     });
 
+    it('undoes one complete multi-frame lasso move through PaintingBoard history', () => {
+      // Given: PaintingBoard 自持历史，且横向笔迹已被套索选中。
+      const onChange = jest.fn();
+      render(
+        <PaintingBoard
+          testID="drawing-surface-host"
+          defaultValue={lassoFixture()}
+          onChange={onChange}
+          tool="lasso"
+          defaultSelectedStrokeIds={['lasso-target']}
+          selectionPopover={false}
+          virtualPaper={false}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      zeroHostRect(host);
+
+      // When: 一次按下、三帧移动、抬起把整组选区平移 30px。
+      dispatchDragMove(host, [
+        finger([
+          {
+            point: { x: 25, y: 20 },
+            event: { pointerType: 'mouse', button: 0, clientX: 25, clientY: 20 },
+          },
+          {
+            point: { x: 35, y: 20 },
+            event: { pointerType: 'mouse', button: 0, clientX: 35, clientY: 20 },
+          },
+          {
+            point: { x: 45, y: 20 },
+            event: { pointerType: 'mouse', button: 0, clientX: 45, clientY: 20 },
+          },
+          {
+            point: { x: 55, y: 20 },
+            event: { pointerType: 'mouse', button: 0, clientX: 55, clientY: 20 },
+          },
+        ]),
+      ]);
+      dispatchDragEnd(host);
+      const movedValue = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0];
+      expect(movedValue?.strokes.find((stroke) => stroke.id === 'lasso-target')?.points).toEqual([
+        { x: 50, y: 20 },
+        { x: 90, y: 20 },
+      ]);
+      act(() => screen.getByTestId('painting-board-undo').click());
+
+      // Then: 一次撤销完整回到按下前，而不是停在任一预览帧。
+      const undoneValue = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0];
+      expect(undoneValue?.strokes.find((stroke) => stroke.id === 'lasso-target')?.points).toEqual([
+        { x: 20, y: 20 },
+        { x: 60, y: 20 },
+      ]);
+    });
+
     it('selects an image by clicking its content and moves it without a prior lasso', () => {
       const onChange = jest.fn();
       const onSelectionChange = jest.fn();
@@ -5545,8 +5599,50 @@ describe('DrawingSurface', () => {
       expect(selectionBox?.getAttribute('stroke')).toBe('rgb(59,130,246)');
       expect(selectionBox?.getAttribute('stroke-width')).toBe('3');
       expect(selectionBox?.getAttribute('stroke-dasharray')).toBe('4 4');
-      expect(selectionBox?.getAttribute('vector-effect')).toBe('non-scaling-stroke');
+      expect(selectionBox?.hasAttribute('vector-effect')).toBe(false);
       expect(container.querySelector('[data-testid="lasso-preview"]')).toBeNull();
+    });
+
+    it('compensates the lasso selection stroke and dash lengths at scale 2', () => {
+      // Given: a selected stroke rendered through the regular SVG viewport transform.
+      const { container } = render(
+        <DrawingSurface
+          value={lassoFixture()}
+          tool="lasso"
+          selectedStrokeIds={['lasso-target']}
+          viewport={{ scale: 2, tx: 0, ty: 0 }}
+        />
+      );
+
+      // When: the lasso selection controls are rendered at 2x zoom.
+      const selectionBox = container.querySelector('[data-testid="lasso-selection-box"]');
+
+      // Then: the canvas-unit values compensate for zoom to preserve 3px strokes and 4px dashes.
+      expect(selectionBox?.getAttribute('stroke-width')).toBe('1.5');
+      expect(selectionBox?.getAttribute('stroke-dasharray')).toBe('2 2');
+      expect(selectionBox?.hasAttribute('vector-effect')).toBe(false);
+    });
+
+    it('compensates the lasso selection stroke and dash lengths in virtual paper mode', () => {
+      // Given: virtual paper owns the visual transform at 2x zoom.
+      const { container } = render(
+        <DrawingSurface
+          value={lassoFixture()}
+          tool="lasso"
+          selectedStrokeIds={['lasso-target']}
+          viewport={{ scale: 2, tx: 0, ty: 0 }}
+          virtualPaper={true}
+        />
+      );
+
+      // When: the lasso selection controls are rendered inside virtual paper.
+      const selectionBox = container.querySelector('[data-testid="lasso-selection-box"]');
+
+      // Then: CSS scaling receives the same numerical compensation without vector-effect.
+      expect(container.querySelector('[data-testid="virtual-paper-wrapper"]')).toBeTruthy();
+      expect(selectionBox?.getAttribute('stroke-width')).toBe('1.5');
+      expect(selectionBox?.getAttribute('stroke-dasharray')).toBe('2 2');
+      expect(selectionBox?.hasAttribute('vector-effect')).toBe(false);
     });
 
     it('renders eight resize handles around the lasso selection box', () => {
@@ -5621,15 +5717,6 @@ describe('DrawingSurface', () => {
         );
         dispatchElementPointerEvent(
           document,
-          'pointermove',
-          {
-            point: { x: 85, y: 40 },
-            event: { pointerType: 'mouse', button: 0, clientX: 85, clientY: 40 },
-          },
-          45
-        );
-        dispatchElementPointerEvent(
-          document,
           'pointerup',
           {
             point: { x: 85, y: 40 },
@@ -5649,6 +5736,99 @@ describe('DrawingSurface', () => {
       expect(rotatedStroke?.points[1]?.x).toBeCloseTo(40);
       expect(rotatedStroke?.points[1]?.y).toBeCloseTo(40);
       expect(onChange).toHaveBeenCalledTimes(3);
+    });
+
+    it('undoes and redoes one complete rotation gesture through PaintingBoard history', () => {
+      // Given: PaintingBoard 自持历史，且一条横向笔迹已经被套索选中。
+      const onChange = jest.fn();
+      const { container } = render(
+        <PaintingBoard
+          testID="drawing-surface-host"
+          defaultValue={lassoFixture()}
+          onChange={onChange}
+          tool="lasso"
+          defaultSelectedStrokeIds={['lasso-target']}
+          selectionPopover={false}
+          virtualPaper={false}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      zeroHostRect(host);
+      const rotateHandle = container.querySelector('[data-lasso-rotate-handle]');
+      expect(rotateHandle).toBeTruthy();
+
+      // When: 两个预览帧后直接在不同坐标松手，由 pointerup 提交最终 90° 姿态。
+      if (rotateHandle) {
+        dispatchElementPointerEvent(
+          rotateHandle,
+          'pointerdown',
+          {
+            point: { x: 40, y: -15 },
+            event: { pointerType: 'mouse', button: 0, clientX: 40, clientY: -15 },
+          },
+          46
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointermove',
+          {
+            point: { x: 57.5, y: -10.31 },
+            event: { pointerType: 'mouse', button: 0, clientX: 57.5, clientY: -10.31 },
+          },
+          46
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointermove',
+          {
+            point: { x: 70.31, y: 2.5 },
+            event: { pointerType: 'mouse', button: 0, clientX: 70.31, clientY: 2.5 },
+          },
+          46
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointerup',
+          {
+            point: { x: 75, y: 20 },
+            event: { pointerType: 'mouse', button: 0, clientX: 75, clientY: 20 },
+          },
+          46
+        );
+      }
+      const rotatedValue = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0];
+      const rotatedStroke = rotatedValue?.strokes.find((stroke) => stroke.id === 'lasso-target');
+      expect(rotatedStroke?.points[0]?.x).toBeCloseTo(40);
+      expect(rotatedStroke?.points[0]?.y).toBeCloseTo(0);
+      expect(rotatedStroke?.points[1]?.x).toBeCloseTo(40);
+      expect(rotatedStroke?.points[1]?.y).toBeCloseTo(40);
+      expect(container.querySelector('[data-testid="lasso-selection-box"]')).toBeTruthy();
+
+      // Then: Undo 回到按下前并取消选框。
+      act(() => screen.getByTestId('painting-board-undo').click());
+      const undoneValue = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0];
+      expect(undoneValue?.strokes.find((stroke) => stroke.id === 'lasso-target')?.points).toEqual([
+        { x: 20, y: 20 },
+        { x: 60, y: 20 },
+      ]);
+      expect(container.querySelector('[data-testid="lasso-selection-box"]')).toBeNull();
+
+      // Given: 重新圈选笔迹不会产生历史项，因此 Redo 仍然可用。
+      dispatchDragMove(host, [finger(lassoPathAroundTarget())]);
+      dispatchDragEnd(host);
+      expect(container.querySelector('[data-testid="lasso-selection-box"]')).toBeTruthy();
+
+      // When: Redo 直接恢复最终帧。
+      act(() => screen.getByTestId('painting-board-redo').click());
+      const redoneValue = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0];
+      const redoneStroke = redoneValue?.strokes.find(
+        (stroke: DrawingStroke) => stroke.id === 'lasso-target'
+      );
+      expect(redoneStroke?.points[0]?.x).toBeCloseTo(40);
+      expect(redoneStroke?.points[0]?.y).toBeCloseTo(0);
+      expect(redoneStroke?.points[1]?.x).toBeCloseTo(40);
+      expect(redoneStroke?.points[1]?.y).toBeCloseTo(40);
+      expect(container.querySelector('[data-testid="lasso-selection-box"]')).toBeNull();
     });
 
     it('rotates the selection frame and resizes from its rotated east handle', () => {

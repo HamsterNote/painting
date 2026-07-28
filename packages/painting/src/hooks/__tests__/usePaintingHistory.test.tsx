@@ -38,6 +38,9 @@ function SharedHistoryHarness() {
     <>
       <output data-testid="board-a-count">{history.values.boardA?.strokes.length}</output>
       <output data-testid="board-b-count">{history.values.boardB?.strokes.length}</output>
+      <output data-testid="board-a-point-x">
+        {history.values.boardA?.strokes[0]?.points[0]?.x ?? 'empty'}
+      </output>
       <button type="button" onClick={() => history.setValue('boardA', BOARD_A_VALUE)}>
         Draw A
       </button>
@@ -70,6 +73,37 @@ function SharedHistoryHarness() {
         }}
       >
         Reset Then Draw B
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          history.beginTransaction();
+          history.setValue('boardA', {
+            strokes: [{ ...BOARD_A_VALUE.strokes[0], points: [{ x: 1, y: 1 }] }],
+          });
+          history.setValue('boardA', {
+            strokes: [{ ...BOARD_A_VALUE.strokes[0], points: [{ x: 2, y: 2 }] }],
+          });
+          history.setValue('boardA', BOARD_A_VALUE);
+          history.endTransaction();
+        }}
+      >
+        Rotate A
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          history.beginTransaction();
+          history.setValue('boardA', {
+            strokes: [{ ...BOARD_A_VALUE.strokes[0], points: [{ x: 1, y: 1 }] }],
+          });
+          history.beginTransaction();
+          history.setValue('boardA', BOARD_A_VALUE);
+          history.endTransaction();
+          history.endTransaction();
+        }}
+      >
+        Nested Rotate A
       </button>
       <button type="button" onClick={history.undo} disabled={!history.canUndo}>
         Undo
@@ -126,4 +160,34 @@ describe('usePaintingHistory', () => {
       expect(screen.getByTestId('board-b-count').textContent).toBe('1');
     }
   );
+
+  it('undoes and redoes all preview frames from one pointer gesture as one history entry', () => {
+    // Given: 一次旋转手势会在拖动期间连续产生多个预览值。
+    render(<SharedHistoryHarness />);
+
+    // When: 三帧预览在同一个 pointer down → move → up 事务内写入历史。
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate A' }));
+    expect(screen.getByTestId('board-a-count').textContent).toBe('1');
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+
+    // Then: 一次撤销完整回到手势前，一次恢复直接回到最终帧。
+    expect(screen.getByTestId('board-a-count').textContent).toBe('0');
+    fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
+    expect(screen.getByTestId('board-a-count').textContent).toBe('1');
+  });
+
+  it('keeps nested transaction scopes in one history entry until the outer scope ends', () => {
+    // Given: 两层手势生命周期共享同一个画板历史。
+    render(<SharedHistoryHarness />);
+
+    // When: 外层和内层事务分别写入预览帧，再按相反顺序结束。
+    fireEvent.click(screen.getByRole('button', { name: 'Nested Rotate A' }));
+    expect(screen.getByTestId('board-a-point-x').textContent).toBe('0');
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+
+    // Then: 一次撤销直接回到最外层事务之前，恢复则直达最终帧。
+    expect(screen.getByTestId('board-a-point-x').textContent).toBe('empty');
+    fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
+    expect(screen.getByTestId('board-a-point-x').textContent).toBe('0');
+  });
 });

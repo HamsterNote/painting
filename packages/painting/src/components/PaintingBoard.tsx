@@ -9,7 +9,11 @@ import {
   useRef,
   useState,
 } from 'react';
-import { type PaintingHistory, usePaintingHistory } from '../hooks/usePaintingHistory';
+import {
+  type PaintingHistory,
+  type PaintingHistoryControls,
+  usePaintingHistory,
+} from '../hooks/usePaintingHistory';
 import { fitImageIntoViewport } from '../model/image';
 import { generateStrokeId } from '../stroke-helpers';
 import { DEFAULT_DRAWING_VIEWPORT, type DrawingViewport, normalizeViewport } from '../viewport';
@@ -169,6 +173,8 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
       selectionPopover,
       controller,
       onSelectionOverlayChange,
+      onSelectionTransformStart: onSelectionTransformStartProp,
+      onSelectionTransformEnd: onSelectionTransformEndProp,
       selectedStrokeIds: selectedStrokeIdsProp,
       onSelectionChange: onSelectionChangeProp,
       style,
@@ -475,6 +481,29 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
       },
       [history, historyBoardId, isValueControlled, onChangeProp]
     );
+    const selectionTransactionOwnersRef = useRef<Array<(() => void) | null>>([]);
+    const handleSelectionTransformStart = useCallback(() => {
+      if (!isValueControlled) {
+        history.beginTransaction();
+        selectionTransactionOwnersRef.current.push(history.endTransaction);
+      } else {
+        selectionTransactionOwnersRef.current.push(null);
+      }
+      onSelectionTransformStartProp?.();
+    }, [history, isValueControlled, onSelectionTransformStartProp]);
+    const handleSelectionTransformEnd = useCallback(() => {
+      selectionTransactionOwnersRef.current.pop()?.();
+      onSelectionTransformEndProp?.();
+    }, [onSelectionTransformEndProp]);
+
+    useEffect(
+      () => () => {
+        for (const endTransaction of selectionTransactionOwnersRef.current.splice(0)) {
+          endTransaction?.();
+        }
+      },
+      []
+    );
 
     // 拦截 onViewportChange，同步内部 viewport 状态
     const handleViewportChange = useCallback(
@@ -514,15 +543,36 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
       onViewportChangeProp?.(next);
     }, [defaultViewport, onViewportChangeProp]);
 
-    // 清空画布：删除全部 strokes 并清除选区。
-    // 共享 controller 场景下若本画板持有选区，同步清掉共享 selection。
-    const handleClearCanvas = useCallback(() => {
+    const clearSelection = useCallback(() => {
       surfaceRef.current?.clearSelection();
       if (controller && controller.data.selection?.boardId === controller.boardId) {
         controller.onDataChange({ ...controller.data, selection: null });
       }
+    }, [controller]);
+
+    // 清空画布：删除全部 strokes 并清除选区。
+    const handleClearCanvas = useCallback(() => {
+      clearSelection();
       handleChange({ strokes: [] });
-    }, [controller, handleChange]);
+    }, [clearSelection, handleChange]);
+
+    const handleUndo = useCallback(() => {
+      surfaceRef.current?.clearSelection();
+      history.undo();
+    }, [history]);
+    const handleRedo = useCallback(() => {
+      surfaceRef.current?.clearSelection();
+      history.redo();
+    }, [history]);
+    const toolbarHistory = useMemo<PaintingHistoryControls>(
+      () => ({
+        canUndo: history.canUndo,
+        canRedo: history.canRedo,
+        undo: handleUndo,
+        redo: handleRedo,
+      }),
+      [handleRedo, handleUndo, history.canRedo, history.canUndo]
+    );
 
     // 画布区域宿主尺寸，通过 ResizeObserver 追踪（供 Minimap 使用）
     const canvasWrapperRef = useRef<HTMLDivElement>(null);
@@ -637,6 +687,8 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
             defaultViewport={defaultViewport}
             onViewportChange={handleViewportChange}
             onSelectionOverlayChange={handleSelectionOverlayChange}
+            onSelectionTransformStart={handleSelectionTransformStart}
+            onSelectionTransformEnd={handleSelectionTransformEnd}
             selectedStrokeIds={controller ? controlledSelectedStrokeIds : selectedStrokeIdsProp}
             onSelectionChange={handleSelectionChange}
             {...surfaceProps}
@@ -711,7 +763,7 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
             onResetView={handleResetView}
             onClearCanvas={handleClearCanvas}
             onInsertImage={handleInsertImage}
-            history={history}
+            history={toolbarHistory}
             relative
           />
         )}

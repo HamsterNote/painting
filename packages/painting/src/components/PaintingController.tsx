@@ -246,6 +246,19 @@ export function PaintingController({
   const fontSize = resolveTextFontSize(data.fontSize);
   const activeToolIcon = TOOL_ICON_MAP[activeTool];
 
+  const handleUndo = useCallback(() => {
+    if (data.selection) {
+      onDataChange({ ...data, selection: null });
+    }
+    history?.undo();
+  }, [data, history, onDataChange]);
+  const handleRedo = useCallback(() => {
+    if (data.selection) {
+      onDataChange({ ...data, selection: null });
+    }
+    history?.redo();
+  }, [data, history, onDataChange]);
+
   // ===== 纯 UI 状态（不进 data，与画板控制无关） =====
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [moreMenuAnchor, setMoreMenuAnchor] = useState<HTMLElement | null>(null);
@@ -379,7 +392,7 @@ export function PaintingController({
               data-testid="painting-board-undo"
               aria-label="Undo"
               disabled={!history.canUndo}
-              onClick={history.undo}
+              onClick={handleUndo}
             >
               <Icon name="undo" style={{ width: 16, height: 16 }} />
               {showLabels ? 'Undo' : null}
@@ -391,7 +404,7 @@ export function PaintingController({
               data-testid="painting-board-redo"
               aria-label="Redo"
               disabled={!history.canRedo}
-              onClick={history.redo}
+              onClick={handleRedo}
             >
               <Icon name="redo" style={{ width: 16, height: 16 }} />
               {showLabels ? 'Redo' : null}

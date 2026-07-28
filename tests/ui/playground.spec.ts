@@ -1209,7 +1209,7 @@ test.describe('DrawingSurface playground', () => {
       await expect(selectionBox).toHaveAttribute('stroke', 'rgb(59,130,246)');
       await expect(selectionBox).toHaveAttribute('stroke-width', '3');
       await expect(selectionBox).toHaveAttribute('stroke-dasharray', '4 4');
-      await expect(selectionBox).toHaveAttribute('vector-effect', 'non-scaling-stroke');
+      await expect(selectionBox).not.toHaveAttribute('vector-effect');
 
       // 点击删除后 seed stroke 消失
       await deleteBtn.click();
