@@ -138,8 +138,7 @@ export default function App() {
   // 启用后 DrawingSurface 将虚拟纸张交给 @hamster-note/virtual-paper 管理视口变换
   const [virtualPaperEnabled, setVirtualPaperEnabled] = useState(false);
 const [minimapEnabled, setMinimapEnabled] = useState(true);
-  const [rulerStateUncontrolled, setRulerStateUncontrolled] = useState<DrawingRulerState | undefined>(undefined);
-  const [rulerStateControlled, setRulerStateControlled] = useState<DrawingRulerState | undefined>(undefined);
+  const [rulerStateControlled, setRulerStateControlled] = useState<DrawingRulerState>();
   const [color, setColor] = useState('#000000');
   const [width, setWidth] = useState(2);
   const [fontSize, setFontSize] = useState(24);
@@ -460,18 +459,15 @@ const [minimapEnabled, setMinimapEnabled] = useState(true);
   const rulerUncontrolledOptions: false | DrawingRulerOptions = rulerEnabled
     ? {
         enabled: true,
-        state: rulerStateUncontrolled,
-        defaultState: rulerStateUncontrolled,
       }
     : false;
 
   const rulerControlledOptions: false | DrawingRulerOptions = rulerEnabled
-    ? {
-        enabled: true,
-        state: rulerStateControlled,
-        defaultState: rulerStateControlled,
-      }
-    : false;
+      ? {
+          enabled: true,
+          state: rulerStateControlled,
+        }
+      : false;
 
   // Memoize so DrawingSurface 不会因为父组件 re-render 而频繁触发 eraserTrajectory 副作用。
   const eraserTrajectoryProp = useMemo(
@@ -1104,7 +1100,6 @@ const [minimapEnabled, setMinimapEnabled] = useState(true);
               onSelectionChange={setUncontrolledSelectedIds}
               tool={tool}
               ruler={rulerUncontrolledOptions}
-              onRulerChange={setRulerStateUncontrolled}
               strokeColor={color}
               strokeWidth={effectiveStrokeWidth}
               fontSize={fontSize}

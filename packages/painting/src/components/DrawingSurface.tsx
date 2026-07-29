@@ -47,9 +47,8 @@ import {
   selectionFrameLocalBox,
 } from '../selectionRotation';
 import { resizeStrokeInSelectionFrame } from '../selectionResize';
-import { isInsideRuler, projectOntoRulerTickEdge, type RulerTransform } from '../ruler/geometry';
-import { generateTicks } from '../ruler/ticks';
 import { installCapturePhaseRulerPointerBridge } from '../rulerPointerBridge';
+import type { RulerPoint } from '../ruler/geometry';
 import {
   appendPoint,
   createStroke,
@@ -266,27 +265,25 @@ export type DrawingEventTargetRef = { readonly current: EventTarget | null };
 export type DrawingEventTarget = EventTarget | DrawingEventTargetRef | null;
 
 /**
- * Ruler 状态 — 描述 ruler 在画布中的位置、朝向和尺寸。
- * 字段与 `RulerTransform`（ruler/geometry.ts）完全对齐，
- * 供受控 / 非受控模式共用。
+ * 尺子状态只描述其画布中心。尺寸由尺子选项配置。
  */
-export type DrawingRulerState = RulerTransform;
+export type DrawingRulerState = {
+  readonly center: RulerPoint;
+};
 
 /**
  * Ruler overlay 配置项。
  *
  * - `ruler={false}` 或 `ruler` 省略 → 不显示 ruler
  * - `ruler={{}}` 或 `ruler={{ enabled: true }}` → 启用 ruler，使用默认参数
- * - 受控模式：传入 `state` + `onRulerChange`
- * - 非受控模式：传入 `defaultState`（或都不传，使用内置默认值）
+ * - 受控模式：传入 `ruler.state` + 顶层 `onRulerChange`
+ * - 非受控模式：不传 `state`，每次启用时自动居中
  */
 export type DrawingRulerOptions = {
   /** 是否启用 ruler。省略时默认 true（只要 `ruler` 对象存在即启用）。 */
   readonly enabled?: boolean;
-  /** 受控的 ruler 变换状态。 */
+  /** 受控的尺子中心状态。 */
   readonly state?: DrawingRulerState;
-  /** 非受控模式下的初始 ruler 变换状态。 */
-  readonly defaultState?: DrawingRulerState;
   /** Ruler 长度（画布坐标）。默认 `400`。 */
   readonly length?: number;
   /** Ruler 高度（画布坐标）。默认 `48`。 */
@@ -295,15 +292,9 @@ export type DrawingRulerOptions = {
   readonly backgroundColor?: string;
   /** Ruler 背景不透明度。默认 `0.2`。 */
   readonly backgroundOpacity?: number;
-  /** 次刻度间距（画布坐标）。默认 `10`。 */
-  readonly minorTickSpacing?: number;
-  /** 每隔 N 个次刻度绘制一个主刻度。默认 `5`。 */
-  readonly majorTickEvery?: number;
-  /** 拖拽手柄尺寸（画布坐标）。默认 `24`。 */
-  readonly dragGripSize?: number;
-  /** Test identifier 前缀，用于自动化测试。 */
-  readonly testID?: string;
 };
+
+const RULER_CENTER_EPSILON = 1e-6;
 
 type CursorPointer = { x: number; y: number };
 
@@ -780,7 +771,6 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       minimapProp !== false && minimapProp !== undefined && minimapOptions.enabled !== false;
     const hostRef = useRef<HTMLDivElement>(null);
     const eventTargetRef = useRef<DrawingEventTarget | undefined>(eventTarget);
-    const multiDragRef = useRef<InstanceType<typeof Mixin> | null>(null);
     const selectionTransformDragRef = useRef<InstanceType<typeof Mixin> | null>(null);
     const onSelectionTransformStartRef = useRef(onSelectionTransformStart);
     const onSelectionTransformEndRef = useRef(onSelectionTransformEnd);
@@ -812,328 +802,319 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
 
     const handleVirtualPaperViewportChange = handleViewportChange;
 
-    const internalRulerStateRef = useRef<DrawingRulerState | null>(null);
-    const [rulerInitTick, setRulerInitTick] = useState(0);
-    const [, setRulerGestureTick] = useState(0);
+    const internalRulerStateRef = useRef<DrawingRulerState>({ center: { x: 0, y: 0 } });
+    const [, renderRuler] = useReducer((tick: number) => tick + 1, 0);
+    const [isRulerDragging, setIsRulerDragging] = useState(false);
+    const [hasRulerModifierHover, setHasRulerModifierHover] = useState(false);
 
     const isRulerEnabled = ruler !== false && ruler !== undefined && (ruler.enabled ?? true);
     const effectiveRulerOptions = typeof ruler === 'object' ? ruler : {};
     const isVirtualPaperActive = isVirtualPaperEnabled(virtualPaper);
     const resolvedVirtualPaperOptions = typeof virtualPaper === 'object' ? virtualPaper : {};
 
-    let currentRulerState: DrawingRulerState | null = null;
-
-    if (isRulerEnabled) {
-      if (effectiveRulerOptions.state) {
-        currentRulerState = effectiveRulerOptions.state;
-      } else {
-        if (!internalRulerStateRef.current) {
-          const defaultState = effectiveRulerOptions.defaultState ?? {
-            center: { x: 0, y: 0 },
-            rotationRad: 0,
-            length: effectiveRulerOptions.length ?? 400,
-            height: effectiveRulerOptions.height ?? 48,
-          };
-
-          internalRulerStateRef.current = defaultState;
+    const currentRulerState = isRulerEnabled
+      ? (effectiveRulerOptions.state ?? internalRulerStateRef.current)
+      : null;
+    const currentRulerRect = currentRulerState
+      ? {
+          center: currentRulerState.center,
+          length: effectiveRulerOptions.length ?? 400,
+          height: effectiveRulerOptions.height ?? 48,
         }
-        currentRulerState = internalRulerStateRef.current;
-      }
-    }
-
-    // 始终保持最新 ruler 状态到 ref，供 Mixin effect 读取而无需将 currentRulerState 放入依赖。
-    // 核心修复：之前 effect 依赖 currentRulerState，每次拖拽 onRulerChange → 父组件 re-render
-    // → currentRulerState 变为新对象 → effect 清理重建 Mixin → 拖拽手势中断。
-    // 改用 ref 后 effect 只在 isRulerEnabled 切换时重建，拖拽过程不再被打断。
+      : null;
     const currentRulerStateRef = useRef<DrawingRulerState | null>(null);
     currentRulerStateRef.current = currentRulerState;
-
-    // onRulerChange 回调也用 ref 包装，避免 effect 因回调引用变化而重建
     const onRulerChangeRef = useRef(onRulerChange);
     onRulerChangeRef.current = onRulerChange;
-
-    const hasInitializedRulerCenter = useRef(false);
+    const controlledRulerStateRef = useRef(effectiveRulerOptions.state);
+    controlledRulerStateRef.current = effectiveRulerOptions.state;
+    const lastRequestedRulerCenterRef = useRef<DrawingPoint | null>(null);
+    const cancelActiveRulerDragRef = useRef<(() => void) | null>(null);
+    const wasRulerEnabledRef = useRef(false);
 
     useLayoutEffect(() => {
-      if (
-        !isRulerEnabled ||
-        !currentRulerState ||
-        effectiveRulerOptions.state ||
-        hasInitializedRulerCenter.current
-      ) {
+      const controlledState = effectiveRulerOptions.state;
+      const requestedCenter = lastRequestedRulerCenterRef.current;
+      if (!isRulerDragging || !controlledState || !requestedCenter) {
         return;
       }
-
-      if (currentRulerState.center.x === 0 && currentRulerState.center.y === 0 && hostRef.current) {
-        hasInitializedRulerCenter.current = true;
-
-        const hostWidth = hostRef.current.clientWidth;
-        const hostHeight = hostRef.current.clientHeight;
-        const screenCenter = { x: hostWidth / 2, y: hostHeight / 2 };
-        const canvasCenter = screenToCanvas(screenCenter, viewportRef.current);
-
-        internalRulerStateRef.current = {
-          ...currentRulerState,
-          center: canvasCenter,
-        };
-
-        setRulerInitTick((t) => t + 1);
-      }
-    }, [isRulerEnabled, currentRulerState, effectiveRulerOptions.state]);
-
-    useEffect(() => {
-      if (rulerInitTick > 0 && onRulerChange && internalRulerStateRef.current) {
-        onRulerChange(internalRulerStateRef.current);
-      }
-    }, [rulerInitTick, onRulerChange]);
-
-    useEffect(() => {
-      const destroyExistingMixin = () => {
-        multiDragRef.current?.destroy();
-        multiDragRef.current = null;
-      };
-
-      if (!isRulerEnabled || !currentRulerStateRef.current || !hostRef.current) {
-        destroyExistingMixin();
+      const followsRequestedCenter =
+        Math.abs(controlledState.center.x - requestedCenter.x) <= RULER_CENTER_EPSILON &&
+        Math.abs(controlledState.center.y - requestedCenter.y) <= RULER_CENTER_EPSILON;
+      if (followsRequestedCenter) {
         return;
       }
+      cancelActiveRulerDragRef.current?.();
+    }, [effectiveRulerOptions.state, isRulerDragging]);
 
-      destroyExistingMixin();
-
+    useLayoutEffect(() => {
+      if (!isRulerEnabled) {
+        wasRulerEnabledRef.current = false;
+        return;
+      }
+      if (wasRulerEnabledRef.current) {
+        return;
+      }
+      wasRulerEnabledRef.current = true;
       const host = hostRef.current;
-      let gestureRegion: 'grip' | 'body' | 'rotate' | null = null;
-      // 手势开始时的 ruler 状态快照；在 handleStart 中从 ref 捕获最新值，
-      // 使每次手势都基于按下瞬间的状态计算 delta
-      let gestureStartState: DrawingRulerState | null = currentRulerStateRef.current;
+      if (!host) {
+        return;
+      }
+      const centeredState = {
+        center: screenToCanvas(
+          { x: host.clientWidth / 2, y: host.clientHeight / 2 },
+          viewportRef.current
+        ),
+      };
+      if (controlledRulerStateRef.current) {
+        onRulerChangeRef.current?.(centeredState);
+        return;
+      }
+      internalRulerStateRef.current = centeredState;
+      currentRulerStateRef.current = centeredState;
+      renderRuler();
+      onRulerChangeRef.current?.(centeredState);
+    }, [isRulerEnabled]);
 
-      const getPose = (): Pose => {
-        const state = gestureStartState;
-        if (!state) {
-          return { position: { x: 0, y: 0 }, rotation: 0, width: 0, height: 0 };
+    useEffect(() => {
+      const host = hostRef.current;
+      if (!isRulerEnabled || !host) {
+        setIsRulerDragging(false);
+        return undefined;
+      }
+
+      type ActiveInput = 'mouse' | 'touch' | null;
+      type DragAnchor = {
+        readonly centerToPointer: DrawingPoint;
+      };
+      const mouseElement = document.createElement('div');
+      const touchElement = document.createElement('div');
+      const acceptedTouchIds = new Set<number>();
+      const suppressedTouchIds = new Set<number>();
+      let activeInput: ActiveInput = null;
+      let mousePointerId: number | null = null;
+      let dragAnchor: DragAnchor | null = null;
+
+      const getEmptyPose = (): Pose => ({
+        position: { x: 0, y: 0 },
+        width: 0,
+        height: 0,
+      });
+      const commitCenterAtScreenPoint = (screenPoint: DrawingPoint) => {
+        if (!dragAnchor) {
+          return;
         }
-        return {
-          position: canvasToScreen(state.center, viewportRef.current),
-          rotation: state.rotationRad,
-          width: state.length,
-          height: state.height,
+        const nextState = {
+          center: screenToCanvas(
+            {
+              x: screenPoint.x + dragAnchor.centerToPointer.x,
+              y: screenPoint.y + dragAnchor.centerToPointer.y,
+            },
+            viewportRef.current
+          ),
         };
-      };
-
-      const normalizeRotationDelta = (delta: number) => {
-        if (delta > Math.PI) {
-          return delta - Math.PI * 2;
-        }
-        if (delta < -Math.PI) {
-          return delta + Math.PI * 2;
-        }
-        return delta;
-      };
-
-      const resolveBodyRotation = () => {
-        if (!gestureStartState) {
-          return null;
-        }
-        const fingers = multiDragRef.current?.getFingers() ?? [];
-        const firstFinger = fingers[0];
-        const secondFinger = fingers[1];
-        const firstStart = firstFinger?.getPath()[0]?.point;
-        const secondStart = secondFinger?.getPath()[0]?.point;
-        const firstCurrent = firstFinger?.getLastOperation()?.point;
-        const secondCurrent = secondFinger?.getLastOperation()?.point;
-
-        if (!firstStart || !secondStart || !firstCurrent || !secondCurrent) {
-          return null;
-        }
-
-        const center = canvasToScreen(gestureStartState.center, viewportRef.current);
-        const angleFromCenter = (point: { readonly x: number; readonly y: number }) =>
-          Math.atan2(point.y - center.y, point.x - center.x);
-        const firstDelta = normalizeRotationDelta(
-          angleFromCenter(firstCurrent) - angleFromCenter(firstStart)
-        );
-        const secondDelta = normalizeRotationDelta(
-          angleFromCenter(secondCurrent) - angleFromCenter(secondStart)
-        );
-
-        return gestureStartState.rotationRad + (firstDelta + secondDelta) / 2;
-      };
-
-      // 鼠标 alt+拖拽单指旋转：计算鼠标围绕尺子中心的角度变化。
-      const resolveMouseRotation = () => {
-        if (!gestureStartState) {
-          return null;
-        }
-        const fingers = multiDragRef.current?.getFingers() ?? [];
-        const firstFinger = fingers[0];
-        const firstStart = firstFinger?.getPath()[0]?.point;
-        const firstCurrent = firstFinger?.getLastOperation()?.point;
-
-        if (!firstStart || !firstCurrent) {
-          return null;
-        }
-
-        const center = canvasToScreen(gestureStartState.center, viewportRef.current);
-        const angleFromCenter = (point: { readonly x: number; readonly y: number }) =>
-          Math.atan2(point.y - center.y, point.x - center.x);
-        const delta = normalizeRotationDelta(
-          angleFromCenter(firstCurrent) - angleFromCenter(firstStart)
-        );
-
-        return gestureStartState.rotationRad + delta;
-      };
-
-      const commitRulerState = (pose: Partial<Pose>, shouldRender: boolean) => {
-        if (!gestureStartState) {
-          return;
-        }
-        let nextState: DrawingRulerState | null = null;
-
-        if (gestureRegion === 'grip' && pose.position) {
-          nextState = {
-            ...gestureStartState,
-            center: screenToCanvas(pose.position, viewportRef.current),
-          };
-        }
-
-        if (gestureRegion === 'body') {
-          const rotationRad = resolveBodyRotation();
-          if (rotationRad === null) {
-            return;
-          }
-          nextState = {
-            ...gestureStartState,
-            center: pose.position
-              ? screenToCanvas(pose.position, viewportRef.current)
-              : gestureStartState.center,
-            rotationRad,
-          };
-        }
-
-        if (gestureRegion === 'rotate') {
-          const rotationRad = resolveMouseRotation();
-          if (rotationRad === null) {
-            return;
-          }
-          nextState = {
-            ...gestureStartState,
-            rotationRad,
-          };
-        }
-
-        if (!nextState) {
-          return;
-        }
-
+        lastRequestedRulerCenterRef.current = nextState.center;
         internalRulerStateRef.current = nextState;
-        if (shouldRender) {
-          setRulerGestureTick((tick) => tick + 1);
+        currentRulerStateRef.current = controlledRulerStateRef.current ?? nextState;
+        if (!controlledRulerStateRef.current) {
+          renderRuler();
         }
         onRulerChangeRef.current?.(nextState);
       };
+      const currentFingerPoint = (mixin: Mixin, index: number) =>
+        mixin.getFingers()[index]?.getLastOperation()?.point;
+      const toHostPoint = (point: DrawingPoint): DrawingPoint => {
+        const bounds = host.getBoundingClientRect();
+        return { x: point.x - bounds.left, y: point.y - bounds.top };
+      };
+      const touchMidpoint = (mixin: Mixin): DrawingPoint | null => {
+        const first = currentFingerPoint(mixin, 0);
+        const second = currentFingerPoint(mixin, 1);
+        return first && second
+          ? { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 }
+          : null;
+      };
+      const createForwardedPointerDown = (event: PointerEvent): Event => {
+        const forwarded = new Event('pointerdown');
+        Object.defineProperties(forwarded, {
+          button: { value: event.button },
+          buttons: { value: event.buttons },
+          clientX: { value: event.clientX },
+          clientY: { value: event.clientY },
+          ctrlKey: { value: event.ctrlKey },
+          metaKey: { value: event.metaKey },
+          pointerId: { value: event.pointerId },
+          pointerType: { value: event.pointerType },
+          pressure: { value: event.pressure },
+          timeStamp: { value: event.timeStamp },
+        });
+        return forwarded;
+      };
 
-      const multiDrag = new Mixin(
-        host,
-        {
-          inertial: false,
-          getPose,
-          setPose: (_element: HTMLElement, pose: Partial<Pose>) => {
-            commitRulerState(pose, false);
-          },
-          setPoseOnEnd: (_element: HTMLElement, pose: Partial<Pose>) => {
-            commitRulerState(pose, true);
-          },
-        },
-        [MixinType.Drag, MixinType.Rotate],
+      const mouseDrag = new Mixin(
+        mouseElement,
+        { inertial: false, getPose: getEmptyPose, setPose: () => undefined },
         [MixinType.Drag]
       );
+      let touchDrag = new Mixin(
+        touchElement,
+        { inertial: false, getPose: getEmptyPose, setPose: () => undefined },
+        [MixinType.Drag],
+        []
+      );
 
-      const handleStart = () => {
-        // 手势开始时从 ref 捕获最新 ruler 状态作为基准快照，
-        // 确保整个拖拽过程中的 delta 计算都基于按下瞬间的状态
-        gestureStartState = currentRulerStateRef.current;
-        if (!gestureStartState) {
-          gestureRegion = null;
+      const beginDragAt = (screenPoint: DrawingPoint) => {
+        const state = currentRulerStateRef.current;
+        if (!state) {
           return;
         }
+        const center = canvasToScreen(state.center, viewportRef.current);
+        dragAnchor = {
+          centerToPointer: { x: center.x - screenPoint.x, y: center.y - screenPoint.y },
+        };
+        lastRequestedRulerCenterRef.current = state.center;
+        setIsRulerDragging(true);
+      };
+      const handleMouseMove = () => {
+        const point = currentFingerPoint(mouseDrag, 0);
+        if (activeInput === 'mouse' && point) {
+          commitCenterAtScreenPoint(toHostPoint(point));
+        }
+      };
+      const handleTouchMove = () => {
+        const midpoint = touchMidpoint(touchDrag);
+        if (activeInput === 'touch' && midpoint) {
+          commitCenterAtScreenPoint(toHostPoint(midpoint));
+        }
+      };
+      mouseDrag.addEventListener(DragOperationType.Move, handleMouseMove);
+      touchDrag.addEventListener(DragOperationType.Move, handleTouchMove);
 
-        const [finger] = multiDrag.getFingers();
-        const event = finger?.getLastOperation()?.event;
-        const target = event?.target;
-
-        if (!event || !(target instanceof Element)) {
-          gestureRegion = null;
+      const restartTouchDrag = () => {
+        touchDrag.removeEventListener(DragOperationType.Move, handleTouchMove);
+        touchDrag.destroy();
+        touchDrag = new Mixin(
+          touchElement,
+          { inertial: false, getPose: getEmptyPose, setPose: () => undefined },
+          [MixinType.Drag],
+          []
+        );
+        touchDrag.addEventListener(DragOperationType.Move, handleTouchMove);
+      };
+      const cancelWaitingTouches = () => {
+        for (const pointerId of acceptedTouchIds) {
+          suppressedTouchIds.add(pointerId);
+        }
+        acceptedTouchIds.clear();
+        restartTouchDrag();
+      };
+      const cancelActiveDrag = () => {
+        const wasTouchDrag = activeInput === 'touch';
+        activeInput = null;
+        dragAnchor = null;
+        lastRequestedRulerCenterRef.current = null;
+        setIsRulerDragging(false);
+        if (!wasTouchDrag) {
           return;
         }
-
-        const owner = classifyInteraction({
-          input: buildPointerInteractionInput(event),
-          isDrawingEnabled: true,
-          isRulerEnabled,
-          virtualPaperEnabled: isVirtualPaperActive,
-          virtualPaperInteractions: resolvedVirtualPaperOptions.enabledInteractions,
-          allowedDrawingInputMethods: DEFAULT_INPUT_METHODS,
-        });
-        if (owner !== 'ruler') {
-          gestureRegion = null;
+        for (const pointerId of acceptedTouchIds) {
+          suppressedTouchIds.add(pointerId);
+        }
+        acceptedTouchIds.clear();
+        restartTouchDrag();
+      };
+      cancelActiveRulerDragRef.current = cancelActiveDrag;
+      const handlePointerDown = (event: PointerEvent) => {
+        const target = event.target;
+        const hitsRuler =
+          target instanceof Element && target.closest('[data-testid="drawing-ruler"]') !== null;
+        if (!hitsRuler) {
           return;
         }
-
-        if (event.pointerType === 'mouse' && (event.ctrlKey || event.metaKey || event.altKey)) {
-          if (target.closest('[data-testid="drawing-ruler"]')) {
-            gestureRegion = event.altKey ? 'rotate' : 'grip';
+        if (event.pointerType === 'mouse') {
+          if (
+            event.button !== 0 ||
+            (!event.ctrlKey && !event.metaKey) ||
+            activeInput !== null
+          ) {
             return;
           }
-        }
-
-        if (target.closest('[data-testid="drawing-ruler-drag-grip"]')) {
-          gestureRegion = 'grip';
+          cancelWaitingTouches();
+          activeInput = 'mouse';
+          mousePointerId = event.pointerId;
+          beginDragAt(toHostPoint({ x: event.clientX, y: event.clientY }));
+          mouseElement.dispatchEvent(createForwardedPointerDown(event));
+          event.preventDefault();
           return;
         }
-
-        if (target.closest('[data-testid="drawing-ruler"]')) {
-          gestureRegion = 'body';
+        if (event.pointerType !== 'touch' || activeInput === 'mouse') {
           return;
         }
-
-        gestureRegion = null;
+        if (acceptedTouchIds.size >= 2) {
+          suppressedTouchIds.add(event.pointerId);
+          return;
+        }
+        acceptedTouchIds.add(event.pointerId);
+        touchElement.dispatchEvent(createForwardedPointerDown(event));
+        if (acceptedTouchIds.size === 2) {
+          const midpoint = touchMidpoint(touchDrag);
+          if (midpoint) {
+            activeInput = 'touch';
+            beginDragAt(toHostPoint(midpoint));
+          }
+        }
+        event.preventDefault();
       };
-
-      const handleMove = () => {
-        if (gestureRegion === 'grip' && multiDrag.getFingers().length !== 1) {
-          gestureRegion = null;
+      const endPointer = (event: PointerEvent) => {
+        if (suppressedTouchIds.delete(event.pointerId)) {
           return;
         }
-
-        if (gestureRegion === 'rotate' && multiDrag.getFingers().length !== 1) {
-          gestureRegion = null;
+        if (event.pointerId === mousePointerId) {
+          mousePointerId = null;
+          activeInput = null;
+          dragAnchor = null;
+          lastRequestedRulerCenterRef.current = null;
+          setIsRulerDragging(false);
           return;
         }
-
-        if (gestureRegion === 'body' && multiDrag.getFingers().length < 2) {
+        if (!acceptedTouchIds.has(event.pointerId)) {
           return;
         }
+        acceptedTouchIds.delete(event.pointerId);
+        if (activeInput === 'touch') {
+          for (const pointerId of acceptedTouchIds) {
+            suppressedTouchIds.add(pointerId);
+          }
+          activeInput = null;
+          dragAnchor = null;
+          lastRequestedRulerCenterRef.current = null;
+          setIsRulerDragging(false);
+        }
+        acceptedTouchIds.clear();
+        restartTouchDrag();
       };
-
-      const handleAllEnd = () => {
-        gestureRegion = null;
-        multiDrag.setEnabled();
-      };
-
-      multiDrag.addEventListener(DragOperationType.Start, handleStart);
-      multiDrag.addEventListener(DragOperationType.Move, handleMove);
-      multiDrag.addEventListener(DragOperationType.AllEnd, handleAllEnd);
-      multiDragRef.current = multiDrag;
+      const listenerTarget = resolveDrawingEventTarget(eventTarget) ?? host;
+      const disposeBridge = installCapturePhaseRulerPointerBridge({
+        listenerTarget,
+        onPointerDown: handlePointerDown,
+      });
+      document.addEventListener('pointerup', endPointer, true);
+      document.addEventListener('pointercancel', endPointer, true);
+      host.addEventListener('lostpointercapture', endPointer, true);
 
       return () => {
-        multiDrag.removeEventListener(DragOperationType.Start, handleStart);
-        multiDrag.removeEventListener(DragOperationType.Move, handleMove);
-        multiDrag.removeEventListener(DragOperationType.AllEnd, handleAllEnd);
-        if (multiDragRef.current === multiDrag) {
-          multiDragRef.current = null;
-        }
-        multiDrag.destroy();
+        cancelActiveRulerDragRef.current = null;
+        disposeBridge();
+        document.removeEventListener('pointerup', endPointer, true);
+        document.removeEventListener('pointercancel', endPointer, true);
+        host.removeEventListener('lostpointercapture', endPointer, true);
+        mouseDrag.removeEventListener(DragOperationType.Move, handleMouseMove);
+        touchDrag.removeEventListener(DragOperationType.Move, handleTouchMove);
+        mouseDrag.destroy();
+        touchDrag.destroy();
+        setIsRulerDragging(false);
       };
-    }, [isRulerEnabled, isVirtualPaperActive, resolvedVirtualPaperOptions.enabledInteractions]);
+    }, [eventTarget, isRulerEnabled]);
 
     const effectiveTool: DrawingTool = isDrawingToolSupported(tool) ? tool : 'pen';
     const isDrawingEnabled = tool === undefined || isDrawingToolSupported(tool);
@@ -2020,26 +2001,6 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     }, [commitSelectionFrame, getInteractionOwnerOptions]);
 
     useEffect(() => {
-      if (!isVirtualPaperActive) {
-        return undefined;
-      }
-      const host = hostRef.current;
-      if (!host) {
-        return undefined;
-      }
-      const listenerTarget = resolveDrawingEventTarget(eventTarget) ?? host;
-      if (!shouldCaptureVirtualPaperPointerDown(listenerTarget, host, true)) {
-        return undefined;
-      }
-
-      return installCapturePhaseRulerPointerBridge({
-        listenerTarget,
-        multiDragRef,
-        getInteractionOwnerOptions,
-      });
-    }, [eventTarget, getInteractionOwnerOptions, isVirtualPaperActive]);
-
-    useEffect(() => {
       if ((effectiveTool !== 'lasso' && effectiveTool !== 'text') || selectedIds.length === 0) {
         return undefined;
       }
@@ -2123,17 +2084,6 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       []
     );
 
-    const getProjectedCanvasPoint = useCallback(
-      (canvasPoint: DrawingPoint): DrawingPoint => {
-        if (!currentRulerState || !isInsideRuler(canvasPoint, currentRulerState)) {
-          return canvasPoint;
-        }
-        const projected = projectOntoRulerTickEdge(canvasPoint, currentRulerState);
-        return projected ? { ...canvasPoint, x: projected.x, y: projected.y } : canvasPoint;
-      },
-      [currentRulerState]
-    );
-
     const resolveInteractiveCanvasPoint = useCallback(
       (
         screenPoint: DrawingPoint,
@@ -2145,9 +2095,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         const snappedOrRawCanvas = isSnapEligibleTool(tool)
           ? resolvePointerSnap(screenPoint, viewport, snapOptions, targetStrokes).canvas
           : screenToCanvas(screenPoint, viewport);
-        return getProjectedCanvasPoint(snappedOrRawCanvas);
+        return snappedOrRawCanvas;
       },
-      [getProjectedCanvasPoint, resolvePointerSnap]
+      [resolvePointerSnap]
     );
 
     const clearActiveStroke = useCallback(() => {
@@ -3926,65 +3876,42 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
               </g>
             )}
 
-          {isRulerEnabled && currentRulerState && (
+          {isRulerEnabled && currentRulerRect && (
             <g
               data-testid="drawing-ruler"
-              data-ruler-center-x={String(currentRulerState.center.x)}
-              data-ruler-center-y={String(currentRulerState.center.y)}
-              data-ruler-rotation={String(currentRulerState.rotationRad)}
-              data-ruler-length={String(currentRulerState.length)}
-              data-ruler-height={String(currentRulerState.height)}
-              transform={`translate(${currentRulerState.center.x} ${currentRulerState.center.y}) rotate(${(currentRulerState.rotationRad * 180) / Math.PI})`}
+              data-ruler-center-x={String(currentRulerRect.center.x)}
+              data-ruler-center-y={String(currentRulerRect.center.y)}
+              data-ruler-length={String(currentRulerRect.length)}
+              data-ruler-height={String(currentRulerRect.height)}
+              transform={`translate(${currentRulerRect.center.x} ${currentRulerRect.center.y})`}
+              onPointerEnter={(event) => {
+                if (event.pointerType === 'mouse') {
+                  setHasRulerModifierHover(event.ctrlKey || event.metaKey);
+                }
+              }}
+              onPointerMove={(event) => {
+                if (event.pointerType === 'mouse' && !isRulerDragging) {
+                  setHasRulerModifierHover(event.ctrlKey || event.metaKey);
+                }
+              }}
+              onPointerLeave={() => setHasRulerModifierHover(false)}
+              style={{
+                cursor: isRulerDragging
+                  ? 'grabbing'
+                  : hasRulerModifierHover
+                    ? 'grab'
+                    : 'default',
+              }}
             >
               <rect
                 data-testid="drawing-ruler-background"
-                x={-currentRulerState.length / 2}
-                y={-currentRulerState.height / 2}
-                width={currentRulerState.length}
-                height={currentRulerState.height}
+                x={-currentRulerRect.length / 2}
+                y={-currentRulerRect.height / 2}
+                width={currentRulerRect.length}
+                height={currentRulerRect.height}
                 fill={effectiveRulerOptions.backgroundColor ?? '#e0e0e0'}
                 fillOpacity={String(effectiveRulerOptions.backgroundOpacity ?? 0.2)}
               />
-              <circle
-                data-testid="drawing-ruler-drag-grip"
-                cx={0}
-                cy={0}
-                r={effectiveRulerOptions.dragGripSize ?? 24}
-                fill="white"
-                stroke="grey"
-                strokeWidth={2}
-              />
-              <g className="ruler-ticks">
-                {generateTicks(currentRulerState, {
-                  minorSpacing: effectiveRulerOptions.minorTickSpacing ?? 10,
-                  majorSpacing:
-                    (effectiveRulerOptions.minorTickSpacing ?? 10) *
-                    (effectiveRulerOptions.majorTickEvery ?? 5),
-                }).map((tick) => {
-                  const isCenter = tick.localX === 0;
-                  return (
-                    <g
-                      key={tick.localX.toFixed(6)}
-                      transform={`translate(${tick.localX} ${-currentRulerState.height / 2})`}
-                    >
-                      <line
-                        data-testid={isCenter ? 'drawing-ruler-center-tick' : 'drawing-ruler-tick'}
-                        x1={0}
-                        y1={0}
-                        x2={0}
-                        y2={tick.kind === 'major' ? 20 : 10}
-                        stroke="black"
-                        strokeWidth={1}
-                      />
-                      {tick.label && (
-                        <text x={0} y={35} fontSize={12} textAnchor="middle" fill="black">
-                          {tick.label}
-                        </text>
-                      )}
-                    </g>
-                  );
-                })}
-              </g>
             </g>
           )}
         </g>

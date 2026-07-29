@@ -1,47 +1,32 @@
-import type { ClassifyInteractionOptions } from './interactionOwnership';
-import { buildPointerInteractionInput, classifyInteraction } from './interactionOwnership';
 import { POINTER_DOWN_CAPTURE_OPTIONS } from './virtualPaperPointerCapture';
-
-type MultiDragPointerDownBridge = {
-  readonly handlePointerDown?: (event: PointerEvent) => void;
-};
-
-type MultiDragPointerDownBridgeRef = {
-  readonly current: object | null;
-};
 
 type RulerPointerBridgeOptions = {
   readonly listenerTarget: EventTarget;
-  readonly multiDragRef: MultiDragPointerDownBridgeRef;
-  readonly getInteractionOwnerOptions: (
-    input: ClassifyInteractionOptions['input'],
-    activeTouchPointers?: number
-  ) => ClassifyInteractionOptions;
+  readonly onPointerDown: (event: PointerEvent) => void;
 };
 
 function isPointerDomEvent(event: Event): event is PointerEvent {
-  return event.type.startsWith('pointer');
+  return (
+    event.type === 'pointerdown' &&
+    'button' in event &&
+    'clientX' in event &&
+    'clientY' in event &&
+    'pointerId' in event &&
+    'pointerType' in event &&
+    typeof event.button === 'number' &&
+    typeof event.clientX === 'number' &&
+    typeof event.clientY === 'number' &&
+    typeof event.pointerId === 'number' &&
+    typeof event.pointerType === 'string'
+  );
 }
 
 export function installCapturePhaseRulerPointerBridge(
   options: RulerPointerBridgeOptions
 ): () => void {
-  const handleRulerPointerDownBridge = (event: PointerEvent) => {
-    const owner = classifyInteraction(
-      options.getInteractionOwnerOptions(buildPointerInteractionInput(event))
-    );
-    if (owner !== 'ruler') {
-      return;
-    }
-    // @system-ui-js/multi-drag exposes this runtime arrow property while
-    // marking it private in declarations; the bridge must call the same
-    // entrypoint before virtual-paper stops mouse pointerdown in bubble.
-    const multiDrag = options.multiDragRef.current as object as MultiDragPointerDownBridge | null;
-    multiDrag?.handlePointerDown?.(event);
-  };
   const handleRulerPointerDownBridgeEvent: EventListener = (event) => {
     if (isPointerDomEvent(event)) {
-      handleRulerPointerDownBridge(event);
+      options.onPointerDown(event);
     }
   };
 

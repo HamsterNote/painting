@@ -66,19 +66,8 @@ export type {
 export { resolveStrokeStyle } from './render/resolveStrokeStyle';
 export type { RenderableStroke, StrokeRendererProps } from './render/StrokeRenderer';
 export { StrokeRenderer } from './render/StrokeRenderer';
-export type { RulerPoint, RulerTransform } from './ruler';
-export {
-  DEFAULT_TICK_OPTIONS,
-  degToRad,
-  generateTicks,
-  isInsideRuler,
-  normalizeAngle,
-  projectOntoRuler,
-  projectOntoRulerTickEdge,
-  radToDeg,
-  toCanvasPoint,
-  toLocalPoint,
-} from './ruler';
+export type { RulerPoint, RulerRect } from './ruler';
+export { isInsideRuler } from './ruler';
 export type { DrawingStrokeSmoothingOptions } from './stroke-helpers';
 export type { LassoSelectionOptions } from './utils';
 export {

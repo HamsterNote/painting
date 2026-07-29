@@ -1575,7 +1575,7 @@ test.describe('DrawingSurface playground', () => {
       expect(secondStrokeStart.y).toBeCloseTo(p2Y - box!.y, 1);
     });
   });
-  test.describe('ruler overlay', () => {
+  test.describe('ruler first-phase overlay', () => {
     test('toggle shows ruler and keeps tool', async ({ page }) => {
       const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
       const toolSelect = page.getByTestId('drawing-tool-select');
@@ -1590,27 +1590,18 @@ test.describe('DrawingSurface playground', () => {
       await expect(controlled.getByTestId('drawing-ruler')).toBeVisible();
     });
 
-    test('visual constants', async ({ page }) => {
+    test('shows a single translucent rectangular body', async ({ page }) => {
       const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
       await toggleBtn.click();
 
       const uncontrolled = page.getByTestId('drawing-surface-uncontrolled');
       const rulerBg = uncontrolled.getByTestId('drawing-ruler-background');
       
-      const fillOpacity = await rulerBg.getAttribute('fill-opacity');
-      expect(fillOpacity).toBe('0.2');
-
-      const labels = await uncontrolled.locator('text[fill="black"]').allInnerTexts();
-      for (const label of labels) {
-        expect(String(label).startsWith('-')).toBe(false);
-      }
-
-      const centerLabel = await uncontrolled
-        .locator('text[fill="black"]')
-        .filter({ hasText: /^0$/ })
-        .first()
-        .textContent();
-      expect(centerLabel?.trim()).toBe('0');
+      await expect(rulerBg).toHaveAttribute('fill-opacity', '0.2');
+      await expect(rulerBg).not.toHaveAttribute('stroke', /.+/);
+      await expect(rulerBg).not.toHaveAttribute('rx', /.+/);
+      await expect(uncontrolled.getByTestId('drawing-ruler').locator('rect')).toHaveCount(1);
+      await expect(uncontrolled.getByTestId('drawing-ruler').locator('circle, text')).toHaveCount(0);
     });
 
     test('geometry attributes numeric', async ({ page }) => {
@@ -1619,7 +1610,7 @@ test.describe('DrawingSurface playground', () => {
 
       const ruler = page.getByTestId('drawing-surface-uncontrolled').getByTestId('drawing-ruler');
       
-      for (const attr of ['data-ruler-center-x', 'data-ruler-center-y', 'data-ruler-rotation', 'data-ruler-length', 'data-ruler-height']) {
+      for (const attr of ['data-ruler-center-x', 'data-ruler-center-y', 'data-ruler-length', 'data-ruler-height']) {
         const val = await ruler.getAttribute(attr);
         expect(val).not.toBeNull();
         expect(Number.isFinite(parseFloat(val!))).toBe(true);
@@ -1646,11 +1637,8 @@ test.describe('DrawingSurface playground', () => {
         start: { x: cx - 50, y: drawY },
         moves: [{ x: cx + 50, y: drawY }],
       });
-      await page.waitForTimeout(100);
-
-      const previewText = await preview.textContent();
-      const parsed = JSON.parse(previewText!);
-      expect(parsed.strokes.length).toBeGreaterThan(1);
+      await expect.poll(async () => (await readPreview(preview)).strokes.length).toBeGreaterThan(1);
+      const parsed = await readPreview(preview);
       const lastStroke = parsed.strokes[parsed.strokes.length - 1];
       
       for (const pt of lastStroke.points) {
@@ -1658,37 +1646,40 @@ test.describe('DrawingSurface playground', () => {
       }
     });
 
-    test('draw inside horizontal ruler is projected', async ({ page }) => {
+    test('plain left drag inside ruler is blocked instead of drawing', async ({ page }) => {
       const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
       await toggleBtn.click();
 
       const surface = page.getByTestId('drawing-surface-uncontrolled');
       const preview = page.getByTestId('drawing-preview-uncontrolled');
       const ruler = surface.getByTestId('drawing-ruler');
+      const background = surface.getByTestId('drawing-ruler-background');
 
-      const cx = parseFloat((await ruler.getAttribute('data-ruler-center-x'))!);
-      const cy = parseFloat((await ruler.getAttribute('data-ruler-center-y'))!);
-      const height = parseFloat((await ruler.getAttribute('data-ruler-height'))!);
+      const backgroundBox = await background.boundingBox();
+      const surfaceBox = await surface.boundingBox();
+      expect(backgroundBox).not.toBeNull();
+      expect(surfaceBox).not.toBeNull();
+      if (!backgroundBox || !surfaceBox) return;
+      const previewBefore = await preview.textContent();
 
-      const drawY = cy + height / 4;
-
-      await dispatchPointerDrag(surface, {
-        pointerId: 99,
-        pointerType: 'mouse',
-        start: { x: cx - 20, y: drawY },
-        moves: [{ x: cx + 50, y: drawY }],
+      await background.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        const options = (type: string, clientX: number, buttons: number) => ({
+          bubbles: true,
+          cancelable: true,
+          pointerId: 99,
+          pointerType: 'mouse',
+          button: 0,
+          buttons,
+          clientX,
+          clientY: rect.y + rect.height / 2,
+        });
+        element.dispatchEvent(new PointerEvent('pointerdown', options('pointerdown', rect.x + 20, 1)));
+        document.dispatchEvent(new PointerEvent('pointermove', options('pointermove', rect.x + 70, 1)));
+        document.dispatchEvent(new PointerEvent('pointerup', options('pointerup', rect.x + 70, 0)));
       });
-      await page.waitForTimeout(100);
 
-      const previewText = await preview.textContent();
-      const parsed = JSON.parse(previewText!);
-      expect(parsed.strokes.length).toBeGreaterThan(1);
-      const lastStroke = parsed.strokes[parsed.strokes.length - 1];
-      
-      const expectedY = cy - height / 2;
-      for (const pt of lastStroke.points) {
-        expect(pt.y).toBeCloseTo(expectedY, 1);
-      }
+      await expect.poll(() => preview.textContent()).toBe(previewBefore);
     });
 
     test('disable ruler restores normal drawing', async ({ page }) => {
@@ -1713,11 +1704,8 @@ test.describe('DrawingSurface playground', () => {
         start: { x: cx - 50, y: drawY },
         moves: [{ x: cx + 50, y: drawY }],
       });
-      await page.waitForTimeout(100);
-
-      const previewText = await preview.textContent();
-      const parsed = JSON.parse(previewText!);
-      expect(parsed.strokes.length).toBeGreaterThan(1);
+      await expect.poll(async () => (await readPreview(preview)).strokes.length).toBeGreaterThan(1);
+      const parsed = await readPreview(preview);
       const lastStroke = parsed.strokes[parsed.strokes.length - 1];
       
       for (const pt of lastStroke.points) {
@@ -1725,41 +1713,7 @@ test.describe('DrawingSurface playground', () => {
       }
     });
 
-    test('grip drag changes transform without stroke', async ({ page }) => {
-      const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
-      await toggleBtn.click();
-
-      const surface = page.getByTestId('drawing-surface-uncontrolled');
-      const preview = page.getByTestId('drawing-preview-uncontrolled');
-      const ruler = surface.getByTestId('drawing-ruler');
-      const grip = surface.getByTestId('drawing-ruler-drag-grip');
-
-      const startCx = parseFloat((await ruler.getAttribute('data-ruler-center-x'))!);
-      const startCy = parseFloat((await ruler.getAttribute('data-ruler-center-y'))!);
-
-      const gripBox = await grip.boundingBox();
-      expect(gripBox).not.toBeNull();
-
-      const previewBefore = await preview.textContent();
-
-      await dispatchPointerDrag(grip, {
-        pointerId: 101,
-        pointerType: 'mouse',
-        start: { x: gripBox!.width / 2, y: gripBox!.height / 2 },
-        moves: [{ x: gripBox!.width / 2 + 50, y: gripBox!.height / 2 + 50 }],
-      });
-
-      const endCx = parseFloat((await ruler.getAttribute('data-ruler-center-x'))!);
-      const endCy = parseFloat((await ruler.getAttribute('data-ruler-center-y'))!);
-
-      expect(endCx).not.toBe(startCx);
-      expect(endCy).not.toBe(startCy);
-
-      const previewAfter = await preview.textContent();
-      expect(previewAfter).toBe(previewBefore);
-    });
-
-    test('Ctrl move and Alt rotate ruler without creating stroke in real browser path', async ({ page }) => {
+    test('Ctrl moves ruler while Alt leaves it unchanged', async ({ page }) => {
       const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
       const surface = page.getByTestId('drawing-surface-uncontrolled');
       const preview = page.getByTestId('drawing-preview-uncontrolled');
@@ -1776,7 +1730,6 @@ test.describe('DrawingSurface playground', () => {
       const before = {
         centerX: parseFloat((await ruler.getAttribute('data-ruler-center-x')) ?? '0'),
         centerY: parseFloat((await ruler.getAttribute('data-ruler-center-y')) ?? '0'),
-        rotation: parseFloat((await ruler.getAttribute('data-ruler-rotation')) ?? '0'),
       };
 
       const beforeBox = await background.boundingBox();
@@ -1794,11 +1747,9 @@ test.describe('DrawingSurface playground', () => {
       const afterCtrl = {
         centerX: parseFloat((await ruler.getAttribute('data-ruler-center-x')) ?? '0'),
         centerY: parseFloat((await ruler.getAttribute('data-ruler-center-y')) ?? '0'),
-        rotation: parseFloat((await ruler.getAttribute('data-ruler-rotation')) ?? '0'),
       };
 
       expect(afterCtrl.centerX !== before.centerX || afterCtrl.centerY !== before.centerY).toBe(true);
-      expect(afterCtrl.rotation).toBe(before.rotation);
 
       const afterCtrlBox = await background.boundingBox();
       expect(afterCtrlBox).not.toBeNull();
@@ -1815,12 +1766,10 @@ test.describe('DrawingSurface playground', () => {
       const afterAlt = {
         centerX: parseFloat((await ruler.getAttribute('data-ruler-center-x')) ?? '0'),
         centerY: parseFloat((await ruler.getAttribute('data-ruler-center-y')) ?? '0'),
-        rotation: parseFloat((await ruler.getAttribute('data-ruler-rotation')) ?? '0'),
       };
 
       expect(afterAlt.centerX).toBe(afterCtrl.centerX);
       expect(afterAlt.centerY).toBe(afterCtrl.centerY);
-      expect(afterAlt.rotation).not.toBe(afterCtrl.rotation);
 
       const previewAfter = await preview.textContent();
       expect(previewAfter).toBe(previewBefore);

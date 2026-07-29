@@ -13,6 +13,7 @@ export type PointerInteractionInput = {
   readonly pointerType?: string;
   readonly button?: number;
   readonly ctrlKey?: boolean;
+  readonly metaKey?: boolean;
   readonly altKey?: boolean;
   readonly pointerId?: number;
 };
@@ -30,6 +31,7 @@ type PointerInteractionEvent = Event & {
   readonly pointerType?: string;
   readonly button?: number;
   readonly ctrlKey?: boolean;
+  readonly metaKey?: boolean;
   readonly altKey?: boolean;
   readonly pointerId?: number;
 };
@@ -57,17 +59,14 @@ export function buildPointerInteractionInput(
     pointerType: event.pointerType ?? (event.type === 'dblclick' ? 'mouse' : undefined),
     button: buttonOverride ?? event.button,
     ctrlKey: event.ctrlKey,
+    metaKey: event.metaKey,
     altKey: event.altKey,
     pointerId: event.pointerId,
   };
 }
 
 export function classifyInteraction(options: ClassifyInteractionOptions): InteractionOwner {
-  if (isRulerInteraction(
-    options.input,
-    options.isRulerEnabled,
-    options.activeTouchPointers ?? 1
-  )) {
+  if (isRulerInteraction(options.input, options.isRulerEnabled)) {
     return 'ruler';
   }
 
@@ -142,22 +141,20 @@ export function isSafeInteractiveTarget(target: EventTarget | null): boolean {
 
 function isRulerInteraction(
   input: InteractionInput,
-  isRulerEnabled: boolean,
-  activeTouchPointers: number
+  isRulerEnabled: boolean
 ): boolean {
-  if (!isRulerEnabled) {
+  if (!isRulerEnabled || input.kind !== 'pointer') {
     return false;
   }
-  if (input.target instanceof Element && input.target.closest('[data-testid="drawing-ruler"]')) {
-    return true;
-  }
-  if (input.kind !== 'pointer') {
+  if (!(input.target instanceof Element) || !input.target.closest('[data-testid="drawing-ruler"]')) {
     return false;
   }
-  if (input.ctrlKey === true || input.altKey === true) {
+
+  if (input.pointerType === 'touch' || input.pointerType === 'pen') {
     return true;
   }
-  return input.pointerType === 'touch' && activeTouchPointers >= 2;
+
+  return (input.pointerType === 'mouse' || input.pointerType === undefined) && input.button === 0;
 }
 
 function isVirtualPaperInteraction(options: ClassifyInteractionOptions): boolean {
