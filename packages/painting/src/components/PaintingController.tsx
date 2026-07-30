@@ -107,7 +107,7 @@ const TOOL_LABEL_MAP: Record<DrawingTool, string> = {
 /**
  * PaintingController 的受控数据。这份 data 同时也是分发给各个
  * PaintingBoard 的控制面：`tool` 决定画板当前工具，`minimap` 决定
- * 画板是否展示 Minimap，`strokeWidth` / `strokeColor` 决定绘制笔触样式，`selection`
+ * 画板是否展示 Minimap，`ruler` 决定是否展示尺子，`strokeWidth` / `strokeColor` 决定绘制笔触样式，`selection`
  * 保证多个受控画板之间的套索选区互斥，`stylusMode` 决定单指触摸的归属（绘图 or 平移画布）。
  * 后续期次（撤销重做）在此扩展字段即可。
  */
@@ -116,6 +116,8 @@ export interface PaintingControllerData {
   readonly tool: DrawingTool;
   /** 是否展示 Minimap */
   readonly minimap: boolean;
+  /** 是否展示尺子；省略时默认关闭 */
+  readonly ruler?: boolean;
   /** 当前笔触宽度；未传或无效时按 DrawingSurface 的默认值 2 展示 */
   readonly strokeWidth?: number;
   /** 当前笔触颜色；未传或为空时按 DrawingSurface 的默认黑色展示 */
@@ -163,7 +165,7 @@ export interface PaintingControllerProps {
   readonly history?: PaintingHistoryControls;
   /**
    * 是否处于「一个底栏控制多个 PaintingBoard」的多画板共享模式，默认 false。
-   * 为 true 时隐藏「重置视角」「清空画布」按钮及 More 菜单（含 MiniMap 开关），
+   * 为 true 时隐藏「重置视角」「清空画布」按钮及 More 菜单中的画板级开关，
    * 因为这三者在语义上只作用于单个画板，共享控制多画板时出现会引发歧义。
    * 详见组件顶部 doc comment 的 multiBoard 章节。
    */
@@ -232,6 +234,7 @@ export function PaintingController({
   relative = false,
 }: PaintingControllerProps) {
   const { tool: activeTool, minimap: showMinimap, stylusMode: stylusModeFromData } = data;
+  const showRuler = data.ruler ?? false;
   // stylusMode 默认 true（手写笔模式），与 DrawingSurface 的安全默认对齐
   const stylusMode = stylusModeFromData ?? true;
   // pressure 默认 false（均匀线宽），与 DrawingSurface 的安全默认对齐
@@ -278,8 +281,7 @@ export function PaintingController({
         ...data,
         tool: next,
         selection:
-          (next === 'lasso' || next === 'text') &&
-          (data.tool === 'lasso' || data.tool === 'text')
+          (next === 'lasso' || next === 'text') && (data.tool === 'lasso' || data.tool === 'text')
             ? (data.selection ?? null)
             : null,
       });
@@ -291,11 +293,15 @@ export function PaintingController({
     onDataChange({ ...data, minimap: !data.minimap });
   }, [data, onDataChange]);
 
+  const handleToggleRuler = useCallback(() => {
+    onDataChange({ ...data, ruler: !showRuler });
+  }, [data, onDataChange, showRuler]);
+
   useEffect(() => {
-    if (multiBoard && data.minimap) {
-      onDataChange({ ...data, minimap: false });
+    if (multiBoard && (data.minimap || showRuler)) {
+      onDataChange({ ...data, minimap: false, ruler: false });
     }
-  }, [multiBoard, data.minimap, data, onDataChange]);
+  }, [multiBoard, data.minimap, data, onDataChange, showRuler]);
 
   const handleStrokeWidthChange = useCallback(
     (nextStrokeWidth: number) => {
@@ -377,11 +383,7 @@ export function PaintingController({
         edge={edge}
         edgeOffset={edgeOffset}
         orientation="horizontal"
-        style={
-          relative
-            ? { ...style, position: 'absolute' }
-            : { zIndex: 1000, ...style }
-        }
+        style={relative ? { ...style, position: 'absolute' } : { zIndex: 1000, ...style }}
       >
         {history ? (
           <>
@@ -583,9 +585,7 @@ export function PaintingController({
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
-                    ...(isActive
-                      ? { background: 'var(--hn-color-accent)', color: '#09090b' }
-                      : {}),
+                    ...(isActive ? { background: 'var(--hn-color-accent)', color: '#09090b' } : {}),
                   }}
                   onClick={() => {
                     handleSelectTool(tool);
@@ -631,21 +631,39 @@ export function PaintingController({
           <Menu>
             {/* MiniMap 开关：仅单画板模式展示 */}
             {!multiBoard ? (
-              <MenuItem
-                data-testid="painting-board-minimap-toggle"
-                style={
-                  showMinimap
-                    ? { background: 'var(--hn-color-accent)', color: '#09090b' }
-                    : undefined
-                }
-                onClick={() => {
-                  handleToggleMinimap();
-                  setMoreMenuOpen(false);
-                }}
-              >
-                <Icon name="minimap" style={{ width: 14, height: 14 }} />
-                MiniMap
-              </MenuItem>
+              <>
+                <MenuItem
+                  data-testid="painting-board-minimap-toggle"
+                  style={
+                    showMinimap
+                      ? { background: 'var(--hn-color-accent)', color: '#09090b' }
+                      : undefined
+                  }
+                  onClick={() => {
+                    handleToggleMinimap();
+                    setMoreMenuOpen(false);
+                  }}
+                >
+                  <Icon name="minimap" style={{ width: 14, height: 14 }} />
+                  MiniMap
+                </MenuItem>
+                <MenuItem
+                  data-testid="painting-board-ruler-toggle"
+                  aria-pressed={showRuler}
+                  style={
+                    showRuler
+                      ? { background: 'var(--hn-color-accent)', color: '#09090b' }
+                      : undefined
+                  }
+                  onClick={() => {
+                    handleToggleRuler();
+                    setMoreMenuOpen(false);
+                  }}
+                >
+                  <Icon name="line" style={{ width: 14, height: 14 }} />
+                  Ruler
+                </MenuItem>
+              </>
             ) : null}
             {/* compact 模式下把压感/手写笔/清空收纳进 More 菜单 */}
             {!multiBoard && isCompact ? <MenuSeparator /> : null}

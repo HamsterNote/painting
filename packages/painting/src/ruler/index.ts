@@ -7,3 +7,5 @@
 // 几何类型与函数
 export type { RulerPoint, RulerRect } from './geometry';
 export { isInsideRuler } from './geometry';
+export type { GenerateRulerTicksOptions, RulerTick, RulerTickKind } from './ticks';
+export { DEFAULT_RULER_PIXELS_PER_INCH, generateRulerTicks, millimetersToPixels } from './ticks';

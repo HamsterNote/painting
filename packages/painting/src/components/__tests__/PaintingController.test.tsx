@@ -115,7 +115,7 @@ describe('PaintingController', () => {
     expect(onDataChange).toHaveBeenCalledWith({ ...data, tool: 'lasso', selection: null });
   });
 
-  it('hides reset/clear/more/minimap controls when multiBoard is true', () => {
+  it('hides reset/clear/more/minimap/ruler controls when multiBoard is true', () => {
     // Given: 多画板共享底栏模式开启，reset/clear/minimap 语义上只作用于单个画板，应隐藏。
     render(
       <PaintingController
@@ -133,9 +133,10 @@ describe('PaintingController', () => {
     expect(screen.queryByTestId('painting-board-clear-canvas')).toBeNull();
     expect(screen.queryByTestId('painting-board-more-btn')).toBeNull();
     expect(screen.queryByTestId('painting-board-minimap-toggle')).toBeNull();
+    expect(screen.queryByTestId('painting-board-ruler-toggle')).toBeNull();
   });
 
-  it('renders reset/clear/more controls by default and exposes MiniMap in the more menu', () => {
+  it('renders reset/clear/more controls by default and exposes MiniMap and Ruler in the more menu', () => {
     // Given: 默认单画板模式（未传 multiBoard），传入 reset/clear 回调。
     render(
       <PaintingController
@@ -153,6 +154,21 @@ describe('PaintingController', () => {
     expect(screen.queryByTestId('painting-board-more-btn')).not.toBeNull();
     fireEvent.click(screen.getByTestId('painting-board-more-btn'));
     expect(screen.queryByTestId('painting-board-minimap-toggle')).not.toBeNull();
+    expect(screen.queryByTestId('painting-board-ruler-toggle')).not.toBeNull();
+  });
+
+  it('writes ruler visibility through the controlled data channel', () => {
+    // Given: 单画板底栏的尺子当前关闭。
+    const data: PaintingControllerData = { tool: 'pen', minimap: false, ruler: false };
+    const onDataChange = jest.fn();
+    render(<PaintingController data={data} onDataChange={onDataChange} tools={['pen']} />);
+
+    // When: 用户在 More 菜单开启尺子。
+    fireEvent.click(screen.getByTestId('painting-board-more-btn'));
+    fireEvent.click(screen.getByTestId('painting-board-ruler-toggle'));
+
+    // Then: 完整 data 通过既有受控通道回写。
+    expect(onDataChange).toHaveBeenCalledWith({ ...data, ruler: true });
   });
 
   it('renders undo and redo first and forwards enabled history actions', () => {
@@ -335,6 +351,7 @@ describe('PaintingController', () => {
       expect(screen.queryByTestId('painting-board-more-pressure')).not.toBeNull();
       expect(screen.queryByTestId('painting-board-more-stylus')).not.toBeNull();
       expect(screen.queryByTestId('painting-board-minimap-toggle')).toBeNull();
+      expect(screen.queryByTestId('painting-board-ruler-toggle')).toBeNull();
       expect(screen.queryByTestId('painting-board-more-clear-canvas')).toBeNull();
     } finally {
       window.matchMedia = originalMatchMedia;

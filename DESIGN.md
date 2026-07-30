@@ -19,6 +19,8 @@ The primary user edits strokes with a mouse, pen, or touch input and expects sel
 - Stroke-color presets: black `#000000`, blue `#2563eb`, red `#dc2626`, green `#16a34a`, orange `#ea580c`, and purple `#9333ea`.
 - Stroke-color swatches are 20 px circles with a white outline; the selected row uses the existing accent treatment, and custom color selection uses the browser-native color input.
 - Text-size presets are 12, 16, 20, 24, 32, and 48 canvas units; 24 is the default.
+- The ruler is a 48 px-high screen-space strip clipped to the drawing-surface host. Its rendered length exceeds twice the host diagonal, so neither endpoint can enter the visible canvas.
+- Ruler marks mirror across the top and bottom edges, using three line-height levels for 1 mm, 5 mm, and 10 mm intervals. The ruler contains no numeric or textual labels.
 
 ## 4. Selection control anatomy
 
@@ -39,6 +41,10 @@ The primary user edits strokes with a mouse, pen, or touch input and expects sel
 - Clicking an empty point in text mode places a text box at that canvas position and starts editing it. Clicking an existing text box in text mode selects and edits it.
 - Text boxes are selectable only in text mode, when enclosed by a lasso, or when clicked while the lasso tool is active. Switching to an ordinary drawing or eraser tool clears that selection context.
 - Text mode exposes text color and font size in the bottom toolbar; stroke width and pressure controls are hidden because they do not apply to text.
+- The ruler stores a logical origin and clockwise rotation in host-local CSS pixels/radians. Canvas pan and zoom never change them; direct translation changes the origin, `Alt` + left drag rotates around the visible host center, and two ruler-owned touches use `@system-ui-js/multi-drag` to translate and rotate together.
+- Mouse and touch rotation always snap to the nearest 45-degree multiple. The ruler overlay stays below Minimap while retaining ruler gesture ownership in their overlap.
+- PaintingBoard exposes ruler visibility in its bottom More menu, with controlled and uncontrolled visibility following the same contract as Minimap without replacing ruler geometry or visual options.
+- Ruler marks do not receive pointer events. Wheel input over the ruler remains available to virtual-paper navigation.
 
 ## 6. Responsive behavior
 
@@ -47,6 +53,7 @@ The primary user edits strokes with a mouse, pen, or touch input and expects sel
 - The pointer target must not shrink below 24 px as the canvas zoom changes.
 - Stroke-color and stroke-width controls remain directly available beside the compact tool selector; their menus open above the bottom toolbar and must stay inside a 375 px viewport.
 - In text mode, color and font-size controls replace stroke width and remain directly available beside the compact tool selector at 375 px.
+- The ruler remains clipped to the host with constant screen-space height, mark spacing, and line hierarchy in ordinary and virtual-paper modes at every canvas viewport scale. Moving along its axis changes the tick phase without exposing an endpoint.
 
 ## 7. Accessibility constraints
 
@@ -54,6 +61,7 @@ The primary user edits strokes with a mouse, pen, or touch input and expects sel
 - Pointer targets support mouse, pen, and touch through the canvas input-method contract.
 - Color swatches expose text labels and selected state; color is never the only accessible identifier.
 - Accepted debt: canvas transform handles, including the existing resize controls, do not yet expose keyboard rotation or resize. A future keyboard interaction must add complete behavior and focus treatment rather than a non-functional button role.
+- The ruler's unlabeled marks are a spatial alignment aid rather than a standalone measurement readout; consumers that require spoken or numeric measurements must provide that information outside this decorative overlay.
 
 ## 8. Review contract
 
@@ -63,3 +71,5 @@ The primary user edits strokes with a mouse, pen, or touch input and expects sel
 - Verify all six fixed stroke colors, the custom-color input, real stroke output, lasso visibility, and menu containment at 375 px, 768 px, and 1280 px widths.
 - Verify undo and redo button order, disabled states, and chronological behavior when one bottom toolbar controls two PaintingBoard instances.
 - Verify text placement at the pointer, editing, all six font-size presets, color changes, lasso enclosure and click selection, and independent left/right boundary dragging at 375 px, 768 px, and 1280 px widths.
+- Verify canvas pan and zoom leave the ruler layout unchanged, no pixels escape the drawing host, neither endpoint appears after extreme translation or rotation, top and bottom ticks mirror without text, the ruler remains below Minimap, Ctrl/Cmd translation still works, and mouse/touch rotation snaps to 45-degree multiples.
+- Verify the PaintingBoard bottom-bar ruler switch preserves supplied ruler options and respects controlled visibility at 375 px, 768 px, and 1280 px widths.

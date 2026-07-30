@@ -143,6 +143,129 @@ describe('PaintingBoard', () => {
     expect(screen.queryByRole('button', { name: 'Rect' })).toBeNull();
   });
 
+  it('非受控模式：底栏尺子开关显示并隐藏尺子且保留配置', () => {
+    // Given: 画板提供自定义尺子高度，但初始显式关闭。
+    render(
+      <div style={{ width: 400, height: 300 }}>
+        <PaintingBoard testID="board" ruler={{ enabled: false, height: 36 }} />
+      </div>
+    );
+    expect(screen.queryByTestId('drawing-ruler-overlay')).toBeNull();
+
+    // When: 用户从底栏 More 菜单开启尺子。
+    fireEvent.click(screen.getByTestId('painting-board-more-btn'));
+    fireEvent.click(screen.getByTestId('painting-board-ruler-toggle'));
+
+    // Then: 尺子显示，且原有高度配置没有被底栏状态覆盖。
+    expect(screen.getByTestId('drawing-ruler-overlay')).toBeTruthy();
+    expect(screen.getByTestId('drawing-ruler').getAttribute('data-ruler-height')).toBe('36');
+
+    // When / Then: 再次切换后尺子隐藏。
+    fireEvent.click(screen.getByTestId('painting-board-more-btn'));
+    fireEvent.click(screen.getByTestId('painting-board-ruler-toggle'));
+    expect(screen.queryByTestId('drawing-ruler-overlay')).toBeNull();
+  });
+
+  it('受控模式：底栏尺子开关只通知父组件', () => {
+    // Given: rulerVisible 受控为 false。
+    const onRulerVisibleChange = jest.fn();
+    render(
+      <div style={{ width: 400, height: 300 }}>
+        <PaintingBoard
+          testID="board"
+          rulerVisible={false}
+          onRulerVisibleChange={onRulerVisibleChange}
+        />
+      </div>
+    );
+
+    // When: 用户请求开启尺子。
+    fireEvent.click(screen.getByTestId('painting-board-more-btn'));
+    fireEvent.click(screen.getByTestId('painting-board-ruler-toggle'));
+
+    // Then: 回调收到期望值，但父组件未回写前 UI 保持关闭。
+    expect(onRulerVisibleChange).toHaveBeenCalledWith(true);
+    expect(screen.queryByTestId('drawing-ruler-overlay')).toBeNull();
+  });
+
+  it('ruler 配置的 enabled 在父组件重渲染时同步可见性', () => {
+    // Given: ruler 配置对象直接控制初始可见性和尺寸。
+    const { rerender } = render(
+      <div style={{ width: 400, height: 300 }}>
+        <PaintingBoard testID="board" ruler={{ enabled: true, height: 36 }} />
+      </div>
+    );
+    expect(screen.getByTestId('drawing-ruler').getAttribute('data-ruler-height')).toBe('36');
+
+    // When / Then: 父组件显式关闭后尺子立即隐藏。
+    rerender(
+      <div style={{ width: 400, height: 300 }}>
+        <PaintingBoard testID="board" ruler={false} />
+      </div>
+    );
+    expect(screen.queryByTestId('drawing-ruler-overlay')).toBeNull();
+
+    // When / Then: 父组件再次启用时恢复显示并保留新配置。
+    rerender(
+      <div style={{ width: 400, height: 300 }}>
+        <PaintingBoard testID="board" ruler={{ enabled: true, height: 44 }} />
+      </div>
+    );
+    expect(screen.getByTestId('drawing-ruler').getAttribute('data-ruler-height')).toBe('44');
+  });
+
+  it('共享 controller 省略 ruler 字段时以关闭处理', () => {
+    // Given: controller 已接管画板，但旧数据中没有可选 ruler 字段。
+    const data: PaintingControllerData = { tool: 'pen', minimap: false };
+    render(
+      <div style={{ width: 400, height: 300 }}>
+        <PaintingBoard
+          testID="board"
+          ruler={{ enabled: true }}
+          rulerVisible
+          controller={{ boardId: 'board-a', data, onDataChange: jest.fn() }}
+        />
+      </div>
+    );
+
+    // Then: controller 是唯一状态源，省略字段等价于关闭。
+    expect(screen.queryByTestId('drawing-ruler-overlay')).toBeNull();
+  });
+
+  it('通过 DrawingSurface 内置 Minimap 渲染并保留配置', () => {
+    // Given: jsdom 没有布局尺寸，显式提供 DrawingSurface 读取的宿主宽高。
+    const clientWidth = jest
+      .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+      .mockReturnValue(400);
+    const clientHeight = jest
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockReturnValue(300);
+
+    try {
+      // When: PaintingBoard 同时显示尺子和自定义 Minimap。
+      render(
+        <div style={{ width: 400, height: 300 }}>
+          <PaintingBoard
+            testID="board"
+            rulerVisible
+            minimapVisible
+            minimap={{ width: 180, height: 120, position: 'top-right', testID: 'board-minimap' }}
+          />
+        </div>
+      );
+
+      // Then: 只存在 DrawingSurface 内置实例，不再渲染失去尺子归属桥接的外部兄弟节点。
+      const minimap = screen.getByTestId('board-minimap');
+      expect(minimap.style.width).toBe('180px');
+      expect(minimap.style.height).toBe('120px');
+      expect(screen.queryByTestId('painting-board-minimap')).toBeNull();
+      expect(screen.getAllByTestId('board-minimap')).toHaveLength(1);
+    } finally {
+      clientWidth.mockRestore();
+      clientHeight.mockRestore();
+    }
+  });
+
   it('Given the built-in toolbar When Image is clicked Then it opens an image-only file picker', () => {
     const { container } = render(
       <div style={{ width: 400, height: 300 }}>
@@ -192,7 +315,8 @@ describe('PaintingBoard', () => {
     );
     const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]');
     const canvasWrapper = fileInput?.parentElement;
-    if (!fileInput || !canvasWrapper) throw new Error('Image input must be inside the canvas wrapper');
+    if (!fileInput || !canvasWrapper)
+      throw new Error('Image input must be inside the canvas wrapper');
     mockHostRect(canvasWrapper);
 
     fireEvent.change(fileInput, {

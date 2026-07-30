@@ -1,6 +1,6 @@
 import {
-  SAFE_DEFAULT_VIRTUAL_PAPER_INTERACTIONS,
   type DrawingSurfaceVirtualPaperInteraction,
+  SAFE_DEFAULT_VIRTUAL_PAPER_INTERACTIONS,
 } from './virtualPaperOptions';
 
 export type InteractionOwner = 'ruler' | 'virtual-paper' | 'drawing' | 'none';
@@ -10,6 +10,8 @@ export type InteractionInputMethod = 'touch' | 'mouse' | 'pen';
 export type PointerInteractionInput = {
   readonly kind: 'pointer';
   readonly target: EventTarget | null;
+  /** Pointer coordinates hit the screen-space ruler, even when its visual overlay is pointer-inert. */
+  readonly hitsRuler?: boolean;
   readonly pointerType?: string;
   readonly button?: number;
   readonly ctrlKey?: boolean;
@@ -27,7 +29,9 @@ export type WheelInteractionInput = {
 
 export type InteractionInput = PointerInteractionInput | WheelInteractionInput;
 
-type PointerInteractionEvent = Event & {
+export type PointerInteractionEvent = Event & {
+  readonly clientX: number;
+  readonly clientY: number;
   readonly pointerType?: string;
   readonly button?: number;
   readonly ctrlKey?: boolean;
@@ -139,14 +143,14 @@ export function isSafeInteractiveTarget(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(SAFE_INTERACTIVE_SELECTOR) !== null;
 }
 
-function isRulerInteraction(
-  input: InteractionInput,
-  isRulerEnabled: boolean
-): boolean {
+function isRulerInteraction(input: InteractionInput, isRulerEnabled: boolean): boolean {
   if (!isRulerEnabled || input.kind !== 'pointer') {
     return false;
   }
-  if (!(input.target instanceof Element) || !input.target.closest('[data-testid="drawing-ruler"]')) {
+  const targetHitsRuler =
+    input.target instanceof Element &&
+    input.target.closest('[data-testid="drawing-ruler"]') !== null;
+  if (input.hitsRuler !== true && !targetHitsRuler) {
     return false;
   }
 
