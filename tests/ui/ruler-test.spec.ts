@@ -483,7 +483,7 @@ test.describe('ruler first-phase browser contract', () => {
     await expect(surface).toHaveAttribute('data-ty', initialTy ?? '');
   });
 
-  test('two ruler touches keep the projected initial midpoint as the fixed angle anchor', async ({
+  test('two ruler touches project the live midpoint onto the rotated ruler centerline', async ({
     page,
   }) => {
     const { surface, ruler, background } = await enableRuler(page);
@@ -529,12 +529,12 @@ test.describe('ruler first-phase browser contract', () => {
 
     const feedback = surface.getByTestId('drawing-ruler-angle-feedback');
     await expect(feedback).toBeVisible();
-    const initialAnchor = {
+    const initialProjection = {
       x: Number(await feedback.getAttribute('data-feedback-x')),
       y: Number(await feedback.getAttribute('data-feedback-y')),
     };
-    expect(initialAnchor.x).toBeCloseTo(initialCenter.x + 50, 4);
-    expect(initialAnchor.y).toBeCloseTo(initialCenter.y, 4);
+    expect(initialProjection.x).toBeCloseTo(initialCenter.x + 50, 4);
+    expect(initialProjection.y).toBeCloseTo(initialCenter.y, 4);
 
     await background.evaluate((element, center) => {
       const dispatch = (
@@ -567,8 +567,11 @@ test.describe('ruler first-phase browser contract', () => {
       .poll(async () => Number(await ruler.getAttribute('data-ruler-rotation')))
       .toBeCloseTo(Math.PI / 2, 4);
     await expect(feedback).toContainText('90°');
-    expect(Number(await feedback.getAttribute('data-feedback-x'))).toBeCloseTo(initialAnchor.x, 4);
-    expect(Number(await feedback.getAttribute('data-feedback-y'))).toBeCloseTo(initialAnchor.y, 4);
+    expect(Number(await feedback.getAttribute('data-feedback-x'))).toBeCloseTo(initialCenter.x, 4);
+    expect(Number(await feedback.getAttribute('data-feedback-y'))).toBeCloseTo(
+      initialCenter.y + 10,
+      4
+    );
 
     await background.evaluate((element, center) => {
       const dispatch = (pointerId: number, clientX: number, clientY: number) => {
