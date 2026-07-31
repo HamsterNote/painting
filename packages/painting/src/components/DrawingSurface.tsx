@@ -2,8 +2,8 @@ import { DragOperationType, Mixin, MixinType, type Pose } from '@system-ui-js/mu
 import {
   type CSSProperties,
   forwardRef,
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -14,6 +14,7 @@ import {
   useState,
 } from 'react';
 import { useCanvas } from '../hooks/useCanvas';
+import { type CanvasPoint, createInitialState, interactionReducer } from '../interaction/reducer';
 import {
   formatAngleDegrees,
   formatScalePercent,
@@ -21,14 +22,13 @@ import {
   getTouchZoomFeedbackPoint,
   type InteractionFeedbackPoint,
 } from '../interactionFeedback';
-import { type CanvasPoint, createInitialState, interactionReducer } from '../interaction/reducer';
 import {
-  type ClassifyInteractionOptions,
-  type PointerInteractionEvent,
   buildPointerInteractionInput,
+  type ClassifyInteractionOptions,
   classifyInteraction,
   createGestureOwner,
   isSafeInteractiveTarget,
+  type PointerInteractionEvent,
 } from '../interactionOwnership';
 import {
   type BezierStrokeV2,
@@ -53,11 +53,11 @@ import {
   isInsideRuler,
   projectPointToRulerCenterline,
   projectPointToRulerEdge,
-  rotateRulerAround,
-  snapRulerRotation,
   type RulerEdgeConstraint,
   type RulerPoint,
   type RulerRect,
+  rotateRulerAround,
+  snapRulerRotation,
 } from '../ruler/geometry';
 import { RulerTicks } from '../ruler/RulerTicks';
 import { installCapturePhaseRulerPointerBridge } from '../rulerPointerBridge';
@@ -104,8 +104,8 @@ import {
 } from '../viewport';
 import { isVirtualPaperEnabled } from '../virtualPaperAdapter';
 import {
-  SAFE_DEFAULT_VIRTUAL_PAPER_INTERACTIONS,
   type DrawingSurfaceVirtualPaperOptions,
+  SAFE_DEFAULT_VIRTUAL_PAPER_INTERACTIONS,
 } from '../virtualPaperOptions';
 import {
   POINTER_DOWN_CAPTURE_OPTIONS,
@@ -891,7 +891,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     const wheelZoomPointTimerRef = useRef<number | null>(null);
     const touchZoomPointsRef = useRef(new Map<number, InteractionFeedbackPoint>());
     const touchZoomPointerIdsRef = useRef<readonly [number, number] | null>(null);
-    const touchDrawingArbitrationRef = useRef<TouchDrawingArbitration>({ phase: 'idle' });
+    const touchDrawingArbitrationRef = useRef<TouchDrawingArbitration>({
+      phase: 'idle',
+    });
     const touchZoomEnabledRef = useRef(isTouchZoomEnabled);
     touchZoomEnabledRef.current = isTouchZoomEnabled;
     const zoomFeedbackTimerRef = useRef<number | null>(null);
@@ -977,7 +979,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
 
     const handleVirtualPaperViewportChange = handleViewportChange;
 
-    const internalRulerStateRef = useRef<DrawingRulerState>({ center: { x: 0, y: 0 } });
+    const internalRulerStateRef = useRef<DrawingRulerState>({
+      center: { x: 0, y: 0 },
+    });
     const [, renderRuler] = useReducer((tick: number) => tick + 1, 0);
     const [isRulerDragging, setIsRulerDragging] = useState(false);
     const [rulerRotationFeedback, setRulerRotationFeedback] = useState<{
@@ -985,7 +989,10 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       readonly point: InteractionFeedbackPoint;
     } | null>(null);
     const [hasRulerModifierHover, setHasRulerModifierHover] = useState(false);
-    const [rulerViewportSize, setRulerViewportSize] = useState({ width: 0, height: 0 });
+    const [rulerViewportSize, setRulerViewportSize] = useState({
+      width: 0,
+      height: 0,
+    });
 
     const isRulerEnabled = ruler !== false && ruler !== undefined && (ruler.enabled ?? true);
     const effectiveRulerOptions = typeof ruler === 'object' ? ruler : {};
@@ -1011,10 +1018,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (!rulerRect || !isSnapEligibleTool(tool)) {
           return;
         }
-        rulerEdgeConstraintsRef.current.set(
-          pointerId,
-          createRulerEdgeConstraint(point, rulerRect)
-        );
+        rulerEdgeConstraintsRef.current.set(pointerId, createRulerEdgeConstraint(point, rulerRect));
       },
       []
     );
@@ -1087,7 +1091,10 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         return undefined;
       }
       const updateSize = () => {
-        setRulerViewportSize({ width: host.clientWidth, height: host.clientHeight });
+        setRulerViewportSize({
+          width: host.clientWidth,
+          height: host.clientHeight,
+        });
       };
       updateSize();
       if (typeof ResizeObserver === 'undefined') {
@@ -1136,7 +1143,10 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       };
       type RotationAnchor = {
         readonly pivot: DrawingPoint;
-        readonly ruler: { readonly center: DrawingPoint; readonly rotationRad: number };
+        readonly ruler: {
+          readonly center: DrawingPoint;
+          readonly rotationRad: number;
+        };
         previousPointerAngle: number | null;
         accumulatedRotationRad: number;
       };
@@ -1322,7 +1332,10 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         lastRequestedRulerCenterRef.current = state.center;
         lastRequestedRulerRotationRef.current = state.rotationRad ?? 0;
         setIsRulerDragging(true);
-        setRulerRotationFeedback({ rotationRad: state.rotationRad ?? 0, point: pivot });
+        setRulerRotationFeedback({
+          rotationRad: state.rotationRad ?? 0,
+          point: pivot,
+        });
       };
       const handleMouseMove = () => {
         const point = currentFingerPoint(mouseDrag, 0);
@@ -1414,7 +1427,10 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           }
           cancelWaitingTouches();
           mousePointerId = event.pointerId;
-          const hostPoint = toMouseHostPoint({ x: event.clientX, y: event.clientY });
+          const hostPoint = toMouseHostPoint({
+            x: event.clientX,
+            y: event.clientY,
+          });
           if (event.altKey) {
             activeInput = 'mouse-rotate';
             beginRotationAt(hostPoint);
@@ -2103,10 +2119,16 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       commitSelection(prunedIds);
     }, [commitSelection, strokes]);
 
-    const previousTextStyleRef = useRef({ color: resolvedColor, fontSize: resolvedFontSize });
+    const previousTextStyleRef = useRef({
+      color: resolvedColor,
+      fontSize: resolvedFontSize,
+    });
     useEffect(() => {
       const previous = previousTextStyleRef.current;
-      previousTextStyleRef.current = { color: resolvedColor, fontSize: resolvedFontSize };
+      previousTextStyleRef.current = {
+        color: resolvedColor,
+        fontSize: resolvedFontSize,
+      };
       if (
         effectiveTool !== 'text' ||
         selectedTextStroke === null ||
@@ -2207,7 +2229,10 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       type SelectionTransformGesture = MoveGesture | ResizeGesture | RotateGesture;
 
       let gesture: SelectionTransformGesture | null = null;
-      let finalPointer: { readonly pointerId: number; readonly point: DrawingPoint } | null = null;
+      let finalPointer: {
+        readonly pointerId: number;
+        readonly point: DrawingPoint;
+      } | null = null;
       const getPose = (): Pose => ({
         position: { x: 0, y: 0 },
         width: 0,
@@ -3284,11 +3309,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           eraserQueuedHitsRef.current.clear();
         }
         activeDrawingPointerIds.add(rawInput.pointerId);
-        beginRulerEdgeConstraint(
-          rawInput.pointerId,
-          rawInput.point,
-          effectiveToolRef.current
-        );
+        beginRulerEdgeConstraint(rawInput.pointerId, rawInput.point, effectiveToolRef.current);
         const input = {
           ...rawInput,
           point: resolveDrawingScreenPoint(
@@ -3324,10 +3345,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           activePaperTouchPointerIds.add(event.pointerId);
         }
         const owner = gestureOwnerRef.current.startPointer(
-          getInteractionOwnerOptions(
-            interactionInput,
-            activePaperTouchPointerIds.size
-          )
+          getInteractionOwnerOptions(interactionInput, activePaperTouchPointerIds.size)
         );
         if (owner !== 'drawing') {
           return;
@@ -4228,9 +4246,19 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         case 'top-right':
           return { position: 'absolute', top: offset, right: offset, zIndex: 10 };
         case 'bottom-left':
-          return { position: 'absolute', bottom: offset, left: offset, zIndex: 10 };
+          return {
+            position: 'absolute',
+            bottom: offset,
+            left: offset,
+            zIndex: 10,
+          };
         default:
-          return { position: 'absolute', bottom: offset, right: offset, zIndex: 10 };
+          return {
+            position: 'absolute',
+            bottom: offset,
+            right: offset,
+            zIndex: 10,
+          };
       }
     })();
     const selectionControlsBox =
@@ -4672,7 +4700,12 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         <svg
           width="100%"
           height="100%"
-          style={{ position: 'absolute', inset: 0, zIndex: 20, pointerEvents: 'none' }}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 20,
+            pointerEvents: 'none',
+          }}
         >
           <title>Ruler angle feedback</title>
           <g

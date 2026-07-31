@@ -29,6 +29,17 @@ export type RulerState = {
   readonly rotationRad: number;
 };
 
+export type RulerEdgeConstraint = {
+  readonly ruler: RulerRect;
+  readonly edgeNormal: -1 | 1;
+  readonly phase: 'approaching' | 'constrained';
+};
+
+export type RulerEdgeConstraintResult = {
+  readonly point: RulerPoint;
+  readonly constraint: RulerEdgeConstraint;
+};
+
 export type InfiniteRulerLayout = {
   readonly visualCenter: RulerPoint;
   readonly renderLength: number;
@@ -43,9 +54,14 @@ export type InfiniteRulerLayoutOptions = {
 };
 
 const RULER_ROTATION_SNAP_RAD = Math.PI / 4;
+const RULER_ROTATION_SNAP_TOLERANCE_RAD = (6 * Math.PI) / 180;
 
 export function snapRulerRotation(rotationRad: number): number {
-  return Math.round(rotationRad / RULER_ROTATION_SNAP_RAD) * RULER_ROTATION_SNAP_RAD;
+  const snappedRotation =
+    Math.round(rotationRad / RULER_ROTATION_SNAP_RAD) * RULER_ROTATION_SNAP_RAD;
+  return Math.abs(rotationRad - snappedRotation) <= RULER_ROTATION_SNAP_TOLERANCE_RAD
+    ? snappedRotation
+    : rotationRad;
 }
 
 /**
@@ -62,6 +78,94 @@ export function isInsideRuler(point: RulerPoint, ruler: RulerRect): boolean {
   return Math.abs(localY) <= ruler.height / 2;
 }
 
+/**
+ * 记录一次绘制手势所选择的物理尺边。尺边只在手势越过它后锁定，
+ * 因而指针从尺子外侧接近时仍保持自然轨迹。
+ */
+export function createRulerEdgeConstraint(
+  start: RulerPoint,
+  ruler: RulerRect
+): RulerEdgeConstraint {
+  const rotationRad = ruler.rotationRad ?? 0;
+  const localY =
+    -(start.x - ruler.center.x) * Math.sin(rotationRad) +
+    (start.y - ruler.center.y) * Math.cos(rotationRad);
+
+  return {
+    ruler,
+    edgeNormal: localY >= 0 ? 1 : -1,
+    phase: 'approaching',
+  };
+}
+
+export function constrainPointToRulerEdge(
+  point: RulerPoint,
+  constraint: RulerEdgeConstraint
+): RulerEdgeConstraintResult {
+  const { ruler, edgeNormal } = constraint;
+  const rotationRad = ruler.rotationRad ?? 0;
+  const sine = Math.sin(rotationRad);
+  const cosine = Math.cos(rotationRad);
+  const dx = point.x - ruler.center.x;
+  const dy = point.y - ruler.center.y;
+  const localY = -dx * sine + dy * cosine;
+  const halfHeight = ruler.height / 2;
+
+  if (constraint.phase === 'approaching') {
+    const distanceTowardRuler = edgeNormal * localY;
+    if (distanceTowardRuler >= halfHeight) {
+      return { point, constraint };
+    }
+    if (distanceTowardRuler < -halfHeight) {
+      return { point, constraint: createRulerEdgeConstraint(point, ruler) };
+    }
+  } else if (Math.abs(localY) > halfHeight) {
+    return { point, constraint: createRulerEdgeConstraint(point, ruler) };
+  }
+
+  return {
+    point: projectPointToRulerEdge(point, constraint),
+    constraint:
+      constraint.phase === 'constrained' ? constraint : { ...constraint, phase: 'constrained' },
+  };
+}
+
+export function projectPointToRulerEdge(
+  point: RulerPoint,
+  constraint: RulerEdgeConstraint
+): RulerPoint {
+  const { ruler, edgeNormal } = constraint;
+  const rotationRad = ruler.rotationRad ?? 0;
+  const sine = Math.sin(rotationRad);
+  const cosine = Math.cos(rotationRad);
+  const dx = point.x - ruler.center.x;
+  const dy = point.y - ruler.center.y;
+  const localX = dx * cosine + dy * sine;
+  const edgeY = edgeNormal * (ruler.height / 2);
+
+  return {
+    x: ruler.center.x + localX * cosine - edgeY * sine,
+    y: ruler.center.y + localX * sine + edgeY * cosine,
+  };
+}
+
+export function projectPointToRulerCenterline(
+  point: RulerPoint,
+  ruler: Pick<RulerRect, 'center' | 'rotationRad'>
+): RulerPoint {
+  const rotationRad = ruler.rotationRad ?? 0;
+  const sine = Math.sin(rotationRad);
+  const cosine = Math.cos(rotationRad);
+  const dx = point.x - ruler.center.x;
+  const dy = point.y - ruler.center.y;
+  const localX = dx * cosine + dy * sine;
+
+  return {
+    x: ruler.center.x + localX * cosine,
+    y: ruler.center.y + localX * sine,
+  };
+}
+
 export function getInfiniteRulerLayout(options: InfiniteRulerLayoutOptions): InfiniteRulerLayout {
   const viewportCenter = {
     x: options.viewport.width / 2,
@@ -75,7 +179,29 @@ export function getInfiniteRulerLayout(options: InfiniteRulerLayoutOptions): Inf
     x: viewportCenter.x - options.logicalCenter.x,
     y: viewportCenter.y - options.logicalCenter.y,
   };
-  const projection = centerToViewport.x * axis.x + centerToViewport.y * axis.y;
+  const viewportProjection = centerToViewport.x * axis.x + centerToViewport.y * axis.y;
+  const clipAxis = (origin: number, direction: number, maximum: number) => {
+    if (Math.abs(direction) < Number.EPSILON) {
+      return origin >= 0 && origin <= maximum
+        ? { minimum: Number.NEGATIVE_INFINITY, maximum: Number.POSITIVE_INFINITY }
+        : null;
+    }
+    const first = -origin / direction;
+    const second = (maximum - origin) / direction;
+    return { minimum: Math.min(first, second), maximum: Math.max(first, second) };
+  };
+  const xInterval = clipAxis(options.logicalCenter.x, axis.x, options.viewport.width);
+  const yInterval = clipAxis(options.logicalCenter.y, axis.y, options.viewport.height);
+  const clippedMinimum = Math.max(
+    xInterval?.minimum ?? Number.POSITIVE_INFINITY,
+    yInterval?.minimum ?? Number.POSITIVE_INFINITY
+  );
+  const clippedMaximum = Math.min(
+    xInterval?.maximum ?? Number.NEGATIVE_INFINITY,
+    yInterval?.maximum ?? Number.NEGATIVE_INFINITY
+  );
+  const projection =
+    clippedMinimum <= clippedMaximum ? (clippedMinimum + clippedMaximum) / 2 : viewportProjection;
   const visualCenter = {
     x: options.logicalCenter.x + projection * axis.x,
     y: options.logicalCenter.y + projection * axis.y,

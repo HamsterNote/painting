@@ -39,10 +39,16 @@ export function generateRulerTicks(options: GenerateRulerTicksOptions): readonly
       : -length / 2;
   const firstMillimeter = Math.ceil((-length / 2 - originX) / millimeterSpacing);
   const lastMillimeter = Math.floor((length / 2 - originX) / millimeterSpacing);
-  const tickCount = Math.min(Math.max(lastMillimeter - firstMillimeter + 1, 0), MAX_RULER_TICKS);
+  const visibleTickCount = Math.max(lastMillimeter - firstMillimeter + 1, 0);
+  const tickCount = Math.min(visibleTickCount, MAX_RULER_TICKS);
+  const centeredFirstMillimeter = Math.round(-originX / millimeterSpacing - (tickCount - 1) / 2);
+  const renderedFirstMillimeter = Math.max(
+    firstMillimeter,
+    Math.min(centeredFirstMillimeter, lastMillimeter - tickCount + 1)
+  );
 
   return Array.from({ length: tickCount }, (_, index) => {
-    const millimeter = firstMillimeter + index;
+    const millimeter = renderedFirstMillimeter + index;
     const absoluteMillimeter = Math.abs(millimeter);
     const kind: RulerTickKind =
       absoluteMillimeter % 10 === 0

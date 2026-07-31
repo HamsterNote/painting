@@ -40,4 +40,27 @@ describe('ruler physical ticks', () => {
     expect(ticks[10]?.millimeter).toBe(10);
     expect(ticks[10]?.kind).toBe('centimeter');
   });
+
+  it('centers the capped tick window across a wide ruler', () => {
+    // Given: 4K 视口对应的无限尺渲染长度会产生超过硬上限的毫米刻度。
+    const length = 8_908;
+
+    // When: 生成默认 96 PPI 的可见刻度。
+    const ticks = generateRulerTicks({ length });
+
+    // Then: 仍严格遵守 2,000 个上限，并将未覆盖区域均匀留在尺子两侧。
+    expect(ticks).toHaveLength(2_000);
+    const firstTick = ticks[0];
+    const lastTick = ticks[ticks.length - 1];
+    expect(firstTick).toBeDefined();
+    expect(lastTick).toBeDefined();
+
+    if (firstTick === undefined || lastTick === undefined) {
+      return;
+    }
+
+    const leftGap = firstTick.localX + length / 2;
+    const rightGap = length / 2 - lastTick.localX;
+    expect(Math.abs(leftGap - rightGap)).toBeLessThanOrEqual(millimetersToPixels(1));
+  });
 });

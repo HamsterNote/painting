@@ -358,9 +358,10 @@ describe('PaintingBoard', () => {
       </div>
     );
 
-    // 手写笔模式按钮始终渲染，默认激活（aria-pressed=true）
+    // 手写笔模式按钮始终渲染，默认关闭；关闭时压感没有意义，因此不展示。
     const stylusToggle = screen.getByTestId('painting-board-stylus-toggle');
-    expect(stylusToggle.getAttribute('aria-pressed')).toBe('true');
+    expect(stylusToggle.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByTestId('painting-board-pressure-toggle')).toBeNull();
 
     // 重置视角按钮渲染
     expect(screen.getByTestId('painting-board-reset-view')).toBeTruthy();
@@ -505,15 +506,17 @@ describe('PaintingBoard', () => {
     );
 
     const stylusToggle = screen.getByTestId('painting-board-stylus-toggle');
-    // 默认手写笔模式开启
-    expect(stylusToggle.getAttribute('aria-pressed')).toBe('true');
+    // 默认手写笔模式关闭，压感入口不展示。
+    expect(stylusToggle.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByTestId('painting-board-pressure-toggle')).toBeNull();
 
     fireEvent.click(stylusToggle);
 
-    // 回调收到 false（关闭手写笔模式）
-    expect(onStylusModeChange).toHaveBeenCalledWith(false);
-    // 非受控：内部状态翻转，aria-pressed 变为 false
-    expect(stylusToggle.getAttribute('aria-pressed')).toBe('false');
+    // 回调收到 true（开启手写笔模式）。
+    expect(onStylusModeChange).toHaveBeenCalledWith(true);
+    // 非受控：内部状态翻转，且压感入口随手写笔模式出现。
+    expect(stylusToggle.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.queryByTestId('painting-board-pressure-toggle')).not.toBeNull();
   });
 
   it('受控模式：aria-pressed 由 stylusMode prop 决定，点击仍通知 onStylusModeChange', () => {

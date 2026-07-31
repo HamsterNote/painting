@@ -154,11 +154,19 @@ function isRulerInteraction(input: InteractionInput, isRulerEnabled: boolean): b
     return false;
   }
 
-  if (input.pointerType === 'touch' || input.pointerType === 'pen') {
+  if (input.pointerType === 'touch') {
     return true;
   }
 
-  return (input.pointerType === 'mouse' || input.pointerType === undefined) && input.button === 0;
+  if (input.pointerType === 'pen') {
+    return false;
+  }
+
+  return (
+    (input.pointerType === 'mouse' || input.pointerType === undefined) &&
+    input.button === 0 &&
+    (input.altKey === true || input.ctrlKey === true || input.metaKey === true)
+  );
 }
 
 function isVirtualPaperInteraction(options: ClassifyInteractionOptions): boolean {

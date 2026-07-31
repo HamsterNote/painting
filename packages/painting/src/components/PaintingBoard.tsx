@@ -138,7 +138,7 @@ export interface PaintingBoardProps extends Omit<DrawingSurfaceProps, 'tool'> {
   readonly rulerVisible?: boolean;
   /** 尺子可见性切换回调（受控/非受控均触发） */
   readonly onRulerVisibleChange?: (visible: boolean) => void;
-  /** 受控手写笔模式。true=手写笔绘图+单指拖动画布（默认）；false=单指绘图+双指拖动画布 */
+  /** 受控手写笔模式。true=手写笔绘图+单指拖动画布；false/未传=单指绘图+双指拖动画布（默认） */
   readonly stylusMode?: boolean;
   /** 手写笔模式切换回调（受控/非受控均触发） */
   readonly onStylusModeChange?: (stylusMode: boolean) => void;
@@ -266,8 +266,7 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
     }, [controller, rulerPropEnabled, rulerVisibleProp]);
 
     // ===== 受控 / 非受控手写笔模式状态 =====
-    // 默认 true（手写笔模式），与 DrawingSurface 的安全默认对齐
-    const [innerStylusMode, setInnerStylusMode] = useState(true);
+    const [innerStylusMode, setInnerStylusMode] = useState(false);
     const stylusMode = controller?.data.stylusMode ?? stylusModeProp ?? innerStylusMode;
 
     // ===== 受控 / 非受控压感开关状态 =====
@@ -571,8 +570,8 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
     );
 
     // 根据 stylusMode 解析最终传给 DrawingSurface 的 virtualPaper 配置：
-    // - stylusMode=true（默认）：沿用原有 virtualPaper，DrawingSurface 自行应用安全默认交互集
-    // - stylusMode=false：注入 FINGER_DRAWING_INTERACTIONS，单指触摸回落到绘图、双指负责画布手势
+    // - stylusMode=true：沿用原有 virtualPaper，DrawingSurface 自行应用安全默认交互集
+    // - stylusMode=false（默认）：注入 FINGER_DRAWING_INTERACTIONS，单指触摸回落到绘图、双指负责画布手势
     const resolvedVirtualPaper = useMemo(() => {
       if (stylusMode) return virtualPaper;
       if (virtualPaper === true) {

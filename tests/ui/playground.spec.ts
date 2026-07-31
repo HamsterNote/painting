@@ -20,6 +20,8 @@ test.describe('DrawingSurface playground', () => {
       el.releasePointerCapture = () => undefined;
       el.hasPointerCapture = () => true;
       const rect = el.getBoundingClientRect();
+      const contentLeft = rect.left + el.clientLeft;
+      const contentTop = rect.top + el.clientTop;
       const dispatch = (
         type: string,
         point: { x: number; y: number; pressure?: number },
@@ -31,8 +33,8 @@ test.describe('DrawingSurface playground', () => {
             pointerType: drag.pointerType,
             button: 0,
             buttons,
-            clientX: rect.left + point.x,
-            clientY: rect.top + point.y,
+            clientX: contentLeft + point.x,
+            clientY: contentTop + point.y,
             pressure: point.pressure ?? drag.startPressure ?? 0.5,
             bubbles: true,
             cancelable: true,
@@ -1449,9 +1451,13 @@ test.describe('DrawingSurface playground', () => {
 
       const box = await surface.boundingBox();
       expect(box).not.toBeNull();
+      const clientBorder = await surface.evaluate((element) => ({
+        left: element.clientLeft,
+        top: element.clientTop,
+      }));
 
-      const p1X = box!.x + 50;
-      const p1Y = box!.y + 50;
+      const p1X = box!.x + clientBorder.left + 50;
+      const p1Y = box!.y + clientBorder.top + 50;
       await page.mouse.move(p1X, p1Y);
       await page.mouse.down();
       await page.mouse.move(p1X + 50, p1Y + 50);
@@ -1485,9 +1491,13 @@ test.describe('DrawingSurface playground', () => {
 
       const box = await surface.boundingBox();
       expect(box).not.toBeNull();
+      const clientBorder = await surface.evaluate((element) => ({
+        left: element.clientLeft,
+        top: element.clientTop,
+      }));
 
-      const p1X = box!.x + 50;
-      const p1Y = box!.y + 100;
+      const p1X = box!.x + clientBorder.left + 50;
+      const p1Y = box!.y + clientBorder.top + 100;
       await page.mouse.move(p1X, p1Y);
       await page.mouse.down();
       await page.mouse.move(p1X + 100, p1Y);
@@ -1584,9 +1594,13 @@ test.describe('DrawingSurface playground', () => {
 
       const box = await surface.boundingBox();
       expect(box).not.toBeNull();
+      const clientBorder = await surface.evaluate((element) => ({
+        left: element.clientLeft,
+        top: element.clientTop,
+      }));
 
-      const p1X = box!.x + 50;
-      const p1Y = box!.y + 50;
+      const p1X = box!.x + clientBorder.left + 50;
+      const p1Y = box!.y + clientBorder.top + 50;
       await page.mouse.move(p1X, p1Y);
       await page.mouse.down();
       await page.mouse.move(p1X + 50, p1Y + 50);
@@ -1618,8 +1632,8 @@ test.describe('DrawingSurface playground', () => {
       expect(secondStrokeStart.x).toBeCloseTo(firstStrokeStart.x, 1);
       expect(secondStrokeStart.y).toBeCloseTo(firstStrokeStart.y, 1);
 
-      expect(thirdStrokeStart.x).toBeCloseTo(p3X - box!.x, 1);
-      expect(thirdStrokeStart.y).toBeCloseTo(p3Y - box!.y, 1);
+      expect(thirdStrokeStart.x).toBeCloseTo(p3X - box!.x - clientBorder.left, 1);
+      expect(thirdStrokeStart.y).toBeCloseTo(p3Y - box!.y - clientBorder.top, 1);
     });
 
     test('uses raw coordinates when toggles are off', async ({ page }) => {
@@ -1632,9 +1646,13 @@ test.describe('DrawingSurface playground', () => {
 
       const box = await surface.boundingBox();
       expect(box).not.toBeNull();
+      const clientBorder = await surface.evaluate((element) => ({
+        left: element.clientLeft,
+        top: element.clientTop,
+      }));
 
-      const p1X = box!.x + 50;
-      const p1Y = box!.y + 50;
+      const p1X = box!.x + clientBorder.left + 50;
+      const p1Y = box!.y + clientBorder.top + 50;
       await page.mouse.move(p1X, p1Y);
       await page.mouse.down();
       await page.mouse.move(p1X + 50, p1Y + 50);
@@ -1657,8 +1675,8 @@ test.describe('DrawingSurface playground', () => {
 
       expect(secondStrokeStart.x).not.toBeCloseTo(firstStrokeStart.x, 1);
       expect(secondStrokeStart.y).not.toBeCloseTo(firstStrokeStart.y, 1);
-      expect(secondStrokeStart.x).toBeCloseTo(p2X - box!.x, 1);
-      expect(secondStrokeStart.y).toBeCloseTo(p2Y - box!.y, 1);
+      expect(secondStrokeStart.x).toBeCloseTo(p2X - box!.x - clientBorder.left, 1);
+      expect(secondStrokeStart.y).toBeCloseTo(p2Y - box!.y - clientBorder.top, 1);
     });
   });
   test.describe('ruler first-phase overlay', () => {
@@ -1739,43 +1757,39 @@ test.describe('DrawingSurface playground', () => {
       }
     });
 
-    test('plain left drag inside ruler is blocked instead of drawing', async ({ page }) => {
+    test('plain left drag inside ruler draws without moving the ruler', async ({ page }) => {
       const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
       await toggleBtn.click();
 
       const surface = page.getByTestId('drawing-surface-uncontrolled');
       const preview = page.getByTestId('drawing-preview-uncontrolled');
-      const background = surface.getByTestId('drawing-ruler-background');
 
-      const backgroundBox = await background.boundingBox();
       const surfaceBox = await surface.boundingBox();
-      expect(backgroundBox).not.toBeNull();
       expect(surfaceBox).not.toBeNull();
-      if (!backgroundBox || !surfaceBox) return;
-      const previewBefore = await preview.textContent();
+      if (!surfaceBox) return;
+      const initialCenter = {
+        x: Number(await surface.getByTestId('drawing-ruler').getAttribute('data-ruler-center-x')),
+        y: Number(await surface.getByTestId('drawing-ruler').getAttribute('data-ruler-center-y')),
+      };
+      const strokeCountBefore = (await readPreview(preview)).strokes.length;
+      const start = {
+        x: surfaceBox.x + surfaceBox.width * 0.2,
+        y: surfaceBox.y + initialCenter.y,
+      };
 
-      await background.evaluate((element) => {
-        const rect = element.getBoundingClientRect();
-        const options = (type: string, clientX: number, buttons: number) => ({
-          bubbles: true,
-          cancelable: true,
-          pointerId: 99,
-          pointerType: 'mouse',
-          button: 0,
-          buttons,
-          clientX,
-          clientY: rect.y + rect.height / 2,
-        });
-        element.dispatchEvent(
-          new PointerEvent('pointerdown', options('pointerdown', rect.x + 20, 1))
-        );
-        document.dispatchEvent(
-          new PointerEvent('pointermove', options('pointermove', rect.x + 70, 1))
-        );
-        document.dispatchEvent(new PointerEvent('pointerup', options('pointerup', rect.x + 70, 0)));
-      });
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      await page.mouse.move(start.x + 50, start.y + 10, { steps: 4 });
+      await page.mouse.up();
 
-      await expect.poll(() => preview.textContent()).toBe(previewBefore);
+      await expect.poll(async () => (await readPreview(preview)).strokes.length).toBe(
+        strokeCountBefore + 1
+      );
+      const centerAfterDrawing = {
+        x: Number(await surface.getByTestId('drawing-ruler').getAttribute('data-ruler-center-x')),
+        y: Number(await surface.getByTestId('drawing-ruler').getAttribute('data-ruler-center-y')),
+      };
+      expect(centerAfterDrawing).toEqual(initialCenter);
     });
 
     test('disable ruler restores normal drawing', async ({ page }) => {
@@ -1809,7 +1823,9 @@ test.describe('DrawingSurface playground', () => {
       }
     });
 
-    test('Ctrl translates the ruler while Alt applies snapped rigid rotation', async ({ page }) => {
+    test('Ctrl drag translates the ruler while Alt rotates around its visible midpoint', async ({
+      page,
+    }) => {
       const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
       const surface = page.getByTestId('drawing-surface-uncontrolled');
       const preview = page.getByTestId('drawing-preview-uncontrolled');
@@ -1852,7 +1868,7 @@ test.describe('DrawingSurface playground', () => {
       expect(afterCtrl.centerX - before.centerX).toBeCloseTo(48, 4);
       expect(afterCtrl.centerY - before.centerY).toBeCloseTo(26, 4);
 
-      const localPivot = { x: viewport.width / 2, y: viewport.height / 2 };
+      const localPivot = { x: viewport.width / 2, y: afterCtrl.centerY };
       const pivot = {
         x: surfaceBox.x + localPivot.x,
         y: surfaceBox.y + localPivot.y,
@@ -1865,10 +1881,6 @@ test.describe('DrawingSurface playground', () => {
         x: altStart.x - pivot.x,
         y: altStart.y - pivot.y,
       };
-      const radiusBeforeAlt = Math.hypot(
-        afterCtrl.centerX - localPivot.x,
-        afterCtrl.centerY - localPivot.y
-      );
       await page.keyboard.down('Alt');
       await page.mouse.move(altStart.x, altStart.y);
       await page.mouse.down();
@@ -1882,9 +1894,8 @@ test.describe('DrawingSurface playground', () => {
       };
 
       expect(Number(await ruler.getAttribute('data-ruler-rotation'))).toBeCloseTo(Math.PI / 2, 4);
-      expect(
-        Math.hypot(afterAlt.centerX - localPivot.x, afterAlt.centerY - localPivot.y)
-      ).toBeCloseTo(radiusBeforeAlt, 4);
+      expect(afterAlt.centerX).toBeCloseTo(localPivot.x, 4);
+      expect(afterAlt.centerY).toBeCloseTo(localPivot.y + afterCtrl.centerX - localPivot.x, 4);
 
       const previewAfter = await preview.textContent();
       expect(previewAfter).toBe(previewBefore);

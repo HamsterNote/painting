@@ -50,6 +50,32 @@ describe('PaintingController', () => {
     expect(screen.queryByTestId('painting-board-stroke-color-btn')).toBeNull();
   });
 
+  it('shows pressure only while stylus mode is enabled', () => {
+    // Given / When: 默认关闭手写笔模式。
+    const { rerender } = render(
+      <PaintingController
+        data={{ tool: 'pen', minimap: false }}
+        onDataChange={jest.fn()}
+        tools={['pen']}
+      />
+    );
+
+    // Then: 手指绘图模式不展示压感入口。
+    expect(screen.queryByTestId('painting-board-pressure-toggle')).toBeNull();
+
+    // When: 外部显式开启手写笔模式。
+    rerender(
+      <PaintingController
+        data={{ tool: 'pen', minimap: false, stylusMode: true }}
+        onDataChange={jest.fn()}
+        tools={['pen']}
+      />
+    );
+
+    // Then: 压感入口随手写笔模式出现。
+    expect(screen.queryByTestId('painting-board-pressure-toggle')).not.toBeNull();
+  });
+
   it('shows text color and font size controls without stroke-only controls', () => {
     // Given / When: 文字工具使用受控颜色与字号。
     render(
@@ -307,8 +333,8 @@ describe('PaintingController', () => {
       // When: 打开 More 菜单（compact 模式下 More 按钮始终展示）。
       fireEvent.click(screen.getByTestId('painting-board-more-btn'));
 
-      // Then: 压感 / 手写笔 / 清空收纳进 More 菜单。
-      expect(screen.queryByTestId('painting-board-more-pressure')).not.toBeNull();
+      // Then: 默认关闭手写笔模式，因此只收纳手写笔 / 清空，不展示压感。
+      expect(screen.queryByTestId('painting-board-more-pressure')).toBeNull();
       expect(screen.queryByTestId('painting-board-more-stylus')).not.toBeNull();
       expect(screen.queryByTestId('painting-board-more-clear-canvas')).not.toBeNull();
     } finally {
@@ -347,8 +373,8 @@ describe('PaintingController', () => {
       // When: 打开 More 菜单（compact 模式下即使 multiBoard 也展示 More 按钮）。
       fireEvent.click(screen.getByTestId('painting-board-more-btn'));
 
-      // Then: 压感 / 手写笔保留；MiniMap / 清空隐藏。
-      expect(screen.queryByTestId('painting-board-more-pressure')).not.toBeNull();
+      // Then: 默认关闭手写笔模式，只保留手写笔；MiniMap / 清空隐藏。
+      expect(screen.queryByTestId('painting-board-more-pressure')).toBeNull();
       expect(screen.queryByTestId('painting-board-more-stylus')).not.toBeNull();
       expect(screen.queryByTestId('painting-board-minimap-toggle')).toBeNull();
       expect(screen.queryByTestId('painting-board-ruler-toggle')).toBeNull();

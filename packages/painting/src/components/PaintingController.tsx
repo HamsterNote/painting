@@ -126,7 +126,7 @@ export interface PaintingControllerData {
   readonly fontSize?: number;
   /** 当前由哪个画板持有套索选区；null 表示所有受控画板均未选中 */
   readonly selection?: PaintingControllerSelection | null;
-  /** 手写笔模式：true=手写笔绘图+单指拖动画布（默认）；false=单指绘图+双指拖动画布 */
+  /** 手写笔模式：true=手写笔绘图+单指拖动画布；false/未传=单指绘图+双指拖动画布（默认） */
   readonly stylusMode?: boolean;
   /** 压感开关：true=pen 笔画宽度随手写笔压力变化；false/未传=均匀线宽（默认，与 DrawingSurface 安全默认对齐） */
   readonly pressure?: boolean;
@@ -235,8 +235,7 @@ export function PaintingController({
 }: PaintingControllerProps) {
   const { tool: activeTool, minimap: showMinimap, stylusMode: stylusModeFromData } = data;
   const showRuler = data.ruler ?? false;
-  // stylusMode 默认 true（手写笔模式），与 DrawingSurface 的安全默认对齐
-  const stylusMode = stylusModeFromData ?? true;
+  const stylusMode = stylusModeFromData ?? false;
   // pressure 默认 false（均匀线宽），与 DrawingSurface 的安全默认对齐
   const pressure = data.pressure ?? false;
   const strokeWidth =
@@ -383,7 +382,11 @@ export function PaintingController({
         edge={edge}
         edgeOffset={edgeOffset}
         orientation="horizontal"
-        style={relative ? { ...style, position: 'absolute' } : { zIndex: 1000, ...style }}
+        style={
+          relative
+            ? { ...style, position: 'absolute', zIndex: 1 }
+            : { zIndex: 1000, ...style }
+        }
       >
         {history ? (
           <>
@@ -485,7 +488,7 @@ export function PaintingController({
             />
             {/* 压感开关：仅影响 pen 笔画，与颜色/宽度同属笔触样式组。
                 compact 模式下收纳进 More 菜单（见 painting-board-more-pressure）。 */}
-            {!isCompact ? (
+            {!isCompact && stylusMode ? (
               <Button
                 type="button"
                 size="small"
@@ -667,7 +670,10 @@ export function PaintingController({
             ) : null}
             {/* compact 模式下把压感/手写笔/清空收纳进 More 菜单 */}
             {!multiBoard && isCompact ? <MenuSeparator /> : null}
-            {isCompact && activeTool !== 'lasso' && activeTool !== 'text' ? (
+            {isCompact &&
+            stylusMode &&
+            activeTool !== 'lasso' &&
+            activeTool !== 'text' ? (
               <MenuItem
                 data-testid="painting-board-more-pressure"
                 aria-pressed={pressure}

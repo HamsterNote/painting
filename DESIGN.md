@@ -21,6 +21,7 @@ The primary user edits strokes with a mouse, pen, or touch input and expects sel
 - Text-size presets are 12, 16, 20, 24, 32, and 48 canvas units; 24 is the default.
 - The ruler is a 48 px-high screen-space strip clipped to the drawing-surface host. Its rendered length exceeds twice the host diagonal, so neither endpoint can enter the visible canvas.
 - Ruler marks mirror across the top and bottom edges, using three line-height levels for 1 mm, 5 mm, and 10 mm intervals. The ruler contains no numeric or textual labels.
+- Transient interaction feedback uses a white surface with black, tabular numeric text. Ruler angle feedback is a 44 px circle; mouse zoom feedback is a compact 32 px-high pill with a minimum width of 48 px, while touch zoom feedback is fixed at 64 × 32 px so viewport clamping uses its exact rendered bounds.
 
 ## 4. Selection control anatomy
 
@@ -41,10 +42,14 @@ The primary user edits strokes with a mouse, pen, or touch input and expects sel
 - Clicking an empty point in text mode places a text box at that canvas position and starts editing it. Clicking an existing text box in text mode selects and edits it.
 - Text boxes are selectable only in text mode, when enclosed by a lasso, or when clicked while the lasso tool is active. Switching to an ordinary drawing or eraser tool clears that selection context.
 - Text mode exposes text color and font size in the bottom toolbar; stroke width and pressure controls are hidden because they do not apply to text.
-- The ruler stores a logical origin and clockwise rotation in host-local CSS pixels/radians. Canvas pan and zoom never change them; direct translation changes the origin, `Alt` + left drag rotates around the visible host center, and two ruler-owned touches use `@system-ui-js/multi-drag` to translate and rotate together.
-- Mouse and touch rotation always snap to the nearest 45-degree multiple. The ruler overlay stays below Minimap while retaining ruler gesture ownership in their overlap.
+- The ruler stores a logical origin and clockwise rotation in host-local CSS pixels/radians. Canvas pan and zoom never change them; `Ctrl`/`Cmd` + left drag translates the origin, while mouse `Alt` + left drag rotates the ruler as a rigid body around the midpoint of its viewport-clipped centerline. Two ruler-owned touches retain the original `@system-ui-js/multi-drag` translation and rotation behavior. An unmodified mouse drag never moves the ruler.
+- Mouse and touch rotation snap to the nearest 45-degree multiple only within the configured angular tolerance. The ruler overlay stays below both Minimap and the bottom toolbar while retaining ruler gesture ownership in their overlap.
 - PaintingBoard exposes ruler visibility in its bottom More menu, with controlled and uncontrolled visibility following the same contract as Minimap without replacing ruler geometry or visual options.
 - Ruler marks do not receive pointer events. Wheel input over the ruler remains available to virtual-paper navigation.
+- While the ruler rotates, its current whole-degree angle appears at a gesture-fixed point. Mouse rotation captures the midpoint of the viewport-clipped ruler centerline when rotation begins; touch rotation projects the initial two-touch midpoint onto the ruler centerline. The angle updates without moving that point, remains upright, and disappears when rotation ends; ordinary ruler translation does not show it.
+- Drawing gestures choose the physical ruler edge nearest their starting side. Before crossing that edge, points remain unconstrained; after crossing it, points project onto that edge only while the raw pointer remains inside the ruler strip. Leaving the strip keeps that outside sample raw and re-arms the constraint from the side where the pointer landed, so a later entry during the same gesture can snap to the newly approached physical edge. A sparse sample that jumps across the complete strip never fabricates an intermediate constrained point.
+- Virtual-paper zoom shows the real returned scale rounded to a whole percent. Mouse-wheel feedback appears above the pointer, or below it when the upper placement would clip. Two-finger feedback starts from the upper normal-line intersection, remains within 50 px of the finger midpoint, and keeps the complete feedback pill inside the visible host.
+- Interaction feedback appears and updates directly without decorative entrance or exit motion. Touch feedback ends with the pinch; wheel feedback clears shortly after the final wheel update.
 
 ## 6. Responsive behavior
 
@@ -71,5 +76,8 @@ The primary user edits strokes with a mouse, pen, or touch input and expects sel
 - Verify all six fixed stroke colors, the custom-color input, real stroke output, lasso visibility, and menu containment at 375 px, 768 px, and 1280 px widths.
 - Verify undo and redo button order, disabled states, and chronological behavior when one bottom toolbar controls two PaintingBoard instances.
 - Verify text placement at the pointer, editing, all six font-size presets, color changes, lasso enclosure and click selection, and independent left/right boundary dragging at 375 px, 768 px, and 1280 px widths.
-- Verify canvas pan and zoom leave the ruler layout unchanged, no pixels escape the drawing host, neither endpoint appears after extreme translation or rotation, top and bottom ticks mirror without text, the ruler remains below Minimap, Ctrl/Cmd translation still works, and mouse/touch rotation snaps to 45-degree multiples.
+- Verify canvas pan and zoom leave the ruler layout unchanged, no pixels escape the drawing host, neither endpoint appears after extreme translation or rotation, top and bottom ticks mirror without text, the ruler remains below Minimap and the bottom toolbar, unmodified mouse drags do not move it, Ctrl/Cmd translation still works, mouse rotation uses the clipped centerline midpoint, touch retains its original two-point multi-drag behavior, and both inputs snap only near 45-degree multiples.
+- Verify mouse, pen, and drawing-owned touch gestures select the nearer ruler edge, project onto that edge while inside the strip, keep the first outside sample unconstrained, and snap again from the opposite side when the same gesture later re-enters.
+- Verify mouse ruler rotation keeps the upright white-circle whole-degree readout at its gesture-start clipped-centerline midpoint, touch rotation keeps it at the initial two-touch midpoint's centerline projection, and ruler translation shows no readout.
+- Verify Ctrl/Cmd wheel zoom shows the real whole-percent scale above the pointer with the top-edge fallback below, and two-finger zoom keeps the same scale within 50 px of the midpoint and fully inside the visible host until either finger ends.
 - Verify the PaintingBoard bottom-bar ruler switch preserves supplied ruler options and respects controlled visibility at 375 px, 768 px, and 1280 px widths.
