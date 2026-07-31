@@ -5,7 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] - 2026-07-31
+
+### Added
+
+- 文字与图片笔触支持，笔触属性控件（颜色、宽度）及撤销历史（`feat(painting): 文字/图片笔触支持 + 撤销历史 + 笔触属性控件`）
+- 套索选区旋转手柄，围绕选区中心旋转且 rect/ellipse 保持本地宽高；选区缩放支持旋转后的本地坐标系（`feat(painting): 套索选区旋转 + 提取 PaintingController 组件`）
+- 提取 `PaintingController` 独立受控组件，可共享控制多个画板
+- 选区变换回调（`feat(painting): 选区变换回调 + 文档完善`）
+- 交互反馈组件：触屏绘制反馈、缩放百分比锚点反馈等（`feat(painting): add interaction feedback component and expand test coverage`）
+- Virtual-Paper 开启时 `DrawingSurface` 根 SVG 与容器默认 `overflow: visible`（`feat(painting): Virtual-Paper 开启时默认 overflow visible`）
+- Minimap 增加 `backdrop-filter` 毛玻璃效果
 
 ### Changed
 
@@ -14,6 +24,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 双指手势通过 `@system-ui-js/multi-drag` 同时平移和旋转尺子；鼠标与触屏旋转均吸附到 45° 的倍数。
 - PaintingBoard 底栏新增尺子开关，支持受控/非受控可见性并保留既有尺子配置。
 - `DrawingRulerState` 新增可选的顺时针弧度 `rotationRad`；省略时保持与旧版中心状态相同的零角度语义。
+- `DrawingStroke` 新增 `rotationRad` 字段，附带 `strokeMigration` 迁移。
+
+### Fixed
+
+- PaintingBoard 受控 `value` 模式：value 独立传入时不再写入 history；`usePaintingHistory` 使用 ref 追踪最新值，避免 batch 内多画板更新互相覆盖（`fix(painting): 受控 value + batch-safe 历史更新`）
+- 使用 `useMemo` 缓存 viewport，避免选区浮层循环通知（`fix(painting): 使用 useMemo 缓存 viewport 避免选区浮层循环通知`）
+- 修复底部工具栏 CI 交互（`fix(painting): 修复底部工具栏 CI 交互`）
+- 触屏尺子角度标签跟随双指中点实时投影，鼠标旋转反馈保持手势起始枢轴（`fix(painting): stabilize touch ruler label, zoom feedback, and SVG selection`）
+- SVG 表面禁用原生文本选择（`user-select: none`），文本编辑器显式恢复 `user-select: text`
+- 缩放百分比反馈使用稳定的单一锚点，消除靠近宿主边缘时的垂直跳动
+
+### Test
+
+- 交互反馈组件测试覆盖（`feat(painting): add interaction feedback component and expand test coverage`）
+- 触屏尺子反馈测试对齐（`fix(painting): align touch ruler feedback test`）
+- 尺子边缘输入、控制器颜色/宽度、触屏绘制仲裁等 UI 测试扩展
 
 ## [0.3.0] - 2026-07-21
 
