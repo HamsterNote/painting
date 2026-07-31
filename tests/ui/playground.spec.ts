@@ -13,36 +13,41 @@ test.describe('DrawingSurface playground', () => {
       start: { x: number; y: number };
       moves: { x: number; y: number; pressure?: number }[];
       startPressure?: number;
-    },
+    }
   ) {
-    await surface.evaluate(
-      (el, drag) => {
-        el.setPointerCapture = () => undefined;
-        el.releasePointerCapture = () => undefined;
-        el.hasPointerCapture = () => true;
-        const rect = el.getBoundingClientRect();
-        const dispatch = (type: string, point: { x: number; y: number; pressure?: number }, buttons: number) => {
-          el.dispatchEvent(new PointerEvent(type, {
+    await surface.evaluate((el, drag) => {
+      el.setPointerCapture = () => undefined;
+      el.releasePointerCapture = () => undefined;
+      el.hasPointerCapture = () => true;
+      const rect = el.getBoundingClientRect();
+      const contentLeft = rect.left + el.clientLeft;
+      const contentTop = rect.top + el.clientTop;
+      const dispatch = (
+        type: string,
+        point: { x: number; y: number; pressure?: number },
+        buttons: number
+      ) => {
+        el.dispatchEvent(
+          new PointerEvent(type, {
             pointerId: drag.pointerId,
             pointerType: drag.pointerType,
             button: 0,
             buttons,
-            clientX: rect.left + point.x,
-            clientY: rect.top + point.y,
+            clientX: contentLeft + point.x,
+            clientY: contentTop + point.y,
             pressure: point.pressure ?? drag.startPressure ?? 0.5,
             bubbles: true,
             cancelable: true,
-          }));
-        };
+          })
+        );
+      };
 
-        dispatch('pointerdown', { ...drag.start, pressure: drag.startPressure }, 1);
-        for (const point of drag.moves) {
-          dispatch('pointermove', point, 1);
-        }
-        dispatch('pointerup', drag.moves[drag.moves.length - 1] ?? drag.start, 0);
-      },
-      options,
-    );
+      dispatch('pointerdown', { ...drag.start, pressure: drag.startPressure }, 1);
+      for (const point of drag.moves) {
+        dispatch('pointermove', point, 1);
+      }
+      dispatch('pointerup', drag.moves[drag.moves.length - 1] ?? drag.start, 0);
+    }, options);
   }
 
   async function readPreview(preview: Locator) {
@@ -198,61 +203,75 @@ test.describe('DrawingSurface playground', () => {
       const x2 = rect.left + 150;
       const y2 = rect.top + 150;
 
-      el.dispatchEvent(new PointerEvent('pointerdown', {
-        pointerId: 1,
-        pointerType: 'pen',
-        clientX: x1,
-        clientY: y1,
-        bubbles: true,
-      }));
+      el.dispatchEvent(
+        new PointerEvent('pointerdown', {
+          pointerId: 1,
+          pointerType: 'pen',
+          clientX: x1,
+          clientY: y1,
+          bubbles: true,
+        })
+      );
 
-      el.dispatchEvent(new PointerEvent('pointermove', {
-        pointerId: 1,
-        pointerType: 'pen',
-        clientX: x1 + 20,
-        clientY: y1 + 20,
-        bubbles: true,
-      }));
+      el.dispatchEvent(
+        new PointerEvent('pointermove', {
+          pointerId: 1,
+          pointerType: 'pen',
+          clientX: x1 + 20,
+          clientY: y1 + 20,
+          bubbles: true,
+        })
+      );
 
-      el.dispatchEvent(new PointerEvent('pointerdown', {
-        pointerId: 2,
-        pointerType: 'pen',
-        clientX: x2,
-        clientY: y2,
-        bubbles: true,
-      }));
+      el.dispatchEvent(
+        new PointerEvent('pointerdown', {
+          pointerId: 2,
+          pointerType: 'pen',
+          clientX: x2,
+          clientY: y2,
+          bubbles: true,
+        })
+      );
 
-      el.dispatchEvent(new PointerEvent('pointermove', {
-        pointerId: 2,
-        pointerType: 'pen',
-        clientX: x2 + 20,
-        clientY: y2 + 20,
-        bubbles: true,
-      }));
+      el.dispatchEvent(
+        new PointerEvent('pointermove', {
+          pointerId: 2,
+          pointerType: 'pen',
+          clientX: x2 + 20,
+          clientY: y2 + 20,
+          bubbles: true,
+        })
+      );
 
-      el.dispatchEvent(new PointerEvent('pointerup', {
-        pointerId: 2,
-        pointerType: 'pen',
-        clientX: x2 + 20,
-        clientY: y2 + 20,
-        bubbles: true,
-      }));
+      el.dispatchEvent(
+        new PointerEvent('pointerup', {
+          pointerId: 2,
+          pointerType: 'pen',
+          clientX: x2 + 20,
+          clientY: y2 + 20,
+          bubbles: true,
+        })
+      );
 
-      el.dispatchEvent(new PointerEvent('pointermove', {
-        pointerId: 1,
-        pointerType: 'pen',
-        clientX: x1 + 40,
-        clientY: y1 + 40,
-        bubbles: true,
-      }));
+      el.dispatchEvent(
+        new PointerEvent('pointermove', {
+          pointerId: 1,
+          pointerType: 'pen',
+          clientX: x1 + 40,
+          clientY: y1 + 40,
+          bubbles: true,
+        })
+      );
 
-      el.dispatchEvent(new PointerEvent('pointerup', {
-        pointerId: 1,
-        pointerType: 'pen',
-        clientX: x1 + 40,
-        clientY: y1 + 40,
-        bubbles: true,
-      }));
+      el.dispatchEvent(
+        new PointerEvent('pointerup', {
+          pointerId: 1,
+          pointerType: 'pen',
+          clientX: x1 + 40,
+          clientY: y1 + 40,
+          bubbles: true,
+        })
+      );
     }, surfaceEl);
 
     await page.waitForTimeout(100);
@@ -338,33 +357,39 @@ test.describe('DrawingSurface playground', () => {
       const x2 = rect.x + 150;
       const y2 = rect.y + 150;
 
-      el.dispatchEvent(new PointerEvent('pointerdown', {
-        pointerId: 1,
-        pointerType: 'pen',
-        clientX: x1,
-        clientY: y1,
-        pressure: 0.25,
-        buttons: 1,
-        bubbles: true,
-      }));
-      el.dispatchEvent(new PointerEvent('pointermove', {
-        pointerId: 1,
-        pointerType: 'pen',
-        clientX: x2,
-        clientY: y2,
-        pressure: 0.75,
-        buttons: 1,
-        bubbles: true,
-      }));
-      el.dispatchEvent(new PointerEvent('pointerup', {
-        pointerId: 1,
-        pointerType: 'pen',
-        clientX: x2,
-        clientY: y2,
-        pressure: 0.75,
-        buttons: 0,
-        bubbles: true,
-      }));
+      el.dispatchEvent(
+        new PointerEvent('pointerdown', {
+          pointerId: 1,
+          pointerType: 'pen',
+          clientX: x1,
+          clientY: y1,
+          pressure: 0.25,
+          buttons: 1,
+          bubbles: true,
+        })
+      );
+      el.dispatchEvent(
+        new PointerEvent('pointermove', {
+          pointerId: 1,
+          pointerType: 'pen',
+          clientX: x2,
+          clientY: y2,
+          pressure: 0.75,
+          buttons: 1,
+          bubbles: true,
+        })
+      );
+      el.dispatchEvent(
+        new PointerEvent('pointerup', {
+          pointerId: 1,
+          pointerType: 'pen',
+          clientX: x2,
+          clientY: y2,
+          pressure: 0.75,
+          buttons: 0,
+          bubbles: true,
+        })
+      );
     }, box);
 
     const segment = surface.locator('line[stroke-width="7.5"]').first();
@@ -386,33 +411,39 @@ test.describe('DrawingSurface playground', () => {
       const x2 = rect.x + 150;
       const y2 = rect.y + 150;
 
-      el.dispatchEvent(new PointerEvent('pointerdown', {
-        pointerId: 1,
-        pointerType: 'pen',
-        clientX: x1,
-        clientY: y1,
-        pressure: 0.25,
-        buttons: 1,
-        bubbles: true,
-      }));
-      el.dispatchEvent(new PointerEvent('pointermove', {
-        pointerId: 1,
-        pointerType: 'pen',
-        clientX: x2,
-        clientY: y2,
-        pressure: 0.75,
-        buttons: 1,
-        bubbles: true,
-      }));
-      el.dispatchEvent(new PointerEvent('pointerup', {
-        pointerId: 1,
-        pointerType: 'pen',
-        clientX: x2,
-        clientY: y2,
-        pressure: 0.75,
-        buttons: 0,
-        bubbles: true,
-      }));
+      el.dispatchEvent(
+        new PointerEvent('pointerdown', {
+          pointerId: 1,
+          pointerType: 'pen',
+          clientX: x1,
+          clientY: y1,
+          pressure: 0.25,
+          buttons: 1,
+          bubbles: true,
+        })
+      );
+      el.dispatchEvent(
+        new PointerEvent('pointermove', {
+          pointerId: 1,
+          pointerType: 'pen',
+          clientX: x2,
+          clientY: y2,
+          pressure: 0.75,
+          buttons: 1,
+          bubbles: true,
+        })
+      );
+      el.dispatchEvent(
+        new PointerEvent('pointerup', {
+          pointerId: 1,
+          pointerType: 'pen',
+          clientX: x2,
+          clientY: y2,
+          pressure: 0.75,
+          buttons: 0,
+          bubbles: true,
+        })
+      );
     }, box);
 
     const segments = surface.locator('line[stroke-width="7.5"]');
@@ -501,7 +532,9 @@ test.describe('DrawingSurface playground', () => {
     }
   });
 
-  test('exposes dash / fill / cursor / eraser control panels without gesture controls', async ({ page }) => {
+  test('exposes dash / fill / cursor / eraser control panels without gesture controls', async ({
+    page,
+  }) => {
     await expect(page.getByTestId('panel-dash')).toBeVisible();
     await expect(page.getByTestId('panel-fill')).toBeVisible();
     await expect(page.getByTestId('panel-cursor')).toBeVisible();
@@ -547,20 +580,30 @@ test.describe('DrawingSurface playground', () => {
 
   test('shows shift instruction for rect / ellipse', async ({ page }) => {
     await drawingToolButton(page, 'rect').click();
-    await expect(page.getByTestId('tool-instruction')).toHaveText(/Hold Shift to draw square\/circle/);
+    await expect(page.getByTestId('tool-instruction')).toHaveText(
+      /Hold Shift to draw square\/circle/
+    );
 
     await drawingToolButton(page, 'ellipse').click();
-    await expect(page.getByTestId('tool-instruction')).toHaveText(/Hold Shift to draw square\/circle/);
+    await expect(page.getByTestId('tool-instruction')).toHaveText(
+      /Hold Shift to draw square\/circle/
+    );
   });
 
-  test('shows click-to-place instruction for line / polygon and three-drag instruction for bezier', async ({ page }) => {
+  test('shows click-to-place instruction for line / polygon and three-drag instruction for bezier', async ({
+    page,
+  }) => {
     for (const tool of ['line', 'polygon']) {
       await drawingToolButton(page, tool).click();
-      await expect(page.getByTestId('tool-instruction')).toHaveText(/Click to add points, double-click or Esc to finish/);
+      await expect(page.getByTestId('tool-instruction')).toHaveText(
+        /Click to add points, double-click or Esc to finish/
+      );
     }
 
     await drawingToolButton(page, 'bezier').click();
-    await expect(page.getByTestId('tool-instruction')).toHaveText(/Drag 1 sets the start\/end line, drag 2 sets the first control point, drag 3 sets the second control point and commits/);
+    await expect(page.getByTestId('tool-instruction')).toHaveText(
+      /Drag 1 sets the start\/end line, drag 2 sets the first control point, drag 3 sets the second control point and commits/
+    );
   });
 
   test('gesture reset button is not rendered after gesture removal', async ({ page }) => {
@@ -649,34 +692,40 @@ test.describe('DrawingSurface playground', () => {
     await surface.evaluate((el, points) => {
       const rect = el.getBoundingClientRect();
       for (const point of points) {
-        el.dispatchEvent(new PointerEvent('pointerdown', {
-          pointerId: 22,
-          pointerType: 'mouse',
-          button: 0,
-          buttons: 1,
-          clientX: rect.left + point.x,
-          clientY: rect.top + point.y,
-          bubbles: true,
-          cancelable: true,
-        }));
-        el.dispatchEvent(new PointerEvent('pointerup', {
-          pointerId: 22,
-          pointerType: 'mouse',
-          button: 0,
-          buttons: 0,
-          clientX: rect.left + point.x,
-          clientY: rect.top + point.y,
-          bubbles: true,
-          cancelable: true,
-        }));
+        el.dispatchEvent(
+          new PointerEvent('pointerdown', {
+            pointerId: 22,
+            pointerType: 'mouse',
+            button: 0,
+            buttons: 1,
+            clientX: rect.left + point.x,
+            clientY: rect.top + point.y,
+            bubbles: true,
+            cancelable: true,
+          })
+        );
+        el.dispatchEvent(
+          new PointerEvent('pointerup', {
+            pointerId: 22,
+            pointerType: 'mouse',
+            button: 0,
+            buttons: 0,
+            clientX: rect.left + point.x,
+            clientY: rect.top + point.y,
+            bubbles: true,
+            cancelable: true,
+          })
+        );
       }
       const last = points[points.length - 1];
-      el.dispatchEvent(new MouseEvent('dblclick', {
-        clientX: rect.left + last.x,
-        clientY: rect.top + last.y,
-        bubbles: true,
-        cancelable: true,
-      }));
+      el.dispatchEvent(
+        new MouseEvent('dblclick', {
+          clientX: rect.left + last.x,
+          clientY: rect.top + last.y,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
     }, pts);
 
     await expect(surface).toHaveAttribute('data-stroke-count', '1');
@@ -732,7 +781,11 @@ test.describe('DrawingSurface playground', () => {
 
     await expect(surface).toHaveAttribute('data-stroke-count', '3');
     let parsed = await readPreview(preview);
-    expect(parsed.strokes.map((stroke: { tool: string }) => stroke.tool).sort()).toEqual(['bezier', 'pen', 'rect']);
+    expect(parsed.strokes.map((stroke: { tool: string }) => stroke.tool).sort()).toEqual([
+      'bezier',
+      'pen',
+      'rect',
+    ]);
 
     await drawingToolButton(page, 'eraser').click();
     await page.getByTestId('drawing-stroke-width-input').fill('2');
@@ -761,7 +814,9 @@ test.describe('DrawingSurface playground', () => {
     expect(parsed.strokes).toEqual([]);
   });
 
-  test('pressure multiplier changes visible pressure segment width without changing raw pressure data', async ({ page }) => {
+  test('pressure multiplier changes visible pressure segment width without changing raw pressure data', async ({
+    page,
+  }) => {
     const surface = page.getByTestId('drawing-surface-controlled');
     const preview = page.getByTestId('drawing-preview-controlled');
     await expect(surface).toBeVisible();
@@ -785,9 +840,11 @@ test.describe('DrawingSurface playground', () => {
       });
     };
     const maxRenderedLineWidth = async () => {
-      const widths = await surface.locator('line[stroke-width]').evaluateAll((lines) =>
-        lines.map((line) => Number(line.getAttribute('stroke-width') ?? 0)),
-      );
+      const widths = await surface
+        .locator('line[stroke-width]')
+        .evaluateAll((lines) =>
+          lines.map((line) => Number(line.getAttribute('stroke-width') ?? 0))
+        );
       expect(widths.length).toBeGreaterThan(0);
       return Math.max(...widths);
     };
@@ -796,7 +853,9 @@ test.describe('DrawingSurface playground', () => {
     const baseWidth = await maxRenderedLineWidth();
     let parsed = await readPreview(preview);
     expect(parsed.strokes).toHaveLength(1);
-    const basePressures = parsed.strokes[0].points.map((point: { pressure?: number }) => point.pressure);
+    const basePressures = parsed.strokes[0].points.map(
+      (point: { pressure?: number }) => point.pressure
+    );
 
     await page.getByTestId('drawing-reset-controlled').click();
     await expect(surface).toHaveAttribute('data-stroke-count', '0');
@@ -808,11 +867,15 @@ test.describe('DrawingSurface playground', () => {
     expect(multipliedWidth).toBeGreaterThan(baseWidth);
     parsed = await readPreview(preview);
     expect(parsed.strokes).toHaveLength(1);
-    const multipliedPressures = parsed.strokes[0].points.map((point: { pressure?: number }) => point.pressure);
+    const multipliedPressures = parsed.strokes[0].points.map(
+      (point: { pressure?: number }) => point.pressure
+    );
     expect(multipliedPressures).toEqual(basePressures);
   });
 
-  test('draws bezier via three drags and commits one cubic SVG path to JSON preview', async ({ page }) => {
+  test('draws bezier via three drags and commits one cubic SVG path to JSON preview', async ({
+    page,
+  }) => {
     await drawingToolButton(page, 'bezier').click();
 
     const surface = page.getByTestId('drawing-surface-controlled');
@@ -922,7 +985,9 @@ test.describe('DrawingSurface playground', () => {
   });
 
   // 稀疏竖向 sweep 的 down/move 端点都避开目标线，但连线穿过目标；while-sliding 应在 pointerup 前删除。
-  test('eraser sparse sweep deletes a crossed target before release in while-sliding mode', async ({ page }) => {
+  test('eraser sparse sweep deletes a crossed target before release in while-sliding mode', async ({
+    page,
+  }) => {
     const surface = page.getByTestId('drawing-surface-controlled');
     const preview = page.getByTestId('drawing-preview-controlled');
     await expect(surface).toBeVisible();
@@ -958,16 +1023,18 @@ test.describe('DrawingSurface playground', () => {
         el.hasPointerCapture = () => true;
         const rect = el.getBoundingClientRect();
         const dispatch = (type: string, point: { x: number; y: number }, buttons: number) => {
-          el.dispatchEvent(new PointerEvent(type, {
-            pointerId: 11,
-            pointerType: 'pen',
-            button: 0,
-            buttons,
-            clientX: rect.left + point.x,
-            clientY: rect.top + point.y,
-            bubbles: true,
-            cancelable: true,
-          }));
+          el.dispatchEvent(
+            new PointerEvent(type, {
+              pointerId: 11,
+              pointerType: 'pen',
+              button: 0,
+              buttons,
+              clientX: rect.left + point.x,
+              clientY: rect.top + point.y,
+              bubbles: true,
+              cancelable: true,
+            })
+          );
         };
 
         dispatch('pointerdown', points.start, 1);
@@ -976,25 +1043,32 @@ test.describe('DrawingSurface playground', () => {
       {
         start: { x: targetX, y: targetY - 13 },
         end: { x: targetX, y: targetY + 12.5 },
-      },
+      }
     );
     await expect(surface).toHaveAttribute('data-stroke-count', '0');
-    await surface.evaluate((el, point) => {
-      const rect = el.getBoundingClientRect();
-      el.dispatchEvent(new PointerEvent('pointerup', {
-        pointerId: 11,
-        pointerType: 'pen',
-        button: 0,
-        buttons: 0,
-        clientX: rect.left + point.x,
-        clientY: rect.top + point.y,
-        bubbles: true,
-        cancelable: true,
-      }));
-    }, { x: targetX, y: targetY + 12.5 });
+    await surface.evaluate(
+      (el, point) => {
+        const rect = el.getBoundingClientRect();
+        el.dispatchEvent(
+          new PointerEvent('pointerup', {
+            pointerId: 11,
+            pointerType: 'pen',
+            button: 0,
+            buttons: 0,
+            clientX: rect.left + point.x,
+            clientY: rect.top + point.y,
+            bubbles: true,
+            cancelable: true,
+          })
+        );
+      },
+      { x: targetX, y: targetY + 12.5 }
+    );
   });
 
-  test('eraser trajectory style stays continuous while deleting a stroke mid-drag', async ({ page }) => {
+  test('eraser trajectory style stays continuous while deleting a stroke mid-drag', async ({
+    page,
+  }) => {
     const consoleErrors: string[] = [];
     const pageErrors: string[] = [];
     page.on('console', (message) => {
@@ -1044,7 +1118,9 @@ test.describe('DrawingSurface playground', () => {
   });
 
   // 相同稀疏穿越在 on-release 下移动中只排队，必须等 pointerup 后才删除目标。
-  test('eraser sparse sweep queues a crossed target until release in on-release mode', async ({ page }) => {
+  test('eraser sparse sweep queues a crossed target until release in on-release mode', async ({
+    page,
+  }) => {
     const surface = page.getByTestId('drawing-surface-controlled');
     const preview = page.getByTestId('drawing-preview-controlled');
     await expect(surface).toBeVisible();
@@ -1080,16 +1156,18 @@ test.describe('DrawingSurface playground', () => {
         el.hasPointerCapture = () => true;
         const rect = el.getBoundingClientRect();
         const dispatch = (type: string, point: { x: number; y: number }, buttons: number) => {
-          el.dispatchEvent(new PointerEvent(type, {
-            pointerId: 12,
-            pointerType: 'pen',
-            button: 0,
-            buttons,
-            clientX: rect.left + point.x,
-            clientY: rect.top + point.y,
-            bubbles: true,
-            cancelable: true,
-          }));
+          el.dispatchEvent(
+            new PointerEvent(type, {
+              pointerId: 12,
+              pointerType: 'pen',
+              button: 0,
+              buttons,
+              clientX: rect.left + point.x,
+              clientY: rect.top + point.y,
+              bubbles: true,
+              cancelable: true,
+            })
+          );
         };
 
         dispatch('pointerdown', points.start, 1);
@@ -1098,29 +1176,36 @@ test.describe('DrawingSurface playground', () => {
       {
         start: { x: targetX, y: targetY - 13 },
         end: { x: targetX, y: targetY + 12.5 },
-      },
+      }
     );
 
     const sparseMidCount = await surface.getAttribute('data-stroke-count');
     expect(sparseMidCount).toBe('1');
 
-    await surface.evaluate((el, point) => {
-      const rect = el.getBoundingClientRect();
-      el.dispatchEvent(new PointerEvent('pointerup', {
-        pointerId: 12,
-        pointerType: 'pen',
-        button: 0,
-        buttons: 0,
-        clientX: rect.left + point.x,
-        clientY: rect.top + point.y,
-        bubbles: true,
-        cancelable: true,
-      }));
-    }, { x: targetX, y: targetY + 12.5 });
+    await surface.evaluate(
+      (el, point) => {
+        const rect = el.getBoundingClientRect();
+        el.dispatchEvent(
+          new PointerEvent('pointerup', {
+            pointerId: 12,
+            pointerType: 'pen',
+            button: 0,
+            buttons: 0,
+            clientX: rect.left + point.x,
+            clientY: rect.top + point.y,
+            bubbles: true,
+            cancelable: true,
+          })
+        );
+      },
+      { x: targetX, y: targetY + 12.5 }
+    );
     await expect(surface).toHaveAttribute('data-stroke-count', '0');
   });
 
-  test('draws continuous line via 3 clicks + dblclick and commits to JSON preview', async ({ page }) => {
+  test('draws continuous line via 3 clicks + dblclick and commits to JSON preview', async ({
+    page,
+  }) => {
     await drawingToolButton(page, 'line').click();
 
     const surface = page.getByTestId('drawing-surface-controlled');
@@ -1209,7 +1294,7 @@ test.describe('DrawingSurface playground', () => {
       await expect(selectionBox).toHaveAttribute('stroke', 'rgb(59,130,246)');
       await expect(selectionBox).toHaveAttribute('stroke-width', '3');
       await expect(selectionBox).toHaveAttribute('stroke-dasharray', '4 4');
-      await expect(selectionBox).toHaveAttribute('vector-effect', 'non-scaling-stroke');
+      await expect(selectionBox).not.toHaveAttribute('vector-effect');
 
       // 点击删除后 seed stroke 消失
       await deleteBtn.click();
@@ -1222,7 +1307,9 @@ test.describe('DrawingSurface playground', () => {
     });
 
     // 选区外拖拽应立即开始新的套索，而不是只清空选区。
-    test('lasso: drag outside selection box clears old selection and starts new lasso', async ({ page }) => {
+    test('lasso: drag outside selection box clears old selection and starts new lasso', async ({
+      page,
+    }) => {
       const surface = page.getByTestId('drawing-surface-uncontrolled');
       const deleteBtn = page.getByTestId('lasso-delete-selected');
 
@@ -1264,87 +1351,88 @@ test.describe('DrawingSurface playground', () => {
       await page.mouse.up();
     });
 
-  // 选区内拖拽应保持移动模式，不应新建套索。
-  test('lasso: drag inside selection box moves selected strokes', async ({ page }) => {
-    const surface = page.getByTestId('drawing-surface-uncontrolled');
-    const deleteBtn = page.getByTestId('lasso-delete-selected');
+    // 选区内拖拽应保持移动模式，不应新建套索。
+    test('lasso: drag inside selection box moves selected strokes', async ({ page }) => {
+      const surface = page.getByTestId('drawing-surface-uncontrolled');
+      const deleteBtn = page.getByTestId('lasso-delete-selected');
 
-    await drawingToolButton(page, 'lasso').click();
-    await expect(surface).toHaveAttribute('data-active-tool', 'lasso');
+      await drawingToolButton(page, 'lasso').click();
+      await expect(surface).toHaveAttribute('data-active-tool', 'lasso');
 
-    const box = await surface.boundingBox();
-    expect(box).not.toBeNull();
+      const box = await surface.boundingBox();
+      expect(box).not.toBeNull();
 
-    // 第一次拖拽：用套索选中 seed stroke
-    const startX1 = box!.x + 30;
-    const startY1 = box!.y + 30;
-    await page.mouse.move(startX1, startY1);
-    await page.mouse.down();
-    await page.mouse.move(box!.x + 170, box!.y + 30);
-    await page.mouse.move(box!.x + 170, box!.y + 120);
-    await page.mouse.move(box!.x + 30, box!.y + 120);
-    await page.mouse.move(startX1, startY1);
-    await page.mouse.up();
+      // 第一次拖拽：用套索选中 seed stroke
+      const startX1 = box!.x + 30;
+      const startY1 = box!.y + 30;
+      await page.mouse.move(startX1, startY1);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 170, box!.y + 30);
+      await page.mouse.move(box!.x + 170, box!.y + 120);
+      await page.mouse.move(box!.x + 30, box!.y + 120);
+      await page.mouse.move(startX1, startY1);
+      await page.mouse.up();
 
-    const selectionBox = surface.locator('[data-testid="lasso-selection-box"]');
-    await expect(selectionBox).toHaveCount(1);
-    await expect(deleteBtn).toBeEnabled();
+      const selectionBox = surface.locator('[data-testid="lasso-selection-box"]');
+      await expect(selectionBox).toHaveCount(1);
+      await expect(deleteBtn).toBeEnabled();
 
-    // 第二次拖拽：从选区框内部开始并移动
-    const startX2 = box!.x + 100;
-    const startY2 = box!.y + 75;
-    await page.mouse.move(startX2, startY2);
-    await page.mouse.down();
-    await page.mouse.move(startX2 + 30, startY2 + 30);
-    await page.mouse.up();
+      // 第二次拖拽：从选区框内部开始并移动
+      const startX2 = box!.x + 100;
+      const startY2 = box!.y + 75;
+      await page.mouse.move(startX2, startY2);
+      await page.mouse.down();
+      await page.mouse.move(startX2 + 30, startY2 + 30);
+      await page.mouse.up();
 
-    // 选区应仍然存在，删除按钮仍可用
-    await expect(selectionBox).toHaveCount(1);
-    await expect(deleteBtn).toBeEnabled();
-  });
+      // 选区应仍然存在，删除按钮仍可用
+      await expect(selectionBox).toHaveCount(1);
+      await expect(deleteBtn).toBeEnabled();
+    });
 
-  // Bug 2 回归：lasso 选中后切换到 pen 工具，选区应自动清空且选区框消失。
-  test('lasso selection is cleared when switching to pen tool', async ({ page }) => {
-    const surface = page.getByTestId('drawing-surface-uncontrolled');
-    const deleteBtn = page.getByTestId('lasso-delete-selected');
+    // Bug 2 回归：lasso 选中后切换到 pen 工具，选区应自动清空且选区框消失。
+    test('lasso selection is cleared when switching to pen tool', async ({ page }) => {
+      const surface = page.getByTestId('drawing-surface-uncontrolled');
+      const deleteBtn = page.getByTestId('lasso-delete-selected');
 
-    await expect(surface).toHaveAttribute('data-stroke-count', '1');
+      await expect(surface).toHaveAttribute('data-stroke-count', '1');
 
-    await drawingToolButton(page, 'lasso').click();
-    await expect(surface).toHaveAttribute('data-active-tool', 'lasso');
+      await drawingToolButton(page, 'lasso').click();
+      await expect(surface).toHaveAttribute('data-active-tool', 'lasso');
 
-    const box = await surface.boundingBox();
-    expect(box).not.toBeNull();
+      const box = await surface.boundingBox();
+      expect(box).not.toBeNull();
 
-    const startX = box!.x + 30;
-    const startY = box!.y + 30;
-    await page.mouse.move(startX, startY);
-    await page.mouse.down();
-    await page.mouse.move(box!.x + 170, box!.y + 30);
-    await page.mouse.move(box!.x + 170, box!.y + 120);
-    await page.mouse.move(box!.x + 30, box!.y + 120);
-    await page.mouse.move(startX, startY);
-    await page.mouse.up();
+      const startX = box!.x + 30;
+      const startY = box!.y + 30;
+      await page.mouse.move(startX, startY);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 170, box!.y + 30);
+      await page.mouse.move(box!.x + 170, box!.y + 120);
+      await page.mouse.move(box!.x + 30, box!.y + 120);
+      await page.mouse.move(startX, startY);
+      await page.mouse.up();
 
-    await expect(deleteBtn).toBeEnabled();
-    await expect(page.getByTestId('lasso-selection-count')).toHaveText('(1)');
-    const selectionBox = surface.locator('[data-testid="lasso-selection-box"]');
-    await expect(selectionBox).toHaveCount(1);
+      await expect(deleteBtn).toBeEnabled();
+      await expect(page.getByTestId('lasso-selection-count')).toHaveText('(1)');
+      const selectionBox = surface.locator('[data-testid="lasso-selection-box"]');
+      await expect(selectionBox).toHaveCount(1);
 
-    await drawingToolButton(page, 'pen').click();
-    await expect(surface).toHaveAttribute('data-active-tool', 'pen');
+      await drawingToolButton(page, 'pen').click();
+      await expect(surface).toHaveAttribute('data-active-tool', 'pen');
 
-    await expect(selectionBox).toHaveCount(0);
+      await expect(selectionBox).toHaveCount(0);
 
-    const pathOpacity = await surface.locator('svg').first().locator('path').evaluate((el) =>
-      el.getAttribute('opacity'),
-    );
-    expect(pathOpacity).toBeNull();
+      const pathOpacity = await surface
+        .locator('svg')
+        .first()
+        .locator('path')
+        .evaluate((el) => el.getAttribute('opacity'));
+      expect(pathOpacity).toBeNull();
 
-    await drawingToolButton(page, 'lasso').click();
-    await expect(deleteBtn).toBeDisabled();
-  });
-
+      await drawingToolButton(page, 'lasso').click();
+      await expect(deleteBtn).toBeDisabled();
+    });
   });
 
   test.describe('pen tip snapping integration', () => {
@@ -1363,9 +1451,13 @@ test.describe('DrawingSurface playground', () => {
 
       const box = await surface.boundingBox();
       expect(box).not.toBeNull();
+      const clientBorder = await surface.evaluate((element) => ({
+        left: element.clientLeft,
+        top: element.clientTop,
+      }));
 
-      const p1X = box!.x + 50;
-      const p1Y = box!.y + 50;
+      const p1X = box!.x + clientBorder.left + 50;
+      const p1Y = box!.y + clientBorder.top + 50;
       await page.mouse.move(p1X, p1Y);
       await page.mouse.down();
       await page.mouse.move(p1X + 50, p1Y + 50);
@@ -1399,9 +1491,13 @@ test.describe('DrawingSurface playground', () => {
 
       const box = await surface.boundingBox();
       expect(box).not.toBeNull();
+      const clientBorder = await surface.evaluate((element) => ({
+        left: element.clientLeft,
+        top: element.clientTop,
+      }));
 
-      const p1X = box!.x + 50;
-      const p1Y = box!.y + 100;
+      const p1X = box!.x + clientBorder.left + 50;
+      const p1Y = box!.y + clientBorder.top + 100;
       await page.mouse.move(p1X, p1Y);
       await page.mouse.down();
       await page.mouse.move(p1X + 100, p1Y);
@@ -1498,9 +1594,13 @@ test.describe('DrawingSurface playground', () => {
 
       const box = await surface.boundingBox();
       expect(box).not.toBeNull();
+      const clientBorder = await surface.evaluate((element) => ({
+        left: element.clientLeft,
+        top: element.clientTop,
+      }));
 
-      const p1X = box!.x + 50;
-      const p1Y = box!.y + 50;
+      const p1X = box!.x + clientBorder.left + 50;
+      const p1Y = box!.y + clientBorder.top + 50;
       await page.mouse.move(p1X, p1Y);
       await page.mouse.down();
       await page.mouse.move(p1X + 50, p1Y + 50);
@@ -1532,8 +1632,8 @@ test.describe('DrawingSurface playground', () => {
       expect(secondStrokeStart.x).toBeCloseTo(firstStrokeStart.x, 1);
       expect(secondStrokeStart.y).toBeCloseTo(firstStrokeStart.y, 1);
 
-      expect(thirdStrokeStart.x).toBeCloseTo(p3X - box!.x, 1);
-      expect(thirdStrokeStart.y).toBeCloseTo(p3Y - box!.y, 1);
+      expect(thirdStrokeStart.x).toBeCloseTo(p3X - box!.x - clientBorder.left, 1);
+      expect(thirdStrokeStart.y).toBeCloseTo(p3Y - box!.y - clientBorder.top, 1);
     });
 
     test('uses raw coordinates when toggles are off', async ({ page }) => {
@@ -1546,9 +1646,13 @@ test.describe('DrawingSurface playground', () => {
 
       const box = await surface.boundingBox();
       expect(box).not.toBeNull();
+      const clientBorder = await surface.evaluate((element) => ({
+        left: element.clientLeft,
+        top: element.clientTop,
+      }));
 
-      const p1X = box!.x + 50;
-      const p1Y = box!.y + 50;
+      const p1X = box!.x + clientBorder.left + 50;
+      const p1Y = box!.y + clientBorder.top + 50;
       await page.mouse.move(p1X, p1Y);
       await page.mouse.down();
       await page.mouse.move(p1X + 50, p1Y + 50);
@@ -1565,17 +1669,17 @@ test.describe('DrawingSurface playground', () => {
       const parsed = JSON.parse(previewText!);
 
       expect(parsed.strokes.length).toBe(2);
-      
+
       const firstStrokeStart = parsed.strokes[0].points[0];
       const secondStrokeStart = parsed.strokes[1].points[0];
-      
+
       expect(secondStrokeStart.x).not.toBeCloseTo(firstStrokeStart.x, 1);
       expect(secondStrokeStart.y).not.toBeCloseTo(firstStrokeStart.y, 1);
-      expect(secondStrokeStart.x).toBeCloseTo(p2X - box!.x, 1);
-      expect(secondStrokeStart.y).toBeCloseTo(p2Y - box!.y, 1);
+      expect(secondStrokeStart.x).toBeCloseTo(p2X - box!.x - clientBorder.left, 1);
+      expect(secondStrokeStart.y).toBeCloseTo(p2Y - box!.y - clientBorder.top, 1);
     });
   });
-  test.describe('ruler overlay', () => {
+  test.describe('ruler first-phase overlay', () => {
     test('toggle shows ruler and keeps tool', async ({ page }) => {
       const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
       const toolSelect = page.getByTestId('drawing-tool-select');
@@ -1590,27 +1694,20 @@ test.describe('DrawingSurface playground', () => {
       await expect(controlled.getByTestId('drawing-ruler')).toBeVisible();
     });
 
-    test('visual constants', async ({ page }) => {
+    test('shows a single translucent rectangular body', async ({ page }) => {
       const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
       await toggleBtn.click();
 
       const uncontrolled = page.getByTestId('drawing-surface-uncontrolled');
       const rulerBg = uncontrolled.getByTestId('drawing-ruler-background');
-      
-      const fillOpacity = await rulerBg.getAttribute('fill-opacity');
-      expect(fillOpacity).toBe('0.2');
 
-      const labels = await uncontrolled.locator('text[fill="black"]').allInnerTexts();
-      for (const label of labels) {
-        expect(String(label).startsWith('-')).toBe(false);
-      }
-
-      const centerLabel = await uncontrolled
-        .locator('text[fill="black"]')
-        .filter({ hasText: /^0$/ })
-        .first()
-        .textContent();
-      expect(centerLabel?.trim()).toBe('0');
+      await expect(rulerBg).toHaveAttribute('fill-opacity', '0.2');
+      await expect(rulerBg).not.toHaveAttribute('stroke', /.+/);
+      await expect(rulerBg).not.toHaveAttribute('rx', /.+/);
+      await expect(uncontrolled.getByTestId('drawing-ruler').locator('rect')).toHaveCount(1);
+      await expect(uncontrolled.getByTestId('drawing-ruler').locator('circle, text')).toHaveCount(
+        0
+      );
     });
 
     test('geometry attributes numeric', async ({ page }) => {
@@ -1618,8 +1715,13 @@ test.describe('DrawingSurface playground', () => {
       await toggleBtn.click();
 
       const ruler = page.getByTestId('drawing-surface-uncontrolled').getByTestId('drawing-ruler');
-      
-      for (const attr of ['data-ruler-center-x', 'data-ruler-center-y', 'data-ruler-rotation', 'data-ruler-length', 'data-ruler-height']) {
+
+      for (const attr of [
+        'data-ruler-center-x',
+        'data-ruler-center-y',
+        'data-ruler-length',
+        'data-ruler-height',
+      ]) {
         const val = await ruler.getAttribute(attr);
         expect(val).not.toBeNull();
         expect(Number.isFinite(parseFloat(val!))).toBe(true);
@@ -1646,49 +1748,48 @@ test.describe('DrawingSurface playground', () => {
         start: { x: cx - 50, y: drawY },
         moves: [{ x: cx + 50, y: drawY }],
       });
-      await page.waitForTimeout(100);
-
-      const previewText = await preview.textContent();
-      const parsed = JSON.parse(previewText!);
-      expect(parsed.strokes.length).toBeGreaterThan(1);
+      await expect.poll(async () => (await readPreview(preview)).strokes.length).toBeGreaterThan(1);
+      const parsed = await readPreview(preview);
       const lastStroke = parsed.strokes[parsed.strokes.length - 1];
-      
+
       for (const pt of lastStroke.points) {
         expect(Math.abs(pt.y - cy)).toBeGreaterThan(height / 2);
       }
     });
 
-    test('draw inside horizontal ruler is projected', async ({ page }) => {
+    test('plain left drag inside ruler draws without moving the ruler', async ({ page }) => {
       const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
       await toggleBtn.click();
 
       const surface = page.getByTestId('drawing-surface-uncontrolled');
       const preview = page.getByTestId('drawing-preview-uncontrolled');
-      const ruler = surface.getByTestId('drawing-ruler');
 
-      const cx = parseFloat((await ruler.getAttribute('data-ruler-center-x'))!);
-      const cy = parseFloat((await ruler.getAttribute('data-ruler-center-y'))!);
-      const height = parseFloat((await ruler.getAttribute('data-ruler-height'))!);
+      const surfaceBox = await surface.boundingBox();
+      expect(surfaceBox).not.toBeNull();
+      if (!surfaceBox) return;
+      const initialCenter = {
+        x: Number(await surface.getByTestId('drawing-ruler').getAttribute('data-ruler-center-x')),
+        y: Number(await surface.getByTestId('drawing-ruler').getAttribute('data-ruler-center-y')),
+      };
+      const strokeCountBefore = (await readPreview(preview)).strokes.length;
+      const start = {
+        x: surfaceBox.x + surfaceBox.width * 0.2,
+        y: surfaceBox.y + initialCenter.y,
+      };
 
-      const drawY = cy + height / 4;
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      await page.mouse.move(start.x + 50, start.y + 10, { steps: 4 });
+      await page.mouse.up();
 
-      await dispatchPointerDrag(surface, {
-        pointerId: 99,
-        pointerType: 'mouse',
-        start: { x: cx - 20, y: drawY },
-        moves: [{ x: cx + 50, y: drawY }],
-      });
-      await page.waitForTimeout(100);
-
-      const previewText = await preview.textContent();
-      const parsed = JSON.parse(previewText!);
-      expect(parsed.strokes.length).toBeGreaterThan(1);
-      const lastStroke = parsed.strokes[parsed.strokes.length - 1];
-      
-      const expectedY = cy - height / 2;
-      for (const pt of lastStroke.points) {
-        expect(pt.y).toBeCloseTo(expectedY, 1);
-      }
+      await expect.poll(async () => (await readPreview(preview)).strokes.length).toBe(
+        strokeCountBefore + 1
+      );
+      const centerAfterDrawing = {
+        x: Number(await surface.getByTestId('drawing-ruler').getAttribute('data-ruler-center-x')),
+        y: Number(await surface.getByTestId('drawing-ruler').getAttribute('data-ruler-center-y')),
+      };
+      expect(centerAfterDrawing).toEqual(initialCenter);
     });
 
     test('disable ruler restores normal drawing', async ({ page }) => {
@@ -1713,53 +1814,18 @@ test.describe('DrawingSurface playground', () => {
         start: { x: cx - 50, y: drawY },
         moves: [{ x: cx + 50, y: drawY }],
       });
-      await page.waitForTimeout(100);
-
-      const previewText = await preview.textContent();
-      const parsed = JSON.parse(previewText!);
-      expect(parsed.strokes.length).toBeGreaterThan(1);
+      await expect.poll(async () => (await readPreview(preview)).strokes.length).toBeGreaterThan(1);
+      const parsed = await readPreview(preview);
       const lastStroke = parsed.strokes[parsed.strokes.length - 1];
-      
+
       for (const pt of lastStroke.points) {
         expect(Math.abs(pt.y - cy)).toBeGreaterThan(5);
       }
     });
 
-    test('grip drag changes transform without stroke', async ({ page }) => {
-      const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
-      await toggleBtn.click();
-
-      const surface = page.getByTestId('drawing-surface-uncontrolled');
-      const preview = page.getByTestId('drawing-preview-uncontrolled');
-      const ruler = surface.getByTestId('drawing-ruler');
-      const grip = surface.getByTestId('drawing-ruler-drag-grip');
-
-      const startCx = parseFloat((await ruler.getAttribute('data-ruler-center-x'))!);
-      const startCy = parseFloat((await ruler.getAttribute('data-ruler-center-y'))!);
-
-      const gripBox = await grip.boundingBox();
-      expect(gripBox).not.toBeNull();
-
-      const previewBefore = await preview.textContent();
-
-      await dispatchPointerDrag(grip, {
-        pointerId: 101,
-        pointerType: 'mouse',
-        start: { x: gripBox!.width / 2, y: gripBox!.height / 2 },
-        moves: [{ x: gripBox!.width / 2 + 50, y: gripBox!.height / 2 + 50 }],
-      });
-
-      const endCx = parseFloat((await ruler.getAttribute('data-ruler-center-x'))!);
-      const endCy = parseFloat((await ruler.getAttribute('data-ruler-center-y'))!);
-
-      expect(endCx).not.toBe(startCx);
-      expect(endCy).not.toBe(startCy);
-
-      const previewAfter = await preview.textContent();
-      expect(previewAfter).toBe(previewBefore);
-    });
-
-    test('Ctrl move and Alt rotate ruler without creating stroke in real browser path', async ({ page }) => {
+    test('Ctrl drag translates the ruler while Alt rotates around its visible midpoint', async ({
+      page,
+    }) => {
       const toggleBtn = page.getByTestId('drawing-ruler-toggle').first();
       const surface = page.getByTestId('drawing-surface-uncontrolled');
       const preview = page.getByTestId('drawing-preview-uncontrolled');
@@ -1769,21 +1835,24 @@ test.describe('DrawingSurface playground', () => {
       await surface.scrollIntoViewIfNeeded();
 
       const ruler = surface.getByTestId('drawing-ruler');
-      const background = surface.getByTestId('drawing-ruler-background');
       await expect(ruler).toBeVisible();
+      const surfaceBox = await surface.boundingBox();
+      expect(surfaceBox).not.toBeNull();
+      if (!surfaceBox) return;
+      const viewport = await surface.evaluate((element) => ({
+        width: element.clientWidth,
+        height: element.clientHeight,
+      }));
 
       const previewBefore = await preview.textContent();
       const before = {
         centerX: parseFloat((await ruler.getAttribute('data-ruler-center-x')) ?? '0'),
         centerY: parseFloat((await ruler.getAttribute('data-ruler-center-y')) ?? '0'),
-        rotation: parseFloat((await ruler.getAttribute('data-ruler-rotation')) ?? '0'),
       };
 
-      const beforeBox = await background.boundingBox();
-      expect(beforeBox).not.toBeNull();
-
-      const ctrlStartX = beforeBox!.x + beforeBox!.width * 0.25;
-      const ctrlStartY = beforeBox!.y + beforeBox!.height * 0.5;
+      // 使用可视宿主坐标，而不是无限尺子的超长背景包围盒。
+      const ctrlStartX = surfaceBox.x + viewport.width * 0.2;
+      const ctrlStartY = surfaceBox.y + before.centerY;
       await page.keyboard.down('Control');
       await page.mouse.move(ctrlStartX, ctrlStartY);
       await page.mouse.down();
@@ -1794,33 +1863,39 @@ test.describe('DrawingSurface playground', () => {
       const afterCtrl = {
         centerX: parseFloat((await ruler.getAttribute('data-ruler-center-x')) ?? '0'),
         centerY: parseFloat((await ruler.getAttribute('data-ruler-center-y')) ?? '0'),
-        rotation: parseFloat((await ruler.getAttribute('data-ruler-rotation')) ?? '0'),
       };
 
-      expect(afterCtrl.centerX !== before.centerX || afterCtrl.centerY !== before.centerY).toBe(true);
-      expect(afterCtrl.rotation).toBe(before.rotation);
+      expect(afterCtrl.centerX - before.centerX).toBeCloseTo(48, 4);
+      expect(afterCtrl.centerY - before.centerY).toBeCloseTo(26, 4);
 
-      const afterCtrlBox = await background.boundingBox();
-      expect(afterCtrlBox).not.toBeNull();
-
-      const altStartX = afterCtrlBox!.x + afterCtrlBox!.width * 0.75;
-      const altStartY = afterCtrlBox!.y + afterCtrlBox!.height * 0.5;
+      const localPivot = { x: viewport.width / 2, y: afterCtrl.centerY };
+      const pivot = {
+        x: surfaceBox.x + localPivot.x,
+        y: surfaceBox.y + localPivot.y,
+      };
+      const altStart = {
+        x: surfaceBox.x + viewport.width * 0.2,
+        y: surfaceBox.y + afterCtrl.centerY,
+      };
+      const startVector = {
+        x: altStart.x - pivot.x,
+        y: altStart.y - pivot.y,
+      };
       await page.keyboard.down('Alt');
-      await page.mouse.move(altStartX, altStartY);
+      await page.mouse.move(altStart.x, altStart.y);
       await page.mouse.down();
-      await page.mouse.move(altStartX - 36, altStartY + 42, { steps: 10 });
+      await page.mouse.move(pivot.x - startVector.y, pivot.y + startVector.x, { steps: 10 });
       await page.mouse.up();
       await page.keyboard.up('Alt');
 
       const afterAlt = {
         centerX: parseFloat((await ruler.getAttribute('data-ruler-center-x')) ?? '0'),
         centerY: parseFloat((await ruler.getAttribute('data-ruler-center-y')) ?? '0'),
-        rotation: parseFloat((await ruler.getAttribute('data-ruler-rotation')) ?? '0'),
       };
 
-      expect(afterAlt.centerX).toBe(afterCtrl.centerX);
-      expect(afterAlt.centerY).toBe(afterCtrl.centerY);
-      expect(afterAlt.rotation).not.toBe(afterCtrl.rotation);
+      expect(Number(await ruler.getAttribute('data-ruler-rotation'))).toBeCloseTo(Math.PI / 2, 4);
+      expect(afterAlt.centerX).toBeCloseTo(localPivot.x, 4);
+      expect(afterAlt.centerY).toBeCloseTo(localPivot.y + afterCtrl.centerX - localPivot.x, 4);
 
       const previewAfter = await preview.textContent();
       expect(previewAfter).toBe(previewBefore);

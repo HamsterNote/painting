@@ -63,5 +63,6 @@ describe('PaintingController relative positioning', () => {
     if (!toolbarProps) throw new Error('Painting toolbar Popover was not rendered');
     expect(toolbarProps.relative).toBeUndefined();
     expect(toolbarProps.style?.position).toBe('absolute');
+    expect(toolbarProps.style?.zIndex).toBe(1);
   });
 });

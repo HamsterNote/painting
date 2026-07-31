@@ -7,6 +7,8 @@ function createPointerEvent(
 
   Object.defineProperties(event, {
     button: { value: 0 },
+    clientX: { value: 10 },
+    clientY: { value: 20 },
     pointerId: { value: 1 },
     pointerType: { value: pointerType },
   });
@@ -16,32 +18,35 @@ function createPointerEvent(
 
 describe('installCapturePhaseRulerPointerBridge', () => {
   it.each(['mouse', 'touch', 'pen'] as const)(
-    'forwards %s ruler pointerdown events into multi-drag before bubble handlers stop them',
+    'forwards %s pointerdown events to the ruler ingress before bubble handlers stop them',
     (pointerType) => {
       const listenerTarget = document.createElement('div');
       const rulerTarget = document.createElement('div');
       rulerTarget.setAttribute('data-testid', 'drawing-ruler');
       listenerTarget.appendChild(rulerTarget);
 
-      const handlePointerDown = jest.fn();
+      const onPointerDown = jest.fn();
       const dispose = installCapturePhaseRulerPointerBridge({
         listenerTarget,
-        multiDragRef: { current: { handlePointerDown } },
-        getInteractionOwnerOptions: (input) => ({
-          input,
-          isDrawingEnabled: true,
-          isRulerEnabled: true,
-          virtualPaperEnabled: true,
-          allowedDrawingInputMethods: ['mouse', 'touch', 'pen'],
-          activeTouchPointers: pointerType === 'touch' ? 2 : 1,
-        }),
+        onPointerDown,
       });
 
       rulerTarget.dispatchEvent(createPointerEvent(pointerType));
 
-      expect(handlePointerDown).toHaveBeenCalledTimes(1);
+      expect(onPointerDown).toHaveBeenCalledTimes(1);
 
       dispose();
     }
   );
+
+  it('ignores a plain Event that only uses the pointerdown event name', () => {
+    const listenerTarget = document.createElement('div');
+    const onPointerDown = jest.fn();
+    const dispose = installCapturePhaseRulerPointerBridge({ listenerTarget, onPointerDown });
+
+    listenerTarget.dispatchEvent(new Event('pointerdown'));
+
+    expect(onPointerDown).not.toHaveBeenCalled();
+    dispose();
+  });
 });

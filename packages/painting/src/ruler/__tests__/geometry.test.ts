@@ -1,340 +1,222 @@
-/**
- * Ruler 几何与刻度测试。
- *
- * 覆盖：
- * - 坐标转换往返一致性
- * - 点在 ruler 内/外判断
- * - 水平 ruler 中心线投影（投影后 y == center.y）
- * - 内部交互使用的刻度边缘投影
- * - 外部点返回 null
- * - 30° 旋转 ruler 投影到旋转中心线（容差内）
- * - 刻度标签：中心 "0"，正标签镜像，无负标签
- * - 刻度数量有界
- */
-
-import type { RulerTransform } from '../geometry';
 import {
-  degToRad,
+  constrainPointToRulerEdge,
+  createRulerEdgeConstraint,
+  getInfiniteRulerLayout,
   isInsideRuler,
-  projectOntoRuler,
-  projectOntoRulerTickEdge,
-  toCanvasPoint,
-  toLocalPoint,
+  projectPointToRulerCenterline,
+  type RulerRect,
+  rotateRulerAround,
+  snapRulerRotation,
 } from '../geometry';
-import { generateTicks } from '../ticks';
 
-// ─── 测试用 ruler 便利构造 ────────────────────────────────────────────────────
+describe('physical ruler edge constraint', () => {
+  const ruler: RulerRect = {
+    center: { x: 100, y: 100 },
+    length: 400,
+    height: 40,
+    rotationRad: 0,
+  };
 
-/** 创建一个水平、以指定中心为原点的 ruler */
-function makeHorizontalRuler(
-  cx: number,
-  cy: number,
-  length = 400,
-  height = 40,
-): RulerTransform {
-  return { center: { x: cx, y: cy }, rotationRad: 0, length, height };
-}
+  it('selects the nearer edge and leaves points untouched before crossing it', () => {
+    // Given: 指针从尺子上方开始，最近的物理尺边是 y=80。
+    const constraint = createRulerEdgeConstraint({ x: 40, y: 60 }, ruler);
 
-/** 创建一个旋转指定度数的 ruler */
-function makeRotatedRuler(
-  cx: number,
-  cy: number,
-  deg: number,
-  length = 400,
-  height = 40,
-): RulerTransform {
-  return { center: { x: cx, y: cy }, rotationRad: degToRad(deg), length, height };
-}
+    // When: 指针仍停留在起点同侧。
+    const result = constrainPointToRulerEdge({ x: 70, y: 70 }, constraint);
 
-// ─── 坐标转换 ────────────────────────────────────────────────────────────────
-
-describe('ruler geometry - coordinate transforms', () => {
-  const ruler = makeHorizontalRuler(200, 300);
-
-  it('toLocalPoint 将画布原点附近的点转换为本地坐标', () => {
-    // center=(200,300), 无旋转，点 (220,310) → 本地 (20, 10)
-    const local = toLocalPoint({ x: 220, y: 310 }, ruler);
-    expect(local.x).toBeCloseTo(20, 6);
-    expect(local.y).toBeCloseTo(10, 6);
+    // Then: 约束尚未锁定，原始点不被提前吸到尺边。
+    expect(result.constraint.phase).toBe('approaching');
+    expect(result.point).toEqual({ x: 70, y: 70 });
   });
 
-  it('toCanvasPoint 将本地坐标转换回画布坐标', () => {
-    const canvas = toCanvasPoint({ x: 20, y: 10 }, ruler);
-    expect(canvas.x).toBeCloseTo(220, 6);
-    expect(canvas.y).toBeCloseTo(310, 6);
-  });
+  it('re-arms from the exit side so the same gesture can constrain again after re-entry', () => {
+    // Given: 指针从上方接近 y=80 的尺边。
+    const constraint = createRulerEdgeConstraint({ x: 40, y: 60 }, ruler);
 
-  it('往返转换保持一致（水平 ruler）', () => {
-    const original = { x: 250, y: 320 };
-    const local = toLocalPoint(original, ruler);
-    const back = toCanvasPoint(local, ruler);
-    expect(back.x).toBeCloseTo(original.x, 6);
-    expect(back.y).toBeCloseTo(original.y, 6);
-  });
+    // When: 指针先跨入尺身，再从另一侧离开尺子，随后重新进入尺身。
+    const crossed = constrainPointToRulerEdge({ x: 70, y: 90 }, constraint);
+    const leftRuler = constrainPointToRulerEdge({ x: 120, y: 140 }, crossed.constraint);
+    const reentered = constrainPointToRulerEdge({ x: 150, y: 90 }, leftRuler.constraint);
 
-  it('往返转换保持一致（30° 旋转 ruler）', () => {
-    const rotatedRuler = makeRotatedRuler(100, 100, 30);
-    const original = { x: 150, y: 120 };
-    const local = toLocalPoint(original, rotatedRuler);
-    const back = toCanvasPoint(local, rotatedRuler);
-    expect(back.x).toBeCloseTo(original.x, 6);
-    expect(back.y).toBeCloseTo(original.y, 6);
-  });
-
-  it('中心点的本地坐标为原点', () => {
-    const local = toLocalPoint({ x: 200, y: 300 }, ruler);
-    expect(local.x).toBeCloseTo(0, 6);
-    expect(local.y).toBeCloseTo(0, 6);
-  });
-});
-
-// ─── 点在 ruler 内判断 ────────────────────────────────────────────────────────
-
-describe('ruler geometry - isInsideRuler', () => {
-  const ruler = makeHorizontalRuler(200, 300, 400, 40);
-
-  it('中心点在 ruler 内', () => {
-    expect(isInsideRuler({ x: 200, y: 300 }, ruler)).toBe(true);
-  });
-
-  it('ruler 边界上的点在 ruler 内（<= 判断）', () => {
-    // 右边缘：localX = 200, localY = 0
-    expect(isInsideRuler({ x: 400, y: 300 }, ruler)).toBe(true);
-    // 上边缘：localX = 0, localY = -20
-    expect(isInsideRuler({ x: 200, y: 280 }, ruler)).toBe(true);
-  });
-
-  it('ruler 外部的点不在 ruler 内', () => {
-    // 超出右边界
-    expect(isInsideRuler({ x: 500, y: 300 }, ruler)).toBe(false);
-    // 超出上边界
-    expect(isInsideRuler({ x: 200, y: 200 }, ruler)).toBe(false);
-  });
-
-  it('30° 旋转 ruler 内部点判断正确', () => {
-    const rotatedRuler = makeRotatedRuler(200, 300, 30, 400, 40);
-    // 中心点始终在内部
-    expect(isInsideRuler({ x: 200, y: 300 }, rotatedRuler)).toBe(true);
-    // 远处的点在外部
-    expect(isInsideRuler({ x: 500, y: 500 }, rotatedRuler)).toBe(false);
-  });
-});
-
-// ─── 投影 ────────────────────────────────────────────────────────────────────
-
-describe('ruler geometry - projectOntoRuler', () => {
-  it('水平 ruler：内部点投影后 y == 中心线（center.y）', () => {
-    const ruler = makeHorizontalRuler(200, 300, 400, 40);
-    const canvasPoint = { x: 220, y: 310 };
-    const projected = projectOntoRuler(canvasPoint, ruler);
-
-    expect(projected).toEqual({ x: 220, y: 300 });
-  });
-
-  it('外部点返回 null', () => {
-    const ruler = makeHorizontalRuler(200, 300, 400, 40);
-    // 完全在 ruler 外部
-    const projected = projectOntoRuler({ x: 600, y: 600 }, ruler);
-    expect(projected).toBeNull();
-  });
-
-  it('超出右端的内部点被 clamp 到右端', () => {
-    const ruler = makeHorizontalRuler(200, 300, 400, 40);
-    // localX = 250，超出 halfLen=200，但仍在 height 范围内
-    // y 需要在 [280, 320] 范围内
-    const canvasPoint = { x: 450, y: 300 }; // localX=250, localY=0
-    const projected = projectOntoRuler(canvasPoint, ruler);
-
-    // 点 (450, 300) 的 localX=250 > halfLen=200，但仍 |localY|=0 <= halfH=20
-    // 所以 isInsideRuler 应该为 false（|localX|=250 > 200）
-    expect(projected).toBeNull();
-  });
-
-  it('边界点投影时 localX 被限制在 [-length/2, length/2], localY == 0', () => {
-    const ruler = makeHorizontalRuler(200, 300, 400, 40);
-
-    const rightEdgeProjection = projectOntoRuler({ x: 400, y: 310 }, ruler);
-    const leftEdgeProjection = projectOntoRuler({ x: 0, y: 290 }, ruler);
-
-    expect(rightEdgeProjection).not.toBeNull();
-    expect(leftEdgeProjection).not.toBeNull();
-    if (!rightEdgeProjection || !leftEdgeProjection) {
-      throw new Error('Expected ruler edge projections to exist');
-    }
-    const rightLocal = toLocalPoint(rightEdgeProjection, ruler);
-    const leftLocal = toLocalPoint(leftEdgeProjection, ruler);
-    expect(rightLocal.x).toBeCloseTo(ruler.length / 2, 6);
-    expect(rightLocal.y).toBeCloseTo(0, 6);
-    expect(leftLocal.x).toBeCloseTo(-ruler.length / 2, 6);
-    expect(leftLocal.y).toBeCloseTo(0, 6);
-  });
-
-  it('30° 旋转 ruler：内部点投影到中心线（容差内）', () => {
-    const ruler = makeRotatedRuler(200, 300, 30, 400, 40);
-
-    const localInput = { x: 50, y: 5 };
-    const canvasPoint = toCanvasPoint(localInput, ruler);
-
-    const projected = projectOntoRuler(canvasPoint, ruler);
-    if (!projected) {
-      throw new Error('Expected projected point to exist for inside ruler input');
-    }
-
-    const projectedLocal = toLocalPoint(projected, ruler);
-    expect(projectedLocal.x).toBeCloseTo(50, 4);
-    expect(projectedLocal.y).toBeCloseTo(0, 4);
-
-    const dirX = Math.cos(ruler.rotationRad);
-    const dirY = Math.sin(ruler.rotationRad);
-    const expectedX = ruler.center.x + 50 * dirX;
-    const expectedY = ruler.center.y + 50 * dirY;
-    expect(projected.x).toBeCloseTo(expectedX, 4);
-    expect(projected.y).toBeCloseTo(expectedY, 4);
-  });
-
-  it('30° 旋转 ruler：外部点返回 null', () => {
-    const ruler = makeRotatedRuler(200, 300, 30, 400, 40);
-    const projected = projectOntoRuler({ x: 600, y: 600 }, ruler);
-    expect(projected).toBeNull();
-  });
-});
-
-describe('ruler geometry - projectOntoRulerTickEdge', () => {
-  it('水平 ruler：内部点投影后 y == 刻度边缘（center.y - height/2）', () => {
-    const ruler = makeHorizontalRuler(200, 300, 400, 40);
-    const projected = projectOntoRulerTickEdge({ x: 220, y: 310 }, ruler);
-
-    expect(projected).toEqual({ x: 220, y: 280 });
-  });
-
-  it('30° 旋转 ruler：内部点投影到刻度边缘线（容差内）', () => {
-    const ruler = makeRotatedRuler(200, 300, 30, 400, 40);
-    const localInput = { x: 50, y: 5 };
-    const canvasPoint = toCanvasPoint(localInput, ruler);
-    const projected = projectOntoRulerTickEdge(canvasPoint, ruler);
-
-    if (!projected) {
-      throw new Error('Expected edge projection to exist for inside ruler input');
-    }
-    const projectedLocal = toLocalPoint(projected, ruler);
-    expect(projectedLocal.x).toBeCloseTo(50, 4);
-    expect(projectedLocal.y).toBeCloseTo(-ruler.height / 2, 4);
-  });
-});
-
-// ─── 角度工具 ────────────────────────────────────────────────────────────────
-
-describe('ruler geometry - angle utilities', () => {
-  it('degToRad 正确转换', () => {
-    expect(degToRad(0)).toBeCloseTo(0, 10);
-    expect(degToRad(90)).toBeCloseTo(Math.PI / 2, 10);
-    expect(degToRad(180)).toBeCloseTo(Math.PI, 10);
-    expect(degToRad(30)).toBeCloseTo(Math.PI / 6, 10);
-  });
-});
-
-// ─── 刻度生成 ────────────────────────────────────────────────────────────────
-
-describe('ruler ticks - generateTicks', () => {
-  const ruler = makeHorizontalRuler(200, 300, 400, 40);
-
-  it('中心刻度标签为 "0"', () => {
-    const ticks = generateTicks(ruler, { majorSpacing: 50, minorSpacing: 10 });
-    const centerTick = ticks.find((t) => Math.abs(t.localX) < 1e-6);
-    if (!centerTick) {
-      throw new Error('Expected center tick to exist');
-    }
-    expect(centerTick.label).toBe('0');
-    expect(centerTick.kind).toBe('major');
-  });
-
-  it('所有标签不含负号', () => {
-    const ticks = generateTicks(ruler, { majorSpacing: 50, minorSpacing: 10 });
-    for (const tick of ticks) {
-      expect(tick.label).not.toMatch(/-/);
-    }
-  });
-
-  it('左右对称的 major 刻度标签相同（正数）', () => {
-    const ticks = generateTicks(ruler, { majorSpacing: 50, minorSpacing: 10 });
-    const majorTicks = ticks.filter((t) => t.kind === 'major');
-
-    // 收集正方向和负方向的标签
-    const positiveLabels = majorTicks
-      .filter((t) => t.localX > 1e-6)
-      .map((t) => t.label);
-    const negativeLabels = majorTicks
-      .filter((t) => t.localX < -1e-6)
-      .map((t) => t.label);
-
-    // 两侧的标签集合应该相同（镜像）
-    expect(positiveLabels.sort()).toEqual(negativeLabels.sort());
-
-    // 所有非零标签应该是正数字符串
-    for (const label of positiveLabels) {
-      expect(Number(label)).toBeGreaterThan(0);
-    }
-  });
-
-  it('major 刻度间距正确（50 单位间隔）', () => {
-    const ticks = generateTicks(ruler, { majorSpacing: 50, minorSpacing: 10 });
-    const majorTicks = ticks.filter((t) => t.kind === 'major');
-    // ruler length=400, halfLen=200, majorSpacing=50 → 应有 0, ±50, ±100, ±150, ±200
-    // 共 9 个 major 刻度
-    expect(majorTicks.length).toBe(9);
-  });
-
-  it('刻度数量有界（默认 length=400 不超过 maxTicks）', () => {
-    const ticks = generateTicks(ruler, { majorSpacing: 50, minorSpacing: 10 });
-    // length=400, minorSpacing=10 → 最多 400/10 + 1 = 41 个刻度
-    expect(ticks.length).toBeLessThanOrEqual(200);
-    expect(ticks.length).toBeGreaterThan(0);
-  });
-
-  it('maxTicks 限制生效', () => {
-    const ticks = generateTicks(ruler, {
-      majorSpacing: 50,
-      minorSpacing: 10,
-      maxTicks: 5,
+    // Then: 首次进入吸到上边；离尺样本保持原始值，并从下侧重新等待下一次进入。
+    expect(crossed.constraint.phase).toBe('constrained');
+    expect(crossed.point).toEqual({ x: 70, y: 80 });
+    expect(leftRuler.constraint).toMatchObject({
+      phase: 'approaching',
+      edgeNormal: 1,
     });
-    expect(ticks.length).toBeLessThanOrEqual(5);
+    expect(leftRuler.point).toEqual({ x: 120, y: 140 });
+    expect(reentered.constraint.phase).toBe('constrained');
+    expect(reentered.point).toEqual({ x: 150, y: 120 });
   });
 
-  it('刻度按 localX 升序排列', () => {
-    const ticks = generateTicks(ruler, { majorSpacing: 50, minorSpacing: 10 });
-    for (let i = 1; i < ticks.length; i++) {
-      expect(ticks[i].localX).toBeGreaterThanOrEqual(ticks[i - 1].localX);
+  it('keeps approaching after touching the selected edge without crossing it', () => {
+    // Given: 指针从尺子上方接近 y=80 的尺边。
+    const constraint = createRulerEdgeConstraint({ x: 40, y: 60 }, ruler);
+
+    // When: 指针先精确接触尺边，随后退回同侧，最后才真正进入尺身。
+    const touched = constrainPointToRulerEdge({ x: 70, y: 80 }, constraint);
+    const retreated = constrainPointToRulerEdge({ x: 90, y: 70 }, touched.constraint);
+    const crossed = constrainPointToRulerEdge({ x: 110, y: 90 }, retreated.constraint);
+
+    // Then: 接触和后退都不改变阶段；真正跨入后才约束到最初选择的尺边。
+    expect(touched.constraint.phase).toBe('approaching');
+    expect(touched.point).toEqual({ x: 70, y: 80 });
+    expect(retreated.constraint.phase).toBe('approaching');
+    expect(retreated.point).toEqual({ x: 90, y: 70 });
+    expect(crossed.constraint.phase).toBe('constrained');
+    expect(crossed.point).toEqual({ x: 110, y: 80 });
+  });
+
+  it('re-arms without inventing a constrained point when one sparse sample jumps across', () => {
+    // Given: 指针从尺子上方开始，尚未进入尺身。
+    const constraint = createRulerEdgeConstraint({ x: 40, y: 60 }, ruler);
+
+    // When: 下一个稀疏采样直接落到尺子下方，随后又回到尺身内。
+    const jumpedAcross = constrainPointToRulerEdge({ x: 100, y: 140 }, constraint);
+    const reentered = constrainPointToRulerEdge({ x: 130, y: 90 }, jumpedAcross.constraint);
+
+    // Then: 跳越点不补造吸附，但落到下侧后会重新等待下一次真实进入。
+    expect(jumpedAcross.constraint).toMatchObject({
+      phase: 'approaching',
+      edgeNormal: 1,
+    });
+    expect(jumpedAcross.point).toEqual({ x: 100, y: 140 });
+    expect(reentered.constraint.phase).toBe('constrained');
+    expect(reentered.point).toEqual({ x: 130, y: 120 });
+  });
+
+  it('projects onto the nearer edge of a rotated ruler', () => {
+    // Given: 竖直尺子的左侧边为 x=80，指针从其左侧开始。
+    const rotatedRuler = { ...ruler, rotationRad: Math.PI / 2 };
+    const constraint = createRulerEdgeConstraint({ x: 60, y: 40 }, rotatedRuler);
+
+    // When: 指针横向跨过左侧边。
+    const result = constrainPointToRulerEdge({ x: 95, y: 150 }, constraint);
+
+    // Then: 点沿尺轴保留纵向位置，并投影到 x=80 的同一条物理边。
+    expect(result.point.x).toBeCloseTo(80);
+    expect(result.point.y).toBeCloseTo(150);
+  });
+
+  it('projects a point onto a rotated ruler centerline', () => {
+    // Given: 一把 45° 尺子和一个偏离其中线的触摸中点。
+    const rotatedRuler = { ...ruler, rotationRad: Math.PI / 4 };
+
+    // When: 将触摸中点投影到尺子中线。
+    const projected = projectPointToRulerCenterline({ x: 120, y: 100 }, rotatedRuler);
+
+    // Then: 投影点的 x/y 沿 45° 中线等量偏移。
+    expect(projected.x).toBeCloseTo(110);
+    expect(projected.y).toBeCloseTo(110);
+  });
+});
+
+describe('ruler rectangle geometry', () => {
+  const ruler: RulerRect = {
+    center: { x: 200, y: 300 },
+    length: 400,
+    height: 40,
+    rotationRad: 0,
+  };
+
+  it('includes its center and visible edges', () => {
+    expect(isInsideRuler({ x: 200, y: 300 }, ruler)).toBe(true);
+    expect(isInsideRuler({ x: 0, y: 300 }, ruler)).toBe(true);
+    expect(isInsideRuler({ x: 400, y: 300 }, ruler)).toBe(true);
+    expect(isInsideRuler({ x: 200, y: 280 }, ruler)).toBe(true);
+    expect(isInsideRuler({ x: 200, y: 320 }, ruler)).toBe(true);
+  });
+
+  it('has no endpoints but excludes points beyond its thickness', () => {
+    expect(isInsideRuler({ x: -10_000, y: 300 }, ruler)).toBe(true);
+    expect(isInsideRuler({ x: 10_000, y: 300 }, ruler)).toBe(true);
+    expect(isInsideRuler({ x: 200, y: 279.99 }, ruler)).toBe(false);
+    expect(isInsideRuler({ x: 200, y: 320.01 }, ruler)).toBe(false);
+  });
+
+  it('tests a rotated ruler in its local coordinate system', () => {
+    // Given: 一把绕中心旋转 90° 的尺子。
+    const rotatedRuler: RulerRect = { ...ruler, rotationRad: Math.PI / 2 };
+
+    // When / Then: 原本的长度轴随旋转变为竖直方向，厚度轴变为水平方向。
+    expect(isInsideRuler({ x: 200, y: 490 }, rotatedRuler)).toBe(true);
+    expect(isInsideRuler({ x: 221, y: 300 }, rotatedRuler)).toBe(false);
+  });
+});
+
+describe('infinite ruler layout', () => {
+  it('projects the logical origin onto an endpoint-free strip covering the viewport diagonal', () => {
+    // Given: 逻辑原点已经沿尺子方向移出画布，但直线仍穿过画布。
+    const viewport = { width: 800, height: 600 };
+
+    // When: 计算只用于可视区域的无限尺布局。
+    const layout = getInfiniteRulerLayout({
+      logicalCenter: { x: 2_000, y: 300 },
+      rotationRad: 0,
+      height: 48,
+      viewport,
+    });
+
+    // Then: 可见段仍锚定在画布中心，并长于画布对角线，因此看不到端点。
+    expect(layout.visualCenter).toEqual({ x: 400, y: 300 });
+    expect(layout.tickOriginX).toBe(1_600);
+    expect(layout.renderLength).toBeGreaterThan(Math.hypot(viewport.width, viewport.height));
+  });
+
+  it('rotates both the logical origin and ruler angle around the visible canvas center', () => {
+    // Given: 水平尺子的逻辑原点位于旋转中心右侧。
+    const state = { center: { x: 500, y: 300 }, rotationRad: 0 };
+
+    // When: 绕画布可视中心顺时针旋转 90°。
+    const rotated = rotateRulerAround(state, { x: 400, y: 300 }, Math.PI / 2);
+
+    // Then: 尺子作为刚体绕同一中心旋转。
+    expect(rotated.center.x).toBeCloseTo(400);
+    expect(rotated.center.y).toBeCloseTo(400);
+    expect(rotated.rotationRad).toBeCloseTo(Math.PI / 2);
+  });
+
+  it('uses the midpoint of the viewport-clipped centerline as the visible center', () => {
+    // Given: 45° 尺子中线从画布左上角进入、底边离开；其逻辑原点不在裁切段中点。
+    const viewport = { width: 800, height: 600 };
+
+    // When: 计算无限尺在可视区域中的布局。
+    const layout = getInfiniteRulerLayout({
+      logicalCenter: { x: 100, y: 100 },
+      rotationRad: Math.PI / 4,
+      height: 48,
+      viewport,
+    });
+
+    // Then: 可见中心是裁切中线段 (0,0)→(600,600) 的中点，并严格位于尺子中线上。
+    expect(layout.visualCenter.x).toBeCloseTo(300);
+    expect(layout.visualCenter.y).toBeCloseTo(300);
+    expect(layout.tickOriginX).toBeCloseTo(-Math.hypot(200, 200));
+  });
+});
+
+describe('ruler rotation snapping', () => {
+  it.each([
+    [Math.PI * 0.24, Math.PI / 4],
+    [Math.PI * 0.49, Math.PI / 2],
+    [-Math.PI * 0.24, -Math.PI / 4],
+  ])('snaps %p radians to the nearest 45-degree multiple', (rotationRad, expected) => {
+    // Given / When: 尺子旋转角已进入某个 45° 倍数附近的吸附范围。
+    const snapped = snapRulerRotation(rotationRad);
+
+    // Then: 角度吸附到距离最近的 45° 倍数，负角度保持方向。
+    expect(snapped).toBeCloseTo(expected);
+  });
+
+  it.each([Math.PI / 6, -Math.PI / 6])(
+    'keeps %p radians free outside the snap tolerance',
+    (rotationRad) => {
+      // Given / When: 尺子方向距离最近的 45° 倍数仍有明显距离。
+      const rotation = snapRulerRotation(rotationRad);
+
+      // Then: 范围外保持连续自由旋转，不提前跳到吸附角。
+      expect(rotation).toBeCloseTo(rotationRad);
     }
-  });
-
-  it('minor 刻度标签为空字符串', () => {
-    const ticks = generateTicks(ruler, { majorSpacing: 50, minorSpacing: 10 });
-    const minorTicks = ticks.filter((t) => t.kind === 'minor');
-    for (const tick of minorTicks) {
-      expect(tick.label).toBe('');
-    }
-  });
-
-  it('所有刻度的 canvasPoint 在 ruler 中心线上', () => {
-    const ticks = generateTicks(ruler, { majorSpacing: 50, minorSpacing: 10 });
-    for (const tick of ticks) {
-      // 水平 ruler 的中心线 y == center.y
-      expect(tick.canvasPoint.y).toBeCloseTo(300, 6);
-    }
-  });
-
-  it('旋转 ruler 的刻度 canvasPoint 在旋转中心线上', () => {
-    const rotatedRuler = makeRotatedRuler(200, 300, 30, 400, 40);
-    const ticks = generateTicks(rotatedRuler, { majorSpacing: 50, minorSpacing: 10 });
-
-    for (const tick of ticks) {
-      // 验证：从 center 到 tick.canvasPoint 的向量与 ruler 方向平行（叉积≈0）
-      const dx = tick.canvasPoint.x - rotatedRuler.center.x;
-      const dy = tick.canvasPoint.y - rotatedRuler.center.y;
-      const dirX = Math.cos(rotatedRuler.rotationRad);
-      const dirY = Math.sin(rotatedRuler.rotationRad);
-      const cross = dx * dirY - dy * dirX;
-      expect(Math.abs(cross)).toBeLessThan(1e-4);
-    }
-  });
+  );
 });

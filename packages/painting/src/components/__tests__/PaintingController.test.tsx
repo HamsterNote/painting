@@ -50,6 +50,32 @@ describe('PaintingController', () => {
     expect(screen.queryByTestId('painting-board-stroke-color-btn')).toBeNull();
   });
 
+  it('shows pressure only while stylus mode is enabled', () => {
+    // Given / When: 默认关闭手写笔模式。
+    const { rerender } = render(
+      <PaintingController
+        data={{ tool: 'pen', minimap: false }}
+        onDataChange={jest.fn()}
+        tools={['pen']}
+      />
+    );
+
+    // Then: 手指绘图模式不展示压感入口。
+    expect(screen.queryByTestId('painting-board-pressure-toggle')).toBeNull();
+
+    // When: 外部显式开启手写笔模式。
+    rerender(
+      <PaintingController
+        data={{ tool: 'pen', minimap: false, stylusMode: true }}
+        onDataChange={jest.fn()}
+        tools={['pen']}
+      />
+    );
+
+    // Then: 压感入口随手写笔模式出现。
+    expect(screen.queryByTestId('painting-board-pressure-toggle')).not.toBeNull();
+  });
+
   it('shows text color and font size controls without stroke-only controls', () => {
     // Given / When: 文字工具使用受控颜色与字号。
     render(
@@ -115,7 +141,7 @@ describe('PaintingController', () => {
     expect(onDataChange).toHaveBeenCalledWith({ ...data, tool: 'lasso', selection: null });
   });
 
-  it('hides reset/clear/more/minimap controls when multiBoard is true', () => {
+  it('hides reset/clear/more/minimap/ruler controls when multiBoard is true', () => {
     // Given: 多画板共享底栏模式开启，reset/clear/minimap 语义上只作用于单个画板，应隐藏。
     render(
       <PaintingController
@@ -133,9 +159,10 @@ describe('PaintingController', () => {
     expect(screen.queryByTestId('painting-board-clear-canvas')).toBeNull();
     expect(screen.queryByTestId('painting-board-more-btn')).toBeNull();
     expect(screen.queryByTestId('painting-board-minimap-toggle')).toBeNull();
+    expect(screen.queryByTestId('painting-board-ruler-toggle')).toBeNull();
   });
 
-  it('renders reset/clear/more controls by default and exposes MiniMap in the more menu', () => {
+  it('renders reset/clear/more controls by default and exposes MiniMap and Ruler in the more menu', () => {
     // Given: 默认单画板模式（未传 multiBoard），传入 reset/clear 回调。
     render(
       <PaintingController
@@ -153,6 +180,21 @@ describe('PaintingController', () => {
     expect(screen.queryByTestId('painting-board-more-btn')).not.toBeNull();
     fireEvent.click(screen.getByTestId('painting-board-more-btn'));
     expect(screen.queryByTestId('painting-board-minimap-toggle')).not.toBeNull();
+    expect(screen.queryByTestId('painting-board-ruler-toggle')).not.toBeNull();
+  });
+
+  it('writes ruler visibility through the controlled data channel', () => {
+    // Given: 单画板底栏的尺子当前关闭。
+    const data: PaintingControllerData = { tool: 'pen', minimap: false, ruler: false };
+    const onDataChange = jest.fn();
+    render(<PaintingController data={data} onDataChange={onDataChange} tools={['pen']} />);
+
+    // When: 用户在 More 菜单开启尺子。
+    fireEvent.click(screen.getByTestId('painting-board-more-btn'));
+    fireEvent.click(screen.getByTestId('painting-board-ruler-toggle'));
+
+    // Then: 完整 data 通过既有受控通道回写。
+    expect(onDataChange).toHaveBeenCalledWith({ ...data, ruler: true });
   });
 
   it('renders undo and redo first and forwards enabled history actions', () => {
@@ -179,6 +221,40 @@ describe('PaintingController', () => {
     expect(buttons[1]).toBe(screen.getByTestId('painting-board-redo'));
     expect(undo).toHaveBeenCalledTimes(1);
     expect(redo).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['undo', 'painting-board-undo'],
+    ['redo', 'painting-board-redo'],
+  ] as const)('clears the shared selection before %s', (action, testId) => {
+    // Given: 共享底栏持有跨画板选框，且对应历史命令可执行。
+    const data: PaintingControllerData = {
+      tool: 'lasso',
+      minimap: false,
+      selection: { boardId: 'board-a', strokeIds: ['stroke-1'] },
+    };
+    const onDataChange = jest.fn();
+    const history = {
+      canUndo: true,
+      canRedo: true,
+      undo: jest.fn(),
+      redo: jest.fn(),
+    };
+    render(
+      <PaintingController
+        data={data}
+        onDataChange={onDataChange}
+        tools={['lasso']}
+        history={history}
+      />
+    );
+
+    // When: 用户点击共享底栏的撤销或恢复按钮。
+    fireEvent.click(screen.getByTestId(testId));
+
+    // Then: 先通过共享 data 通道取消选框，再执行对应历史命令。
+    expect(onDataChange).toHaveBeenCalledWith({ ...data, selection: null });
+    expect(history[action]).toHaveBeenCalledTimes(1);
   });
 
   it('disables unavailable undo and redo actions', () => {
@@ -257,8 +333,8 @@ describe('PaintingController', () => {
       // When: 打开 More 菜单（compact 模式下 More 按钮始终展示）。
       fireEvent.click(screen.getByTestId('painting-board-more-btn'));
 
-      // Then: 压感 / 手写笔 / 清空收纳进 More 菜单。
-      expect(screen.queryByTestId('painting-board-more-pressure')).not.toBeNull();
+      // Then: 默认关闭手写笔模式，因此只收纳手写笔 / 清空，不展示压感。
+      expect(screen.queryByTestId('painting-board-more-pressure')).toBeNull();
       expect(screen.queryByTestId('painting-board-more-stylus')).not.toBeNull();
       expect(screen.queryByTestId('painting-board-more-clear-canvas')).not.toBeNull();
     } finally {
@@ -297,10 +373,11 @@ describe('PaintingController', () => {
       // When: 打开 More 菜单（compact 模式下即使 multiBoard 也展示 More 按钮）。
       fireEvent.click(screen.getByTestId('painting-board-more-btn'));
 
-      // Then: 压感 / 手写笔保留；MiniMap / 清空隐藏。
-      expect(screen.queryByTestId('painting-board-more-pressure')).not.toBeNull();
+      // Then: 默认关闭手写笔模式，只保留手写笔；MiniMap / 清空隐藏。
+      expect(screen.queryByTestId('painting-board-more-pressure')).toBeNull();
       expect(screen.queryByTestId('painting-board-more-stylus')).not.toBeNull();
       expect(screen.queryByTestId('painting-board-minimap-toggle')).toBeNull();
+      expect(screen.queryByTestId('painting-board-ruler-toggle')).toBeNull();
       expect(screen.queryByTestId('painting-board-more-clear-canvas')).toBeNull();
     } finally {
       window.matchMedia = originalMatchMedia;

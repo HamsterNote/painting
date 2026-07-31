@@ -9,7 +9,11 @@ import {
   useRef,
   useState,
 } from 'react';
-import { type PaintingHistory, usePaintingHistory } from '../hooks/usePaintingHistory';
+import {
+  type PaintingHistory,
+  type PaintingHistoryControls,
+  usePaintingHistory,
+} from '../hooks/usePaintingHistory';
 import { fitImageIntoViewport } from '../model/image';
 import { generateStrokeId } from '../stroke-helpers';
 import { DEFAULT_DRAWING_VIEWPORT, type DrawingViewport, normalizeViewport } from '../viewport';
@@ -22,7 +26,6 @@ import {
   type DrawingTool,
   type DrawingValue,
 } from './DrawingSurface';
-import { Minimap } from './Minimap';
 import {
   PAINTING_BOARD_DEFAULT_TOOLS,
   PaintingController,
@@ -36,7 +39,7 @@ import {
  * `PaintingController`（完全受控，通过 `data` / `onDataChange` 通信）：
  * PaintingBoard 默认在内部渲染一个 PaintingController 并自行托管 data；
  * 需要「一个底部栏控制多个画板」时，给每个 PaintingBoard 传 `toolbar={false}`，
- * 并通过 `controller` 绑定同一份 data。工具、Minimap 和互斥套索选区均由该 data 管理。
+ * 并通过 `controller` 绑定同一份 data。工具、Minimap、尺子和互斥套索选区均由该 data 管理。
  *
  * ⚠️ Web-only：Popover 依赖 react-dom（createPortal），本组件不支持
  * react-native 原生端。Web 消费方需在应用入口手动引入一次样式：
@@ -131,7 +134,11 @@ export interface PaintingBoardProps extends Omit<DrawingSurfaceProps, 'tool'> {
   readonly minimapVisible?: boolean;
   /** Minimap 可见性切换回调（受控/非受控均触发） */
   readonly onMinimapVisibleChange?: (visible: boolean) => void;
-  /** 受控手写笔模式。true=手写笔绘图+单指拖动画布（默认）；false=单指绘图+双指拖动画布 */
+  /** 受控尺子可见性。传入后内部状态失效，尺子配置仍沿用 `ruler`。 */
+  readonly rulerVisible?: boolean;
+  /** 尺子可见性切换回调（受控/非受控均触发） */
+  readonly onRulerVisibleChange?: (visible: boolean) => void;
+  /** 受控手写笔模式。true=手写笔绘图+单指拖动画布；false/未传=单指绘图+双指拖动画布（默认） */
   readonly stylusMode?: boolean;
   /** 手写笔模式切换回调（受控/非受控均触发） */
   readonly onStylusModeChange?: (stylusMode: boolean) => void;
@@ -161,6 +168,10 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
       onFontSizeChange,
       minimapVisible: minimapVisibleProp,
       onMinimapVisibleChange,
+      minimap: minimapProp,
+      ruler: rulerProp,
+      rulerVisible: rulerVisibleProp,
+      onRulerVisibleChange,
       stylusMode: stylusModeProp,
       onStylusModeChange,
       pressure: pressureProp,
@@ -169,6 +180,8 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
       selectionPopover,
       controller,
       onSelectionOverlayChange,
+      onSelectionTransformStart: onSelectionTransformStartProp,
+      onSelectionTransformEnd: onSelectionTransformEndProp,
       selectedStrokeIds: selectedStrokeIdsProp,
       onSelectionChange: onSelectionChangeProp,
       style,
@@ -212,12 +225,48 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
     const activeFontSize = controller?.data.fontSize ?? fontSizeProp ?? innerFontSize;
 
     // ===== 受控 / 非受控 Minimap 可见性状态 =====
-    const [innerMinimapVisible, setInnerMinimapVisible] = useState(false);
-    const showMinimap = controller?.data.minimap ?? minimapVisibleProp ?? innerMinimapVisible;
+    const minimapPropEnabled =
+      minimapProp !== false && minimapProp !== undefined && (minimapProp.enabled ?? true);
+    const [innerMinimapVisible, setInnerMinimapVisible] = useState(minimapPropEnabled);
+    const showMinimap = controller
+      ? controller.data.minimap
+      : (minimapVisibleProp ?? innerMinimapVisible);
+    const effectiveMinimap = useMemo(
+      () => ({
+        ...(minimapProp === false || minimapProp === undefined ? {} : minimapProp),
+        enabled: showMinimap,
+      }),
+      [minimapProp, showMinimap]
+    );
+
+    const rulerPropEnabled =
+      rulerProp !== false && rulerProp !== undefined && (rulerProp.enabled ?? true);
+    const [innerRulerVisible, setInnerRulerVisible] = useState(rulerPropEnabled);
+    const showRuler = controller
+      ? (controller.data.ruler ?? false)
+      : (rulerVisibleProp ?? innerRulerVisible);
+    const effectiveRuler = useMemo(
+      () => ({
+        ...(rulerProp === false || rulerProp === undefined ? {} : rulerProp),
+        enabled: showRuler,
+      }),
+      [rulerProp, showRuler]
+    );
+
+    useEffect(() => {
+      if (!controller && minimapVisibleProp === undefined) {
+        setInnerMinimapVisible(minimapPropEnabled);
+      }
+    }, [controller, minimapPropEnabled, minimapVisibleProp]);
+
+    useEffect(() => {
+      if (!controller && rulerVisibleProp === undefined) {
+        setInnerRulerVisible(rulerPropEnabled);
+      }
+    }, [controller, rulerPropEnabled, rulerVisibleProp]);
 
     // ===== 受控 / 非受控手写笔模式状态 =====
-    // 默认 true（手写笔模式），与 DrawingSurface 的安全默认对齐
-    const [innerStylusMode, setInnerStylusMode] = useState(true);
+    const [innerStylusMode, setInnerStylusMode] = useState(false);
     const stylusMode = controller?.data.stylusMode ?? stylusModeProp ?? innerStylusMode;
 
     // ===== 受控 / 非受控压感开关状态 =====
@@ -241,17 +290,18 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
     // 把 tool / minimap / strokeWidth / strokeColor / stylusMode 聚合成 PaintingController 需要的 data；
     // PaintingBoard 内部渲染工具栏时即为「受控消费方」。
     const controllerData = useMemo<PaintingControllerData>(() => {
-      return (
-        controller?.data ?? {
-          tool: activeTool,
-          minimap: showMinimap,
-          strokeWidth: activeStrokeWidth,
-          strokeColor: activeStrokeColor,
-          fontSize: activeFontSize,
-          stylusMode,
-          pressure: activePressure,
-        }
-      );
+      return controller?.data
+        ? { ...controller.data, ruler: showRuler }
+        : {
+            tool: activeTool,
+            minimap: showMinimap,
+            ruler: showRuler,
+            strokeWidth: activeStrokeWidth,
+            strokeColor: activeStrokeColor,
+            fontSize: activeFontSize,
+            stylusMode,
+            pressure: activePressure,
+          };
     }, [
       activePressure,
       activeStrokeColor,
@@ -260,6 +310,7 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
       activeTool,
       controller?.data,
       showMinimap,
+      showRuler,
       stylusMode,
     ]);
 
@@ -274,6 +325,9 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
           }
           if (next.minimap !== showMinimap) {
             onMinimapVisibleChange?.(next.minimap);
+          }
+          if (next.ruler !== undefined && next.ruler !== showRuler) {
+            onRulerVisibleChange?.(next.ruler);
           }
           if (next.strokeWidth !== undefined && next.strokeWidth !== activeStrokeWidth) {
             onStrokeWidthChange?.(next.strokeWidth);
@@ -304,6 +358,12 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
             setInnerMinimapVisible(next.minimap);
           }
           onMinimapVisibleChange?.(next.minimap);
+        }
+        if (next.ruler !== undefined && next.ruler !== showRuler) {
+          if (rulerVisibleProp === undefined) {
+            setInnerRulerVisible(next.ruler);
+          }
+          onRulerVisibleChange?.(next.ruler);
         }
         if (next.strokeWidth !== undefined && next.strokeWidth !== activeStrokeWidth) {
           if (strokeWidthProp === undefined) {
@@ -346,13 +406,16 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
         minimapVisibleProp,
         onMinimapVisibleChange,
         onPressureChange,
+        onRulerVisibleChange,
         onStrokeWidthChange,
         onStrokeColorChange,
         onFontSizeChange,
         onStylusModeChange,
         onToolChange,
         pressureProp,
+        rulerVisibleProp,
         showMinimap,
+        showRuler,
         stylusMode,
         stylusModeProp,
         strokeColorProp,
@@ -429,8 +492,6 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
       surfaceRef.current?.deleteSelectedStrokes();
     }, []);
 
-    const strokes = renderedValue.strokes;
-
     // 追踪 viewport：受控时使用 viewportProp，非受控时通过 onViewportChange 同步。
     // 初始值同样尊重 defaultViewport，保证与 DrawingSurface 的非受控初始值一致。
     const [internalViewport, setInternalViewport] = useState<DrawingViewport>(
@@ -475,6 +536,29 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
       },
       [history, historyBoardId, isValueControlled, onChangeProp]
     );
+    const selectionTransactionOwnersRef = useRef<Array<(() => void) | null>>([]);
+    const handleSelectionTransformStart = useCallback(() => {
+      if (!isValueControlled) {
+        history.beginTransaction();
+        selectionTransactionOwnersRef.current.push(history.endTransaction);
+      } else {
+        selectionTransactionOwnersRef.current.push(null);
+      }
+      onSelectionTransformStartProp?.();
+    }, [history, isValueControlled, onSelectionTransformStartProp]);
+    const handleSelectionTransformEnd = useCallback(() => {
+      selectionTransactionOwnersRef.current.pop()?.();
+      onSelectionTransformEndProp?.();
+    }, [onSelectionTransformEndProp]);
+
+    useEffect(
+      () => () => {
+        for (const endTransaction of selectionTransactionOwnersRef.current.splice(0)) {
+          endTransaction?.();
+        }
+      },
+      []
+    );
 
     // 拦截 onViewportChange，同步内部 viewport 状态
     const handleViewportChange = useCallback(
@@ -486,8 +570,8 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
     );
 
     // 根据 stylusMode 解析最终传给 DrawingSurface 的 virtualPaper 配置：
-    // - stylusMode=true（默认）：沿用原有 virtualPaper，DrawingSurface 自行应用安全默认交互集
-    // - stylusMode=false：注入 FINGER_DRAWING_INTERACTIONS，单指触摸回落到绘图、双指负责画布手势
+    // - stylusMode=true：沿用原有 virtualPaper，DrawingSurface 自行应用安全默认交互集
+    // - stylusMode=false（默认）：注入 FINGER_DRAWING_INTERACTIONS，单指触摸回落到绘图、双指负责画布手势
     const resolvedVirtualPaper = useMemo(() => {
       if (stylusMode) return virtualPaper;
       if (virtualPaper === true) {
@@ -514,35 +598,39 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
       onViewportChangeProp?.(next);
     }, [defaultViewport, onViewportChangeProp]);
 
-    // 清空画布：删除全部 strokes 并清除选区。
-    // 共享 controller 场景下若本画板持有选区，同步清掉共享 selection。
-    const handleClearCanvas = useCallback(() => {
+    const clearSelection = useCallback(() => {
       surfaceRef.current?.clearSelection();
       if (controller && controller.data.selection?.boardId === controller.boardId) {
         controller.onDataChange({ ...controller.data, selection: null });
       }
-      handleChange({ strokes: [] });
-    }, [controller, handleChange]);
+    }, [controller]);
 
-    // 画布区域宿主尺寸，通过 ResizeObserver 追踪（供 Minimap 使用）
+    // 清空画布：删除全部 strokes 并清除选区。
+    const handleClearCanvas = useCallback(() => {
+      clearSelection();
+      handleChange({ strokes: [] });
+    }, [clearSelection, handleChange]);
+
+    const handleUndo = useCallback(() => {
+      surfaceRef.current?.clearSelection();
+      history.undo();
+    }, [history]);
+    const handleRedo = useCallback(() => {
+      surfaceRef.current?.clearSelection();
+      history.redo();
+    }, [history]);
+    const toolbarHistory = useMemo<PaintingHistoryControls>(
+      () => ({
+        canUndo: history.canUndo,
+        canRedo: history.canRedo,
+        undo: handleUndo,
+        redo: handleRedo,
+      }),
+      [handleRedo, handleUndo, history.canRedo, history.canUndo]
+    );
+
     const canvasWrapperRef = useRef<HTMLDivElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
-    const [hostSize, setHostSize] = useState<{ width: number; height: number }>({
-      width: 0,
-      height: 0,
-    });
-    useEffect(() => {
-      const el = canvasWrapperRef.current;
-      if (!el) return;
-      const observer = new ResizeObserver((entries) => {
-        const rect = entries[0]?.contentRect;
-        if (rect) {
-          setHostSize({ width: rect.width, height: rect.height });
-        }
-      });
-      observer.observe(el);
-      return () => observer.disconnect();
-    }, []);
 
     const handleInsertImage = useCallback(() => {
       imageInputRef.current?.click();
@@ -637,9 +725,13 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
             defaultViewport={defaultViewport}
             onViewportChange={handleViewportChange}
             onSelectionOverlayChange={handleSelectionOverlayChange}
+            onSelectionTransformStart={handleSelectionTransformStart}
+            onSelectionTransformEnd={handleSelectionTransformEnd}
             selectedStrokeIds={controller ? controlledSelectedStrokeIds : selectedStrokeIdsProp}
             onSelectionChange={handleSelectionChange}
             {...surfaceProps}
+            minimap={effectiveMinimap}
+            ruler={effectiveRuler}
           />
           {selectionPopoverOptions && selectionOverlay && (
             <Popover
@@ -677,25 +769,6 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
               </Button>
             </Popover>
           )}
-          {/* MiniMap 覆盖在画布右上角 */}
-          {showMinimap && (
-            <div
-              data-testid="painting-board-minimap"
-              style={{
-                position: 'absolute',
-                top: 8,
-                right: 8,
-                zIndex: 10,
-              }}
-            >
-              <Minimap
-                strokes={strokes}
-                viewport={currentViewport}
-                onViewportChange={handleViewportChange}
-                hostSize={hostSize}
-              />
-            </div>
-          )}
         </div>
         {/* 底部工具栏：PaintingBoard 内部作为 PaintingController 的受控宿主。
             外部需要共享底部栏时传 toolbar={false} 并自行渲染 PaintingController。 */}
@@ -711,7 +784,7 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
             onResetView={handleResetView}
             onClearCanvas={handleClearCanvas}
             onInsertImage={handleInsertImage}
-            history={history}
+            history={toolbarHistory}
             relative
           />
         )}
