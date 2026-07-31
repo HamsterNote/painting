@@ -2,6 +2,7 @@ import { DragOperationType, Mixin, MixinType, type Pose } from '@system-ui-js/mu
 import {
   type CSSProperties,
   forwardRef,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -13,6 +14,13 @@ import {
   useState,
 } from 'react';
 import { useCanvas } from '../hooks/useCanvas';
+import {
+  formatAngleDegrees,
+  formatScalePercent,
+  getMouseZoomFeedbackPoint,
+  getTouchZoomFeedbackPoint,
+  type InteractionFeedbackPoint,
+} from '../interactionFeedback';
 import { type CanvasPoint, createInitialState, interactionReducer } from '../interaction/reducer';
 import {
   type ClassifyInteractionOptions,
@@ -39,10 +47,15 @@ import {
 } from '../model/text';
 import { StrokeRenderer } from '../render/StrokeRenderer';
 import {
+  constrainPointToRulerEdge,
+  createRulerEdgeConstraint,
   getInfiniteRulerLayout,
   isInsideRuler,
+  projectPointToRulerCenterline,
+  projectPointToRulerEdge,
   rotateRulerAround,
   snapRulerRotation,
+  type RulerEdgeConstraint,
   type RulerPoint,
   type RulerRect,
 } from '../ruler/geometry';
@@ -90,11 +103,15 @@ import {
   screenToCanvas,
 } from '../viewport';
 import { isVirtualPaperEnabled } from '../virtualPaperAdapter';
-import type { DrawingSurfaceVirtualPaperOptions } from '../virtualPaperOptions';
+import {
+  SAFE_DEFAULT_VIRTUAL_PAPER_INTERACTIONS,
+  type DrawingSurfaceVirtualPaperOptions,
+} from '../virtualPaperOptions';
 import {
   POINTER_DOWN_CAPTURE_OPTIONS,
   shouldCaptureVirtualPaperPointerDown,
 } from '../virtualPaperPointerCapture';
+import { InteractionFeedback } from './InteractionFeedback';
 import { Minimap, type MinimapOptions } from './Minimap';
 
 // Public drawing contract types
@@ -109,6 +126,19 @@ export type DrawingTool =
   | 'eraser'
   | 'lasso';
 export type DrawingInputMethod = 'touch' | 'mouse' | 'pen';
+
+type ZoomFeedbackState = {
+  readonly label: string;
+  readonly point: InteractionFeedbackPoint;
+  readonly source: 'mouse' | 'touch';
+};
+
+type TouchDrawingArbitration =
+  | { readonly phase: 'idle' }
+  | {
+      readonly phase: 'pending' | 'drawing' | 'viewport';
+      readonly pointerId: number;
+    };
 
 /**
  * Eraser commit mode controls when stroke deletions are applied during an
@@ -522,6 +552,9 @@ function applyShiftConstraintToShape(stroke: DrawingStroke): DrawingStroke {
 
 const DEFAULT_INPUT_METHODS: DrawingInputMethod[] = ['touch', 'mouse', 'pen'];
 const LINE_DRAG_THRESHOLD_PX = 4;
+// 单指绘制与双指画布操作共享首个触点。只有越过该屏幕距离后，
+// 首指才正式承诺为绘制，避免第二指紧接着落下时留下短误笔。
+const TOUCH_DRAWING_COMMIT_THRESHOLD_PX = 10;
 const LASSO_RESIZE_HANDLE_SIZE_PX = 10;
 const LASSO_ROTATE_HANDLE_OFFSET_PX = 24;
 const LASSO_ROTATE_HANDLE_SIZE_PX = 14;
@@ -734,6 +767,18 @@ function containsEventTarget(container: EventTarget | null, target: EventTarget 
   return container instanceof Node && target instanceof Node && container.contains(target);
 }
 
+function clientPointToHostContentBox(
+  host: HTMLElement,
+  clientX: number,
+  clientY: number
+): DrawingPoint {
+  const bounds = host.getBoundingClientRect();
+  return {
+    x: clientX - bounds.left - host.clientLeft,
+    y: clientY - bounds.top - host.clientTop,
+  };
+}
+
 function clientPointHitsRuler(
   host: HTMLElement,
   clientX: number,
@@ -744,15 +789,13 @@ function clientPointHitsRuler(
     return false;
   }
   const hostBounds = host.getBoundingClientRect();
-  if (
-    clientX < hostBounds.left ||
-    clientX > hostBounds.right ||
-    clientY < hostBounds.top ||
-    clientY > hostBounds.bottom
-  ) {
+  const width = host.clientWidth || hostBounds.width;
+  const height = host.clientHeight || hostBounds.height;
+  const point = clientPointToHostContentBox(host, clientX, clientY);
+  if (point.x < 0 || point.x > width || point.y < 0 || point.y > height) {
     return false;
   }
-  return isInsideRuler({ x: clientX - hostBounds.left, y: clientY - hostBounds.top }, ruler);
+  return isInsideRuler(point, ruler);
 }
 
 function isPointerDomEvent(event: Event): event is PointerEvent {
@@ -814,7 +857,20 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     onSelectionTransformStartRef.current = onSelectionTransformStart;
     onSelectionTransformEndRef.current = onSelectionTransformEnd;
     const gestureOwnerRef = useRef(createGestureOwner());
+    const rulerEdgeConstraintsRef = useRef(new Map<number, RulerEdgeConstraint>());
     const isViewportControlled = viewportProp !== undefined;
+    const isVirtualPaperActive = isVirtualPaperEnabled(virtualPaper);
+    const resolvedVirtualPaperOptions = typeof virtualPaper === 'object' ? virtualPaper : {};
+    const virtualPaperInteractions =
+      resolvedVirtualPaperOptions.enabledInteractions ?? SAFE_DEFAULT_VIRTUAL_PAPER_INTERACTIONS;
+    const isTouchZoomEnabled = virtualPaperInteractions.includes('touchTwoFingerZoom');
+    const shouldArbitrateTouchDrawing =
+      isVirtualPaperActive &&
+      !virtualPaperInteractions.includes('touchSingleFingerPan') &&
+      (virtualPaperInteractions.includes('touchTwoFingerPan') || isTouchZoomEnabled);
+    const isCtrlWheelZoomEnabled = virtualPaperInteractions.includes('mouseWheelCtrlZoom');
+    const isWheelZoomEnabled = virtualPaperInteractions.includes('mouseWheelZoom');
+    const isTrackpadPanEnabled = virtualPaperInteractions.includes('trackpadScrollPan');
     const [internalViewport, setInternalViewport] = useState<DrawingViewport>(() =>
       defaultViewport ? normalizeViewport(defaultViewport) : createResetViewport()
     );
@@ -830,26 +886,110 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     const onViewportChangeRef = useRef(onViewportChange);
     onViewportChangeRef.current = onViewportChange;
 
-    const handleViewportChange = useCallback((nextViewport: DrawingViewport) => {
-      if (!isViewportControlledRef.current) {
-        setInternalViewport(nextViewport);
+    const [zoomFeedback, setZoomFeedback] = useState<ZoomFeedbackState | null>(null);
+    const wheelZoomPointRef = useRef<InteractionFeedbackPoint | null>(null);
+    const wheelZoomPointTimerRef = useRef<number | null>(null);
+    const touchZoomPointsRef = useRef(new Map<number, InteractionFeedbackPoint>());
+    const touchZoomPointerIdsRef = useRef<readonly [number, number] | null>(null);
+    const touchDrawingArbitrationRef = useRef<TouchDrawingArbitration>({ phase: 'idle' });
+    const touchZoomEnabledRef = useRef(isTouchZoomEnabled);
+    touchZoomEnabledRef.current = isTouchZoomEnabled;
+    const zoomFeedbackTimerRef = useRef<number | null>(null);
+
+    const clearZoomFeedbackTimer = useCallback(() => {
+      if (zoomFeedbackTimerRef.current !== null) {
+        window.clearTimeout(zoomFeedbackTimerRef.current);
+        zoomFeedbackTimerRef.current = null;
       }
-      onViewportChangeRef.current?.(nextViewport);
     }, []);
+
+    const clearWheelZoomPoint = useCallback(() => {
+      wheelZoomPointRef.current = null;
+      if (wheelZoomPointTimerRef.current !== null) {
+        window.clearTimeout(wheelZoomPointTimerRef.current);
+        wheelZoomPointTimerRef.current = null;
+      }
+    }, []);
+
+    const updateTouchZoomFeedback = useCallback(
+      (scale: number): boolean => {
+        const touchZoomPointerIds = touchZoomPointerIdsRef.current;
+        const firstTouchPoint = touchZoomPointerIds
+          ? touchZoomPointsRef.current.get(touchZoomPointerIds[0])
+          : undefined;
+        const secondTouchPoint = touchZoomPointerIds
+          ? touchZoomPointsRef.current.get(touchZoomPointerIds[1])
+          : undefined;
+        if (!touchZoomEnabledRef.current || !firstTouchPoint || !secondTouchPoint) {
+          return false;
+        }
+
+        const host = hostRef.current;
+        const bounds = host?.getBoundingClientRect();
+        clearZoomFeedbackTimer();
+        setZoomFeedback({
+          label: formatScalePercent(scale),
+          point: getTouchZoomFeedbackPoint(firstTouchPoint, secondTouchPoint, {
+            width: host?.clientWidth || bounds?.width || 0,
+            height: host?.clientHeight || bounds?.height || 0,
+          }),
+          source: 'touch',
+        });
+        return true;
+      },
+      [clearZoomFeedbackTimer]
+    );
+
+    const handleViewportChange = useCallback(
+      (nextViewport: DrawingViewport) => {
+        const previousViewport = viewportRef.current;
+        viewportRef.current = nextViewport;
+        if (!isViewportControlledRef.current) {
+          setInternalViewport(nextViewport);
+        }
+        onViewportChangeRef.current?.(nextViewport);
+        if (nextViewport.scale === previousViewport.scale) {
+          return;
+        }
+
+        if (updateTouchZoomFeedback(nextViewport.scale)) {
+          return;
+        }
+
+        const wheelPoint = wheelZoomPointRef.current;
+        if (!wheelPoint) {
+          return;
+        }
+        clearWheelZoomPoint();
+        clearZoomFeedbackTimer();
+        setZoomFeedback({
+          label: formatScalePercent(nextViewport.scale),
+          point: getMouseZoomFeedbackPoint(wheelPoint),
+          source: 'mouse',
+        });
+        zoomFeedbackTimerRef.current = window.setTimeout(() => {
+          setZoomFeedback(null);
+          zoomFeedbackTimerRef.current = null;
+        }, 600);
+      },
+      [clearWheelZoomPoint, clearZoomFeedbackTimer, updateTouchZoomFeedback]
+    );
 
     const handleVirtualPaperViewportChange = handleViewportChange;
 
     const internalRulerStateRef = useRef<DrawingRulerState>({ center: { x: 0, y: 0 } });
     const [, renderRuler] = useReducer((tick: number) => tick + 1, 0);
     const [isRulerDragging, setIsRulerDragging] = useState(false);
+    const [rulerRotationFeedback, setRulerRotationFeedback] = useState<{
+      readonly rotationRad: number;
+      readonly point: InteractionFeedbackPoint;
+    } | null>(null);
     const [hasRulerModifierHover, setHasRulerModifierHover] = useState(false);
     const [rulerViewportSize, setRulerViewportSize] = useState({ width: 0, height: 0 });
 
     const isRulerEnabled = ruler !== false && ruler !== undefined && (ruler.enabled ?? true);
     const effectiveRulerOptions = typeof ruler === 'object' ? ruler : {};
-    const isVirtualPaperActive = isVirtualPaperEnabled(virtualPaper);
-    const resolvedVirtualPaperOptions = typeof virtualPaper === 'object' ? virtualPaper : {};
-
+    const effectiveRulerHeight = effectiveRulerOptions.height ?? 48;
     const currentRulerState = isRulerEnabled
       ? (effectiveRulerOptions.state ?? internalRulerStateRef.current)
       : null;
@@ -857,7 +997,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       ? {
           center: currentRulerState.center,
           length: effectiveRulerOptions.length ?? 400,
-          height: effectiveRulerOptions.height ?? 48,
+          height: effectiveRulerHeight,
           rotationRad: currentRulerState.rotationRad ?? 0,
         }
       : null;
@@ -865,6 +1005,43 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     currentRulerStateRef.current = currentRulerState;
     const currentRulerRectRef = useRef<RulerRect | null>(currentRulerRect);
     currentRulerRectRef.current = currentRulerRect;
+    const beginRulerEdgeConstraint = useCallback(
+      (pointerId: number, point: DrawingPoint, tool: DrawingTool) => {
+        const rulerRect = currentRulerRectRef.current;
+        if (!rulerRect || !isSnapEligibleTool(tool)) {
+          return;
+        }
+        rulerEdgeConstraintsRef.current.set(
+          pointerId,
+          createRulerEdgeConstraint(point, rulerRect)
+        );
+      },
+      []
+    );
+    const applyRulerEdgeConstraint = useCallback(
+      (pointerId: number, point: DrawingPoint): DrawingPoint => {
+        const constraint = rulerEdgeConstraintsRef.current.get(pointerId);
+        if (!constraint) {
+          return point;
+        }
+        const result = constrainPointToRulerEdge(point, constraint);
+        rulerEdgeConstraintsRef.current.set(pointerId, result.constraint);
+        return result.point;
+      },
+      []
+    );
+    const projectLockedRulerEdge = useCallback(
+      (pointerId: number, point: DrawingPoint): DrawingPoint => {
+        const constraint = rulerEdgeConstraintsRef.current.get(pointerId);
+        return constraint?.phase === 'constrained'
+          ? projectPointToRulerEdge(point, constraint)
+          : point;
+      },
+      []
+    );
+    const endRulerEdgeConstraint = useCallback((pointerId: number) => {
+      rulerEdgeConstraintsRef.current.delete(pointerId);
+    }, []);
     const isPointerReservedForRuler = useCallback((clientX: number, clientY: number) => {
       const host = hostRef.current;
       const rulerRect = currentRulerRectRef.current;
@@ -949,6 +1126,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       const host = hostRef.current;
       if (!isRulerEnabled || !host) {
         setIsRulerDragging(false);
+        setRulerRotationFeedback(null);
         return undefined;
       }
 
@@ -970,6 +1148,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       let mousePointerId: number | null = null;
       let dragAnchor: DragAnchor | null = null;
       let rotationAnchor: RotationAnchor | null = null;
+      let touchDrag: Mixin;
 
       const getEmptyPose = (): Pose => ({
         position: { x: 0, y: 0 },
@@ -983,6 +1162,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         currentRulerStateRef.current = controlledRulerStateRef.current ?? nextState;
         if (!controlledRulerStateRef.current) {
           renderRuler();
+        }
+        if (activeInput === 'mouse-rotate') {
+          setRulerRotationFeedback((feedback) =>
+            feedback ? { ...feedback, rotationRad: nextState.rotationRad ?? 0 } : null
+          );
         }
         onRulerChangeRef.current?.(nextState);
       };
@@ -1002,9 +1186,17 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       };
       const currentFingerPoint = (mixin: Mixin, index: number) =>
         mixin.getFingers()[index]?.getLastOperation()?.point;
-      const toHostPoint = (point: DrawingPoint): DrawingPoint => {
-        const bounds = host.getBoundingClientRect();
-        return { x: point.x - bounds.left, y: point.y - bounds.top };
+      const toTouchHostPoint = (point: DrawingPoint): DrawingPoint => {
+        return clientPointToHostContentBox(host, point.x, point.y);
+      };
+      const toMouseHostPoint = (point: DrawingPoint): DrawingPoint =>
+        clientPointToHostContentBox(host, point.x, point.y);
+      const touchMidpoint = (mixin: Mixin): DrawingPoint | null => {
+        const first = currentFingerPoint(mixin, 0);
+        const second = currentFingerPoint(mixin, 1);
+        return first && second
+          ? { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 }
+          : null;
       };
       const getTouchPose = (): Pose => {
         const state = currentRulerStateRef.current;
@@ -1014,8 +1206,8 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         const bounds = host.getBoundingClientRect();
         return {
           position: {
-            x: state.center.x + bounds.left,
-            y: state.center.y + bounds.top,
+            x: state.center.x + bounds.left + host.clientLeft,
+            y: state.center.y + bounds.top + host.clientTop,
           },
           rotation: ((state.rotationRad ?? 0) * 180) / Math.PI,
           width: 0,
@@ -1023,7 +1215,12 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         };
       };
       const setTouchPose = (_element: HTMLElement, pose: Partial<Pose>) => {
-        if (activeInput !== 'touch' || acceptedTouchIds.size !== 2 || !pose.position) {
+        if (
+          activeInput !== 'touch' ||
+          acceptedTouchIds.size !== 2 ||
+          !pose.position ||
+          !dragAnchor
+        ) {
           return;
         }
         const bounds = host.getBoundingClientRect();
@@ -1031,31 +1228,26 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (!state) {
           return;
         }
-        commitRulerState({
+        const nextState: DrawingRulerState = {
           center: {
-            x: pose.position.x - bounds.left,
-            y: pose.position.y - bounds.top,
+            x: pose.position.x - bounds.left - host.clientLeft,
+            y: pose.position.y - bounds.top - host.clientTop,
           },
           rotationRad: snapRulerRotation(
             typeof pose.rotation === 'number'
               ? (pose.rotation * Math.PI) / 180
               : (state.rotationRad ?? 0)
           ),
-        });
-      };
-      const getHostCenter = (): DrawingPoint => {
-        const bounds = host.getBoundingClientRect();
-        return {
-          x: (host.clientWidth || bounds.width) / 2,
-          y: (host.clientHeight || bounds.height) / 2,
         };
-      };
-      const touchMidpoint = (mixin: Mixin): DrawingPoint | null => {
-        const first = currentFingerPoint(mixin, 0);
-        const second = currentFingerPoint(mixin, 1);
-        return first && second
-          ? { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 }
-          : null;
+        commitRulerState(nextState);
+        const hostMidpoint = {
+          x: nextState.center.x - dragAnchor.centerToPointer.x,
+          y: nextState.center.y - dragAnchor.centerToPointer.y,
+        };
+        setRulerRotationFeedback({
+          rotationRad: nextState.rotationRad ?? 0,
+          point: projectPointToRulerCenterline(hostMidpoint, nextState),
+        });
       };
       const createForwardedPointerDown = (event: PointerEvent): Event => {
         const forwarded = new Event('pointerdown');
@@ -1080,7 +1272,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         { inertial: false, getPose: getEmptyPose, setPose: () => undefined },
         [MixinType.Drag]
       );
-      let touchDrag = new Mixin(
+      touchDrag = new Mixin(
         touchElement,
         { inertial: false, getPose: getTouchPose, setPose: setTouchPose },
         [MixinType.Drag, MixinType.Rotate],
@@ -1107,11 +1299,20 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (!state) {
           return;
         }
-        const pivot = getHostCenter();
+        const rotationRad = state.rotationRad ?? 0;
+        const bounds = host.getBoundingClientRect();
+        const viewportWidth = host.clientWidth || bounds.width;
+        const viewportHeight = host.clientHeight || bounds.height;
+        const pivot = getInfiniteRulerLayout({
+          logicalCenter: state.center,
+          rotationRad,
+          height: effectiveRulerHeight,
+          viewport: { width: viewportWidth, height: viewportHeight },
+        }).visualCenter;
         const distanceFromPivot = Math.hypot(screenPoint.x - pivot.x, screenPoint.y - pivot.y);
         rotationAnchor = {
           pivot,
-          ruler: { center: state.center, rotationRad: state.rotationRad ?? 0 },
+          ruler: { center: state.center, rotationRad },
           previousPointerAngle:
             distanceFromPivot >= 8
               ? Math.atan2(screenPoint.y - pivot.y, screenPoint.x - pivot.x)
@@ -1121,13 +1322,14 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         lastRequestedRulerCenterRef.current = state.center;
         lastRequestedRulerRotationRef.current = state.rotationRad ?? 0;
         setIsRulerDragging(true);
+        setRulerRotationFeedback({ rotationRad: state.rotationRad ?? 0, point: pivot });
       };
       const handleMouseMove = () => {
         const point = currentFingerPoint(mouseDrag, 0);
         if (!point) {
           return;
         }
-        const hostPoint = toHostPoint(point);
+        const hostPoint = toMouseHostPoint(point);
         if (activeInput === 'mouse-translate') {
           commitCenterAtScreenPoint(hostPoint);
         } else if (activeInput === 'mouse-rotate' && rotationAnchor) {
@@ -1180,11 +1382,13 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       const cancelActiveDrag = () => {
         const wasTouchDrag = activeInput === 'touch';
         activeInput = null;
+        mousePointerId = null;
         dragAnchor = null;
         rotationAnchor = null;
         lastRequestedRulerCenterRef.current = null;
         lastRequestedRulerRotationRef.current = null;
         setIsRulerDragging(false);
+        setRulerRotationFeedback(null);
         if (!wasTouchDrag) {
           return;
         }
@@ -1204,25 +1408,23 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           return;
         }
         if (event.pointerType === 'mouse') {
-          if (
-            event.button !== 0 ||
-            (!event.altKey && !event.ctrlKey && !event.metaKey) ||
-            activeInput !== null
-          ) {
+          const ownsRulerGesture = event.altKey || event.ctrlKey || event.metaKey;
+          if (event.button !== 0 || activeInput !== null || !ownsRulerGesture) {
             return;
           }
           cancelWaitingTouches();
           mousePointerId = event.pointerId;
-          const hostPoint = toHostPoint({ x: event.clientX, y: event.clientY });
+          const hostPoint = toMouseHostPoint({ x: event.clientX, y: event.clientY });
           if (event.altKey) {
             activeInput = 'mouse-rotate';
             beginRotationAt(hostPoint);
-          } else {
+          } else if (event.ctrlKey || event.metaKey) {
             activeInput = 'mouse-translate';
             beginDragAt(hostPoint);
           }
           mouseElement.dispatchEvent(createForwardedPointerDown(event));
           event.preventDefault();
+          event.stopPropagation();
           return;
         }
         if (event.pointerType !== 'touch' || activeInput?.startsWith('mouse')) {
@@ -1230,18 +1432,30 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         }
         if (acceptedTouchIds.size >= 2) {
           suppressedTouchIds.add(event.pointerId);
+          event.preventDefault();
+          event.stopPropagation();
           return;
         }
         acceptedTouchIds.add(event.pointerId);
         touchElement.dispatchEvent(createForwardedPointerDown(event));
         if (acceptedTouchIds.size === 2) {
           const midpoint = touchMidpoint(touchDrag);
-          if (midpoint) {
-            activeInput = 'touch';
-            beginDragAt(toHostPoint(midpoint));
+          if (!midpoint) {
+            return;
+          }
+          activeInput = 'touch';
+          const hostMidpoint = toTouchHostPoint(midpoint);
+          beginDragAt(hostMidpoint);
+          const state = currentRulerStateRef.current;
+          if (state) {
+            setRulerRotationFeedback({
+              rotationRad: state.rotationRad ?? 0,
+              point: projectPointToRulerCenterline(hostMidpoint, state),
+            });
           }
         }
         event.preventDefault();
+        event.stopPropagation();
       };
       const endPointer = (event: PointerEvent) => {
         if (suppressedTouchIds.delete(event.pointerId)) {
@@ -1255,6 +1469,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           lastRequestedRulerCenterRef.current = null;
           lastRequestedRulerRotationRef.current = null;
           setIsRulerDragging(false);
+          setRulerRotationFeedback(null);
           return;
         }
         if (!acceptedTouchIds.has(event.pointerId)) {
@@ -1271,6 +1486,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           lastRequestedRulerCenterRef.current = null;
           lastRequestedRulerRotationRef.current = null;
           setIsRulerDragging(false);
+          setRulerRotationFeedback(null);
         }
         acceptedTouchIds.clear();
         restartTouchDrag();
@@ -1294,8 +1510,184 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         mouseDrag.destroy();
         touchDrag.destroy();
         setIsRulerDragging(false);
+        setRulerRotationFeedback(null);
       };
-    }, [eventTarget, isRulerEnabled]);
+    }, [effectiveRulerHeight, eventTarget, isRulerEnabled]);
+
+    useEffect(
+      () => () => {
+        clearWheelZoomPoint();
+        clearZoomFeedbackTimer();
+      },
+      [clearWheelZoomPoint, clearZoomFeedbackTimer]
+    );
+
+    const handleZoomWheelCapture = useCallback(
+      (event: WheelEvent) => {
+        if (!isVirtualPaperActive) {
+          return;
+        }
+        const usesModifierZoom = (event.ctrlKey || event.metaKey) && isCtrlWheelZoomEnabled;
+        const usesPlainWheelZoom =
+          !event.ctrlKey && !event.metaKey && isWheelZoomEnabled && !isTrackpadPanEnabled;
+        if (!usesModifierZoom && !usesPlainWheelZoom) {
+          clearWheelZoomPoint();
+          return;
+        }
+        const host = hostRef.current;
+        if (!host) {
+          return;
+        }
+        const bounds = host.getBoundingClientRect();
+        const wheelPoint = {
+          x: event.clientX - bounds.left,
+          y: event.clientY - bounds.top,
+        };
+        clearWheelZoomPoint();
+        wheelZoomPointRef.current = wheelPoint;
+        wheelZoomPointTimerRef.current = window.setTimeout(clearWheelZoomPoint, 250);
+      },
+      [
+        clearWheelZoomPoint,
+        isCtrlWheelZoomEnabled,
+        isTrackpadPanEnabled,
+        isVirtualPaperActive,
+        isWheelZoomEnabled,
+      ]
+    );
+
+    useEffect(() => {
+      const host = hostRef.current;
+      if (!host) {
+        return undefined;
+      }
+      host.addEventListener('wheel', handleZoomWheelCapture, true);
+      return () => {
+        host.removeEventListener('wheel', handleZoomWheelCapture, true);
+      };
+    }, [handleZoomWheelCapture]);
+
+    const handleZoomPointerDownCapture = useCallback(
+      (event: ReactPointerEvent<HTMLDivElement>) => {
+        const virtualPaperWrapper = event.currentTarget.querySelector(
+          '[data-testid="virtual-paper-wrapper"]'
+        );
+        const isVirtualPaperTouch =
+          event.pointerType === 'touch' && containsEventTarget(virtualPaperWrapper, event.target);
+        const isRulerTouch = isPointerReservedForRuler(event.clientX, event.clientY);
+        const touchDrawingArbitration = touchDrawingArbitrationRef.current;
+        if (
+          shouldArbitrateTouchDrawing &&
+          isVirtualPaperTouch &&
+          !isRulerTouch &&
+          touchDrawingArbitration.phase !== 'idle' &&
+          touchDrawingArbitration.pointerId !== event.pointerId
+        ) {
+          if (touchDrawingArbitration.phase === 'pending') {
+            touchDrawingArbitrationRef.current = {
+              phase: 'viewport',
+              pointerId: touchDrawingArbitration.pointerId,
+            };
+          } else if (touchDrawingArbitration.phase === 'drawing') {
+            event.preventDefault();
+            event.stopPropagation();
+            touchZoomPointerIdsRef.current = null;
+            touchZoomPointsRef.current.clear();
+            setZoomFeedback((current) => (current?.source === 'touch' ? null : current));
+            return;
+          }
+        }
+        if (
+          !isVirtualPaperActive ||
+          !isTouchZoomEnabled ||
+          !isVirtualPaperTouch ||
+          touchZoomPointerIdsRef.current !== null ||
+          touchZoomPointsRef.current.size >= 2 ||
+          isRulerTouch
+        ) {
+          return;
+        }
+        const bounds = event.currentTarget.getBoundingClientRect();
+        touchZoomPointsRef.current.set(event.pointerId, {
+          x: event.clientX - bounds.left,
+          y: event.clientY - bounds.top,
+        });
+        const pointerIds = Array.from(touchZoomPointsRef.current.keys());
+        const firstPointerId = pointerIds[0];
+        const secondPointerId = pointerIds[1];
+        if (firstPointerId !== undefined && secondPointerId !== undefined) {
+          touchZoomPointerIdsRef.current = [firstPointerId, secondPointerId];
+        }
+      },
+      [
+        isPointerReservedForRuler,
+        isTouchZoomEnabled,
+        isVirtualPaperActive,
+        shouldArbitrateTouchDrawing,
+      ]
+    );
+
+    const handleZoomPointerMoveCapture = useCallback(
+      (event: ReactPointerEvent<HTMLDivElement>) => {
+        if (!touchZoomPointsRef.current.has(event.pointerId)) {
+          return;
+        }
+        const bounds = event.currentTarget.getBoundingClientRect();
+        touchZoomPointsRef.current.set(event.pointerId, {
+          x: event.clientX - bounds.left,
+          y: event.clientY - bounds.top,
+        });
+        if (touchZoomPointerIdsRef.current?.includes(event.pointerId)) {
+          updateTouchZoomFeedback(viewportRef.current.scale);
+        }
+      },
+      [updateTouchZoomFeedback]
+    );
+
+    const handleZoomPointerEndCapture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+      const touchZoomPointerIds = touchZoomPointerIdsRef.current;
+      if (!touchZoomPointsRef.current.has(event.pointerId)) {
+        return;
+      }
+      if (touchZoomPointerIds?.includes(event.pointerId)) {
+        touchZoomPointerIdsRef.current = null;
+        touchZoomPointsRef.current.clear();
+        setZoomFeedback((current) => (current?.source === 'touch' ? null : current));
+        return;
+      }
+      touchZoomPointsRef.current.delete(event.pointerId);
+    }, []);
+
+    useEffect(() => {
+      const finishTouchZoom = (event: PointerEvent) => {
+        const touchZoomPointerIds = touchZoomPointerIdsRef.current;
+        if (!touchZoomPointsRef.current.has(event.pointerId)) {
+          return;
+        }
+        if (touchZoomPointerIds?.includes(event.pointerId)) {
+          touchZoomPointerIdsRef.current = null;
+          touchZoomPointsRef.current.clear();
+          setZoomFeedback((current) => (current?.source === 'touch' ? null : current));
+          return;
+        }
+        touchZoomPointsRef.current.delete(event.pointerId);
+      };
+      document.addEventListener('pointerup', finishTouchZoom, true);
+      document.addEventListener('pointercancel', finishTouchZoom, true);
+      return () => {
+        document.removeEventListener('pointerup', finishTouchZoom, true);
+        document.removeEventListener('pointercancel', finishTouchZoom, true);
+      };
+    }, []);
+
+    useEffect(() => {
+      if (isVirtualPaperActive && isTouchZoomEnabled) {
+        return;
+      }
+      touchZoomPointerIdsRef.current = null;
+      touchZoomPointsRef.current.clear();
+      setZoomFeedback((current) => (current?.source === 'touch' ? null : current));
+    }, [isTouchZoomEnabled, isVirtualPaperActive]);
 
     const effectiveTool: DrawingTool = isDrawingToolSupported(tool) ? tool : 'pen';
     const isDrawingEnabled = tool === undefined || isDrawingToolSupported(tool);
@@ -2232,14 +2624,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     );
 
     const getLocalCoordinates = useCallback((clientX: number, clientY: number): DrawingPoint => {
-      if (!hostRef.current) {
+      const host = hostRef.current;
+      if (!host) {
         return { x: 0, y: 0 };
       }
-      const rect = hostRef.current.getBoundingClientRect();
-      return {
-        x: clientX - rect.left,
-        y: clientY - rect.top,
-      };
+      return clientPointToHostContentBox(host, clientX, clientY);
     }, []);
 
     // 跟踪宿主元素尺寸，供 minimap 计算指示框大小
@@ -2344,9 +2733,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
 
       const pointerPaths = new Map<number, PointerSample[]>();
       const activeDrawingPointerIds = new Set<number>();
-      // 跟踪所有活跃触摸指针（包括落在 ruler 上的），
-      // 用于判断是否为多指手势以在 ruler 启用时阻止绘画
-      const activeTouchPointerIds = new Set<number>();
+      const activePaperTouchPointerIds = new Set<number>();
       const capturedPointerIds = new Set<number>();
       const eraserQueuedHits = eraserQueuedHitsRef.current;
       let currentActiveStroke: DrawingStroke | null = null;
@@ -2648,6 +3035,27 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         isPrimary: event.isPrimary ?? true,
       });
 
+      const resolveDrawingScreenPoint = (
+        pointerId: number,
+        rawPoint: DrawingPoint,
+        tool: DrawingTool
+      ): DrawingPoint => {
+        if (!isSnapEligibleTool(tool)) {
+          return rawPoint;
+        }
+
+        // 只有原始指针能推进“越过尺边”的锁定状态。普通吸附完成后只在已经
+        // 锁定时投影，避免吸附坐标提前锁边，也避免它把已锁定点拉离物理尺边。
+        applyRulerEdgeConstraint(pointerId, rawPoint);
+        const snappedScreenPoint = resolvePointerSnap(
+          rawPoint,
+          viewportRef.current,
+          snapOptionsRef.current,
+          strokesRef.current
+        ).screen;
+        return projectLockedRulerEdge(pointerId, snappedScreenPoint);
+      };
+
       const releasePointerCapture = (pointerId: number) => {
         if (!capturedPointerIds.has(pointerId)) {
           return;
@@ -2776,13 +3184,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
 
         // 橡皮和套索在上面的分支中故意跳过投影：它们做的是命中测试/选区，必须使用原始指针位置。
         const localPath = path.map((pathItem) =>
-          resolveInteractiveCanvasPoint(
-            pathItem.point,
-            effectiveToolRef.current,
-            viewportRef.current,
-            snapOptionsRef.current,
-            strokesRef.current
-          )
+          screenToCanvas(pathItem.point, viewportRef.current)
         );
 
         // Line is click-to-place by default. Drag remains the shortcut, but only
@@ -2820,14 +3222,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
             continue;
           }
           const localPoint =
-            localPath[index] ??
-            resolveInteractiveCanvasPoint(
-              pathItem.point,
-              effectiveToolRef.current,
-              viewportRef.current,
-              snapOptionsRef.current,
-              strokesRef.current
-            );
+            localPath[index] ?? screenToCanvas(pathItem.point, viewportRef.current);
           const timedPoint: TimedDrawingPoint = {
             ...localPoint,
             timestamp: pathItem.timestamp || undefined,
@@ -2866,13 +3261,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           dispatchInteraction({
             type: 'POINTER_UP',
             pointerId: input.pointerId,
-            point: resolveInteractiveCanvasPoint(
-              input.point,
-              effectiveToolRef.current,
-              viewportRef.current,
-              snapOptionsRef.current,
-              strokesRef.current
-            ),
+            point: screenToCanvas(input.point, viewportRef.current),
           });
         }
       };
@@ -2889,6 +3278,35 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         );
       };
 
+      const activateDrawingPointer = (rawInput: PointerSample, event: PointerEvent) => {
+        capturePointer(event);
+        if (activeDrawingPointerIds.size > 0 && eraserCommitModeRef.current === 'on-release') {
+          eraserQueuedHitsRef.current.clear();
+        }
+        activeDrawingPointerIds.add(rawInput.pointerId);
+        beginRulerEdgeConstraint(
+          rawInput.pointerId,
+          rawInput.point,
+          effectiveToolRef.current
+        );
+        const input = {
+          ...rawInput,
+          point: resolveDrawingScreenPoint(
+            rawInput.pointerId,
+            rawInput.point,
+            effectiveToolRef.current
+          ),
+        };
+        pointerPaths.set(input.pointerId, [input]);
+        if (effectiveToolRef.current === 'eraser') {
+          eraserGestureStartCanvasPointRef.current = screenToCanvas(
+            input.point,
+            viewportRef.current
+          );
+        }
+        startLassoInteraction(input, event);
+      };
+
       const handlePointerDown = (event: PointerEvent) => {
         if (event.button !== undefined && event.button !== 0) {
           return;
@@ -2901,20 +3319,20 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         ) {
           return;
         }
-        // 记录触摸指针（无论目标是否在 ruler 上），用于多指检测
-        if (event.pointerType === 'touch') {
-          activeTouchPointerIds.add(event.pointerId);
+        const interactionInput = buildSurfacePointerInteractionInput(event);
+        if (event.pointerType === 'touch' && interactionInput.hitsRuler !== true) {
+          activePaperTouchPointerIds.add(event.pointerId);
         }
         const owner = gestureOwnerRef.current.startPointer(
           getInteractionOwnerOptions(
-            buildSurfacePointerInteractionInput(event),
-            activeTouchPointerIds.size
+            interactionInput,
+            activePaperTouchPointerIds.size
           )
         );
         if (owner !== 'drawing') {
           return;
         }
-        const input = toPointerSample(event);
+        const rawInput = toPointerSample(event);
         const pointerEvent = readPointerEvent(event);
         if (
           !isDrawingInput(pointerEvent, inputMethodsRef.current) ||
@@ -2924,13 +3342,13 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         }
         if (effectiveToolRef.current === 'text') {
           event.preventDefault();
-          const canvasPoint = screenToCanvas(input.point, viewportRef.current);
+          const canvasPoint = screenToCanvas(rawInput.point, viewportRef.current);
           const hadSelectedText = selectedIdsRef.current.some((selectedId) =>
             strokesRef.current.some((stroke) => stroke.id === selectedId && stroke.tool === 'text')
           );
           const removedTextId = finishEditingText();
           if (removedTextId !== null) {
-            gestureOwnerRef.current.endPointer(input.pointerId);
+            gestureOwnerRef.current.endPointer(rawInput.pointerId);
             return;
           }
           const hitTextStroke = pickTextStrokeAtPoint(canvasPoint, strokesRef.current);
@@ -2953,26 +3371,22 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
             commitSelection([textStroke.id]);
             setEditingTextId(textStroke.id);
           }
-          gestureOwnerRef.current.endPointer(input.pointerId);
+          gestureOwnerRef.current.endPointer(rawInput.pointerId);
           return;
         }
-        capturePointer(event);
-        // 多指按下时清空 on-release 橡皮队列，避免多指误触把之前的待提交删除一起提交。
-        if (activeDrawingPointerIds.size > 0 && eraserCommitModeRef.current === 'on-release') {
-          eraserQueuedHitsRef.current.clear();
-        }
-        activeDrawingPointerIds.add(input.pointerId);
-        pointerPaths.set(input.pointerId, [input]);
         if (
-          effectiveToolRef.current === 'eraser' &&
-          isDrawingInput(pointerEvent, inputMethodsRef.current)
+          shouldArbitrateTouchDrawing &&
+          event.pointerType === 'touch' &&
+          !isPlacementReducerTool(effectiveToolRef.current)
         ) {
-          eraserGestureStartCanvasPointRef.current = screenToCanvas(
-            input.point,
-            viewportRef.current
-          );
+          touchDrawingArbitrationRef.current = {
+            phase: 'pending',
+            pointerId: rawInput.pointerId,
+          };
+          pointerPaths.set(rawInput.pointerId, [rawInput]);
+          return;
         }
-        startLassoInteraction(input, event);
+        activateDrawingPointer(rawInput, event);
       };
       const handlePointerDownEvent: EventListener = (event) => {
         if (isPointerDomEvent(event)) {
@@ -2981,21 +3395,69 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       };
 
       const handlePointerMove = (event: PointerEvent) => {
-        const input = toPointerSample(event);
-        if (gestureOwnerRef.current.getPointerOwner(input.pointerId) !== 'drawing') {
+        const rawInput = toPointerSample(event);
+        if (gestureOwnerRef.current.getPointerOwner(rawInput.pointerId) !== 'drawing') {
           return;
         }
-        const path = pointerPaths.get(input.pointerId);
+        const touchDrawingArbitration = touchDrawingArbitrationRef.current;
+        if (
+          rawInput.pointerType === 'touch' &&
+          touchDrawingArbitration.phase !== 'idle' &&
+          touchDrawingArbitration.pointerId === rawInput.pointerId
+        ) {
+          if (touchDrawingArbitration.phase === 'viewport') {
+            gestureOwnerRef.current.endPointer(rawInput.pointerId);
+            pointerPaths.delete(rawInput.pointerId);
+            return;
+          }
+          if (touchDrawingArbitration.phase === 'pending') {
+            const pendingPath = pointerPaths.get(rawInput.pointerId);
+            const startInput = pendingPath?.[0];
+            if (!startInput) {
+              return;
+            }
+            const distanceFromStart = Math.hypot(
+              rawInput.point.x - startInput.point.x,
+              rawInput.point.y - startInput.point.y
+            );
+            if (distanceFromStart < TOUCH_DRAWING_COMMIT_THRESHOLD_PX) {
+              return;
+            }
+            touchDrawingArbitrationRef.current = {
+              phase: 'drawing',
+              pointerId: rawInput.pointerId,
+            };
+            activateDrawingPointer(startInput, event);
+          }
+        }
+        const path = pointerPaths.get(rawInput.pointerId);
         if (!path) {
           return;
         }
+        const input = {
+          ...rawInput,
+          point: resolveDrawingScreenPoint(
+            rawInput.pointerId,
+            rawInput.point,
+            effectiveToolRef.current
+          ),
+        };
         path.push(input);
         handleSingleMove(input, event, path);
       };
 
       const handlePointerEnd = (event: PointerEvent) => {
-        const input = toPointerSample(event);
-        const owner = isPlacementReducerTool(effectiveToolRef.current)
+        const rawInput = toPointerSample(event);
+        const isPlacementTool = isPlacementReducerTool(effectiveToolRef.current);
+        const input = {
+          ...rawInput,
+          point: resolveDrawingScreenPoint(
+            rawInput.pointerId,
+            rawInput.point,
+            effectiveToolRef.current
+          ),
+        };
+        const owner = isPlacementTool
           ? gestureOwnerRef.current.getPointerOwner(input.pointerId)
           : gestureOwnerRef.current.endPointer(input.pointerId);
         releasePointerCapture(input.pointerId);
@@ -3004,8 +3466,18 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         }
         activeDrawingPointerIds.delete(input.pointerId);
         pointerPaths.delete(input.pointerId);
+        if (!isPlacementTool) {
+          endRulerEdgeConstraint(input.pointerId);
+        }
         if (event.pointerType === 'touch') {
-          activeTouchPointerIds.delete(event.pointerId);
+          activePaperTouchPointerIds.delete(event.pointerId);
+          const touchDrawingArbitration = touchDrawingArbitrationRef.current;
+          if (
+            touchDrawingArbitration.phase !== 'idle' &&
+            touchDrawingArbitration.pointerId === event.pointerId
+          ) {
+            touchDrawingArbitrationRef.current = { phase: 'idle' };
+          }
         }
       };
 
@@ -3018,8 +3490,16 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         }
         activeDrawingPointerIds.delete(input.pointerId);
         pointerPaths.delete(input.pointerId);
+        endRulerEdgeConstraint(input.pointerId);
         if (event.pointerType === 'touch') {
-          activeTouchPointerIds.delete(event.pointerId);
+          activePaperTouchPointerIds.delete(event.pointerId);
+          const touchDrawingArbitration = touchDrawingArbitrationRef.current;
+          if (
+            touchDrawingArbitration.phase !== 'idle' &&
+            touchDrawingArbitration.pointerId === event.pointerId
+          ) {
+            touchDrawingArbitrationRef.current = { phase: 'idle' };
+          }
         }
       };
 
@@ -3053,6 +3533,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       window.addEventListener('blur', handleBlur);
 
       return () => {
+        clearStrokeState();
         if (clearActiveStrokeRef.current === clearCurrentActiveStroke) {
           clearActiveStrokeRef.current = null;
         }
@@ -3072,7 +3553,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         }
         activeDrawingPointerIds.clear();
         pointerPaths.clear();
-        activeTouchPointerIds.clear();
+        rulerEdgeConstraintsRef.current.clear();
+        activePaperTouchPointerIds.clear();
+        touchDrawingArbitrationRef.current = { phase: 'idle' };
         gestureOwnerRef.current.reset();
         eraserQueuedHits.clear();
         clearEraserTrajectoryRef.current();
@@ -3082,14 +3565,19 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       commitSelection,
       commitSelectionFrame,
       beginLassoMoveTransaction,
+      applyRulerEdgeConstraint,
+      beginRulerEdgeConstraint,
       buildSurfacePointerInteractionInput,
       eventTarget,
+      endRulerEdgeConstraint,
       finishEditingText,
       getInteractionOwnerOptions,
       getLocalCoordinates,
-      resolveInteractiveCanvasPoint,
+      projectLockedRulerEdge,
+      resolvePointerSnap,
       isVirtualPaperActive,
       selectionFrameFromTextStroke,
+      shouldArbitrateTouchDrawing,
       setActiveStroke,
     ]);
 
@@ -3198,14 +3686,18 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         ? POINTER_DOWN_CAPTURE_OPTIONS
         : undefined;
 
-      const toCanvasPoint = (clientX: number, clientY: number) => {
-        const screenPoint = getLocalCoordinates(clientX, clientY);
-        return resolveInteractiveCanvasPoint(
-          screenPoint,
-          effectiveTool,
+      const toCanvasPoint = (clientX: number, clientY: number, pointerId: number) => {
+        const rawScreenPoint = getLocalCoordinates(clientX, clientY);
+        applyRulerEdgeConstraint(pointerId, rawScreenPoint);
+        const snappedScreenPoint = resolvePointerSnap(
+          rawScreenPoint,
           viewportRef.current,
           snapOptionsRef.current,
           strokesRef.current
+        ).screen;
+        return screenToCanvas(
+          projectLockedRulerEdge(pointerId, snappedScreenPoint),
+          viewportRef.current
         );
       };
 
@@ -3221,7 +3713,9 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (owner !== 'drawing') {
           return;
         }
-        const point = toCanvasPoint(event.clientX, event.clientY);
+        const screenPoint = getLocalCoordinates(event.clientX, event.clientY);
+        beginRulerEdgeConstraint(event.pointerId, screenPoint, effectiveTool);
+        const point = toCanvasPoint(event.clientX, event.clientY, event.pointerId);
         if (effectiveTool === 'line') {
           pendingLineClick = { point, pointerId: event.pointerId };
           return;
@@ -3255,7 +3749,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (moveOwner !== 'drawing') {
           return;
         }
-        const point = toCanvasPoint(event.clientX, event.clientY);
+        const point = toCanvasPoint(event.clientX, event.clientY, event.pointerId);
         if (
           effectiveTool === 'line' &&
           pendingLineClick &&
@@ -3274,12 +3768,15 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       const handlePointerUp = (event: PointerEvent) => {
         const owner = gestureOwnerRef.current.endPointer(event.pointerId);
         if (owner !== 'drawing') {
+          endRulerEdgeConstraint(event.pointerId);
           return;
         }
+        const point = toCanvasPoint(event.clientX, event.clientY, event.pointerId);
+        endRulerEdgeConstraint(event.pointerId);
         if (effectiveTool === 'bezier') {
           dispatchInteraction({
             type: 'POINTER_UP',
-            point: toCanvasPoint(event.clientX, event.clientY),
+            point,
             pointerId: event.pointerId,
             detail: event.detail,
           });
@@ -3288,7 +3785,6 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         if (effectiveTool !== 'line' || !pendingLineClick) {
           return;
         }
-        const point = toCanvasPoint(event.clientX, event.clientY);
         const click = pendingLineClick;
         pendingLineClick = null;
         if (
@@ -3323,7 +3819,13 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         pendingLineClick = null;
         // Forward as a POINTER_DOWN with detail=2 — the reducer recognises
         // that as the polygon/line finish signal.
-        const point = toCanvasPoint(event.clientX, event.clientY);
+        const point = resolveInteractiveCanvasPoint(
+          getLocalCoordinates(event.clientX, event.clientY),
+          effectiveTool,
+          viewportRef.current,
+          snapOptionsRef.current,
+          strokesRef.current
+        );
         dispatchInteraction({
           type: 'POINTER_DOWN',
           point,
@@ -3376,10 +3878,15 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     }, [
       effectiveTool,
       eventTarget,
+      applyRulerEdgeConstraint,
+      beginRulerEdgeConstraint,
       buildSurfacePointerInteractionInput,
       getInteractionOwnerOptions,
       getLocalCoordinates,
+      endRulerEdgeConstraint,
+      projectLockedRulerEdge,
       resolveInteractiveCanvasPoint,
+      resolvePointerSnap,
       isVirtualPaperActive,
       isDrawingEnabled,
     ]);
@@ -3835,6 +4342,8 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
                     fontSize: resolveTextFontSize(selectedTextStroke.fontSize),
                     lineHeight: TEXT_LINE_HEIGHT,
                     fontFamily: 'inherit',
+                    userSelect: 'text',
+                    WebkitUserSelect: 'text',
                   }}
                 />
               </foreignObject>
@@ -4076,19 +4585,25 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       </svg>
     );
 
-    const rulerOverlay = (() => {
+    const rulerLayout = (() => {
       if (!isRulerEnabled || !currentRulerRect) return null;
       const { height, rotationRad } = currentRulerRect;
       const viewportSize = {
         width: rulerViewportSize.width || currentRulerRect.length,
         height: rulerViewportSize.height || Math.max(height, 200),
       };
-      const layout = getInfiniteRulerLayout({
+      return getInfiniteRulerLayout({
         logicalCenter: currentRulerRect.center,
         rotationRad,
         height,
         viewport: viewportSize,
       });
+    })();
+
+    const rulerOverlay = (() => {
+      if (!currentRulerRect || !rulerLayout) return null;
+      const { height, rotationRad } = currentRulerRect;
+      const layout = rulerLayout;
       const left = layout.visualCenter.x - layout.renderLength / 2;
       const top = layout.visualCenter.y - height / 2;
       return (
@@ -4098,7 +4613,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
             position: 'absolute',
             inset: 0,
             overflow: 'hidden',
-            zIndex: 5,
+            zIndex: 0,
             // 尺子拖动由宿主捕获阶段按几何范围识别。视觉层必须穿透，
             // 否则作为 VirtualPaper 的兄弟节点会截断 wheel 事件的冒泡路径。
             pointerEvents: 'none',
@@ -4152,6 +4667,37 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       );
     })();
 
+    const rulerAngleFeedback =
+      rulerRotationFeedback !== null ? (
+        <svg
+          width="100%"
+          height="100%"
+          style={{ position: 'absolute', inset: 0, zIndex: 20, pointerEvents: 'none' }}
+        >
+          <title>Ruler angle feedback</title>
+          <g
+            data-testid="drawing-ruler-angle-feedback"
+            data-feedback-x={String(rulerRotationFeedback.point.x)}
+            data-feedback-y={String(rulerRotationFeedback.point.y)}
+            transform={`translate(${rulerRotationFeedback.point.x} ${rulerRotationFeedback.point.y})`}
+          >
+            <circle cx={0} cy={0} r={22} fill="white" />
+            <text
+              x={0}
+              y={0}
+              fill="black"
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontSize={13}
+              fontWeight={600}
+              style={{ fontVariantNumeric: 'tabular-nums', userSelect: 'none' }}
+            >
+              {formatAngleDegrees(rulerRotationFeedback.rotationRad)}
+            </text>
+          </g>
+        </svg>
+      ) : null;
+
     return (
       <div
         ref={hostRef}
@@ -4170,8 +4716,14 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           border: '1px solid #ccc',
           position: 'relative',
           touchAction: 'none',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
           cursor: cursorEnabled ? 'none' : undefined,
         }}
+        onPointerDownCapture={handleZoomPointerDownCapture}
+        onPointerMoveCapture={handleZoomPointerMoveCapture}
+        onPointerUpCapture={handleZoomPointerEndCapture}
+        onPointerCancelCapture={handleZoomPointerEndCapture}
       >
         <VirtualPaperSurfaceFrame
           enabled={isVirtualPaperActive}
@@ -4281,6 +4833,8 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           />
         )}
         {rulerOverlay}
+        {rulerAngleFeedback}
+        {zoomFeedback && <InteractionFeedback {...zoomFeedback} />}
       </div>
     );
   }

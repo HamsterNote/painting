@@ -147,9 +147,28 @@ function dispatchElementPointerEvent(
   });
 }
 
-function dispatchElementWheelEvent(element: Element, deltaY: number) {
+function dispatchElementWheelEvent(
+  element: Element,
+  options: {
+    readonly deltaY: number;
+    readonly clientX?: number;
+    readonly clientY?: number;
+    readonly ctrlKey?: boolean;
+    readonly metaKey?: boolean;
+  }
+) {
   act(() => {
-    element.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY }));
+    element.dispatchEvent(
+      new WheelEvent('wheel', {
+        bubbles: true,
+        cancelable: true,
+        deltaY: options.deltaY,
+        clientX: options.clientX,
+        clientY: options.clientY,
+        ctrlKey: options.ctrlKey,
+        metaKey: options.metaKey,
+      })
+    );
   });
 }
 
@@ -165,6 +184,26 @@ function mockHostRect(element: HTMLElement) {
     height: 200,
     toJSON: () => ({}),
   }));
+}
+
+function mockHostClientBox(element: HTMLElement) {
+  element.getBoundingClientRect = jest.fn(() => ({
+    x: 10,
+    y: 20,
+    left: 10,
+    top: 20,
+    right: 212,
+    bottom: 222,
+    width: 202,
+    height: 202,
+    toJSON: () => ({}),
+  }));
+  Object.defineProperties(element, {
+    clientLeft: { configurable: true, value: 1 },
+    clientTop: { configurable: true, value: 1 },
+    clientWidth: { configurable: true, value: 200 },
+    clientHeight: { configurable: true, value: 200 },
+  });
 }
 
 function mockElementClientSize(width: number, height: number) {
@@ -265,6 +304,17 @@ describe('DrawingSurface', () => {
     expect(svg).toBeTruthy();
   });
 
+  it('disables native selection across the SVG surface', () => {
+    // Given: 画布宿主包含主画布和覆盖层 SVG。
+    render(<DrawingSurface testID="drawing-surface-host" ruler={{ enabled: true }} />);
+
+    // When: 浏览器解析画布宿主的选择样式。
+    const host = screen.getByTestId('drawing-surface-host');
+
+    // Then: 所有 SVG 后代继承不可选中语义，避免拖动时出现原生文字选区。
+    expect(host.style.userSelect).toBe('none');
+  });
+
   it('mounts and unmounts with React 18 createRoot without crashing', () => {
     const rootElement = document.createElement('div');
     document.body.appendChild(rootElement);
@@ -356,6 +406,7 @@ describe('DrawingSurface', () => {
     expect(overlay).not.toBeNull();
     expect(overlay.style.inset).toBe('0');
     expect(overlay.style.overflow).toBe('hidden');
+    expect(overlay.style.zIndex).toBe('0');
     expect(Number(overlay.style.zIndex)).toBeLessThan(Number(minimap.style.zIndex));
     expect(overlay.style.pointerEvents).toBe('none');
     expect(Number(ruler?.getAttribute('data-ruler-length'))).toBeGreaterThan(1_000);
@@ -433,7 +484,7 @@ describe('DrawingSurface', () => {
     ]);
   });
 
-  it('blocks ordinary left mouse input on the ruler without moving it under virtualPaper', () => {
+  it('draws without moving the ruler on an unmodified left mouse drag under virtualPaper', () => {
     const onChange = jest.fn();
     const onRulerChange = jest.fn();
     render(
@@ -489,7 +540,7 @@ describe('DrawingSurface', () => {
     );
 
     expect(onRulerChange).not.toHaveBeenCalled();
-    expect(onChange).not.toHaveBeenCalled();
+    expect(onChange).toHaveBeenCalledTimes(1);
   });
 
   it('moves the ruler with Ctrl/Cmd mouse drag when virtualPaper stops bubbling pointerdown', () => {
@@ -561,7 +612,7 @@ describe('DrawingSurface', () => {
     expect(nextState).toEqual({ center: { x: 75, y: 68 } });
   });
 
-  it('rotates the ruler with Alt mouse drag around the visible host center', () => {
+  it('rotates the ruler with Alt mouse drag around the visible centerline midpoint', () => {
     const onChange = jest.fn();
     const onRulerChange = jest.fn();
     render(
@@ -571,7 +622,7 @@ describe('DrawingSurface', () => {
         onChange={onChange}
         ruler={{
           enabled: true,
-          state: { center: { x: 150, y: 100 }, rotationRad: 0 },
+          state: { center: { x: 150, y: 50 }, rotationRad: 0 },
           length: 160,
           height: 30,
         }}
@@ -588,34 +639,45 @@ describe('DrawingSurface', () => {
       body,
       'pointerdown',
       {
-        point: { x: 150, y: 100 },
+        point: { x: 150, y: 50 },
         event: {
           pointerType: 'mouse',
           button: 0,
-          clientX: 160,
-          clientY: 120,
+          clientX: 200,
+          clientY: 70,
           altKey: true,
         },
         timestamp: 0,
       },
       1
     );
+    const initialFeedback = screen.getByTestId('drawing-ruler-angle-feedback');
+    expect(initialFeedback.textContent).toBe('0°');
+    expect(initialFeedback.getAttribute('data-feedback-x')).toBe('100');
+    expect(initialFeedback.getAttribute('data-feedback-y')).toBe('50');
     dispatchElementPointerEvent(
       document,
       'pointermove',
       {
-        point: { x: 100, y: 150 },
-        event: { pointerType: 'mouse', button: -1, clientX: 110, clientY: 170 },
+        point: { x: 100, y: 140 },
+        event: { pointerType: 'mouse', button: -1, clientX: 110, clientY: 160 },
         timestamp: 10,
       },
       1
     );
+
+    const rotatedFeedback = screen.getByTestId('drawing-ruler-angle-feedback');
+    expect(rotatedFeedback.textContent).toBe('90°');
+    expect(rotatedFeedback.getAttribute('data-feedback-x')).toBe('100');
+    expect(rotatedFeedback.getAttribute('data-feedback-y')).toBe('50');
+    expect(rotatedFeedback.querySelector('circle')?.getAttribute('fill')).toBe('white');
+    expect(rotatedFeedback.querySelector('text')?.getAttribute('fill')).toBe('black');
     dispatchElementPointerEvent(
       document,
       'pointerup',
       {
-        point: { x: 100, y: 150 },
-        event: { pointerType: 'mouse', button: 0, clientX: 110, clientY: 170 },
+        point: { x: 100, y: 140 },
+        event: { pointerType: 'mouse', button: 0, clientX: 110, clientY: 160 },
         timestamp: 20,
       },
       1
@@ -625,12 +687,66 @@ describe('DrawingSurface', () => {
       | DrawingRulerState
       | undefined;
     expect(nextState?.center.x).toBeCloseTo(100);
-    expect(nextState?.center.y).toBeCloseTo(150);
+    expect(nextState?.center.y).toBeCloseTo(100);
     expect(nextState?.rotationRad).toBeCloseTo(Math.PI / 2);
     expect(onChange).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('drawing-ruler-angle-feedback')).toBeNull();
   });
 
-  it('snaps Alt mouse rotation to the nearest 45-degree multiple', () => {
+  it('measures mouse rotation from the host client-box origin', () => {
+    // Given: 画布宿主有 1px 边框，尺子中线的可见中心为 client box 内的 (100, 100)。
+    const onRulerChange = jest.fn();
+    render(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        ruler={{
+          enabled: true,
+          state: { center: { x: 150, y: 100 }, rotationRad: 0 },
+          height: 30,
+        }}
+        onRulerChange={onRulerChange}
+      />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    const body = screen.getByTestId('drawing-ruler-background');
+    mockHostClientBox(host);
+    onRulerChange.mockClear();
+
+    // When: 鼠标以 client-box 坐标从 0° 自由旋转到 30°。
+    dispatchElementPointerEvent(
+      body,
+      'pointerdown',
+      {
+        point: { x: 190, y: 100 },
+        event: { pointerType: 'mouse', button: 0, clientX: 201, clientY: 121, altKey: true },
+      },
+      1
+    );
+    dispatchElementPointerEvent(
+      document,
+      'pointermove',
+      {
+        point: { x: 177.942286, y: 145 },
+        event: {
+          pointerType: 'mouse',
+          button: -1,
+          clientX: 188.942286,
+          clientY: 166,
+        },
+      },
+      1
+    );
+
+    // Then: 角度和逻辑原点都严格围绕可见 client-box 中心计算。
+    const nextState = onRulerChange.mock.calls[onRulerChange.mock.calls.length - 1]?.[0] as
+      | DrawingRulerState
+      | undefined;
+    expect(nextState?.rotationRad).toBeCloseTo(Math.PI / 6, 5);
+    expect(nextState?.center.x).toBeCloseTo(143.30127, 5);
+    expect(nextState?.center.y).toBeCloseTo(125, 5);
+  });
+
+  it('snaps Alt mouse rotation after it enters a 45-degree tolerance range', () => {
     // Given: 水平尺子的旋转手势从宿主中心右侧开始。
     const onRulerChange = jest.fn();
     render(
@@ -651,7 +767,7 @@ describe('DrawingSurface', () => {
       'pointerdown',
       {
         point: { x: 150, y: 100 },
-        event: { pointerType: 'mouse', button: 0, clientX: 160, clientY: 120, altKey: true },
+        event: { pointerType: 'mouse', button: 0, clientX: 200, clientY: 120, altKey: true },
       },
       1
     );
@@ -659,19 +775,19 @@ describe('DrawingSurface', () => {
       document,
       'pointermove',
       {
-        point: { x: 138.3, y: 132.1 },
-        event: { pointerType: 'mouse', button: -1, clientX: 148.3, clientY: 152.1 },
+        point: { x: 168.9, y: 157.9 },
+        event: { pointerType: 'mouse', button: -1, clientX: 178.9, clientY: 177.9 },
       },
       1
     );
 
-    // Then: 对外提交的角度和绕宿主中心旋转后的中心都使用吸附后的 45°。
+    // Then: 对外提交的角度吸附到 45°，逻辑原点绕可见中线中心同步旋转。
     const nextState = onRulerChange.mock.calls[onRulerChange.mock.calls.length - 1]?.[0] as
       | DrawingRulerState
       | undefined;
     expect(nextState?.rotationRad).toBeCloseTo(Math.PI / 4);
-    expect(nextState?.center.x).toBeCloseTo(135.36, 1);
-    expect(nextState?.center.y).toBeCloseTo(135.36, 1);
+    expect(nextState?.center.x).toBeCloseTo(135.36, 2);
+    expect(nextState?.center.y).toBeCloseTo(135.36, 2);
   });
 
   it('does not create strokes for wheel input under virtualPaper', () => {
@@ -690,9 +806,228 @@ describe('DrawingSurface', () => {
       return;
     }
 
-    dispatchElementWheelEvent(svg, 120);
+    dispatchElementWheelEvent(svg, { deltaY: 120 });
 
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('shows the real integer zoom percentage above a Ctrl wheel pointer', () => {
+    // Given: VirtualPaper 已启用，鼠标位于宿主内且上方空间充足。
+    const { container } = render(
+      <DrawingSurface testID="drawing-surface-host" virtualPaper={true} />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    const wrapper = screen.getByTestId('virtual-paper-wrapper');
+    mockHostRect(host);
+    mockHostRect(wrapper);
+
+    // When: Ctrl + 滚轮触发 VirtualPaper 的真实缩放计算。
+    dispatchElementWheelEvent(wrapper, {
+      deltaY: -100,
+      clientX: 90,
+      clientY: 110,
+      ctrlKey: true,
+    });
+
+    // Then: 显示回传比例的整数百分比，并锚定在鼠标上方。
+    const feedback = screen.getByTestId('drawing-zoom-feedback');
+    expect(feedback.textContent).toBe(`${Math.round(Number(host.dataset.scale) * 100)}%`);
+    expect(feedback.getAttribute('data-feedback-source')).toBe('mouse');
+    expect(feedback.getAttribute('data-feedback-x')).toBe('80');
+    expect(feedback.getAttribute('data-feedback-y')).toBe('62');
+    expect(container.querySelector('[data-testid="drawing-zoom-feedback"]')).not.toBeNull();
+  });
+
+  it('moves Ctrl wheel zoom feedback below a pointer near the host top', () => {
+    // Given: 鼠标靠近宿主顶部。
+    render(<DrawingSurface testID="drawing-surface-host" virtualPaper={true} />);
+    const host = screen.getByTestId('drawing-surface-host');
+    const wrapper = screen.getByTestId('virtual-paper-wrapper');
+    mockHostRect(host);
+    mockHostRect(wrapper);
+
+    // When: 在顶部附近执行 Ctrl + 滚轮缩放。
+    dispatchElementWheelEvent(wrapper, {
+      deltaY: -100,
+      clientX: 42,
+      clientY: 40,
+      ctrlKey: true,
+    });
+
+    // Then: 完整提示翻转到鼠标下方。
+    const feedback = screen.getByTestId('drawing-zoom-feedback');
+    expect(feedback.getAttribute('data-feedback-x')).toBe('32');
+    expect(feedback.getAttribute('data-feedback-y')).toBe('48');
+  });
+
+  it('anchors two-finger zoom feedback at a stable point above the midpoint', () => {
+    // Given: VirtualPaper 上有两个形成斜线的活动触点。
+    render(<DrawingSurface testID="drawing-surface-host" virtualPaper={true} />);
+    const host = screen.getByTestId('drawing-surface-host');
+    const wrapper = screen.getByTestId('virtual-paper-wrapper');
+    mockHostRect(host);
+    mockHostRect(wrapper);
+    dispatchElementPointerEvent(
+      wrapper,
+      'pointerdown',
+      { point: { x: 30, y: 100 }, event: { pointerType: 'touch', clientX: 30, clientY: 100 } },
+      1
+    );
+    dispatchElementPointerEvent(
+      wrapper,
+      'pointerdown',
+      { point: { x: 90, y: 140 }, event: { pointerType: 'touch', clientX: 90, clientY: 140 } },
+      2
+    );
+
+    // When: 第二根手指外移，VirtualPaper 回传新的真实比例。
+    dispatchElementPointerEvent(
+      wrapper,
+      'pointermove',
+      { point: { x: 110, y: 160 }, event: { pointerType: 'touch', clientX: 110, clientY: 160 } },
+      2
+    );
+
+    // Then: 提示固定在宿主局部双指中点上方 36px，并展示整数比例。
+    const feedback = screen.getByTestId('drawing-zoom-feedback');
+    expect(feedback.textContent).toBe(`${Math.round(Number(host.dataset.scale) * 100)}%`);
+    expect(feedback.getAttribute('data-feedback-source')).toBe('touch');
+    const feedbackX = Number(feedback.getAttribute('data-feedback-x'));
+    const feedbackY = Number(feedback.getAttribute('data-feedback-y'));
+    expect(feedbackX).toBe(60);
+    expect(feedbackY).toBe(74);
+
+    // When: 任一触点结束，双指缩放也随之结束。
+    dispatchElementPointerEvent(
+      document,
+      'pointerup',
+      { point: { x: 110, y: 160 }, event: { pointerType: 'touch', clientX: 110, clientY: 160 } },
+      2
+    );
+
+    // Then: 缩放提示立即消失。
+    expect(screen.queryByTestId('drawing-zoom-feedback')).toBeNull();
+  });
+
+  it('ignores a host overlay touch when choosing the VirtualPaper pinch pair', () => {
+    // Given: 一个由 Minimap 等宿主覆盖层持有的触点先于 VirtualPaper 双指手势出现。
+    render(<DrawingSurface testID="drawing-surface-host" virtualPaper={true} />);
+    const host = screen.getByTestId('drawing-surface-host');
+    const wrapper = screen.getByTestId('virtual-paper-wrapper');
+    mockHostRect(host);
+    mockHostRect(wrapper);
+    dispatchElementPointerEvent(
+      host,
+      'pointerdown',
+      { point: { x: 180, y: 180 }, event: { pointerType: 'touch', clientX: 180, clientY: 180 } },
+      90
+    );
+    dispatchElementPointerEvent(
+      wrapper,
+      'pointerdown',
+      { point: { x: 30, y: 100 }, event: { pointerType: 'touch', clientX: 30, clientY: 100 } },
+      1
+    );
+    dispatchElementPointerEvent(
+      wrapper,
+      'pointerdown',
+      { point: { x: 90, y: 140 }, event: { pointerType: 'touch', clientX: 90, clientY: 140 } },
+      2
+    );
+
+    // When: VirtualPaper 的第二根手指外移并触发缩放。
+    dispatchElementPointerEvent(
+      wrapper,
+      'pointermove',
+      { point: { x: 110, y: 160 }, event: { pointerType: 'touch', clientX: 110, clientY: 160 } },
+      2
+    );
+
+    // Then: 提示只使用 VirtualPaper 接受的两根手指计算位置。
+    const feedback = screen.getByTestId('drawing-zoom-feedback');
+    const feedbackX = Number(feedback.getAttribute('data-feedback-x'));
+    const feedbackY = Number(feedback.getAttribute('data-feedback-y'));
+    expect(Math.hypot(feedbackX - 60, feedbackY - 110)).toBeLessThanOrEqual(50);
+  });
+
+  it('ends touch zoom feedback when a locked pinch pointer ends with a third touch present', () => {
+    // Given: VirtualPaper 已用前两个触点开始 pinch，随后出现第三根手指。
+    render(<DrawingSurface testID="drawing-surface-host" virtualPaper={true} />);
+    const host = screen.getByTestId('drawing-surface-host');
+    const wrapper = screen.getByTestId('virtual-paper-wrapper');
+    mockHostRect(host);
+    mockHostRect(wrapper);
+    for (const [pointerId, x, y] of [
+      [1, 30, 100],
+      [2, 90, 140],
+      [3, 150, 180],
+    ] as const) {
+      dispatchElementPointerEvent(
+        wrapper,
+        'pointerdown',
+        { point: { x, y }, event: { pointerType: 'touch', clientX: x, clientY: y } },
+        pointerId
+      );
+    }
+    dispatchElementPointerEvent(
+      wrapper,
+      'pointermove',
+      { point: { x: 110, y: 160 }, event: { pointerType: 'touch', clientX: 110, clientY: 160 } },
+      2
+    );
+    expect(screen.getByTestId('drawing-zoom-feedback')).toBeTruthy();
+
+    // When: 固定 pinch 二元组中的第一根手指结束，第三根手指仍按住。
+    dispatchElementPointerEvent(
+      document,
+      'pointerup',
+      { point: { x: 30, y: 100 }, event: { pointerType: 'touch', clientX: 30, clientY: 100 } },
+      1
+    );
+
+    // Then: 当前 pinch 已结束，提示立即消失而不会由第三根手指接替。
+    expect(screen.queryByTestId('drawing-zoom-feedback')).toBeNull();
+  });
+
+  it('clears touch zoom feedback when touch zoom is disabled during the gesture', () => {
+    // Given: VirtualPaper 双指缩放正在显示比例提示。
+    const { rerender } = render(
+      <DrawingSurface testID="drawing-surface-host" virtualPaper={true} />
+    );
+    const host = screen.getByTestId('drawing-surface-host');
+    const wrapper = screen.getByTestId('virtual-paper-wrapper');
+    mockHostRect(host);
+    mockHostRect(wrapper);
+    dispatchElementPointerEvent(
+      wrapper,
+      'pointerdown',
+      { point: { x: 30, y: 100 }, event: { pointerType: 'touch', clientX: 30, clientY: 100 } },
+      1
+    );
+    dispatchElementPointerEvent(
+      wrapper,
+      'pointerdown',
+      { point: { x: 90, y: 140 }, event: { pointerType: 'touch', clientX: 90, clientY: 140 } },
+      2
+    );
+    dispatchElementPointerEvent(
+      wrapper,
+      'pointermove',
+      { point: { x: 110, y: 160 }, event: { pointerType: 'touch', clientX: 110, clientY: 160 } },
+      2
+    );
+    expect(screen.getByTestId('drawing-zoom-feedback')).toBeTruthy();
+
+    // When: 宿主在手势进行中禁用双指缩放交互。
+    rerender(
+      <DrawingSurface
+        testID="drawing-surface-host"
+        virtualPaper={{ enabledInteractions: ['touchSingleFingerPan'] }}
+      />
+    );
+
+    // Then: 旧触点归属与触摸提示都被清除。
+    expect(screen.queryByTestId('drawing-zoom-feedback')).toBeNull();
   });
 
   describe('central interaction ownership', () => {
@@ -713,6 +1048,32 @@ describe('DrawingSurface', () => {
       expectOwner(
         classifyInteraction({
           input: { kind: 'pointer', target: rulerTarget, pointerType: 'pen', button: 0 },
+          isDrawingEnabled: true,
+          isRulerEnabled: true,
+          virtualPaperEnabled: true,
+          allowedDrawingInputMethods: ['touch', 'mouse', 'pen'],
+        }),
+        'drawing'
+      );
+      expectOwner(
+        classifyInteraction({
+          input: { kind: 'pointer', target: rulerTarget, pointerType: 'mouse', button: 0 },
+          isDrawingEnabled: true,
+          isRulerEnabled: true,
+          virtualPaperEnabled: true,
+          allowedDrawingInputMethods: ['touch', 'mouse', 'pen'],
+        }),
+        'drawing'
+      );
+      expectOwner(
+        classifyInteraction({
+          input: {
+            kind: 'pointer',
+            target: rulerTarget,
+            pointerType: 'mouse',
+            button: 0,
+            ctrlKey: true,
+          },
           isDrawingEnabled: true,
           isRulerEnabled: true,
           virtualPaperEnabled: true,
@@ -843,7 +1204,7 @@ describe('DrawingSurface', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('keeps ruler-owned pen gestures from creating strokes or active previews', () => {
+    it('hands a pending first touch to VirtualPaper when a second touch starts', () => {
       const onChange = jest.fn();
       const { container } = render(
         <DrawingSurface
@@ -852,24 +1213,437 @@ describe('DrawingSurface', () => {
           onChange={onChange}
           tool="pen"
           strokeSmoothing={false}
-          ruler={{
-            enabled: true,
-            state: { center: { x: 50, y: 40 } },
-            length: 120,
-            height: 30,
+          virtualPaper={{
+            enabledInteractions: ['touchTwoFingerPan', 'touchTwoFingerZoom'],
           }}
         />
       );
       const host = screen.getByTestId('drawing-surface-host');
-      const rulerBody = screen.getByTestId('drawing-ruler-background');
+      const wrapper = screen.getByTestId('virtual-paper-wrapper');
       mockHostRect(host);
+      mockHostRect(wrapper);
+      const initialScale = Number(host.dataset.scale);
+
+      // Given: 第一根手指只移动 4px，尚未越过单指绘制承诺阈值。
+      dispatchElementPointerEvent(
+        wrapper,
+        'pointerdown',
+        { point: { x: 40, y: 100 }, event: { pointerType: 'touch' } },
+        1
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        { point: { x: 44, y: 100 }, event: { pointerType: 'touch', button: -1 } },
+        1
+      );
+
+      // When: 第二根手指介入并外移，VirtualPaper 接管为双指缩放。
+      dispatchElementPointerEvent(
+        wrapper,
+        'pointerdown',
+        { point: { x: 100, y: 100 }, event: { pointerType: 'touch' } },
+        2
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        { point: { x: 130, y: 100 }, event: { pointerType: 'touch', button: -1 } },
+        2
+      );
+
+      // Then: 双指缩放真实生效，同时没有生成误画预览。
+      expect(Number(host.dataset.scale)).not.toBe(initialScale);
+      expect(screen.getByTestId('drawing-zoom-feedback')).toBeTruthy();
+      expect(container.querySelector('path')).toBeNull();
 
       dispatchElementPointerEvent(
-        rulerBody,
+        document,
+        'pointerup',
+        { point: { x: 130, y: 100 }, event: { pointerType: 'touch' } },
+        2
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointerup',
+        { point: { x: 44, y: 100 }, event: { pointerType: 'touch' } },
+        1
+      );
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('keeps a committed first-touch stroke isolated from a later second touch', () => {
+      const onChange = jest.fn();
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="pen"
+          strokeSmoothing={false}
+          virtualPaper={{
+            enabledInteractions: ['touchTwoFingerPan', 'touchTwoFingerZoom'],
+          }}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      const wrapper = screen.getByTestId('virtual-paper-wrapper');
+      mockHostRect(host);
+      mockHostRect(wrapper);
+
+      // Given: 第一根手指已移动 30px，明确承诺为绘制手势。
+      dispatchElementPointerEvent(
+        wrapper,
+        'pointerdown',
+        { point: { x: 40, y: 100 }, event: { pointerType: 'touch' } },
+        1
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        { point: { x: 70, y: 100 }, event: { pointerType: 'touch', button: -1 } },
+        1
+      );
+      expect(container.querySelector('path')).not.toBeNull();
+      const committedDrawingScale = Number(host.dataset.scale);
+
+      // When: 第二根手指按下并移动，第一笔仍继续采样。
+      dispatchElementPointerEvent(
+        wrapper,
+        'pointerdown',
+        { point: { x: 120, y: 100 }, event: { pointerType: 'touch' } },
+        2
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        { point: { x: 160, y: 100 }, event: { pointerType: 'touch', button: -1 } },
+        2
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        { point: { x: 90, y: 100 }, event: { pointerType: 'touch', button: -1 } },
+        1
+      );
+
+      // Then: 第二指既不缩放画布，也不替换或取消已经开始的第一笔。
+      expect(Number(host.dataset.scale)).toBe(committedDrawingScale);
+      expect(screen.queryByTestId('drawing-zoom-feedback')).toBeNull();
+      dispatchElementPointerEvent(
+        document,
+        'pointerup',
+        { point: { x: 160, y: 100 }, event: { pointerType: 'touch' } },
+        2
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointerup',
+        { point: { x: 90, y: 100 }, event: { pointerType: 'touch' } },
+        1
+      );
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0]?.[0].strokes).toHaveLength(1);
+    });
+
+    it('does not count a ruler touch toward the paper touch gesture', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="pen"
+          strokeSmoothing={false}
+          virtualPaper={{
+            enabledInteractions: ['touchTwoFingerPan', 'touchTwoFingerZoom'],
+          }}
+          ruler={{
+            enabled: true,
+            state: { center: { x: 100, y: 100 } },
+            height: 40,
+          }}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      const wrapper = screen.getByTestId('virtual-paper-wrapper');
+      const ruler = screen.getByTestId('drawing-ruler-background');
+      mockHostRect(host);
+      mockHostRect(wrapper);
+
+      // Given: 一根触点已归属于尺子，但 VirtualPaper 尚无画布触点。
+      dispatchElementPointerEvent(
+        ruler,
+        'pointerdown',
+        { point: { x: 110, y: 120 }, event: { pointerType: 'touch' } },
+        1
+      );
+
+      // When: 第一根画布触点随后落下并越过绘制承诺阈值。
+      dispatchElementPointerEvent(
+        wrapper,
+        'pointerdown',
+        { point: { x: 40, y: 50 }, event: { pointerType: 'touch' } },
+        2
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        { point: { x: 70, y: 50 }, event: { pointerType: 'touch', button: -1 } },
+        2
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointerup',
+        { point: { x: 70, y: 50 }, event: { pointerType: 'touch' } },
+        2
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointerup',
+        { point: { x: 110, y: 120 }, event: { pointerType: 'touch' } },
+        1
+      );
+
+      // Then: 画布触点仍按单指绘制处理，而不是被误判为双指 VirtualPaper 手势。
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0]?.[0].strokes).toHaveLength(1);
+    });
+
+    it('keeps one paper touch drawing while two ruler touches operate concurrently', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="pen"
+          strokeSmoothing={false}
+          virtualPaper={{
+            enabledInteractions: ['touchTwoFingerPan', 'touchTwoFingerZoom'],
+          }}
+          ruler={{
+            enabled: true,
+            state: { center: { x: 100, y: 100 } },
+            height: 40,
+          }}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      const wrapper = screen.getByTestId('virtual-paper-wrapper');
+      const ruler = screen.getByTestId('drawing-ruler-background');
+      mockHostRect(host);
+      mockHostRect(wrapper);
+
+      // Given: 两根触点已归属于尺子并形成 ruler multi-drag。
+      dispatchElementPointerEvent(
+        ruler,
+        'pointerdown',
+        { point: { x: 80, y: 120 }, event: { pointerType: 'touch' } },
+        1
+      );
+      dispatchElementPointerEvent(
+        ruler,
+        'pointerdown',
+        { point: { x: 140, y: 120 }, event: { pointerType: 'touch' } },
+        2
+      );
+
+      // When: 独立的第一根画布触点开始并完成一笔。
+      dispatchElementPointerEvent(
+        wrapper,
+        'pointerdown',
+        { point: { x: 40, y: 50 }, event: { pointerType: 'touch' } },
+        3
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        { point: { x: 75, y: 50 }, event: { pointerType: 'touch', button: -1 } },
+        3
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointerup',
+        { point: { x: 75, y: 50 }, event: { pointerType: 'touch' } },
+        3
+      );
+
+      // Then: 尺子触点不占用画布的双指配额，独立绘制正常提交。
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0]?.[0].strokes).toHaveLength(1);
+
+      dispatchElementPointerEvent(
+        document,
+        'pointerup',
+        { point: { x: 80, y: 120 }, event: { pointerType: 'touch' } },
+        1
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointerup',
+        { point: { x: 140, y: 120 }, event: { pointerType: 'touch' } },
+        2
+      );
+    });
+
+    it.each([
+      ['pending', 4],
+      ['committed', 30],
+    ] as const)('cancels a %s touch stroke when VirtualPaper configuration rebuilds listeners', (_, distance) => {
+      const onChange = jest.fn();
+      const value = { strokes: [] };
+      const { container, rerender } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={value}
+          onChange={onChange}
+          tool="pen"
+          strokeSmoothing={false}
+          virtualPaper={{
+            enabledInteractions: ['touchTwoFingerPan', 'touchTwoFingerZoom'],
+          }}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      const wrapper = screen.getByTestId('virtual-paper-wrapper');
+      mockHostRect(host);
+      mockHostRect(wrapper);
+
+      // Given: 一根触点处于待决状态，或已经越过阈值形成活动笔画。
+      dispatchElementPointerEvent(
+        wrapper,
+        'pointerdown',
+        { point: { x: 40, y: 100 }, event: { pointerType: 'touch' } },
+        1
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        { point: { x: 40 + distance, y: 100 }, event: { pointerType: 'touch', button: -1 } },
+        1
+      );
+
+      // When: VirtualPaper 配置变化使绘制监听器 effect 重建。
+      rerender(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={value}
+          onChange={onChange}
+          tool="pen"
+          strokeSmoothing={false}
+          virtualPaper={true}
+        />
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointerup',
+        { point: { x: 40 + distance, y: 100 }, event: { pointerType: 'touch' } },
+        1
+      );
+
+      // Then: 旧事务被取消，不保留预览，也不会由旧 pointerup 提交。
+      expect(container.querySelector('path')).toBeNull();
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it.each(['mouse', 'pen', 'touch'] as const)(
+      'projects %s samples onto the selected ruler edge after crossing it',
+      (pointerType) => {
+        const onChange = jest.fn();
+        render(
+          <DrawingSurface
+            testID="drawing-surface-host"
+            value={{ strokes: [] }}
+            onChange={onChange}
+            tool="pen"
+            strokeSmoothing={false}
+            ruler={{
+              enabled: true,
+              state: { center: { x: 100, y: 100 } },
+              length: 240,
+              height: 40,
+            }}
+          />
+        );
+        const host = screen.getByTestId('drawing-surface-host');
+        mockHostRect(host);
+
+        // Given / When: 输入从上方跨过 y=80 的物理尺边并进入尺身。
+        dispatchElementPointerEvent(
+          host,
+          'pointerdown',
+          {
+            point: { x: 60, y: 60 },
+            event: { pointerType, button: 0, clientX: 70, clientY: 80 },
+          },
+          1
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointermove',
+          {
+            point: { x: 100, y: 90 },
+            event: { pointerType, button: -1, clientX: 110, clientY: 110 },
+          },
+          1
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointerup',
+          {
+            point: { x: 100, y: 90 },
+            event: { pointerType, button: 0, clientX: 110, clientY: 110 },
+          },
+          1
+        );
+
+        // Then: 尺身内采样固定映射到选中的上尺边，而非保留原始 y=90。
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange.mock.calls[0]?.[0].strokes[0]?.points).toEqual([
+          { x: 60, y: 60, timestamp: undefined },
+          { x: 100, y: 80, timestamp: undefined },
+        ]);
+      }
+    );
+
+    it('re-arms ruler snapping after leaving so one pen gesture can constrain again', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          onChange={onChange}
+          tool="pen"
+          strokeSmoothing={false}
+          ruler={{
+            enabled: true,
+            state: { center: { x: 100, y: 100 } },
+            length: 240,
+            height: 40,
+          }}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      // Given: 笔从尺子上方开始，因此选中局部 y=-20 的上尺边。
+      dispatchElementPointerEvent(
+        host,
         'pointerdown',
         {
-          point: { x: 50, y: 40 },
-          event: { pointerType: 'pen', button: 0, clientX: 60, clientY: 60 },
+          point: { x: 60, y: 60 },
+          event: { pointerType: 'pen', button: 0, clientX: 70, clientY: 80 },
+        },
+        1
+      );
+      // When: 笔尖跨入尺身、从另一侧离开，再在同一次按压中从下方重新进入。
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        {
+          point: { x: 100, y: 90 },
+          event: { pointerType: 'pen', button: -1, clientX: 110, clientY: 110 },
         },
         1
       );
@@ -877,8 +1651,17 @@ describe('DrawingSurface', () => {
         document,
         'pointermove',
         {
-          point: { x: 80, y: 80 },
-          event: { pointerType: 'pen', button: -1, clientX: 80, clientY: 80 },
+          point: { x: 140, y: 140 },
+          event: { pointerType: 'pen', button: -1, clientX: 150, clientY: 160 },
+        },
+        1
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        {
+          point: { x: 160, y: 110 },
+          event: { pointerType: 'pen', button: -1, clientX: 170, clientY: 130 },
         },
         1
       );
@@ -886,14 +1669,244 @@ describe('DrawingSurface', () => {
         document,
         'pointerup',
         {
-          point: { x: 80, y: 80 },
-          event: { pointerType: 'pen', button: 0, clientX: 80, clientY: 80 },
+          point: { x: 160, y: 150 },
+          event: { pointerType: 'pen', button: 0, clientX: 170, clientY: 170 },
         },
         1
       );
 
-      expect(container.querySelector('path')).toBeNull();
-      expect(onChange).not.toHaveBeenCalled();
+      // Then: 首次进入固定在上边，离尺点自由；再次进入时改吸附到下边。
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0]?.[0].strokes[0]?.points).toEqual([
+        { x: 60, y: 60, timestamp: undefined },
+        { x: 100, y: 80, timestamp: undefined },
+        { x: 140, y: 140, timestamp: undefined },
+        { x: 160, y: 120, timestamp: undefined },
+      ]);
+    });
+
+    it('projects endpoint snapping while constrained and releases the later raw point', () => {
+      // Given: 上尺边 y=80 附近存在一个 y=75 的普通吸附目标。
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{
+            strokes: [
+              {
+                id: 'near-ruler-edge',
+                tool: 'line',
+                points: [
+                  { x: 100, y: 75 },
+                  { x: 140, y: 75 },
+                ],
+              },
+            ],
+          }}
+          onChange={onChange}
+          tool="pen"
+          strokeSmoothing={false}
+          snap={{ endpoints: true, radius: 20 }}
+          ruler={{
+            enabled: true,
+            state: { center: { x: 100, y: 100 } },
+            length: 240,
+            height: 40,
+          }}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      // When: 笔从尺子上方跨入，原始点会先命中 y=75 的端点吸附。
+      dispatchElementPointerEvent(
+        host,
+        'pointerdown',
+        {
+          point: { x: 60, y: 60 },
+          event: { pointerType: 'pen', button: 0, clientX: 70, clientY: 80 },
+        },
+        1
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        {
+          point: { x: 100, y: 90 },
+          event: { pointerType: 'pen', button: -1, clientX: 110, clientY: 110 },
+        },
+        1
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        {
+          point: { x: 140, y: 140 },
+          event: { pointerType: 'pen', button: -1, clientX: 150, clientY: 160 },
+        },
+        1
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointerup',
+        {
+          point: { x: 160, y: 150 },
+          event: { pointerType: 'pen', button: 0, clientX: 170, clientY: 170 },
+        },
+        1
+      );
+
+      // Then: 尺身内的普通吸附仍投影到 y=80，远侧原始点离尺后不再投影。
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0]?.[0].strokes[1]?.points).toEqual([
+        { x: 60, y: 60, timestamp: undefined },
+        { x: 100, y: 80, timestamp: undefined },
+        { x: 140, y: 140, timestamp: undefined },
+      ]);
+    });
+
+    it('does not let endpoint snapping lock a stroke before the raw pointer crosses the ruler edge', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{
+            strokes: [
+              {
+                id: 'inside-ruler-snap-target',
+                tool: 'line',
+                points: [
+                  { x: 100, y: 90 },
+                  { x: 100, y: 120 },
+                ],
+              },
+            ],
+          }}
+          onChange={onChange}
+          tool="pen"
+          strokeSmoothing={false}
+          snap={{ endpoints: true, radius: 24 }}
+          ruler={{
+            enabled: true,
+            state: { center: { x: 100, y: 100 } },
+            length: 240,
+            height: 40,
+          }}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      // Given: 原始笔尖仍在上尺边 y=80 外侧，但普通吸附目标位于尺身内 y=90。
+      dispatchElementPointerEvent(
+        host,
+        'pointerdown',
+        {
+          point: { x: 60, y: 60 },
+          event: { pointerType: 'pen', button: 0, clientX: 70, clientY: 80 },
+        },
+        1
+      );
+      // When: 笔尖靠近尺内端点后回到上侧，全程没有用原始坐标越过上尺边。
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        {
+          point: { x: 100, y: 70 },
+          event: { pointerType: 'pen', button: -1, clientX: 110, clientY: 90 },
+        },
+        1
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        {
+          point: { x: 140, y: 60 },
+          event: { pointerType: 'pen', button: -1, clientX: 150, clientY: 80 },
+        },
+        1
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointerup',
+        {
+          point: { x: 140, y: 60 },
+          event: { pointerType: 'pen', button: 0, clientX: 150, clientY: 80 },
+        },
+        1
+      );
+
+      // Then: 普通吸附仍生效，但它没有提前锁边，后续点保持真实的上侧坐标。
+      expect(onChange.mock.calls[0]?.[0].strokes[1]?.points).toEqual([
+        { x: 60, y: 60, timestamp: undefined },
+        { x: 100, y: 90, timestamp: undefined },
+        { x: 140, y: 60, timestamp: undefined },
+      ]);
+    });
+
+    it('does not let endpoint snapping lock a placement point before the raw pointer crosses the edge', () => {
+      const onChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{
+            strokes: [
+              {
+                id: 'inside-ruler-placement-target',
+                tool: 'line',
+                points: [
+                  { x: 100, y: 90 },
+                  { x: 100, y: 120 },
+                ],
+              },
+            ],
+          }}
+          onChange={onChange}
+          tool="line"
+          snap={{ endpoints: true, radius: 24 }}
+          ruler={{
+            enabled: true,
+            state: { center: { x: 100, y: 100 } },
+            length: 240,
+            height: 40,
+          }}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      const clickPlacementPoint = (
+        point: { readonly x: number; readonly y: number },
+        pointerId: number
+      ) => {
+        const item: PointerPathItem = {
+          point,
+          event: {
+            pointerType: 'pen',
+            button: 0,
+            clientX: point.x + 10,
+            clientY: point.y + 20,
+          },
+        };
+        dispatchElementPointerEvent(host, 'pointerdown', item, pointerId);
+        dispatchElementPointerEvent(document, 'pointerup', item, pointerId);
+      };
+
+      // Given / When: 第一个放置点的原始坐标在尺边外侧，但会吸附到尺身内的端点。
+      clickPlacementPoint({ x: 100, y: 70 }, 1);
+      clickPlacementPoint({ x: 140, y: 60 }, 2);
+      const finishEvent = new Event('dblclick', { bubbles: true, cancelable: true });
+      Object.assign(finishEvent, { clientX: 170, clientY: 80, button: 0 });
+      act(() => {
+        host.dispatchEvent(finishEvent);
+      });
+
+      // Then: 放置点保留普通端点吸附结果 y=90，而不是被提前投影到尺边 y=80。
+      expect(onChange.mock.calls[0]?.[0].strokes[1]?.points).toEqual([
+        { x: 100, y: 90 },
+        { x: 140, y: 60 },
+        { x: 160, y: 60 },
+      ]);
     });
 
     it('keeps virtualPaper-owned touch gestures out of placement and lasso flows', () => {
@@ -3912,7 +4925,7 @@ describe('DrawingSurface', () => {
       pointerDown(host, 20, 30);
       pointerMove(host, 100, 30);
 
-      const line = container.querySelector('line');
+      const line = container.querySelector('line[opacity="0.7"]');
       expect(line).toBeTruthy();
       expect(line?.getAttribute('x1')).toBe('10');
       expect(line?.getAttribute('y1')).toBe('10');
@@ -3920,6 +4933,36 @@ describe('DrawingSurface', () => {
       expect(line?.getAttribute('y2')).toBe('10');
       expect(line?.getAttribute('opacity')).toBe('0.7');
       expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('releases a constrained Bezier endpoint after pointerup leaves the ruler', () => {
+      const { container } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          value={{ strokes: [] }}
+          tool="bezier"
+          ruler={{
+            enabled: true,
+            state: { center: { x: 100, y: 100 } },
+            length: 240,
+            height: 40,
+          }}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+
+      // Given: 第一段从上尺边外侧开始，并在移动阶段越过 y=80 上尺边。
+      pointerDown(host, 70, 80);
+      pointerMove(host, 110, 110);
+      // When: 抬笔位置继续落在尺子的远侧。
+      pointerUp(host, 150, 160);
+
+      // Then: placement 的最终端点恢复抬笔原始位置，不再投影到上尺边。
+      const path = Array.from(container.querySelectorAll('path')).find((candidate) =>
+        candidate.getAttribute('d')?.startsWith('M 60 60 C')
+      );
+      expect(path?.getAttribute('d')).toBe('M 60 60 C 140 140 140 140 140 140');
     });
 
     it('commits one v2 bezier stroke from three drags with cubic path and keeps bezier active', () => {
@@ -8228,7 +9271,7 @@ describe('eraserCursorAndTrajectory', () => {
       ]);
     });
 
-    it('waits for two ruler touches, then translates by their midpoint without changing shape', () => {
+    it('waits for two ruler touches before multi-drag starts', () => {
       const onRulerChange = jest.fn();
       render(
         <DrawingSurface
@@ -8271,11 +9314,11 @@ describe('eraserCursorAndTrajectory', () => {
 
       expect(onRulerChange.mock.calls[onRulerChange.mock.calls.length - 1]?.[0]).toEqual({
         center: { x: 60, y: 50 },
-        rotationRad: 0,
+        rotationRad: Math.atan2(10, 70) - Math.atan2(-10, 50),
       });
     });
 
-    it('uses multi-drag to rotate two ruler touches and snaps to 45-degree multiples', () => {
+    it('uses multi-drag to rotate two ruler touches and snaps near a 45-degree multiple', () => {
       // Given: 两个触点水平落在尺子上，形成可旋转的 multi-drag 手势。
       const onRulerChange = jest.fn();
       render(
@@ -8291,31 +9334,125 @@ describe('eraserCursorAndTrajectory', () => {
       dispatchElementPointerEvent(
         body,
         'pointerdown',
-        { point: { x: 30, y: 60 }, event: { pointerType: 'touch' } },
+        { point: { x: 30, y: 70 }, event: { pointerType: 'touch' } },
         1
       );
       dispatchElementPointerEvent(
         body,
         'pointerdown',
-        { point: { x: 70, y: 60 }, event: { pointerType: 'touch' } },
+        { point: { x: 70, y: 70 }, event: { pointerType: 'touch' } },
         2
       );
+      const initialFeedback = screen.getByTestId('drawing-ruler-angle-feedback');
+      expect(initialFeedback.getAttribute('data-feedback-x')).toBe('40');
+      expect(initialFeedback.getAttribute('data-feedback-y')).toBe('40');
       onRulerChange.mockClear();
 
       // When: 第二个触点移动，双指向量接近 90°，中点同时向右下移动。
       dispatchElementPointerEvent(
         document,
         'pointermove',
-        { point: { x: 34, y: 100 }, event: { pointerType: 'touch' } },
+        { point: { x: 34, y: 110 }, event: { pointerType: 'touch' } },
         2
       );
 
-      // Then: Mixin 同时提交中点平移和吸附后的 90° 旋转。
+      // Then: Mixin 同时提交中点平移和吸附后的 90° 旋转，提示跟随最新双指中点投影。
       const nextState = onRulerChange.mock.calls[onRulerChange.mock.calls.length - 1]?.[0] as
         | DrawingRulerState
         | undefined;
       expect(nextState?.center).toEqual({ x: 32, y: 60 });
       expect(nextState?.rotationRad).toBeCloseTo(Math.PI / 2);
+      const rotatedFeedback = screen.getByTestId('drawing-ruler-angle-feedback');
+      expect(Number(rotatedFeedback.getAttribute('data-feedback-x'))).toBeCloseTo(32);
+      expect(Number(rotatedFeedback.getAttribute('data-feedback-y'))).toBeCloseTo(70);
+    });
+
+    it('projects the initial touch midpoint from the host content-box origin', () => {
+      // Given: 宿主有 1px 边框，尺子已旋转 45°。
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          ruler={{
+            enabled: true,
+            state: { center: { x: 50, y: 40 }, rotationRad: Math.PI / 4 },
+          }}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      const body = screen.getByTestId('drawing-ruler-background');
+      mockHostClientBox(host);
+
+      // When: 两个触点的 client 中点对应 content-box 内的 (70, 40)。
+      dispatchElementPointerEvent(
+        body,
+        'pointerdown',
+        { point: { x: 61, y: 61 }, event: { pointerType: 'touch' } },
+        1
+      );
+      dispatchElementPointerEvent(
+        body,
+        'pointerdown',
+        { point: { x: 101, y: 61 }, event: { pointerType: 'touch' } },
+        2
+      );
+
+      // Then: 反馈点是 (70, 40) 在 45° 中线上的精确投影 (60, 50)。
+      const feedback = screen.getByTestId('drawing-ruler-angle-feedback');
+      expect(Number(feedback.getAttribute('data-feedback-x'))).toBeCloseTo(60);
+      expect(Number(feedback.getAttribute('data-feedback-y'))).toBeCloseTo(50);
+    });
+
+    it('keeps a two-touch ruler gesture active when an ordinary mouse pointer ends', () => {
+      // Given: 普通鼠标按住尺子后，两个触点开始 ruler multi-drag。
+      const onRulerChange = jest.fn();
+      render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          ruler={{ enabled: true, state: rulerState }}
+          onRulerChange={onRulerChange}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      const body = screen.getByTestId('drawing-ruler-background');
+      mockHostRect(host);
+      dispatchElementPointerEvent(
+        body,
+        'pointerdown',
+        { point: { x: 50, y: 50 }, event: { pointerType: 'mouse', button: 0 } },
+        9
+      );
+      dispatchElementPointerEvent(
+        body,
+        'pointerdown',
+        { point: { x: 30, y: 50 }, event: { pointerType: 'touch' } },
+        1
+      );
+      dispatchElementPointerEvent(
+        body,
+        'pointerdown',
+        { point: { x: 70, y: 50 }, event: { pointerType: 'touch' } },
+        2
+      );
+      expect(screen.getByTestId('drawing-ruler-angle-feedback')).toBeTruthy();
+      onRulerChange.mockClear();
+
+      // When: 不属于 ruler 手势的普通鼠标先抬起，随后触点继续移动。
+      dispatchElementPointerEvent(
+        document,
+        'pointerup',
+        { point: { x: 50, y: 50 }, event: { pointerType: 'mouse', button: 0 } },
+        9
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        { point: { x: 90, y: 70 }, event: { pointerType: 'touch' } },
+        2
+      );
+
+      // Then: 双触手势和角度反馈都没有被鼠标 pointerup 终止。
+      expect(onRulerChange).toHaveBeenCalled();
+      expect(screen.getByTestId('drawing-ruler-angle-feedback')).toBeTruthy();
     });
 
     it('stops a two-touch drag when either participating touch ends', () => {
@@ -8423,7 +9560,7 @@ describe('eraserCursorAndTrajectory', () => {
       expect(onRulerChange.mock.calls.length).toBeGreaterThan(callsAfterIgnoredTouch);
       expect(onRulerChange).toHaveBeenLastCalledWith({
         center: { x: 70, y: 55 },
-        rotationRad: 0,
+        rotationRad: Math.atan2(30, 80),
       });
     });
 
@@ -8537,6 +9674,78 @@ describe('eraserCursorAndTrajectory', () => {
 
       expect(onRulerChange).toHaveBeenCalledTimes(callsBeforeExternalMove);
       expect(screen.getByTestId('drawing-ruler').getAttribute('data-ruler-center-x')).toBe('300');
+    });
+
+    it('forgets a cancelled mouse owner before a later two-touch ruler gesture', () => {
+      // Given: 受控鼠标平移已发出请求，但父组件用不同位置取消该手势。
+      const onRulerChange = jest.fn();
+      const { rerender } = render(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          ruler={{ enabled: true, state: rulerState }}
+          onRulerChange={onRulerChange}
+        />
+      );
+      const host = screen.getByTestId('drawing-surface-host');
+      mockHostRect(host);
+      dispatchElementPointerEvent(
+        screen.getByTestId('drawing-ruler-background'),
+        'pointerdown',
+        {
+          point: { x: 70, y: 60 },
+          event: { pointerType: 'mouse', button: 0, clientX: 70, clientY: 60, ctrlKey: true },
+        },
+        9
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        {
+          point: { x: 80, y: 70 },
+          event: { pointerType: 'mouse', button: -1, clientX: 80, clientY: 70 },
+        },
+        9
+      );
+      rerender(
+        <DrawingSurface
+          testID="drawing-surface-host"
+          ruler={{ enabled: true, state: { center: { x: 80, y: 40 } } }}
+          onRulerChange={onRulerChange}
+        />
+      );
+      const body = screen.getByTestId('drawing-ruler-background');
+      dispatchElementPointerEvent(
+        body,
+        'pointerdown',
+        { point: { x: 40, y: 60 }, event: { pointerType: 'touch' } },
+        1
+      );
+      dispatchElementPointerEvent(
+        body,
+        'pointerdown',
+        { point: { x: 80, y: 60 }, event: { pointerType: 'touch' } },
+        2
+      );
+      expect(screen.getByTestId('drawing-ruler-angle-feedback')).toBeTruthy();
+      onRulerChange.mockClear();
+
+      // When: 已取消手势的旧鼠标抬起后，第二个触点继续移动。
+      dispatchElementPointerEvent(
+        document,
+        'pointerup',
+        { point: { x: 80, y: 70 }, event: { pointerType: 'mouse', button: 0 } },
+        9
+      );
+      dispatchElementPointerEvent(
+        document,
+        'pointermove',
+        { point: { x: 100, y: 80 }, event: { pointerType: 'touch' } },
+        2
+      );
+
+      // Then: 旧鼠标身份不再匹配，双触手势与反馈继续有效。
+      expect(onRulerChange).toHaveBeenCalled();
+      expect(screen.getByTestId('drawing-ruler-angle-feedback')).toBeTruthy();
     });
 
     it('requests the host screen center when a controlled ruler is enabled on mount', () => {
