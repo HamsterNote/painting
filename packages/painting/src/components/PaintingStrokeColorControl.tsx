@@ -12,12 +12,18 @@ const STROKE_COLOR_PRESETS = [
 
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
 
+/** PaintingBoard 与 PaintingController 共用的预设颜色配置。 */
+export interface PaintingColorOption {
+  readonly name: string;
+  readonly color: string;
+}
+
 interface PaintingStrokeColorControlProps {
   readonly strokeColor: string;
   readonly theme: PopoverTheme;
   readonly onStrokeColorChange: (strokeColor: string) => void;
-  /** 预设颜色列表，每项包含 color（颜色值）和 name（显示名称）。若不传则使用默认预设 */
-  readonly presetColors?: ReadonlyArray<{ readonly color: string; readonly name: string }>;
+  /** 预设颜色列表；若不传则使用默认预设。 */
+  readonly presetColors?: readonly PaintingColorOption[];
 }
 
 export function PaintingStrokeColorControl({

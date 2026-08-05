@@ -31,6 +31,7 @@ import {
   PaintingController,
   type PaintingControllerData,
 } from './PaintingController';
+import type { PaintingColorOption } from './PaintingStrokeColorControl';
 
 /**
  * PaintingBoard — DrawingSurface 的产品化封装
@@ -127,6 +128,8 @@ export interface PaintingBoardProps extends Omit<DrawingSurfaceProps, 'tool'> {
   readonly onStrokeWidthChange?: (strokeWidth: number) => void;
   /** 笔触颜色切换回调；传入 strokeColor 时可用于受控回写 */
   readonly onStrokeColorChange?: (strokeColor: string) => void;
+  /** 底部工具栏使用的预设颜色；若不传则使用内置预设。 */
+  readonly colors?: readonly PaintingColorOption[];
   /** 文字字号切换回调；传入 fontSize 时可用于受控回写 */
   readonly onFontSizeChange?: (fontSize: number) => void;
   /** 受控 Minimap 可见性。传入后内部状态失效，切换仅通过 onMinimapVisibleChange 通知。
@@ -164,6 +167,7 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
       onStrokeWidthChange,
       strokeColor: strokeColorProp,
       onStrokeColorChange,
+      colors,
       fontSize: fontSizeProp,
       onFontSizeChange,
       minimapVisible: minimapVisibleProp,
@@ -778,6 +782,7 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
             onDataChange={handleControllerDataChange}
             tools={tools}
             theme={toolbarOptions.theme}
+            presetColors={colors}
             edge={toolbarOptions.edge}
             edgeOffset={toolbarOptions.edgeOffset}
             showLabels={toolbarOptions.showLabels}

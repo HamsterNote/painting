@@ -14,7 +14,7 @@ import type { PaintingHistoryControls } from '../hooks/usePaintingHistory';
 import { resolveTextFontSize } from '../model/text';
 import type { DrawingTool } from './DrawingSurface';
 import { PaintingFontSizeControl } from './PaintingFontSizeControl';
-import { PaintingStrokeColorControl } from './PaintingStrokeColorControl';
+import { type PaintingColorOption, PaintingStrokeColorControl } from './PaintingStrokeColorControl';
 import { PaintingStrokeWidthControl } from './PaintingStrokeWidthControl';
 
 /**
@@ -147,6 +147,8 @@ export interface PaintingControllerProps {
   readonly tools?: readonly DrawingTool[];
   /** Popover 主题，默认 'dark' */
   readonly theme?: PopoverTheme;
+  /** 笔触颜色控件使用的预设颜色；若不传则使用内置预设。 */
+  readonly presetColors?: readonly PaintingColorOption[];
   /** 工具栏吸附的视口边缘，默认 'bottom'（底部栏） */
   readonly edge?: PopoverEdge;
   /** 距吸附边缘的偏移（px），默认 16 */
@@ -222,6 +224,7 @@ export function PaintingController({
   onDataChange,
   tools = PAINTING_BOARD_DEFAULT_TOOLS,
   theme = 'dark',
+  presetColors,
   edge = 'bottom',
   edgeOffset = 16,
   showLabels = false,
@@ -383,9 +386,7 @@ export function PaintingController({
         edgeOffset={edgeOffset}
         orientation="horizontal"
         style={
-          relative
-            ? { ...style, position: 'absolute', zIndex: 1 }
-            : { zIndex: 1000, ...style }
+          relative ? { ...style, position: 'absolute', zIndex: 1 } : { zIndex: 1000, ...style }
         }
       >
         {history ? (
@@ -467,6 +468,7 @@ export function PaintingController({
               strokeColor={strokeColor}
               theme={theme}
               onStrokeColorChange={handleStrokeColorChange}
+              presetColors={presetColors}
             />
             <PaintingFontSizeControl
               fontSize={fontSize}
@@ -480,6 +482,7 @@ export function PaintingController({
               strokeColor={strokeColor}
               theme={theme}
               onStrokeColorChange={handleStrokeColorChange}
+              presetColors={presetColors}
             />
             <PaintingStrokeWidthControl
               strokeWidth={strokeWidth}
@@ -670,10 +673,7 @@ export function PaintingController({
             ) : null}
             {/* compact 模式下把压感/手写笔/清空收纳进 More 菜单 */}
             {!multiBoard && isCompact ? <MenuSeparator /> : null}
-            {isCompact &&
-            stylusMode &&
-            activeTool !== 'lasso' &&
-            activeTool !== 'text' ? (
+            {isCompact && stylusMode && activeTool !== 'lasso' && activeTool !== 'text' ? (
               <MenuItem
                 data-testid="painting-board-more-pressure"
                 aria-pressed={pressure}

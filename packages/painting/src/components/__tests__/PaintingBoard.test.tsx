@@ -123,6 +123,36 @@ describe('PaintingBoard', () => {
     );
   });
 
+  it('使用 colors 配置底栏预设颜色并回写选中的颜色', () => {
+    // Given：消费方为 PaintingBoard 提供统一的颜色列表。
+    const onStrokeColorChange = jest.fn();
+    render(
+      <div style={{ width: 400, height: 300 }}>
+        <PaintingBoard
+          testID="board"
+          colors={[
+            { name: 'Ocean', color: '#0369a1' },
+            { name: 'Rose', color: '#be123c' },
+          ]}
+          onStrokeColorChange={onStrokeColorChange}
+        />
+      </div>
+    );
+
+    // When：打开颜色菜单并选择消费方提供的第二个预设。
+    fireEvent.click(screen.getByTestId('painting-board-stroke-color-btn'));
+    expect(screen.getByText('Ocean')).toBeTruthy();
+    expect(screen.getByText('Rose')).toBeTruthy();
+    expect(screen.queryByText('Blue')).toBeNull();
+    fireEvent.click(screen.getByText('Rose'));
+
+    // Then：选择结果走现有 PaintingBoard 颜色回写通道。
+    expect(onStrokeColorChange).toHaveBeenCalledWith('#be123c');
+    expect(screen.getByTestId('painting-board-stroke-color-btn').getAttribute('data-color')).toBe(
+      '#be123c'
+    );
+  });
+
   it('toolbar=false 时不渲染工具栏', () => {
     render(
       <div style={{ width: 400, height: 300 }}>
