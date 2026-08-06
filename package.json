@@ -12,15 +12,15 @@
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
-    "typecheck": "yarn workspace @hamster-note/painting typecheck && yarn workspace @hamster-note/painting-playground tsc --noEmit",
-    "build:lib": "yarn workspace @hamster-note/painting build",
+    "typecheck": "yarn workspace @hamster-note/painting typecheck && yarn workspace @hamster-note/painting-board typecheck && yarn workspace @hamster-note/painting-playground tsc --noEmit",
+    "build:lib": "yarn workspace @hamster-note/painting build && yarn workspace @hamster-note/painting-board build",
     "build:demo": "yarn workspace @hamster-note/painting-playground build",
     "build:all": "yarn build:lib && yarn build:demo",
     "build": "yarn build:all",
     "test": "jest --runInBand",
     "test:ui": "playwright test --config=playwright.config.ts",
     "ci:local": "yarn install --frozen-lockfile && yarn lint && yarn test && yarn test:ui && yarn build && yarn pack:dry",
-    "pack:dry": "cd packages/painting && npm pack --dry-run",
+    "pack:dry": "cd packages/painting && npm pack --dry-run && cd ../painting-board && npm pack --dry-run",
     "dev": "yarn workspace @hamster-note/painting-playground dev"
   },
   "devDependencies": {

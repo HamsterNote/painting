@@ -8,6 +8,8 @@ export default {
     '^react-native$': '<rootDir>/jest.mockRN.js',
     '^@hamster-note/painting$': '<rootDir>/packages/painting/src/index.ts',
     '^@hamster-note/painting/(.*)$': '<rootDir>/packages/painting/src/$1',
+    '^@hamster-note/painting-board$': '<rootDir>/packages/painting-board/src/index.tsx',
+    '^@hamster-note/painting-board/(.*)$': '<rootDir>/packages/painting-board/src/$1',
     // @hamster-note/components 的 exports 仅提供 import 条件，jest 默认走 require，
     // 这里直接映射到 ESM 产物，配合下方 transformIgnorePatterns 经 babel 转译
     '^@hamster-note/components$': '<rootDir>/node_modules/@hamster-note/components/dist/index.js',

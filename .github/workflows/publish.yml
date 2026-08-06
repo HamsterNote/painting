@@ -28,9 +28,20 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
           PKG_VERSION=$(node -e "console.log(JSON.parse(require('fs').readFileSync('packages/painting/package.json','utf8')).version)")
+          BOARD_VERSION=$(node -e "console.log(JSON.parse(require('fs').readFileSync('packages/painting-board/package.json','utf8')).version)")
 
           if [ "$VERSION" != "$PKG_VERSION" ]; then
             echo "::error::Tag version ($VERSION) must match package version ($PKG_VERSION)."
+            exit 1
+          fi
+
+          if [ "$VERSION" != "$BOARD_VERSION" ]; then
+            echo "::error::Tag version ($VERSION) must match @hamster-note/painting-board version ($BOARD_VERSION)."
+            exit 1
+          fi
+
+          if [ "$PKG_VERSION" != "$BOARD_VERSION" ]; then
+            echo "::error::Lockstep release: packages/painting ($PKG_VERSION) and packages/painting-board ($BOARD_VERSION) versions must be identical."
             exit 1
           fi
 
@@ -70,15 +81,29 @@ jobs:
         shell: bash
         run: |
           PKG_NAME=$(node -e "console.log(JSON.parse(require('fs').readFileSync('packages/painting/package.json','utf8')).name)")
+          BOARD_NAME=$(node -e "console.log(JSON.parse(require('fs').readFileSync('packages/painting-board/package.json','utf8')).name)")
           VERSION=$(node -e "console.log(JSON.parse(require('fs').readFileSync('packages/painting/package.json','utf8')).version)")
-          echo "Package: $PKG_NAME"
+          echo "Packages: $PKG_NAME, $BOARD_NAME"
           echo "Version: $VERSION"
+
+          PKG_EXISTS=false
+          BOARD_EXISTS=false
           if npm view "$PKG_NAME@$VERSION" version > /dev/null 2>&1; then
+            PKG_EXISTS=true
+          fi
+          if npm view "$BOARD_NAME@$VERSION" version > /dev/null 2>&1; then
+            BOARD_EXISTS=true
+          fi
+
+          if [ "$PKG_EXISTS" = "true" ] && [ "$BOARD_EXISTS" = "true" ]; then
             echo "should_publish=false" >> "$GITHUB_OUTPUT"
-            echo "Version $VERSION already exists on npm, skip publishing."
-          else
+            echo "Version $VERSION of both packages already exists on npm, skip publishing."
+          elif [ "$PKG_EXISTS" = "false" ] && [ "$BOARD_EXISTS" = "false" ]; then
             echo "should_publish=true" >> "$GITHUB_OUTPUT"
-            echo "Version $VERSION not found on npm, will publish."
+            echo "Version $VERSION not found on npm for either package, will publish both."
+          else
+            echo "::error::Partial publish state: $PKG_NAME@$VERSION exists=$PKG_EXISTS, $BOARD_NAME@$VERSION exists=$BOARD_EXISTS. Resolve manually before re-tagging."
+            exit 1
           fi
 
       - name: Build project
@@ -91,7 +116,10 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          # 依赖序：painting-board 依赖 painting，必须先发布 painting
           cd packages/painting
+          npm publish --provenance --tag "$PUBLISH_TAG" --access public
+          cd ../painting-board
           npm publish --provenance --tag "$PUBLISH_TAG" --access public
 
       - name: Ensure pre-release dist-tag
@@ -100,10 +128,13 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           PKG_NAME=$(node -e "console.log(JSON.parse(require('fs').readFileSync('packages/painting/package.json','utf8')).name)")
+          BOARD_NAME=$(node -e "console.log(JSON.parse(require('fs').readFileSync('packages/painting-board/package.json','utf8')).name)")
           VERSION=$(node -e "console.log(JSON.parse(require('fs').readFileSync('packages/painting/package.json','utf8')).version)")
           echo "Ensure dist-tag: ${PUBLISH_TAG} -> $VERSION"
           npm dist-tag add "$PKG_NAME@$VERSION" "$PUBLISH_TAG" || true
+          npm dist-tag add "$BOARD_NAME@$VERSION" "$PUBLISH_TAG" || true
           npm dist-tag ls "$PKG_NAME"
+          npm dist-tag ls "$BOARD_NAME"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
