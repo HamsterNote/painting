@@ -5,24 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.0] - 2026-08-06
 
 ### Added
 
 - 新增独立 NPM 组件包 `@hamster-note/painting-board`：`PaintingBoard` 组件封装 `DrawingSurface`，默认开启 virtual-paper 画布漫游（触控板滚动平移、Ctrl+滚轮缩放、双指平移/缩放），并撑满父组件；与 `@hamster-note/painting` lockstep 版本，推送 tag 时一起发布
 - Playground demo 改用 `PaintingBoard` 渲染画板（默认开启 VirtualPaper）
-
-## [0.5.0-beta.1] - 2026-08-05
-
-### Added
-
-- 新增自定义颜色列表配置链路：`PaintingBoard.colors` → `PaintingController.presetColors` → `PaintingStrokeColorControl.presetColors`，消费方可为底栏颜色控件指定预设颜色列表（`feat(painting): 添加自定义颜色列表配置链路`）
+- 新增自定义颜色列表配置链路：`PaintingBoard.colors` → `PaintingController.presetColors` → `PaintingStrokeColorControl.presetColors`，消费方可为底栏颜色控件指定预设颜色列表
 - 新增公共类型 `PaintingColorOption`（`{ name: string; color: string }`），颜色列表字段均只读
 - 未传入颜色列表时保持原有 6 色默认值（Black/Blue/Red/Green/Orange/Purple），向后兼容
 
 ### Test
 
-- PaintingBoard 全链路测试：验证自定义颜色替换默认列表、选择后回调与按钮颜色更新（`feat(painting): 添加自定义颜色列表配置链路`）
+- PaintingBoard 全链路测试：验证自定义颜色替换默认列表、选择后回调与按钮颜色更新
 
 ## [0.4.0] - 2026-07-31
 
