@@ -32,6 +32,7 @@ export type {
   PaintingControllerSelection,
 } from './components/PaintingController';
 export { PaintingController } from './components/PaintingController';
+export type { PaintingColorOption } from './components/PaintingStrokeColorControl';
 export type { UseCanvasOptions, UseCanvasReturn } from './hooks/useCanvas';
 export { useCanvas } from './hooks/useCanvas';
 export type {
