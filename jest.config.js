@@ -8,6 +8,8 @@ export default {
     '^react-native$': '<rootDir>/jest.mockRN.js',
     '^@hamster-note/painting$': '<rootDir>/packages/painting/src/index.ts',
     '^@hamster-note/painting/(.*)$': '<rootDir>/packages/painting/src/$1',
+    '^@hamster-note/painting-board$': '<rootDir>/packages/painting-board/src/index.tsx',
+    '^@hamster-note/painting-board/(.*)$': '<rootDir>/packages/painting-board/src/$1',
   },
   transform: {
     '^.+\\.(t|j)sx?$': 'babel-jest',

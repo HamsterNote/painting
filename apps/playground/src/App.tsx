@@ -8,6 +8,7 @@ import {
   type DrawingRulerState,
   type DrawingRulerOptions,
 } from '@hamster-note/painting';
+import { PaintingBoard } from '@hamster-note/painting-board';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalPropsDemo } from './ExternalPropsDemo';
 
@@ -1131,6 +1132,24 @@ const [minimapEnabled, setMinimapEnabled] = useState(true);
           >
             {JSON.stringify(controlledStrokes, null, 2)}
           </pre>
+        </div>
+      </div>
+
+      {/* ===== PaintingBoard 独立 Demo ===== */}
+      {/* 自带 virtual-paper 滑动画布，不与上方工具栏共享任何状态 */}
+      <div
+        style={{
+          marginTop: '30px',
+          borderTop: '1px solid #ddd',
+          paddingTop: '20px',
+        }}
+      >
+        <h2>PaintingBoard (@hamster-note/painting-board)</h2>
+        <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
+          独立组件，默认启用画布平移/缩放（Ctrl+滚轮缩放、触控板滚动平移、双指平移/缩放）。
+        </p>
+        <div style={{ width: '100%', height: '400px' }}>
+          <PaintingBoard testID="painting-board" />
         </div>
       </div>
 

@@ -31,6 +31,10 @@ export default defineConfig({
     alias: {
       'react-native': 'react-native-web',
       '@hamster-note/painting': path.resolve(__dirname, '../../packages/painting/src/index.ts'),
+      '@hamster-note/painting-board': path.resolve(
+        __dirname,
+        '../../packages/painting-board/src/index.tsx'
+      ),
     },
   },
   optimizeDeps: {
