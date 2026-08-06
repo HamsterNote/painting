@@ -1,14 +1,20 @@
 import {
+  DEFAULT_DRAWING_VIEWPORT,
   type DrawingInputMethod,
+  type DrawingRulerOptions,
+  type DrawingRulerState,
   type DrawingStrokeSmoothingOptions,
   DrawingSurface,
   type DrawingSurfaceHandle,
   type DrawingTool,
   type DrawingValue,
-  type DrawingRulerState,
-  type DrawingRulerOptions,
+  type DrawingViewport,
+  PaintingBoard,
+  PaintingController,
+  type PaintingControllerData,
+  usePaintingHistory,
 } from '@hamster-note/painting';
-import { PaintingBoard } from '@hamster-note/painting-board';
+import { PaintingBoard as StandalonePaintingBoard } from '@hamster-note/painting-board';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalPropsDemo } from './ExternalPropsDemo';
 
@@ -27,6 +33,7 @@ const ALL_TOOLS: { value: DrawingTool; label: string }[] = [
   { value: 'ellipse', label: 'Ellipse' },
   { value: 'polygon', label: 'Polygon' },
   { value: 'bezier', label: 'Bezier' },
+  { value: 'text', label: 'Text' },
   { value: 'eraser', label: 'Eraser' },
   { value: 'lasso', label: 'Lasso' },
 ];
@@ -45,8 +52,10 @@ function getToolInstruction(tool: DrawingTool): string | null {
       return 'Click to add points, double-click or Esc to finish';
     case 'bezier':
       return 'Drag 1 sets the start/end line, drag 2 sets the first control point, drag 3 sets the second control point and commits';
+    case 'text':
+      return 'Click to place and edit text; drag the side handles to change its width';
     case 'lasso':
-      return 'Drag to lasso strokes (any intersection selects); drag selected strokes to move them';
+      return 'Drag to select strokes; drag the selection to move, its handles to resize, or the top handle to rotate';
     default:
       return null;
   }
@@ -102,17 +111,38 @@ const SEED_VALUE: DrawingValue = {
   ],
 };
 
+const SHARED_BOARD_A_ID = 'painting-board-demo-a';
+const SHARED_BOARD_B_ID = 'painting-board-demo-b';
+
 export default function App() {
   const [tool, setTool] = useState<DrawingTool>('pen');
+  // PaintingController 共享受控 data：同一份 data 分发给下方所有 PaintingBoard，
+  // 实现「一个底部栏控制多个画板」。右侧实时展示 data 便于 debug。
+  const [controllerData, setControllerData] = useState<PaintingControllerData>({
+    tool: 'pen',
+    minimap: false,
+    selection: null,
+    fontSize: 24,
+  });
+  // ===== PaintingController Demo 画板数量切换 =====
+  // 默认多画板模式（true=渲染 board A + board B）；切到单画板时仅渲染 board A，
+  // reset/clear 也只作用于 board A。切换时清空 selection 避免残留指向已卸载 board B 的选区。
+  const [multiBoardMode, setMultiBoardMode] = useState(true);
+  const paintingHistory = usePaintingHistory({
+    [SHARED_BOARD_A_ID]: { strokes: [] },
+    [SHARED_BOARD_B_ID]: { strokes: [] },
+  });
+  const [boardAViewport, setBoardAViewport] = useState<DrawingViewport>(DEFAULT_DRAWING_VIEWPORT);
+  const [boardBViewport, setBoardBViewport] = useState<DrawingViewport>(DEFAULT_DRAWING_VIEWPORT);
   const [rulerEnabled, setRulerEnabled] = useState(false);
   // ===== Virtual-paper 滚动/平移模式开关 (Task 9) =====
   // 启用后 DrawingSurface 将虚拟纸张交给 @hamster-note/virtual-paper 管理视口变换
   const [virtualPaperEnabled, setVirtualPaperEnabled] = useState(false);
-const [minimapEnabled, setMinimapEnabled] = useState(true);
-  const [rulerStateUncontrolled, setRulerStateUncontrolled] = useState<DrawingRulerState | undefined>(undefined);
-  const [rulerStateControlled, setRulerStateControlled] = useState<DrawingRulerState | undefined>(undefined);
+  const [minimapEnabled, setMinimapEnabled] = useState(true);
+  const [rulerStateControlled, setRulerStateControlled] = useState<DrawingRulerState>();
   const [color, setColor] = useState('#000000');
   const [width, setWidth] = useState(2);
+  const [fontSize, setFontSize] = useState(24);
   const [pressure, setPressure] = useState(false);
   const [pressureMultiplier, setPressureMultiplier] = useState(1);
   const [inputMethods, setInputMethods] = useState<DrawingInputMethod[]>(['touch', 'mouse', 'pen']);
@@ -211,6 +241,27 @@ const [minimapEnabled, setMinimapEnabled] = useState(true);
 
   const handleReset = useCallback(() => {
     setControlledValue({ strokes: [] });
+  }, []);
+
+  // 共享底栏动作：同时重置两块画板的视角 / 清空两块画板的内容
+  const handleSharedResetView = useCallback(() => {
+    setBoardAViewport({ ...DEFAULT_DRAWING_VIEWPORT });
+    setBoardBViewport({ ...DEFAULT_DRAWING_VIEWPORT });
+  }, []);
+
+  const handleSharedClearCanvas = useCallback(() => {
+    paintingHistory.setValues({
+      ...paintingHistory.values,
+      [SHARED_BOARD_A_ID]: { strokes: [] },
+      [SHARED_BOARD_B_ID]: { strokes: [] },
+    });
+  }, [paintingHistory]);
+
+  // 切换画板数量：翻转 multiBoardMode 并清空共享选区，
+  // 避免单画板模式下 selection 残留指向已卸载的 board B
+  const handleToggleBoardCount = useCallback(() => {
+    setMultiBoardMode((prev) => !prev);
+    setControllerData((prev) => ({ ...prev, selection: null }));
   }, []);
 
   // ===== 采样率测试 Demo 事件处理 =====
@@ -409,18 +460,15 @@ const [minimapEnabled, setMinimapEnabled] = useState(true);
   const rulerUncontrolledOptions: false | DrawingRulerOptions = rulerEnabled
     ? {
         enabled: true,
-        state: rulerStateUncontrolled,
-        defaultState: rulerStateUncontrolled,
       }
     : false;
 
   const rulerControlledOptions: false | DrawingRulerOptions = rulerEnabled
-    ? {
-        enabled: true,
-        state: rulerStateControlled,
-        defaultState: rulerStateControlled,
-      }
-    : false;
+      ? {
+          enabled: true,
+          state: rulerStateControlled,
+        }
+      : false;
 
   // Memoize so DrawingSurface 不会因为父组件 re-render 而频繁触发 eraserTrajectory 副作用。
   const eraserTrajectoryProp = useMemo(
@@ -440,6 +488,7 @@ const [minimapEnabled, setMinimapEnabled] = useState(true);
       <h1 style={{ marginBottom: '20px' }}>DrawingSurface Playground</h1>
 
       <div
+        data-testid="drawing-tool-toolbar"
         style={{
           display: 'flex',
           gap: '12px',
@@ -579,6 +628,20 @@ const [minimapEnabled, setMinimapEnabled] = useState(true);
             min={1}
             max={24}
             onChange={(e) => setWidth(Math.min(24, Math.max(1, parseInt(e.target.value, 10) || 1)))}
+          />
+        </label>
+
+        <label>
+          Font size{' '}
+          <input
+            type="number"
+            data-testid="drawing-font-size-input"
+            value={fontSize}
+            min={8}
+            max={96}
+            onChange={(e) =>
+              setFontSize(Math.min(96, Math.max(8, Number.parseInt(e.target.value, 10) || 24)))
+            }
           />
         </label>
 
@@ -1038,9 +1101,9 @@ const [minimapEnabled, setMinimapEnabled] = useState(true);
               onSelectionChange={setUncontrolledSelectedIds}
               tool={tool}
               ruler={rulerUncontrolledOptions}
-              onRulerChange={setRulerStateUncontrolled}
               strokeColor={color}
               strokeWidth={effectiveStrokeWidth}
+              fontSize={fontSize}
               pressure={pressure}
               pressureMultiplier={pressureMultiplier}
               inputMethods={inputMethods}
@@ -1056,6 +1119,7 @@ const [minimapEnabled, setMinimapEnabled] = useState(true);
               eraserTrajectory={eraserTrajectoryProp}
               virtualPaper={virtualPaperEnabled}
               minimap={minimapEnabled ? { position: 'bottom-right' } : false}
+              overflow="visible"
               testID="drawing-surface-uncontrolled"
             />
           </div>
@@ -1088,6 +1152,7 @@ const [minimapEnabled, setMinimapEnabled] = useState(true);
               onRulerChange={setRulerStateControlled}
               strokeColor={color}
               strokeWidth={effectiveStrokeWidth}
+              fontSize={fontSize}
               pressure={pressure}
               pressureMultiplier={pressureMultiplier}
               inputMethods={inputMethods}
@@ -1103,6 +1168,7 @@ const [minimapEnabled, setMinimapEnabled] = useState(true);
               eraserTrajectory={eraserTrajectoryProp}
               virtualPaper={virtualPaperEnabled}
               minimap={minimapEnabled ? { position: 'bottom-right' } : false}
+              overflow="visible"
               testID="drawing-surface-controlled"
             />
           </div>
@@ -1149,11 +1215,119 @@ const [minimapEnabled, setMinimapEnabled] = useState(true);
           独立组件，默认启用画布平移/缩放（Ctrl+滚轮缩放、触控板滚动平移、双指平移/缩放）。
         </p>
         <div style={{ width: '100%', height: '400px' }}>
-          <PaintingBoard testID="painting-board" />
+          <StandalonePaintingBoard testID="painting-board" />
         </div>
       </div>
 
       <ExternalPropsDemo />
+
+      {/* ===== PaintingController Demo（共享底部栏控制多个 PaintingBoard） ===== */}
+      <div
+        style={{
+          marginTop: '30px',
+          borderTop: '1px solid #ddd',
+          paddingTop: '20px',
+        }}
+      >
+        <h2>PaintingController（一个底部栏控制多个 PaintingBoard）</h2>
+        <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
+          多画板模式由底部共享的 PaintingController 统一控制；切换到单画板后使用画板内置工具栏，可直接导入图片。
+          最左侧的撤销与恢复按钮按真实操作顺序共用同一历史栈。
+          受控 data 实时展示在右侧，方便 debug。
+          底栏右侧三个新按钮：手写笔模式（开=手写笔绘图+单指拖动画布，关=单指绘图+双指拖动画布）、
+          重置视角、清空画布（后两者同时作用于两块画板）。画板已开启 virtualPaper，
+          触控板滚动平移、Ctrl+滚轮缩放后可点「重置视角」验证。
+        </p>
+        {/* 单/多画板切换：多画板时 reset/clear/minimap 入口隐藏（语义上只作用于单个画板） */}
+        <button
+          type="button"
+          data-testid="painting-controller-board-count-toggle"
+          onClick={handleToggleBoardCount}
+          style={{
+            padding: '4px 10px',
+            cursor: 'pointer',
+            border: multiBoardMode ? '2px solid #333' : '1px solid #aaa',
+            background: multiBoardMode ? '#e0e0e0' : '#fff',
+          }}
+        >
+          {multiBoardMode ? '画板 ×2' : '画板 ×1'}
+        </button>
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          {/* 左侧：共享同一份 controllerData 的两个画板 */}
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <div style={{ width: '400px', height: '320px', border: '1px solid #ddd' }}>
+              <PaintingBoard
+                testID="painting-board-demo-a"
+                toolbar={multiBoardMode ? false : {}}
+                controller={{
+                  boardId: SHARED_BOARD_A_ID,
+                  data: controllerData,
+                  onDataChange: setControllerData,
+                  history: paintingHistory,
+                }}
+                value={paintingHistory.values[SHARED_BOARD_A_ID]}
+                viewport={boardAViewport}
+                onViewportChange={setBoardAViewport}
+                virtualPaper
+                strokeColor={color}
+                strokeWidth={width}
+                fontSize={fontSize}
+              />
+            </div>
+            {/* 多画板模式下渲染 board B；单画板模式下不渲染 */}
+            {multiBoardMode ? (
+              <div style={{ width: '400px', height: '320px', border: '1px solid #ddd' }}>
+                <PaintingBoard
+                  testID="painting-board-demo-b"
+                  toolbar={false}
+                  controller={{
+                    boardId: SHARED_BOARD_B_ID,
+                    data: controllerData,
+                    onDataChange: setControllerData,
+                    history: paintingHistory,
+                  }}
+                  value={paintingHistory.values[SHARED_BOARD_B_ID]}
+                  viewport={boardBViewport}
+                  onViewportChange={setBoardBViewport}
+                  virtualPaper
+                  strokeColor={color}
+                  strokeWidth={width}
+                  fontSize={fontSize}
+                />
+              </div>
+            ) : null}
+          </div>
+          {/* 右侧：实时展示受控 data，便于 debug */}
+          <div style={{ flex: 1, minWidth: '240px' }}>
+            <h3 style={{ marginTop: 0 }}>controllerData</h3>
+            <pre
+              data-testid="painting-controller-data-preview"
+              style={{
+                backgroundColor: '#1f102e',
+                color: '#f5e8ff',
+                padding: '12px',
+                borderRadius: '8px',
+                fontSize: '13px',
+              }}
+            >
+              {JSON.stringify(controllerData, null, 2)}
+            </pre>
+          </div>
+        </div>
+        {/* Popover 以 position: fixed 吸附视口底部，组件放置位置不影响展示 */}
+        {/* 多画板模式：multiBoard=true 隐藏 reset/clear/minimap，handler 沿用共享版 */}
+        {/* 单画板模式：multiBoard=false 展示 reset/clear，handler 仅作用于 board A */}
+        {multiBoardMode ? (
+          <PaintingController
+            data={controllerData}
+            onDataChange={setControllerData}
+            multiBoard
+            onResetView={handleSharedResetView}
+            onClearCanvas={handleSharedClearCanvas}
+            history={paintingHistory}
+          />
+        ) : null}
+      </div>
 
       {/* ===== 采样率测试 Demo ===== */}
       <div

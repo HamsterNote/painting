@@ -44,6 +44,8 @@ export type MinimapProps = {
   onViewportChange: (viewport: DrawingViewport) => void;
   /** 主画布宿主元素的尺寸（CSS 像素），用于计算指示框大小 */
   hostSize: { width: number; height: number };
+  /** 命中由宿主上层交互保留的点时，让 pointerdown 继续传播。 */
+  isPointerReserved?: (clientX: number, clientY: number) => boolean;
   /** minimap 宽度，默认 200 */
   width?: number;
   /** minimap 高度，默认 150 */
@@ -262,6 +264,7 @@ export function Minimap({
   viewport,
   onViewportChange,
   hostSize,
+  isPointerReserved,
   width = DEFAULT_MINIMAP_WIDTH,
   height = DEFAULT_MINIMAP_HEIGHT,
   style,
@@ -289,6 +292,8 @@ export function Minimap({
   hostSizeRef.current = hostSize;
   const onViewportChangeRef = useRef(onViewportChange);
   onViewportChangeRef.current = onViewportChange;
+  const isPointerReservedRef = useRef(isPointerReserved);
+  isPointerReservedRef.current = isPointerReserved;
 
   // ---- 计算内容包围盒 ----
   // 仅基于笔画，不包含视口可见区域，保证平移时 minimap 视图稳定
@@ -354,6 +359,10 @@ export function Minimap({
   // 原生事件更直接、更可靠，且避免了 Mixin 内部 Pose 状态管理的潜在问题。
 
   const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (isPointerReservedRef.current?.(event.clientX, event.clientY)) {
+      return;
+    }
+
     // ⚠️ 关键：在捕获阶段拦截 pointerdown 并阻止冒泡。
     // DrawingSurface 自身有 @system-ui-js/multi-drag Mixin，在其容器元素上注册了
     // 原生 pointerdown 监听器（冒泡阶段）。如果不阻止，pointerdown 会从 minimap
@@ -535,7 +544,9 @@ export function Minimap({
         overflow: 'hidden',
         border: '1px solid rgba(0, 0, 0, 0.15)',
         borderRadius: 4,
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
         touchAction: 'none',
         ...style,
       }}

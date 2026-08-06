@@ -1,6 +1,6 @@
 import {
-  SAFE_DEFAULT_VIRTUAL_PAPER_INTERACTIONS,
   type DrawingSurfaceVirtualPaperInteraction,
+  SAFE_DEFAULT_VIRTUAL_PAPER_INTERACTIONS,
 } from './virtualPaperOptions';
 
 export type InteractionOwner = 'ruler' | 'virtual-paper' | 'drawing' | 'none';
@@ -10,9 +10,12 @@ export type InteractionInputMethod = 'touch' | 'mouse' | 'pen';
 export type PointerInteractionInput = {
   readonly kind: 'pointer';
   readonly target: EventTarget | null;
+  /** Pointer coordinates hit the screen-space ruler, even when its visual overlay is pointer-inert. */
+  readonly hitsRuler?: boolean;
   readonly pointerType?: string;
   readonly button?: number;
   readonly ctrlKey?: boolean;
+  readonly metaKey?: boolean;
   readonly altKey?: boolean;
   readonly pointerId?: number;
 };
@@ -26,10 +29,13 @@ export type WheelInteractionInput = {
 
 export type InteractionInput = PointerInteractionInput | WheelInteractionInput;
 
-type PointerInteractionEvent = Event & {
+export type PointerInteractionEvent = Event & {
+  readonly clientX: number;
+  readonly clientY: number;
   readonly pointerType?: string;
   readonly button?: number;
   readonly ctrlKey?: boolean;
+  readonly metaKey?: boolean;
   readonly altKey?: boolean;
   readonly pointerId?: number;
 };
@@ -57,17 +63,14 @@ export function buildPointerInteractionInput(
     pointerType: event.pointerType ?? (event.type === 'dblclick' ? 'mouse' : undefined),
     button: buttonOverride ?? event.button,
     ctrlKey: event.ctrlKey,
+    metaKey: event.metaKey,
     altKey: event.altKey,
     pointerId: event.pointerId,
   };
 }
 
 export function classifyInteraction(options: ClassifyInteractionOptions): InteractionOwner {
-  if (isRulerInteraction(
-    options.input,
-    options.isRulerEnabled,
-    options.activeTouchPointers ?? 1
-  )) {
+  if (isRulerInteraction(options.input, options.isRulerEnabled)) {
     return 'ruler';
   }
 
@@ -140,24 +143,30 @@ export function isSafeInteractiveTarget(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(SAFE_INTERACTIVE_SELECTOR) !== null;
 }
 
-function isRulerInteraction(
-  input: InteractionInput,
-  isRulerEnabled: boolean,
-  activeTouchPointers: number
-): boolean {
-  if (!isRulerEnabled) {
+function isRulerInteraction(input: InteractionInput, isRulerEnabled: boolean): boolean {
+  if (!isRulerEnabled || input.kind !== 'pointer') {
     return false;
   }
-  if (input.target instanceof Element && input.target.closest('[data-testid="drawing-ruler"]')) {
-    return true;
-  }
-  if (input.kind !== 'pointer') {
+  const targetHitsRuler =
+    input.target instanceof Element &&
+    input.target.closest('[data-testid="drawing-ruler"]') !== null;
+  if (input.hitsRuler !== true && !targetHitsRuler) {
     return false;
   }
-  if (input.ctrlKey === true || input.altKey === true) {
+
+  if (input.pointerType === 'touch') {
     return true;
   }
-  return input.pointerType === 'touch' && activeTouchPointers >= 2;
+
+  if (input.pointerType === 'pen') {
+    return false;
+  }
+
+  return (
+    (input.pointerType === 'mouse' || input.pointerType === undefined) &&
+    input.button === 0 &&
+    (input.altKey === true || input.ctrlKey === true || input.metaKey === true)
+  );
 }
 
 function isVirtualPaperInteraction(options: ClassifyInteractionOptions): boolean {

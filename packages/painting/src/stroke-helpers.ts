@@ -1,6 +1,6 @@
 import type { DrawingPoint, DrawingStroke, DrawingStrokeStyle, DrawingTool, DrawingValue } from './components/DrawingSurface';
 
-function generateId(): string {
+export function generateStrokeId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
@@ -17,7 +17,7 @@ export function createStroke(
       : styleOrStrokeColor;
 
   return {
-    id: generateId(),
+    id: generateStrokeId(),
     tool,
     points: [],
     ...style,

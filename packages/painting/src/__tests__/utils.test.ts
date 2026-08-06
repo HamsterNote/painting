@@ -4,6 +4,7 @@ import {
   addStroke,
   clearStrokes,
   pick,
+  pickImageStrokeAtPoint,
   pickRenderedStrokeIntersectingPolyline,
   pickRenderedStrokeIntersectingSegment,
   pickStrokeIntersectingPolyline,
@@ -1129,6 +1130,26 @@ describe('utils', () => {
       expect(result).toEqual(['rect-filled']);
     });
 
+    it('Given an image When the lasso is completely inside it Then selects the image', () => {
+      const stroke: DrawingStroke = {
+        ...createMockStroke('image-filled', 'image', [
+          { x: 0, y: 0 },
+          { x: 100, y: 100 },
+        ]),
+        src: 'data:image/png;base64,example',
+      };
+      const lasso = [
+        { x: 40, y: 40 },
+        { x: 60, y: 40 },
+        { x: 60, y: 60 },
+        { x: 40, y: 60 },
+      ];
+
+      const result = selectStrokesIntersectingLasso([stroke], lasso);
+
+      expect(result).toEqual(['image-filled']);
+    });
+
     it('selects an ellipse whose edge intersects the lasso', () => {
       const stroke = createMockStroke('ellipse-edge', 'ellipse', [
         { x: 50, y: 50 },
@@ -1326,6 +1347,25 @@ describe('utils', () => {
       const result = selectStrokesIntersectingLasso([hitPen, missPen, hitRect], lasso);
 
       expect(result).toEqual(['hit-pen', 'hit-rect']);
+    });
+  });
+
+  describe('pickImageStrokeAtPoint', () => {
+    it('Given a rotated image When clicking its rendered content Then selects the image', () => {
+      const stroke: DrawingStroke = {
+        id: 'rotated-image',
+        tool: 'image',
+        points: [
+          { x: 0, y: 0 },
+          { x: 100, y: 40 },
+        ],
+        rotationRad: Math.PI / 2,
+        src: 'data:image/png;base64,example',
+      };
+
+      const result = pickImageStrokeAtPoint({ x: 50, y: 60 }, [stroke]);
+
+      expect(result?.id).toBe('rotated-image');
     });
   });
 

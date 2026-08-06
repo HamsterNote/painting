@@ -17,7 +17,8 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@hamster-note/painting": ["../../packages/painting/src/index.ts"]
+      "@hamster-note/painting": ["../../packages/painting/src/index.ts"],
+      "@hamster-note/painting-board": ["../../packages/painting-board/src/index.tsx"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"],

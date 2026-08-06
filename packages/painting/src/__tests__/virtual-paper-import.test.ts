@@ -47,9 +47,8 @@ jest.mock(
 );
 
 import {
-  generateTicks,
+  isInsideRuler,
   isVirtualPaperEnabled,
-  projectOntoRuler,
   toVirtualPaperProps,
   viewportToVirtualPaperTransform,
   virtualPaperTransformToViewport,
@@ -104,27 +103,14 @@ describe('@hamster-note/virtual-paper runtime imports', () => {
     ).toBe(VirtualPaperRenderMode.Transform);
 
     expect(
-      generateTicks(
-        {
-          center: { x: 0, y: 0 },
-          rotationRad: 0,
-          length: 100,
-          height: 20,
-        },
-        { majorSpacing: 50, minorSpacing: 10 }
-      ).length
-    ).toBeGreaterThan(0);
-
-    expect(
-      projectOntoRuler(
+      isInsideRuler(
         { x: 10, y: 5 },
         {
           center: { x: 0, y: 0 },
-          rotationRad: 0,
           length: 100,
           height: 20,
         }
       )
-    ).toEqual({ x: 10, y: 0 });
+    ).toBe(true);
   });
 });
