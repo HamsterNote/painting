@@ -4240,6 +4240,7 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
     const minimapPosition = minimapOptions.position ?? 'bottom-right';
     const minimapPositionStyle: CSSProperties = (() => {
       const offset = 8;
+      const bottomOffset = minimapOptions.bottomOffset ?? offset;
       switch (minimapPosition) {
         case 'top-left':
           return { position: 'absolute', top: offset, left: offset, zIndex: 10 };
@@ -4248,14 +4249,14 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         case 'bottom-left':
           return {
             position: 'absolute',
-            bottom: offset,
+            bottom: bottomOffset,
             left: offset,
             zIndex: 10,
           };
         default:
           return {
             position: 'absolute',
-            bottom: offset,
+            bottom: bottomOffset,
             right: offset,
             zIndex: 10,
           };

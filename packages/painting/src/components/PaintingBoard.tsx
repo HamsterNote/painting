@@ -28,6 +28,8 @@ import {
 } from './DrawingSurface';
 import {
   PAINTING_BOARD_DEFAULT_TOOLS,
+  PAINTING_CONTROLLER_DEFAULT_BOTTOM_EDGE_OFFSET,
+  PAINTING_CONTROLLER_HEIGHT,
   PaintingController,
   type PaintingControllerData,
 } from './PaintingController';
@@ -65,7 +67,7 @@ export interface PaintingBoardToolbarOptions {
   readonly theme?: PopoverTheme;
   /** 工具栏吸附的视口边缘，默认 'bottom'（底部栏） */
   readonly edge?: PopoverEdge;
-  /** 距吸附边缘的偏移（px），默认 16 */
+  /** 距吸附边缘的偏移（px）；底部默认 32，其他边缘默认 16 */
   readonly edgeOffset?: number;
   /** 是否在图标旁展示文字标签，默认 false */
   readonly showLabels?: boolean;
@@ -84,6 +86,7 @@ const POPOVER_PLACEMENT_GAP_TOP = 48;
 const POPOVER_PLACEMENT_GAP_BOTTOM = 8;
 /** 选区顶部距宿主顶边小于该值时，Popover 翻转到选区下方展示 */
 const POPOVER_PLACEMENT_MIN_TOP = 56;
+const MINIMAP_EDGE_GAP = 8;
 
 /**
  * 手指绘图模式（stylusMode=false）下的虚拟纸交互集：
@@ -235,14 +238,6 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
     const showMinimap = controller
       ? controller.data.minimap
       : (minimapVisibleProp ?? innerMinimapVisible);
-    const effectiveMinimap = useMemo(
-      () => ({
-        ...(minimapProp === false || minimapProp === undefined ? {} : minimapProp),
-        enabled: showMinimap,
-      }),
-      [minimapProp, showMinimap]
-    );
-
     const rulerPropEnabled =
       rulerProp !== false && rulerProp !== undefined && (rulerProp.enabled ?? true);
     const [innerRulerVisible, setInnerRulerVisible] = useState(rulerPropEnabled);
@@ -282,6 +277,23 @@ export const PaintingBoard = forwardRef<DrawingSurfaceHandle, PaintingBoardProps
       if (toolbar === false) return null;
       return toolbar ?? {};
     }, [toolbar]);
+
+    const effectiveMinimap = useMemo(() => {
+      const options = minimapProp === false || minimapProp === undefined ? {} : minimapProp;
+      const toolbarEdge = toolbarOptions?.edge ?? 'bottom';
+      if (toolbarOptions === null || toolbarEdge !== 'bottom') {
+        return { ...options, enabled: showMinimap };
+      }
+      const toolbarClearance =
+        (toolbarOptions.edgeOffset ?? PAINTING_CONTROLLER_DEFAULT_BOTTOM_EDGE_OFFSET) +
+        PAINTING_CONTROLLER_HEIGHT +
+        MINIMAP_EDGE_GAP;
+      return {
+        ...options,
+        enabled: showMinimap,
+        bottomOffset: Math.max(options.bottomOffset ?? MINIMAP_EDGE_GAP, toolbarClearance),
+      };
+    }, [minimapProp, showMinimap, toolbarOptions]);
 
     const selectionPopoverOptions = useMemo<PaintingBoardSelectionPopoverOptions | null>(() => {
       if (selectionPopover === false) return null;

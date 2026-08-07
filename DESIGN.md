@@ -22,6 +22,7 @@ The primary user edits strokes with a mouse, pen, or touch input and expects sel
 - The ruler is a 48 px-high screen-space strip clipped to the drawing-surface host. Its rendered length exceeds twice the host diagonal, so neither endpoint can enter the visible canvas.
 - Ruler marks mirror across the top and bottom edges, using three line-height levels for 1 mm, 5 mm, and 10 mm intervals. The ruler contains no numeric or textual labels.
 - Transient interaction feedback uses a white surface with black, tabular numeric text. Ruler angle feedback is a 44 px circle; mouse zoom feedback is a compact 32 px-high pill with a minimum width of 48 px, while touch zoom feedback is fixed at 64 × 32 px so viewport clamping uses its exact rendered bounds.
+- Minimap uses an 8 px canvas-edge inset. A built-in bottom toolbar uses a 32 px container-edge inset; bottom-left and bottom-right Minimap positions clear the 42 px toolbar surface with an additional 8 px gap.
 
 ## 4. Selection control anatomy
 
@@ -50,6 +51,7 @@ The primary user edits strokes with a mouse, pen, or touch input and expects sel
 - Drawing gestures choose the physical ruler edge nearest their starting side. Before crossing that edge, points remain unconstrained; after crossing it, points project onto that edge only while the raw pointer remains inside the ruler strip. Leaving the strip keeps that outside sample raw and re-arms the constraint from the side where the pointer landed, so a later entry during the same gesture can snap to the newly approached physical edge. A sparse sample that jumps across the complete strip never fabricates an intermediate constrained point.
 - Virtual-paper zoom shows the real returned scale rounded to a whole percent. Mouse-wheel feedback appears above the pointer, or below it when the upper placement would clip. Two-finger feedback starts from the upper normal-line intersection, remains within 50 px of the finger midpoint, and keeps the complete feedback pill inside the visible host.
 - Interaction feedback appears and updates directly without decorative entrance or exit motion. Touch feedback ends with the pinch; wheel feedback clears shortly after the final wheel update.
+- Minimap viewport-border resize is mouse-only. Touch and pen drags that begin on the border retain viewport panning without changing scale.
 
 ## 6. Responsive behavior
 
@@ -81,3 +83,4 @@ The primary user edits strokes with a mouse, pen, or touch input and expects sel
 - Verify mouse ruler rotation keeps the upright white-circle whole-degree readout at its gesture-start clipped-centerline midpoint, touch rotation keeps it at the initial two-touch midpoint's centerline projection, and ruler translation shows no readout.
 - Verify Ctrl/Cmd wheel zoom shows the real whole-percent scale above the pointer with the top-edge fallback below, and two-finger zoom keeps the same scale within 50 px of the midpoint and fully inside the visible host until either finger ends.
 - Verify the PaintingBoard bottom-bar ruler switch preserves supplied ruler options and respects controlled visibility at 375 px, 768 px, and 1280 px widths.
+- Verify all four Minimap initialization corners, bottom-toolbar clearance, the 32 px toolbar inset, mouse border resize, and touch/pen border panning without scale changes.

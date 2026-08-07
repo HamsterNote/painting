@@ -4,18 +4,17 @@ import { PaintingController } from '../PaintingController';
 
 interface MockPopoverProps {
   readonly children?: ReactNode;
+  readonly edgeOffset?: number;
   readonly relative?: boolean;
   readonly style?: CSSProperties;
   readonly 'data-testid'?: string;
 }
 
-const mockPopover = jest.fn(
-  ({ children, style, 'data-testid': testId }: MockPopoverProps) => (
-    <div data-testid={testId} style={{ position: 'fixed', ...style }}>
-      {children}
-    </div>
-  )
-);
+const mockPopover = jest.fn(({ children, style, 'data-testid': testId }: MockPopoverProps) => (
+  <div data-testid={testId} style={{ position: 'fixed', ...style }}>
+    {children}
+  </div>
+));
 
 jest.mock('@hamster-note/components', () => ({
   ...jest.requireActual('@hamster-note/components'),
@@ -65,4 +64,46 @@ describe('PaintingController relative positioning', () => {
     expect(toolbarProps.style?.position).toBe('absolute');
     expect(toolbarProps.style?.zIndex).toBe(1);
   });
+
+  it('keeps the bottom toolbar twice as far from its container by default', () => {
+    // Given / When: a toolbar uses its default edge geometry.
+    render(
+      <PaintingController
+        data={{ tool: 'pen', minimap: false }}
+        onDataChange={jest.fn()}
+        tools={['pen']}
+        relative
+      />
+    );
+
+    // Then: the previous 16px inset is doubled.
+    const toolbarProps = mockPopover.mock.calls
+      .map(([props]) => props)
+      .find((props) => props['data-testid'] === 'painting-board-toolbar');
+    if (!toolbarProps) throw new Error('Painting toolbar Popover was not rendered');
+    expect(toolbarProps.edgeOffset).toBe(32);
+  });
+
+  it.each(['top', 'left', 'right'] as const)(
+    'keeps the existing default inset for a %s toolbar',
+    (edge) => {
+      // Given / When: a toolbar is docked to a non-bottom edge without an explicit offset.
+      render(
+        <PaintingController
+          data={{ tool: 'pen', minimap: false }}
+          onDataChange={jest.fn()}
+          tools={['pen']}
+          edge={edge}
+          relative
+        />
+      );
+
+      // Then: only the bottom toolbar receives the doubled default inset.
+      const toolbarProps = mockPopover.mock.calls
+        .map(([props]) => props)
+        .find((props) => props['data-testid'] === 'painting-board-toolbar');
+      if (!toolbarProps) throw new Error('Painting toolbar Popover was not rendered');
+      expect(toolbarProps.edgeOffset).toBe(16);
+    }
+  );
 });
