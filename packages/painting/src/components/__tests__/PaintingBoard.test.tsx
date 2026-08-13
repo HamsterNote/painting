@@ -45,6 +45,10 @@ function makeTouchEvent(
 }
 
 describe('PaintingBoard', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('默认渲染底部工具栏并激活默认工具 pen', () => {
     render(
       <div style={{ width: 400, height: 300 }}>
@@ -288,12 +292,161 @@ describe('PaintingBoard', () => {
       const minimap = screen.getByTestId('board-minimap');
       expect(minimap.style.width).toBe('180px');
       expect(minimap.style.height).toBe('120px');
+      expect(minimap.style.top).toBe('8px');
+      expect(minimap.style.right).toBe('8px');
       expect(screen.queryByTestId('painting-board-minimap')).toBeNull();
       expect(screen.getAllByTestId('board-minimap')).toHaveLength(1);
     } finally {
       clientWidth.mockRestore();
       clientHeight.mockRestore();
     }
+  });
+
+  it.each([
+    ['top-left', 'top', 'left'],
+    ['top-right', 'top', 'right'],
+    ['bottom-left', 'bottom', 'left'],
+    ['bottom-right', 'bottom', 'right'],
+  ] as const)(
+    'Given a %s minimap When PaintingBoard renders Then it uses the requested corner',
+    (position, verticalEdge, horizontalEdge) => {
+      // Given: DrawingSurface can resolve a measurable host.
+      jest.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(400);
+      jest.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(300);
+
+      // When: the minimap is initialized at a requested corner without a toolbar.
+      render(
+        <div style={{ width: 400, height: 300 }}>
+          <PaintingBoard
+            minimapVisible
+            minimap={{ position, testID: `minimap-${position}` }}
+            toolbar={false}
+          />
+        </div>
+      );
+
+      // Then: the matching vertical and horizontal edges receive the standard inset.
+      const minimap = screen.getByTestId(`minimap-${position}`);
+      expect(minimap.style[verticalEdge]).toBe('8px');
+      expect(minimap.style[horizontalEdge]).toBe('8px');
+    }
+  );
+
+  it.each(['bottom-left', 'bottom-right'] as const)(
+    'Given the built-in bottom toolbar When a minimap starts at %s Then it clears the toolbar',
+    (position) => {
+      // Given: a measurable board with its built-in toolbar enabled.
+      jest.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(400);
+      jest.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(300);
+
+      // When: a bottom minimap is rendered.
+      render(
+        <div style={{ width: 400, height: 300 }}>
+          <PaintingBoard minimapVisible minimap={{ position, testID: `minimap-${position}` }} />
+        </div>
+      );
+
+      // Then: 32px toolbar inset + 42px toolbar height + 8px separation is reserved.
+      expect(screen.getByTestId(`minimap-${position}`).style.bottom).toBe('82px');
+    }
+  );
+
+  it('Given a custom bottom-toolbar inset When a bottom minimap renders Then its clearance follows the toolbar', () => {
+    // Given: a measurable board with a custom bottom-toolbar inset.
+    jest.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(400);
+    jest.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(300);
+
+    // When: a bottom minimap is rendered beside that toolbar.
+    render(
+      <div style={{ width: 400, height: 300 }}>
+        <PaintingBoard
+          minimapVisible
+          minimap={{ position: 'bottom-right', testID: 'custom-offset-minimap' }}
+          toolbar={{ edgeOffset: 20 }}
+        />
+      </div>
+    );
+
+    // Then: 20px toolbar inset + 42px toolbar height + 8px separation is reserved.
+    expect(screen.getByTestId('custom-offset-minimap').style.bottom).toBe('70px');
+  });
+
+  it('Given a larger explicit minimap offset When a bottom toolbar renders Then the explicit offset is preserved', () => {
+    // Given: a measurable board and an explicit offset larger than the toolbar clearance.
+    jest.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(400);
+    jest.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(300);
+
+    // When: the bottom minimap is rendered with the built-in toolbar.
+    render(
+      <div style={{ width: 400, height: 300 }}>
+        <PaintingBoard
+          minimapVisible
+          minimap={{ bottomOffset: 120, position: 'bottom-right', testID: 'large-offset-minimap' }}
+        />
+      </div>
+    );
+
+    // Then: toolbar avoidance acts as a minimum rather than replacing the caller's value.
+    expect(screen.getByTestId('large-offset-minimap').style.bottom).toBe('120px');
+  });
+
+  it('Given a smaller explicit minimap offset When a bottom toolbar renders Then safe clearance wins', () => {
+    // Given: a measurable board and an explicit offset that would overlap the toolbar.
+    jest.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(400);
+    jest.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(300);
+
+    // When: the bottom minimap is rendered with the built-in toolbar.
+    render(
+      <div style={{ width: 400, height: 300 }}>
+        <PaintingBoard
+          minimapVisible
+          minimap={{ bottomOffset: 24, position: 'bottom-right', testID: 'small-offset-minimap' }}
+        />
+      </div>
+    );
+
+    // Then: the required 82px toolbar clearance is enforced.
+    expect(screen.getByTestId('small-offset-minimap').style.bottom).toBe('82px');
+  });
+
+  it('Given no toolbar When a custom minimap offset is supplied Then it is preserved exactly', () => {
+    // Given: a measurable board without a built-in toolbar.
+    jest.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(400);
+    jest.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(300);
+
+    // When: a bottom minimap is rendered with a custom offset.
+    render(
+      <div style={{ width: 400, height: 300 }}>
+        <PaintingBoard
+          minimapVisible
+          minimap={{ bottomOffset: 24, position: 'bottom-right', testID: 'toolbarless-minimap' }}
+          toolbar={false}
+        />
+      </div>
+    );
+
+    // Then: no toolbar-derived minimum is injected.
+    expect(screen.getByTestId('toolbarless-minimap').style.bottom).toBe('24px');
+  });
+
+  it('Given a side toolbar When a bottom minimap renders Then it keeps the standard canvas inset', () => {
+    // Given: a measurable board whose toolbar is not docked to the bottom edge.
+    jest.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(400);
+    jest.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(300);
+
+    // When: a bottom minimap is rendered with a left-edge toolbar.
+    render(
+      <div style={{ width: 400, height: 300 }}>
+        <PaintingBoard
+          minimapVisible
+          minimap={{ position: 'bottom-right', testID: 'side-toolbar-minimap' }}
+          toolbar={{ edge: 'left' }}
+        />
+      </div>
+    );
+
+    // Then: no bottom-toolbar clearance is injected.
+    expect(screen.getByTestId('side-toolbar-minimap').style.bottom).toBe('8px');
   });
 
   it('Given the built-in toolbar When Image is clicked Then it opens an image-only file picker', () => {

@@ -1,11 +1,11 @@
-import { useCallback, useMemo, useRef, type CSSProperties, type ReactElement } from 'react';
+import { type CSSProperties, type ReactElement, useCallback, useMemo, useRef } from 'react';
 import { StrokeRenderer } from '../render/StrokeRenderer';
 import {
-  type DrawingViewport,
-  type ViewportPoint,
   clampScale,
+  type DrawingViewport,
   normalizeViewport,
   screenToCanvas,
+  type ViewportPoint,
 } from '../viewport';
 import type { DrawingStroke } from './DrawingSurface';
 
@@ -26,6 +26,8 @@ export type MinimapOptions = {
   height?: number;
   /** minimap 在画布中的停靠位置，默认 'bottom-right' */
   position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  /** 底部停靠位置距画布底边的偏移（CSS 像素），默认 8 */
+  bottomOffset?: number;
   /** 测试 ID */
   testID?: string;
 };
@@ -400,9 +402,8 @@ export function Minimap({
     // 通过事件目标判断手势类型
     const target = event.target;
     if (target instanceof Element) {
-      // 点击边缘/角落手柄 -> 缩放模式
       if (target.closest('[data-minimap-edge]')) {
-        gestureModeRef.current = 'resize';
+        gestureModeRef.current = event.pointerType === 'mouse' ? 'resize' : 'pan';
         return;
       }
       // 点击指示框主体 -> 平移模式

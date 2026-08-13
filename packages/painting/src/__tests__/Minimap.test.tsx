@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
 import { normalizeViewport as normalizeViewportFromIndex } from '@hamster-note/painting';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { DrawingSurface } from '../components/DrawingSurface';
 import { Minimap } from '../components/Minimap';
 
@@ -160,4 +160,60 @@ describe('minimap regression coverage', () => {
     );
     expect(onViewportChange.mock.calls[0][0].scale).toBeGreaterThan(0.25);
   });
+
+  it.each(['touch', 'pen'] as const)(
+    'pans without resizing when a %s drag starts from a viewport handle',
+    (pointerType) => {
+      // Given: the viewport handle is visible and the minimap starts at a known scale.
+      const onViewportChange = jest.fn();
+      render(
+        <Minimap
+          strokes={[]}
+          viewport={{ scale: 1, tx: 0, ty: 0 }}
+          onViewportChange={onViewportChange}
+          hostSize={{ width: 400, height: 300 }}
+          width={200}
+          height={150}
+          testID="minimap"
+        />
+      );
+      const minimap = screen.getByTestId('minimap');
+      Object.defineProperty(minimap, 'setPointerCapture', {
+        configurable: true,
+        value: jest.fn(),
+      });
+      const cornerHandle = minimap.querySelector<HTMLElement>('[data-minimap-edge="corner-br"]');
+      if (!cornerHandle) throw new Error('Bottom-right minimap resize handle not found');
+
+      // When: a touch pointer drags that handle.
+      const pointerDown = new MouseEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: 100,
+        clientY: 75,
+      });
+      Object.defineProperties(pointerDown, {
+        pointerId: { value: 2 },
+        pointerType: { value: pointerType },
+      });
+      fireEvent(cornerHandle, pointerDown);
+      const pointerMove = new MouseEvent('pointermove', {
+        bubbles: true,
+        clientX: 90,
+        clientY: 65,
+      });
+      Object.defineProperties(pointerMove, {
+        pointerId: { value: 2 },
+        pointerType: { value: pointerType },
+      });
+      fireEvent(minimap, pointerMove);
+
+      // Then: non-mouse input keeps navigation available but cannot change viewport scale.
+      expect(onViewportChange).toHaveBeenCalledWith(
+        expect.objectContaining({ scale: 1, tx: expect.any(Number), ty: expect.any(Number) })
+      );
+      expect(onViewportChange.mock.calls[0][0].tx).not.toBe(0);
+      expect(onViewportChange.mock.calls[0][0].ty).not.toBe(0);
+    }
+  );
 });

@@ -79,6 +79,10 @@ export const PAINTING_BOARD_DEFAULT_TOOLS: readonly DrawingTool[] = [
   'lasso',
 ];
 
+export const PAINTING_CONTROLLER_DEFAULT_EDGE_OFFSET = 16;
+export const PAINTING_CONTROLLER_DEFAULT_BOTTOM_EDGE_OFFSET = 32;
+export const PAINTING_CONTROLLER_HEIGHT = 42;
+
 const TOOL_ICON_MAP: Partial<Record<DrawingTool, IconName>> = {
   pen: 'pen',
   line: 'line',
@@ -151,7 +155,7 @@ export interface PaintingControllerProps {
   readonly presetColors?: readonly PaintingColorOption[];
   /** 工具栏吸附的视口边缘，默认 'bottom'（底部栏） */
   readonly edge?: PopoverEdge;
-  /** 距吸附边缘的偏移（px），默认 16 */
+  /** 距吸附边缘的偏移（px）；底部默认 32，其他边缘默认 16 */
   readonly edgeOffset?: number;
   /** 是否在图标旁展示文字标签，默认 false */
   readonly showLabels?: boolean;
@@ -226,7 +230,7 @@ export function PaintingController({
   theme = 'dark',
   presetColors,
   edge = 'bottom',
-  edgeOffset = 16,
+  edgeOffset,
   showLabels = false,
   style,
   onResetView,
@@ -250,6 +254,11 @@ export function PaintingController({
   const strokeColor = data.strokeColor?.trim() || '#000000';
   const fontSize = resolveTextFontSize(data.fontSize);
   const activeToolIcon = TOOL_ICON_MAP[activeTool];
+  const resolvedEdgeOffset =
+    edgeOffset ??
+    (edge === 'bottom'
+      ? PAINTING_CONTROLLER_DEFAULT_BOTTOM_EDGE_OFFSET
+      : PAINTING_CONTROLLER_DEFAULT_EDGE_OFFSET);
 
   const handleUndo = useCallback(() => {
     if (data.selection) {
@@ -383,7 +392,7 @@ export function PaintingController({
         data-testid="painting-board-toolbar"
         theme={theme}
         edge={edge}
-        edgeOffset={edgeOffset}
+        edgeOffset={resolvedEdgeOffset}
         orientation="horizontal"
         style={
           relative ? { ...style, position: 'absolute', zIndex: 1 } : { zIndex: 1000, ...style }
@@ -489,22 +498,6 @@ export function PaintingController({
               theme={theme}
               onStrokeWidthChange={handleStrokeWidthChange}
             />
-            {/* 压感开关：仅影响 pen 笔画，与颜色/宽度同属笔触样式组。
-                compact 模式下收纳进 More 菜单（见 painting-board-more-pressure）。 */}
-            {!isCompact && stylusMode ? (
-              <Button
-                type="button"
-                size="small"
-                variant={pressure ? 'primary' : 'ghost'}
-                data-testid="painting-board-pressure-toggle"
-                aria-pressed={pressure}
-                aria-label="Pressure sensitivity"
-                onClick={handleTogglePressure}
-              >
-                <Icon name="edit" style={{ width: 16, height: 16 }} />
-                {showLabels ? 'Pressure' : null}
-              </Button>
-            ) : null}
           </>
         ) : null}
         {/* 手写笔模式切换：属 data 契约。compact 模式下收纳进 More 菜单
@@ -521,6 +514,22 @@ export function PaintingController({
           >
             <Icon name="touch" style={{ width: 16, height: 16 }} />
             {showLabels ? 'Stylus' : null}
+          </Button>
+        ) : null}
+        {/* 压感开关：仅影响 pen 笔画，与颜色/宽度同属笔触样式组。
+            compact 模式下收纳进 More 菜单（见 painting-board-more-pressure）。 */}
+        {!isCompact && stylusMode && activeTool !== 'lasso' && activeTool !== 'text' ? (
+          <Button
+            type="button"
+            size="small"
+            variant={pressure ? 'primary' : 'ghost'}
+            data-testid="painting-board-pressure-toggle"
+            aria-pressed={pressure}
+            aria-label="Pressure sensitivity"
+            onClick={handleTogglePressure}
+          >
+            <Icon name="edit" style={{ width: 16, height: 16 }} />
+            {showLabels ? 'Pressure' : null}
           </Button>
         ) : null}
         {/* 重置视角：仅当传入 onResetView 且非多画板共享模式时渲染 */}
