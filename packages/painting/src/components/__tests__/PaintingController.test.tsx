@@ -76,6 +76,23 @@ describe('PaintingController', () => {
     expect(screen.queryByTestId('painting-board-pressure-toggle')).not.toBeNull();
   });
 
+  it.each(['text', 'lasso'] as const)(
+    'hides pressure while the %s tool is active even when stylus mode is enabled',
+    (tool) => {
+      // Given / When: 桌面端已启用手写笔模式，但当前工具不产生支持压感的笔画。
+      render(
+        <PaintingController
+          data={{ tool, minimap: false, stylusMode: true }}
+          onDataChange={jest.fn()}
+          tools={[tool]}
+        />
+      );
+
+      // Then: 不展示对当前工具无效的压感入口。
+      expect(screen.queryByTestId('painting-board-pressure-toggle')).toBeNull();
+    }
+  );
+
   it('shows text color and font size controls without stroke-only controls', () => {
     // Given / When: 文字工具使用受控颜色与字号。
     render(

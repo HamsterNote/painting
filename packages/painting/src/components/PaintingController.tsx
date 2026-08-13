@@ -518,7 +518,7 @@ export function PaintingController({
         ) : null}
         {/* 压感开关：仅影响 pen 笔画，与颜色/宽度同属笔触样式组。
             compact 模式下收纳进 More 菜单（见 painting-board-more-pressure）。 */}
-        {!isCompact && stylusMode ? (
+        {!isCompact && stylusMode && activeTool !== 'lasso' && activeTool !== 'text' ? (
           <Button
             type="button"
             size="small"
