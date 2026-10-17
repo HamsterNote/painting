@@ -24,7 +24,11 @@ import {
   type LayeredEditorResult,
 } from '../../../core/layeredEditorController';
 import type { FreehandCandidate } from '../../../core/freehandSession';
-import { type BrushSnapshot, type EditorDocument, type FreehandObject } from '../../../model/document';
+import {
+  type BrushSnapshot,
+  type EditorDocument,
+  type FreehandObject,
+} from '../../../model/document';
 import type { DrawingViewport } from '../../../viewport';
 
 // ---------------------------------------------------------------------------
@@ -98,9 +102,12 @@ function installCapture(host: HTMLElement, behavior: 'ok' | 'throw' | 'absent' =
     delete (host as unknown as Record<string, unknown>).releasePointerCapture;
     delete (host as unknown as Record<string, unknown>).hasPointerCapture;
   } else {
-    (host as unknown as Record<string, unknown>).setPointerCapture = behavior === 'throw'
-      ? jest.fn(() => { throw new Error('capture unsupported'); })
-      : set;
+    (host as unknown as Record<string, unknown>).setPointerCapture =
+      behavior === 'throw'
+        ? jest.fn(() => {
+            throw new Error('capture unsupported');
+          })
+        : set;
     (host as unknown as Record<string, unknown>).releasePointerCapture = release;
     (host as unknown as Record<string, unknown>).hasPointerCapture = has;
   }
@@ -184,7 +191,9 @@ function makeDocument(): EditorDocument {
 
 const VIEWPORT: DrawingViewport = { scale: 2, tx: 10, ty: -5 };
 
-function createController(overrides: Partial<LayeredEditorControllerOptions> = {}): LayeredEditorController {
+function createController(
+  overrides: Partial<LayeredEditorControllerOptions> = {}
+): LayeredEditorController {
   const result = createLayeredEditorController({
     document: makeDocument(),
     viewport: { revision: 1, viewport: VIEWPORT },
@@ -257,7 +266,15 @@ function drawStroke(
   const base = { pointerId: 1, pointerType: 'pen', isPrimary: true, buttons: 1, ...init };
   fireHost(h.host, pointer('pointerdown', { pressure: 0.5, ...base, buttons: 1 }));
   moves.forEach((m, index) =>
-    fireWindow(pointer('pointermove', { pressure: 0.5, ...base, ...m, buttons: 1, clientX: m.clientX ?? index + 2 }))
+    fireWindow(
+      pointer('pointermove', {
+        pressure: 0.5,
+        ...base,
+        ...m,
+        buttons: 1,
+        clientX: m.clientX ?? index + 2,
+      })
+    )
   );
   fireWindow(pointer('pointerup', { pressure: 0, ...base, button: 0, buttons: 0 }));
 }
@@ -288,7 +305,10 @@ describe('freehandWebAdapter: 默认策略与 pressure 解析', () => {
       const commit = lastNotice(h);
       expect(commit.phase).toBe('commit');
       expect(commit.result.ok).toBe(true);
-      if (commit.result.ok) {
+      if (!commit.result.ok) {
+        throw new Error('Test precondition failed: commit.result.ok');
+      }
+      {
         expect((commit.result.value as LayeredCommitReceipt).status).toBe('created');
       }
       const document = h.controller.getSnapshot('document');
@@ -304,7 +324,10 @@ describe('freehandWebAdapter: 默认策略与 pressure 解析', () => {
     const commit = lastNotice(h);
     const object = h.controller.getSnapshot('document').objects[0];
     expect(object?.kind).toBe('freehand');
-    if (object?.kind === 'freehand') {
+    if (!(object?.kind === 'freehand')) {
+      throw new Error("Test precondition failed: object?.kind === 'freehand'");
+    }
+    {
       expect(object.resolvedPressureMode).toBe('real');
     }
     expect(commit.phase).toBe('commit');
@@ -314,7 +337,10 @@ describe('freehandWebAdapter: 默认策略与 pressure 解析', () => {
     const h = setup({ pressureCapabilityForSource: () => 'unavailable' });
     drawStroke(h, { pointerType: 'pen', pressure: 0.5 });
     const object = h.controller.getSnapshot('document').objects[0];
-    if (object?.kind === 'freehand') {
+    if (!(object?.kind === 'freehand')) {
+      throw new Error("Test precondition failed: object?.kind === 'freehand'");
+    }
+    {
       expect(object.resolvedPressureMode).toBe('simulated');
     }
   });
@@ -324,7 +350,10 @@ describe('freehandWebAdapter: 默认策略与 pressure 解析', () => {
       const h = setup();
       drawStroke(h, { pointerType, pressure: 0.9 });
       const object = h.controller.getSnapshot('document').objects[0];
-      if (object?.kind === 'freehand') {
+      if (!(object?.kind === 'freehand')) {
+        throw new Error("Test precondition failed: object?.kind === 'freehand'");
+      }
+      {
         expect(object.resolvedPressureMode).toBe('simulated');
       }
       h.adapter.destroy();
@@ -477,10 +506,15 @@ describe('freehandWebAdapter: coalesced / predicted / raw', () => {
     fireWindow(pointer('pointerup', { ...base, pressure: 0, button: 0, buttons: 0 }));
     const candidate = noticesOf(h, 'end')[0]?.result;
     expect(candidate?.ok).toBe(true);
-    if (candidate?.ok) {
+    if (!candidate?.ok) {
+      throw new Error('Test precondition failed: candidate?.ok');
+    }
+    {
       const samples = (candidate.value as FreehandCandidate).samples;
       expect(samples).toHaveLength(4); // down + 2 moves + up，未来点不进
-      expect(samples.some((sample) => sample.x === futureWorldX && sample.y === futureWorldY)).toBe(false);
+      expect(samples.some((sample) => sample.x === futureWorldX && sample.y === futureWorldY)).toBe(
+        false
+      );
     }
   });
 
@@ -512,7 +546,10 @@ describe('freehandWebAdapter: coalesced / predicted / raw', () => {
 
     const candidate = noticesOf(h, 'end')[0]?.result;
     expect(candidate?.ok).toBe(true);
-    if (candidate?.ok) {
+    if (!candidate?.ok) {
+      throw new Error('Test precondition failed: candidate?.ok');
+    }
+    {
       const samples = (candidate.value as FreehandCandidate).samples;
       expect(samples[0].pressure).toBe(1.5);
       expect(samples[samples.length - 1].pressure).toBe(0);
@@ -528,11 +565,12 @@ describe('freehandWebAdapter: coalesced / predicted / raw', () => {
     const h = setup();
     drawStroke(h, { pointerType: 'pen' });
     const candidate = noticesOf(h, 'end')[0]?.result;
-    if (candidate?.ok) {
+    if (!candidate?.ok) {
+      throw new Error('Test precondition failed: candidate?.ok');
+    }
+    {
       const samples = (candidate.value as FreehandCandidate).samples;
-      expect(samples.map((sample) => sample.sequence)).toEqual(
-        samples.map((_, index) => index)
-      );
+      expect(samples.map((sample) => sample.sequence)).toEqual(samples.map((_, index) => index));
     }
     h.adapter.destroy();
     h.host.remove();
@@ -542,11 +580,26 @@ describe('freehandWebAdapter: coalesced / predicted / raw', () => {
     const h = setup();
     const base = { pointerId: 1, pointerType: 'pen', isPrimary: true, buttons: 1 };
     fireHost(h.host, pointer('pointerdown', { ...base, pressure: 0.5 }));
-    fireHost(h.host, pointer('pointerdown', { pointerId: 2, pointerType: 'touch', isPrimary: false, buttons: 1 }));
-    fireWindow(pointer('pointermove', { pointerId: 2, pointerType: 'touch', isPrimary: false, buttons: 1, clientX: 50, clientY: 50 }));
+    fireHost(
+      h.host,
+      pointer('pointerdown', { pointerId: 2, pointerType: 'touch', isPrimary: false, buttons: 1 })
+    );
+    fireWindow(
+      pointer('pointermove', {
+        pointerId: 2,
+        pointerType: 'touch',
+        isPrimary: false,
+        buttons: 1,
+        clientX: 50,
+        clientY: 50,
+      })
+    );
     fireWindow(pointer('pointermove', { ...base, clientX: 4, clientY: 3 }));
     const snap = h.controller.getSnapshot('interaction').activeFreehand;
-    if (snap && snap.status === 'collecting') {
+    if (!(snap && snap.status === 'collecting')) {
+      throw new Error("Test precondition failed: snap && snap.status === 'collecting'");
+    }
+    {
       expect(snap.samples.every((sample) => sample.source === 'pen')).toBe(true);
     }
     h.adapter.destroy();
@@ -564,11 +617,35 @@ describe('freehandWebAdapter: 坐标与 viewport', () => {
     Object.defineProperty(h.host, 'clientLeft', { value: 1, configurable: true });
     Object.defineProperty(h.host, 'clientTop', { value: 2, configurable: true });
     h.host.getBoundingClientRect = () =>
-      ({ left: 10, top: 20, right: 0, bottom: 0, width: 0, height: 0, x: 10, y: 20, toJSON: () => ({}) }) as DOMRect;
+      ({
+        left: 10,
+        top: 20,
+        right: 0,
+        bottom: 0,
+        width: 0,
+        height: 0,
+        x: 10,
+        y: 20,
+        toJSON: () => ({}),
+      }) as DOMRect;
 
-    fireHost(h.host, pointer('pointerdown', { pointerId: 1, pointerType: 'pen', isPrimary: true, buttons: 1, pressure: 0.5, clientX: 30, clientY: 40 }));
+    fireHost(
+      h.host,
+      pointer('pointerdown', {
+        pointerId: 1,
+        pointerType: 'pen',
+        isPrimary: true,
+        buttons: 1,
+        pressure: 0.5,
+        clientX: 30,
+        clientY: 40,
+      })
+    );
     const snap = h.controller.getSnapshot('interaction').activeFreehand;
-    if (snap && snap.status === 'collecting') {
+    if (!(snap && snap.status === 'collecting')) {
+      throw new Error("Test precondition failed: snap && snap.status === 'collecting'");
+    }
+    {
       // localX = 30 - 10 - 1 = 19; localY = 40 - 20 - 2 = 18
       // worldX = (19 - 10)/2 = 4.5; worldY = (18 - (-5))/2 = 11.5
       expect(snap.samples[0].x).toBeCloseTo(4.5, 6);
@@ -585,7 +662,10 @@ describe('freehandWebAdapter: 坐标与 viewport', () => {
     h.controller.setFreehandSettings(makeBrush({ color: '#ffffff' }));
     fireWindow(pointer('pointerup', { ...base, pressure: 0, button: 0, buttons: 0 }));
     const first = h.controller.getSnapshot('document').objects[0];
-    if (first?.kind === 'freehand') {
+    if (!(first?.kind === 'freehand')) {
+      throw new Error("Test precondition failed: first?.kind === 'freehand'");
+    }
+    {
       expect(first.brushSnapshot.color).toBe('#123456');
     }
     h.adapter.destroy();
@@ -626,7 +706,9 @@ describe('freehandWebAdapter: 坐标与 viewport', () => {
     expect(after && after.status === 'collecting' ? after.source : undefined).toBe('pen');
     expect(noticesOf(h, 'update')).toHaveLength(0);
 
-    fireWindow(pointer('pointerup', { ...base, pointerType: 'touch', pressure: 0, button: 0, buttons: 0 }));
+    fireWindow(
+      pointer('pointerup', { ...base, pointerType: 'touch', pressure: 0, button: 0, buttons: 0 })
+    );
     expect(h.controller.getSnapshot('document').objects).toHaveLength(0);
     fireWindow(pointer('pointerup', { ...base, pressure: 0, button: 0, buttons: 0 }));
     expect(h.controller.getSnapshot('document').objects).toHaveLength(1);
@@ -637,7 +719,12 @@ describe('freehandWebAdapter: 坐标与 viewport', () => {
     const input = document.createElement('input');
     h.host.appendChild(input);
     input.focus();
-    const event = pointer('pointerdown', { pointerId: 1, pointerType: 'pen', pressure: 0.5, button: 0 });
+    const event = pointer('pointerdown', {
+      pointerId: 1,
+      pointerType: 'pen',
+      pressure: 0.5,
+      button: 0,
+    });
     const preventSpy = jest.spyOn(event, 'preventDefault');
     input.dispatchEvent(event);
     expect(preventSpy).not.toHaveBeenCalled();
@@ -668,22 +755,47 @@ describe('freehandWebAdapter: 取消与收尾', () => {
   const startCollecting = (h: Harness) => {
     fireHost(
       h.host,
-      pointer('pointerdown', { pointerId: 1, pointerType: 'pen', isPrimary: true, buttons: 1, pressure: 0.5 })
+      pointer('pointerdown', {
+        pointerId: 1,
+        pointerType: 'pen',
+        isPrimary: true,
+        buttons: 1,
+        pressure: 0.5,
+      })
     );
-    fireWindow(pointer('pointermove', { pointerId: 1, pointerType: 'pen', isPrimary: true, buttons: 1, clientX: 4, clientY: 3 }));
+    fireWindow(
+      pointer('pointermove', {
+        pointerId: 1,
+        pointerType: 'pen',
+        isPrimary: true,
+        buttons: 1,
+        clientX: 4,
+        clientY: 3,
+      })
+    );
   };
 
   it('pointercancel 取消：活动会话消失、无对象/history、迟到 up 忽略', () => {
     const h = setup();
     startCollecting(h);
     expect(h.controller.getSnapshot('interaction').activeFreehand).toBeDefined();
-    fireWindow(pointer('pointercancel', { pointerId: 1, pointerType: 'pen', isPrimary: true, buttons: 0 }));
+    fireWindow(
+      pointer('pointercancel', { pointerId: 1, pointerType: 'pen', isPrimary: true, buttons: 0 })
+    );
     expect(h.controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
     expect(h.adapter.getActivePointerIds()).toEqual([]);
     const cancel = noticesOf(h, 'cancel');
     expect(cancel).toHaveLength(1);
     expect(cancel[0].result.ok).toBe(true);
-    fireWindow(pointer('pointerup', { pointerId: 1, pointerType: 'pen', isPrimary: true, buttons: 0, pressure: 0 }));
+    fireWindow(
+      pointer('pointerup', {
+        pointerId: 1,
+        pointerType: 'pen',
+        isPrimary: true,
+        buttons: 0,
+        pressure: 0,
+      })
+    );
     expect(h.controller.getSnapshot('document').objects).toHaveLength(0);
     expect(h.controller.getSnapshot('history').canUndo).toBe(false);
   });
@@ -693,7 +805,12 @@ describe('freehandWebAdapter: 取消与收尾', () => {
     startCollecting(h);
     expect(h.controller.getSnapshot('interaction').activeFreehand).toBeDefined();
     h.host.dispatchEvent(
-      pointer('lostpointercapture', { pointerId: 1, pointerType: 'pen', isPrimary: true, buttons: 0 })
+      pointer('lostpointercapture', {
+        pointerId: 1,
+        pointerType: 'pen',
+        isPrimary: true,
+        buttons: 0,
+      })
     );
     expect(h.controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
     expect(h.adapter.getActivePointerIds()).toEqual([]);
@@ -739,11 +856,18 @@ describe('freehandWebAdapter: 取消与收尾', () => {
   it('正常 up 先清 owner；release 同步派发 host lostpointercapture 不误 cancel', () => {
     const h = setup();
     // releasePointerCapture 同步派发 host lostpointercapture（模拟真实调度）。
-    (h.host as unknown as Record<string, unknown>).releasePointerCapture = jest.fn((pointerId: number) => {
-      h.host.dispatchEvent(
-        pointer('lostpointercapture', { pointerId, pointerType: 'pen', isPrimary: true, buttons: 0 })
-      );
-    });
+    (h.host as unknown as Record<string, unknown>).releasePointerCapture = jest.fn(
+      (pointerId: number) => {
+        h.host.dispatchEvent(
+          pointer('lostpointercapture', {
+            pointerId,
+            pointerType: 'pen',
+            isPrimary: true,
+            buttons: 0,
+          })
+        );
+      }
+    );
     const base = { pointerId: 1, pointerType: 'pen', isPrimary: true, buttons: 1 };
     fireHost(h.host, pointer('pointerdown', { ...base, pressure: 0.5 }));
     fireWindow(pointer('pointermove', { ...base, clientX: 4, clientY: 3 }));
@@ -821,7 +945,13 @@ describe('freehandWebAdapter: 取消与收尾', () => {
 
   it('非 cancelable down 不调用 preventDefault', () => {
     const h = setup();
-    const event = pointer('pointerdown', { pointerId: 1, pointerType: 'pen', isPrimary: true, buttons: 1, pressure: 0.5 });
+    const event = pointer('pointerdown', {
+      pointerId: 1,
+      pointerType: 'pen',
+      isPrimary: true,
+      buttons: 1,
+      pressure: 0.5,
+    });
     Object.defineProperty(event, 'cancelable', { value: false });
     const preventSpy = jest.spyOn(event, 'preventDefault');
     fireHost(h.host, event);
@@ -838,15 +968,18 @@ describe('freehandWebAdapter: 取消与收尾', () => {
 describe('freehandWebAdapter: commit 失败与 retry', () => {
   it('allocator 失败：commit 通知可观测失败、owner 清空、candidate 保留、retry 1 对象 1 undo', () => {
     let allocatorCalls = 0;
-    const h = setup({}, {
-      allocateObjectId: () => {
-        allocatorCalls += 1;
-        if (allocatorCalls === 1) {
-          throw new Error('alloc fail');
-        }
-        return 'obj-retry';
-      },
-    });
+    const h = setup(
+      {},
+      {
+        allocateObjectId: () => {
+          allocatorCalls += 1;
+          if (allocatorCalls === 1) {
+            throw new Error('alloc fail');
+          }
+          return 'obj-retry';
+        },
+      }
+    );
     drawStroke(h, { pointerType: 'pen' });
 
     const failed = noticesOf(h, 'commit').find((notice) => !notice.result.ok);
@@ -857,7 +990,10 @@ describe('freehandWebAdapter: commit 失败与 retry', () => {
     const commitId = failed?.commitId ?? 'c1';
     const retry = h.adapter.retryCommit(commitId);
     expect(retry.ok).toBe(true);
-    if (retry.ok) {
+    if (!retry.ok) {
+      throw new Error('Test precondition failed: retry.ok');
+    }
+    {
       expect(retry.value.status).toBe('created');
     }
     expect(h.controller.getSnapshot('document').objects).toHaveLength(1);
@@ -895,15 +1031,18 @@ describe('freehandWebAdapter: commit 失败与 retry', () => {
 
   it('head commit 失败时，连续后笔不得越过 head', () => {
     let allocatorCalls = 0;
-    const h = setup({}, {
-      allocateObjectId: () => {
-        allocatorCalls += 1;
-        if (allocatorCalls === 1) {
-          throw new Error('head alloc fail');
-        }
-        return `obj-${allocatorCalls}`;
-      },
-    });
+    const h = setup(
+      {},
+      {
+        allocateObjectId: () => {
+          allocatorCalls += 1;
+          if (allocatorCalls === 1) {
+            throw new Error('head alloc fail');
+          }
+          return `obj-${allocatorCalls}`;
+        },
+      }
+    );
     drawStroke(h, { pointerType: 'pen' });
     const headFail = noticesOf(h, 'commit').find((notice) => !notice.result.ok);
     expect(headFail).toBeDefined();
@@ -987,7 +1126,10 @@ describe('freehandWebAdapter: 时间、原子拒绝与顺序', () => {
     fireWindow(pointer('pointermove', { ...base, clientX: 4, clientY: 3, timeStamp: 20 }));
     const snap = h.controller.getSnapshot('interaction').activeFreehand;
     expect(snap && snap.status === 'collecting' ? snap.samples.length : 0).toBe(3);
-    if (snap && snap.status === 'collecting') {
+    if (!(snap && snap.status === 'collecting')) {
+      throw new Error("Test precondition failed: snap && snap.status === 'collecting'");
+    }
+    {
       expect(snap.samples[1].time).toBe(20);
       expect(snap.samples[2].time).toBe(20);
     }
@@ -1001,7 +1143,11 @@ describe('freehandWebAdapter: 时间、原子拒绝与顺序', () => {
     const beforeSamples = before && before.status === 'collecting' ? before.samples.length : -1;
     const beforeBatch = before && before.status === 'collecting' ? before.nextBatchSequence : -1;
 
-    const invalid = new MockPointerEvent('pointermove', { ...base, clientX: 0, clientY: 0 }) as unknown as PointerEvent;
+    const invalid = new MockPointerEvent('pointermove', {
+      ...base,
+      clientX: 0,
+      clientY: 0,
+    }) as unknown as PointerEvent;
     Object.defineProperty(invalid, 'clientX', { value: Number.NaN });
     fireWindow(
       pointer('pointermove', {
@@ -1021,7 +1167,10 @@ describe('freehandWebAdapter: 时间、原子拒绝与顺序', () => {
     fireWindow(pointer('pointerup', { ...base, pressure: 0, button: 0, buttons: 0 }));
     const candidate = noticesOf(h, 'end')[0]?.result;
     expect(candidate?.ok).toBe(true);
-    if (candidate?.ok) {
+    if (!candidate?.ok) {
+      throw new Error('Test precondition failed: candidate?.ok');
+    }
+    {
       const seq = (candidate.value as FreehandCandidate).samples.map((sample) => sample.sequence);
       expect(seq).toEqual(seq.map((_, index) => index));
     }
@@ -1045,27 +1194,36 @@ describe('freehandWebAdapter: 时间、原子拒绝与顺序', () => {
     drawStroke(h, { pointerType: 'pen' });
     const undo = h.controller.undo();
     expect(undo.ok).toBe(true);
-    if (undo.ok) {
+    if (!undo.ok) {
+      throw new Error('Test precondition failed: undo.ok');
+    }
+    {
       expect(undo.value.objects).toHaveLength(0);
     }
     const again = h.controller.undo();
     expect(again.ok).toBe(false);
-    if (!again.ok) {
+    if (again.ok) {
+      throw new Error('Test precondition failed: !again.ok');
+    }
+    {
       expect(again.error.code).toBe('nothing-to-undo');
     }
   });
 
   it('head 失败 pending=2；retry head 后 retry second，顺序有序', () => {
     let allocatorCalls = 0;
-    const h = setup({}, {
-      allocateObjectId: () => {
-        allocatorCalls += 1;
-        if (allocatorCalls === 1) {
-          throw new Error('head fail');
-        }
-        return `obj-${allocatorCalls}`;
-      },
-    });
+    const h = setup(
+      {},
+      {
+        allocateObjectId: () => {
+          allocatorCalls += 1;
+          if (allocatorCalls === 1) {
+            throw new Error('head fail');
+          }
+          return `obj-${allocatorCalls}`;
+        },
+      }
+    );
     drawStroke(h, { pointerType: 'pen' });
     drawStroke(h, { pointerType: 'pen' });
     expect(h.controller.getSnapshot('interaction').pendingCandidates).toHaveLength(2);
@@ -1116,7 +1274,10 @@ describe('freehandWebAdapter: 时间、原子拒绝与顺序', () => {
     fireWindow(pointer('pointerup', { ...base, pressure: 0, button: 0, buttons: 0 }));
     expect(calls).toEqual(['pen']);
     const object = h.controller.getSnapshot('document').objects[0];
-    if (object?.kind === 'freehand') {
+    if (!(object?.kind === 'freehand')) {
+      throw new Error("Test precondition failed: object?.kind === 'freehand'");
+    }
+    {
       expect(object.resolvedPressureMode).toBe('real');
     }
   });
@@ -1139,7 +1300,13 @@ describe('freehandWebAdapter: 时间、原子拒绝与顺序', () => {
 
     const mixed = [
       pointer('pointermove', { ...base, clientX: 4, clientY: 3 }),
-      pointer('pointermove', { pointerId: 2, pointerType: 'touch', isPrimary: false, clientX: 50, clientY: 50 }),
+      pointer('pointermove', {
+        pointerId: 2,
+        pointerType: 'touch',
+        isPrimary: false,
+        clientX: 50,
+        clientY: 50,
+      }),
     ];
     fireWindow(pointer('pointermove', { ...base, clientX: 9, clientY: 9, coalescedEvents: mixed }));
     const after = h.controller.getSnapshot('interaction').activeFreehand;
@@ -1150,20 +1317,41 @@ describe('freehandWebAdapter: 时间、原子拒绝与顺序', () => {
     const h = setup();
     const base = { pointerId: 1, pointerType: 'pen', isPrimary: true, buttons: 1 };
     h.host.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+      ({
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+        width: 0,
+        height: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
     fireHost(h.host, pointer('pointerdown', { ...base, pressure: 0.5, clientX: 10, clientY: 0 }));
 
     h.host.getBoundingClientRect = () =>
-      ({ left: 100, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 100, y: 0, toJSON: () => ({}) }) as DOMRect;
+      ({
+        left: 100,
+        top: 0,
+        right: 0,
+        bottom: 0,
+        width: 0,
+        height: 0,
+        x: 100,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
     fireWindow(pointer('pointermove', { ...base, clientX: 110, clientY: 0, timeStamp: 20 }));
 
     const snap = h.controller.getSnapshot('interaction').activeFreehand;
     expect(snap).toBeDefined();
-    if (snap && snap.status === 'collecting') {
+    if (!(snap && snap.status === 'collecting')) {
+      throw new Error('expected collecting');
+    }
+    {
       // 期望 local = 110 - 100 = 10 → world = (10 - 10)/2 = 0；固定 origin 会得到 50。
       expect(snap.samples[1].x).toBeCloseTo(0, 6);
-    } else {
-      throw new Error('expected collecting');
     }
   });
 });
@@ -1248,10 +1436,22 @@ describe('freehandWebAdapter: 通知重入与 destroy 恢复', () => {
         if (notice.phase === 'end') {
           // callback 内完整新笔 down + up：均被 barrier 忽略。
           box.h?.host.dispatchEvent(
-            pointer('pointerdown', { pointerId: 9, pointerType: 'pen', isPrimary: false, buttons: 1, pressure: 0.5 })
+            pointer('pointerdown', {
+              pointerId: 9,
+              pointerType: 'pen',
+              isPrimary: false,
+              buttons: 1,
+              pressure: 0.5,
+            })
           );
           window.dispatchEvent(
-            pointer('pointerup', { pointerId: 9, pointerType: 'pen', isPrimary: false, buttons: 0, pressure: 0 })
+            pointer('pointerup', {
+              pointerId: 9,
+              pointerType: 'pen',
+              isPrimary: false,
+              buttons: 0,
+              pressure: 0,
+            })
           );
         }
       },
@@ -1264,9 +1464,35 @@ describe('freehandWebAdapter: 通知重入与 destroy 恢复', () => {
     expect(h.notices.filter((notice) => notice.phase === 'commit')).toHaveLength(1);
 
     // 返回后外部独立 down/up 可绘下一笔。
-    fireHost(h.host, pointer('pointerdown', { pointerId: 9, pointerType: 'pen', isPrimary: false, buttons: 1, pressure: 0.5 }));
-    fireWindow(pointer('pointermove', { pointerId: 9, pointerType: 'pen', isPrimary: false, buttons: 1, clientX: 20, clientY: 20 }));
-    fireWindow(pointer('pointerup', { pointerId: 9, pointerType: 'pen', isPrimary: false, buttons: 0, pressure: 0 }));
+    fireHost(
+      h.host,
+      pointer('pointerdown', {
+        pointerId: 9,
+        pointerType: 'pen',
+        isPrimary: false,
+        buttons: 1,
+        pressure: 0.5,
+      })
+    );
+    fireWindow(
+      pointer('pointermove', {
+        pointerId: 9,
+        pointerType: 'pen',
+        isPrimary: false,
+        buttons: 1,
+        clientX: 20,
+        clientY: 20,
+      })
+    );
+    fireWindow(
+      pointer('pointerup', {
+        pointerId: 9,
+        pointerType: 'pen',
+        isPrimary: false,
+        buttons: 0,
+        pressure: 0,
+      })
+    );
 
     const objects = h.controller
       .getSnapshot('document')
@@ -1287,10 +1513,22 @@ describe('freehandWebAdapter: 通知重入与 destroy 恢复', () => {
         if (notice.phase === 'cancel') {
           cancelCallbacks += 1;
           box.h?.host.dispatchEvent(
-            pointer('pointerdown', { pointerId: 9, pointerType: 'pen', isPrimary: false, buttons: 1, pressure: 0.5 })
+            pointer('pointerdown', {
+              pointerId: 9,
+              pointerType: 'pen',
+              isPrimary: false,
+              buttons: 1,
+              pressure: 0.5,
+            })
           );
           window.dispatchEvent(
-            pointer('pointerup', { pointerId: 9, pointerType: 'pen', isPrimary: false, buttons: 0, pressure: 0 })
+            pointer('pointerup', {
+              pointerId: 9,
+              pointerType: 'pen',
+              isPrimary: false,
+              buttons: 0,
+              pressure: 0,
+            })
           );
         }
       },
@@ -1306,9 +1544,35 @@ describe('freehandWebAdapter: 通知重入与 destroy 恢复', () => {
     expect(h.controller.getSnapshot('history').canUndo).toBe(false);
 
     // 返回后外部独立 down/up 新建一笔。
-    fireHost(h.host, pointer('pointerdown', { pointerId: 9, pointerType: 'pen', isPrimary: false, buttons: 1, pressure: 0.5 }));
-    fireWindow(pointer('pointermove', { pointerId: 9, pointerType: 'pen', isPrimary: false, buttons: 1, clientX: 20, clientY: 20 }));
-    fireWindow(pointer('pointerup', { pointerId: 9, pointerType: 'pen', isPrimary: false, buttons: 0, pressure: 0 }));
+    fireHost(
+      h.host,
+      pointer('pointerdown', {
+        pointerId: 9,
+        pointerType: 'pen',
+        isPrimary: false,
+        buttons: 1,
+        pressure: 0.5,
+      })
+    );
+    fireWindow(
+      pointer('pointermove', {
+        pointerId: 9,
+        pointerType: 'pen',
+        isPrimary: false,
+        buttons: 1,
+        clientX: 20,
+        clientY: 20,
+      })
+    );
+    fireWindow(
+      pointer('pointerup', {
+        pointerId: 9,
+        pointerType: 'pen',
+        isPrimary: false,
+        buttons: 0,
+        pressure: 0,
+      })
+    );
     expect(h.controller.getSnapshot('document').objects).toHaveLength(1);
   });
 
@@ -1326,7 +1590,9 @@ describe('freehandWebAdapter: 通知重入与 destroy 恢复', () => {
     fireHost(h.host, pointer('pointerdown', { ...BASE, pressure: 0.5 }));
     fireWindow(pointer('pointermove', { ...BASE, clientX: 4, clientY: 3 }));
     // nested move 不得再产生第二个成功的 update batch。
-    expect(h.notices.filter((notice) => notice.phase === 'update' && notice.result.ok)).toHaveLength(1);
+    expect(
+      h.notices.filter((notice) => notice.phase === 'update' && notice.result.ok)
+    ).toHaveLength(1);
     expect(h.controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
     expect(h.adapter.getActivePointerIds()).toEqual([]);
     expect(h.controller.getSnapshot('document').objects).toHaveLength(0);
@@ -1375,7 +1641,9 @@ describe('freehandWebAdapter: 通知重入与 destroy 恢复', () => {
     const h = setup({ createSessionId: sessionSpy, pressureCapabilityForSource: capabilitySpy });
     const overlay = document.createElement('button');
     h.host.appendChild(overlay);
-    overlay.dispatchEvent(pointer('pointerdown', { pointerId: 1, pointerType: 'pen', pressure: 0.5 }));
+    overlay.dispatchEvent(
+      pointer('pointerdown', { pointerId: 1, pointerType: 'pen', pressure: 0.5 })
+    );
     expect(sessionSpy).not.toHaveBeenCalled();
     expect(capabilitySpy).not.toHaveBeenCalled();
     expect(h.adapter.getActivePointerIds()).toEqual([]);
@@ -1387,7 +1655,9 @@ describe('freehandWebAdapter: 通知重入与 destroy 恢复', () => {
     const h = setup({ createSessionId: sessionSpy, pressureCapabilityForSource: capabilitySpy });
     const input = document.createElement('input');
     h.host.appendChild(input);
-    input.dispatchEvent(pointer('pointerdown', { pointerId: 1, pointerType: 'pen', pressure: 0.5 }));
+    input.dispatchEvent(
+      pointer('pointerdown', { pointerId: 1, pointerType: 'pen', pressure: 0.5 })
+    );
     expect(sessionSpy).not.toHaveBeenCalled();
     expect(capabilitySpy).not.toHaveBeenCalled();
     expect(h.adapter.getActivePointerIds()).toEqual([]);
@@ -1405,7 +1675,17 @@ describe('freehandWebAdapter: 通知重入与 destroy 恢复', () => {
   it('rect origin 非有限：down 原子拒绝不建 owner', () => {
     const h = setup();
     h.host.getBoundingClientRect = () =>
-      ({ left: Number.NaN, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+      ({
+        left: Number.NaN,
+        top: 0,
+        right: 0,
+        bottom: 0,
+        width: 0,
+        height: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
     fireHost(h.host, pointer('pointerdown', { ...BASE, pressure: 0.5, clientX: 10, clientY: 0 }));
     expect(h.adapter.getActivePointerIds()).toEqual([]);
     expect(h.controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
@@ -1416,7 +1696,17 @@ describe('freehandWebAdapter: 通知重入与 destroy 恢复', () => {
     let rectReads = 0;
     h.host.getBoundingClientRect = () => {
       rectReads += 1;
-      return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+      return {
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+        width: 0,
+        height: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect;
     };
     fireHost(h.host, pointer('pointerdown', { ...BASE, pressure: 0.5 }));
     const afterDown = rectReads;
@@ -1425,7 +1715,9 @@ describe('freehandWebAdapter: 通知重入与 destroy 恢复', () => {
       pointer('pointermove', { ...BASE, clientX: 2, clientY: 2 }),
       pointer('pointermove', { ...BASE, clientX: 3, clientY: 3 }),
     ];
-    fireWindow(pointer('pointermove', { ...BASE, clientX: 9, clientY: 9, coalescedEvents: coalesced }));
+    fireWindow(
+      pointer('pointermove', { ...BASE, clientX: 9, clientY: 9, coalescedEvents: coalesced })
+    );
     expect(rectReads - afterDown).toBeLessThanOrEqual(1);
     // 真实非空 batch：down + 3 coalesced = 4 采样。
     const snap = h.controller.getSnapshot('interaction').activeFreehand;
@@ -1443,15 +1735,18 @@ describe('freehandWebAdapter: 通知重入与 destroy 恢复', () => {
 
   it('destroy 后 retryCommit 仍可恢复 pending', () => {
     let allocatorCalls = 0;
-    const h = setup({}, {
-      allocateObjectId: () => {
-        allocatorCalls += 1;
-        if (allocatorCalls === 1) {
-          throw new Error('fail');
-        }
-        return 'obj-retry';
-      },
-    });
+    const h = setup(
+      {},
+      {
+        allocateObjectId: () => {
+          allocatorCalls += 1;
+          if (allocatorCalls === 1) {
+            throw new Error('fail');
+          }
+          return 'obj-retry';
+        },
+      }
+    );
     drawStroke(h, { pointerType: 'pen' });
     const failed = h.notices.find((notice) => notice.phase === 'commit' && !notice.result.ok);
     h.adapter.destroy();
@@ -1476,7 +1771,13 @@ describe('freehandWebAdapter: mustfix 反例', () => {
         calls.n += 1;
         if (calls.n === 1) {
           box.h?.host.dispatchEvent(
-            pointer('pointerdown', { pointerId: 2, pointerType: 'pen', isPrimary: false, buttons: 1, pressure: 0.5 })
+            pointer('pointerdown', {
+              pointerId: 2,
+              pointerType: 'pen',
+              isPrimary: false,
+              buttons: 1,
+              pressure: 0.5,
+            })
           );
         }
         return `s${calls.n}`;
@@ -1502,7 +1803,13 @@ describe('freehandWebAdapter: mustfix 反例', () => {
         calls.n += 1;
         if (calls.n === 1) {
           box.h?.host.dispatchEvent(
-            pointer('pointerdown', { pointerId: 2, pointerType: 'pen', isPrimary: false, buttons: 1, pressure: 0.5 })
+            pointer('pointerdown', {
+              pointerId: 2,
+              pointerType: 'pen',
+              isPrimary: false,
+              buttons: 1,
+              pressure: 0.5,
+            })
           );
         }
         return `c${calls.n}`;
@@ -1710,11 +2017,23 @@ describe('freehandWebAdapter: callback barrier', () => {
   const B = { pointerId: 1, pointerType: 'pen', isPrimary: true, buttons: 1 } as const;
   const nestedDown = (host: HTMLElement, pointerId: number) =>
     host.dispatchEvent(
-      pointer('pointerdown', { pointerId, pointerType: 'pen', isPrimary: false, buttons: 1, pressure: 0.5 })
+      pointer('pointerdown', {
+        pointerId,
+        pointerType: 'pen',
+        isPrimary: false,
+        buttons: 1,
+        pressure: 0.5,
+      })
     );
   const nestedUp = (pointerId: number) =>
     window.dispatchEvent(
-      pointer('pointerup', { pointerId, pointerType: 'pen', isPrimary: false, buttons: 0, pressure: 0 })
+      pointer('pointerup', {
+        pointerId,
+        pointerType: 'pen',
+        isPrimary: false,
+        buttons: 0,
+        pressure: 0,
+      })
     );
 
   it('begin：订阅先 blur，onResult begin 内完整 down/up 均忽略，仅外层 session', () => {

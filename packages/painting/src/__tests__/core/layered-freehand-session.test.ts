@@ -210,7 +210,7 @@ describe('freehandSession: brush 快照', () => {
         thinning: 0.9,
         smoothing: 0.1,
         streamline: 0.2,
-        '__pf': true,
+        __pf: true,
       } as unknown as BrushSnapshot,
     });
     const snapshot = collecting(session);
@@ -254,7 +254,10 @@ describe('freehandSession: brush 快照', () => {
     for (const brush of badBrushes) {
       const result = beginFreehandSession(makeBegin({ brush }));
       expect(result.ok).toBe(false);
-      if (!result.ok) {
+      if (result.ok) {
+        throw new Error('Test precondition failed: !result.ok');
+      }
+      {
         expect(result.code).toBe('invalid-input');
       }
     }
@@ -277,7 +280,10 @@ describe('freehandSession: envelope identity 校验', () => {
     for (const overrides of mismatches) {
       const result = session.update({ type: 'update', batch: makeBatch(overrides) });
       expect(result.ok).toBe(false);
-      if (!result.ok) {
+      if (result.ok) {
+        throw new Error('Test precondition failed: !result.ok');
+      }
+      {
         expect(result.code).toBe('identity-mismatch');
       }
     }
@@ -291,7 +297,10 @@ describe('freehandSession: envelope identity 校验', () => {
       batch: makeBatch({ batchSequence: 1, pointerId: 999, samples: [makeSample(2, 'up')] }),
     });
     expect(result.ok).toBe(false);
-    if (!result.ok) {
+    if (result.ok) {
+      throw new Error('Test precondition failed: !result.ok');
+    }
+    {
       expect(result.code).toBe('identity-mismatch');
     }
     expect(session.getSnapshot().status).toBe('collecting');
@@ -302,10 +311,17 @@ describe('freehandSession: envelope identity 校验', () => {
 
     const switched = session.update({
       type: 'update',
-      batch: makeBatch({ batchSequence: 1, coordinateSpace: 'world', samples: [makeSample(2, 'move')] }),
+      batch: makeBatch({
+        batchSequence: 1,
+        coordinateSpace: 'world',
+        samples: [makeSample(2, 'move')],
+      }),
     });
     expect(switched.ok).toBe(false);
-    if (!switched.ok) {
+    if (switched.ok) {
+      throw new Error('Test precondition failed: !switched.ok');
+    }
+    {
       expect(switched.code).toBe('coordinate-space-mismatch');
     }
 
@@ -314,7 +330,10 @@ describe('freehandSession: envelope identity 校验', () => {
       batch: makeBatch({ batchSequence: 1, viewportRevision: 2, samples: [makeSample(2, 'move')] }),
     });
     expect(stale.ok).toBe(false);
-    if (!stale.ok) {
+    if (stale.ok) {
+      throw new Error('Test precondition failed: !stale.ok');
+    }
+    {
       expect(stale.code).toBe('viewport-revision-mismatch');
     }
   });
@@ -322,7 +341,10 @@ describe('freehandSession: envelope identity 校验', () => {
   it('begin 非 begin 批次序号 / viewport revision 不匹配 → 拒绝', () => {
     const badSeq = beginFreehandSession(makeBegin({ batch: makeBatch({ batchSequence: 1 }) }));
     expect(badSeq.ok).toBe(false);
-    if (!badSeq.ok) {
+    if (badSeq.ok) {
+      throw new Error('Test precondition failed: !badSeq.ok');
+    }
+    {
       expect(badSeq.code).toBe('batch-sequence-mismatch');
     }
 
@@ -330,7 +352,10 @@ describe('freehandSession: envelope identity 校验', () => {
       makeBegin({ batch: makeBatch({ viewportRevision: 9 }) })
     );
     expect(badRevision.ok).toBe(false);
-    if (!badRevision.ok) {
+    if (badRevision.ok) {
+      throw new Error('Test precondition failed: !badRevision.ok');
+    }
+    {
       expect(badRevision.code).toBe('viewport-revision-mismatch');
     }
   });
@@ -350,7 +375,10 @@ describe('freehandSession: 批次与样本序号原子性', () => {
         batch: makeBatch({ batchSequence: sequence, samples: [makeSample(2, 'move')] }),
       });
       expect(result.ok).toBe(false);
-      if (!result.ok) {
+      if (result.ok) {
+        throw new Error('Test precondition failed: !result.ok');
+      }
+      {
         expect(result.code).toBe('batch-sequence-mismatch');
       }
     }
@@ -365,7 +393,10 @@ describe('freehandSession: 批次与样本序号原子性', () => {
         batch: makeBatch({ batchSequence: 1, samples }),
       });
       expect(result.ok).toBe(false);
-      if (!result.ok) {
+      if (result.ok) {
+        throw new Error('Test precondition failed: !result.ok');
+      }
+      {
         expect(result.code).toBe('sample-sequence-mismatch');
       }
     }
@@ -380,7 +411,10 @@ describe('freehandSession: 批次与样本序号原子性', () => {
     });
     const rejected = session.update({ type: 'update', batch: badBatch });
     expect(rejected.ok).toBe(false);
-    if (!rejected.ok) {
+    if (rejected.ok) {
+      throw new Error('Test precondition failed: !rejected.ok');
+    }
+    {
       expect(rejected.code).toBe('invalid-input');
     }
     // 原子：未部分追加，序号可重试。
@@ -403,7 +437,10 @@ describe('freehandSession: 批次与样本序号原子性', () => {
       batch: makeBatch({ batchSequence: 1, samples: [makeSample(2, 'down')] }),
     });
     expect(updateDown.ok).toBe(false);
-    if (!updateDown.ok) {
+    if (updateDown.ok) {
+      throw new Error('Test precondition failed: !updateDown.ok');
+    }
+    {
       expect(updateDown.code).toBe('phase-mismatch');
     }
 
@@ -412,7 +449,10 @@ describe('freehandSession: 批次与样本序号原子性', () => {
       batch: makeBatch({ batchSequence: 1, samples: [makeSample(2, 'up'), makeSample(3, 'up')] }),
     });
     expect(endUpTwice.ok).toBe(false);
-    if (!endUpTwice.ok) {
+    if (endUpTwice.ok) {
+      throw new Error('Test precondition failed: !endUpTwice.ok');
+    }
+    {
       expect(endUpTwice.code).toBe('phase-mismatch');
     }
   });
@@ -477,7 +517,10 @@ describe('freehandSession: 样本保真', () => {
         makeBegin({ batch: makeBatch({ samples: [makeSample(0, 'down'), bad] }) })
       );
       expect(result.ok).toBe(false);
-      if (!result.ok) {
+      if (result.ok) {
+        throw new Error('Test precondition failed: !result.ok');
+      }
+      {
         expect(result.code).toBe('invalid-input');
       }
     }
@@ -514,9 +557,7 @@ describe('freehandSession: 坐标空间与 viewport', () => {
     const session = startSession({
       batch: makeBatch({
         coordinateSpace: 'world',
-        samples: [
-          { sequence: 0, x: 123.5, y: -77.25, pressure: 0.4, time: 5, phase: 'down' },
-        ],
+        samples: [{ sequence: 0, x: 123.5, y: -77.25, pressure: 0.4, time: 5, phase: 'down' }],
       }),
     });
     const snapshot = collecting(session);
@@ -536,7 +577,10 @@ describe('freehandSession: 坐标空间与 viewport', () => {
       })
     );
     expect(result.ok).toBe(false);
-    if (!result.ok) {
+    if (result.ok) {
+      throw new Error('Test precondition failed: !result.ok');
+    }
+    {
       expect(result.code).toBe('invalid-input');
     }
   });
@@ -559,7 +603,12 @@ describe('freehandSession: cancel', () => {
         reason,
       });
       expect(result.ok).toBe(true);
-      if (result.ok && result.value.status === 'canceled') {
+      if (!(result.ok && result.value.status === 'canceled')) {
+        throw new Error(
+          "Test precondition failed: result.ok && result.value.status === 'canceled'"
+        );
+      }
+      {
         expect(result.value.reason).toBe(reason);
         expect(result.value.sessionId).toBe('sess-1');
         expect(result.value.source).toBe('pen');
@@ -584,7 +633,10 @@ describe('freehandSession: cancel', () => {
       batch: makeBatch({ batchSequence: 1, samples: [makeSample(2, 'up')] }),
     });
     expect(lateEnd.ok).toBe(false);
-    if (!lateEnd.ok) {
+    if (lateEnd.ok) {
+      throw new Error('Test precondition failed: !lateEnd.ok');
+    }
+    {
       expect(lateEnd.code).toBe('not-collecting');
     }
 
@@ -608,7 +660,10 @@ describe('freehandSession: cancel', () => {
       reason: 'explicit',
     });
     expect(wrongIdentity.ok).toBe(false);
-    if (!wrongIdentity.ok) {
+    if (wrongIdentity.ok) {
+      throw new Error('Test precondition failed: !wrongIdentity.ok');
+    }
+    {
       expect(wrongIdentity.code).toBe('identity-mismatch');
     }
 
@@ -621,7 +676,10 @@ describe('freehandSession: cancel', () => {
       reason: 'explicit',
     });
     expect(staleSequence.ok).toBe(false);
-    if (!staleSequence.ok) {
+    if (staleSequence.ok) {
+      throw new Error('Test precondition failed: !staleSequence.ok');
+    }
+    {
       expect(staleSequence.code).toBe('batch-sequence-mismatch');
     }
 
@@ -645,12 +703,18 @@ describe('freehandSession: commit 反馈', () => {
       reason: 'explicit',
     });
     expect(result.ok).toBe(false);
-    if (!result.ok) {
+    if (result.ok) {
+      throw new Error('Test precondition failed: !result.ok');
+    }
+    {
       expect(result.code).toBe('not-collecting');
     }
     const snapshot = session.getSnapshot();
     expect(snapshot.status).toBe('awaiting-commit');
-    if (snapshot.status === 'awaiting-commit') {
+    if (!(snapshot.status === 'awaiting-commit')) {
+      throw new Error("Test precondition failed: snapshot.status === 'awaiting-commit'");
+    }
+    {
       expect(snapshot.candidate).toBe(candidate);
     }
   });
@@ -660,7 +724,12 @@ describe('freehandSession: commit 反馈', () => {
 
     const failed = session.applyCommitFeedback({ type: 'commit-failed', commitId: 'commit-1' });
     expect(failed.ok).toBe(true);
-    if (failed.ok && failed.value.status === 'awaiting-commit') {
+    if (!(failed.ok && failed.value.status === 'awaiting-commit')) {
+      throw new Error(
+        "Test precondition failed: failed.ok && failed.value.status === 'awaiting-commit'"
+      );
+    }
+    {
       expect(failed.value.candidate).toBe(candidate);
       expect(failed.value.candidate.commitId).toBe('commit-1');
     }
@@ -672,7 +741,12 @@ describe('freehandSession: commit 反馈', () => {
       documentRevision: 3,
     });
     expect(success.ok).toBe(true);
-    if (success.ok && success.value.status === 'committed') {
+    if (!(success.ok && success.value.status === 'committed')) {
+      throw new Error(
+        "Test precondition failed: success.ok && success.value.status === 'committed'"
+      );
+    }
+    {
       expect(success.value.objectId).toBe('obj-9');
       expect(success.value.documentRevision).toBe(3);
     }
@@ -682,7 +756,10 @@ describe('freehandSession: commit 反馈', () => {
     const { session } = endStroke();
     const result = session.applyCommitFeedback({ type: 'commit-failed', commitId: 'other' });
     expect(result.ok).toBe(false);
-    if (!result.ok) {
+    if (result.ok) {
+      throw new Error('Test precondition failed: !result.ok');
+    }
+    {
       expect(result.code).toBe('commit-id-mismatch');
     }
     expect(session.getSnapshot().status).toBe('awaiting-commit');
@@ -707,13 +784,19 @@ describe('freehandSession: commit 反馈', () => {
       reason: 'explicit',
     });
     expect(lateCancel.ok).toBe(false);
-    if (!lateCancel.ok) {
+    if (lateCancel.ok) {
+      throw new Error('Test precondition failed: !lateCancel.ok');
+    }
+    {
       expect(lateCancel.code).toBe('not-collecting');
     }
 
     const lateFailed = session.applyCommitFeedback({ type: 'commit-failed', commitId: 'commit-1' });
     expect(lateFailed.ok).toBe(false);
-    if (!lateFailed.ok) {
+    if (lateFailed.ok) {
+      throw new Error('Test precondition failed: !lateFailed.ok');
+    }
+    {
       expect(lateFailed.code).toBe('not-collecting');
     }
 
@@ -728,7 +811,10 @@ describe('freehandSession: commit 反馈', () => {
       commitId: 'commit-1',
     } as unknown as Parameters<FreehandSession['applyCommitFeedback']>[0]);
     expect(unknownType.ok).toBe(false);
-    if (!unknownType.ok) {
+    if (unknownType.ok) {
+      throw new Error('Test precondition failed: !unknownType.ok');
+    }
+    {
       expect(unknownType.code).toBe('invalid-input');
     }
 
@@ -739,7 +825,10 @@ describe('freehandSession: commit 反馈', () => {
       documentRevision: 1,
     });
     expect(badObjectId.ok).toBe(false);
-    if (!badObjectId.ok) {
+    if (badObjectId.ok) {
+      throw new Error('Test precondition failed: !badObjectId.ok');
+    }
+    {
       expect(badObjectId.code).toBe('invalid-input');
     }
     expect(session.getSnapshot().status).toBe('awaiting-commit');
@@ -756,7 +845,10 @@ describe('freehandSession: 运行时 guard', () => {
 
     const nullUpdate = session.update(null as unknown as FreehandSessionUpdate);
     expect(nullUpdate.ok).toBe(false);
-    if (!nullUpdate.ok) {
+    if (nullUpdate.ok) {
+      throw new Error('Test precondition failed: !nullUpdate.ok');
+    }
+    {
       expect(nullUpdate.code).toBe('invalid-input');
     }
 
@@ -765,19 +857,28 @@ describe('freehandSession: 运行时 guard', () => {
       batch: makeBatch({ batchSequence: 1 }),
     } as unknown as FreehandSessionUpdate);
     expect(wrongUpdateType.ok).toBe(false);
-    if (!wrongUpdateType.ok) {
+    if (wrongUpdateType.ok) {
+      throw new Error('Test precondition failed: !wrongUpdateType.ok');
+    }
+    {
       expect(wrongUpdateType.code).toBe('invalid-input');
     }
 
     const nullEnd = session.end(undefined as unknown as FreehandSessionEnd);
     expect(nullEnd.ok).toBe(false);
-    if (!nullEnd.ok) {
+    if (nullEnd.ok) {
+      throw new Error('Test precondition failed: !nullEnd.ok');
+    }
+    {
       expect(nullEnd.code).toBe('invalid-input');
     }
 
     const nullCancel = session.cancel(null as unknown as FreehandSessionCancel);
     expect(nullCancel.ok).toBe(false);
-    if (!nullCancel.ok) {
+    if (nullCancel.ok) {
+      throw new Error('Test precondition failed: !nullCancel.ok');
+    }
+    {
       expect(nullCancel.code).toBe('invalid-input');
     }
 
@@ -794,7 +895,10 @@ describe('freehandSession: 运行时 guard', () => {
       makeBegin({ viewportSnapshot: { revision: 1, viewport: { scale: 100, tx: 0, ty: 0 } } })
     );
     expect(outOfRangeViewport.ok).toBe(false);
-    if (!outOfRangeViewport.ok) {
+    if (outOfRangeViewport.ok) {
+      throw new Error('Test precondition failed: !outOfRangeViewport.ok');
+    }
+    {
       expect(outOfRangeViewport.code).toBe('invalid-input');
     }
   });
@@ -807,7 +911,10 @@ describe('freehandSession: 运行时 guard', () => {
       batch: null,
     } as unknown as FreehandSessionUpdate);
     expect(nullBatchUpdate.ok).toBe(false);
-    if (!nullBatchUpdate.ok) {
+    if (nullBatchUpdate.ok) {
+      throw new Error('Test precondition failed: !nullBatchUpdate.ok');
+    }
+    {
       expect(nullBatchUpdate.code).toBe('invalid-input');
     }
 
@@ -816,7 +923,10 @@ describe('freehandSession: 运行时 guard', () => {
       batch: undefined,
     } as unknown as FreehandSessionEnd);
     expect(nullBatchEnd.ok).toBe(false);
-    if (!nullBatchEnd.ok) {
+    if (nullBatchEnd.ok) {
+      throw new Error('Test precondition failed: !nullBatchEnd.ok');
+    }
+    {
       expect(nullBatchEnd.code).toBe('invalid-input');
     }
 
@@ -835,10 +945,16 @@ describe('freehandSession: 快照稳定性', () => {
 
     const result = session.update({
       type: 'update',
-      batch: makeBatch({ batchSequence: 1, samples: [makeSample(2, 'move'), makeSample(3, 'move')] }),
+      batch: makeBatch({
+        batchSequence: 1,
+        samples: [makeSample(2, 'move'), makeSample(3, 'move')],
+      }),
     });
     expect(result.ok).toBe(true);
-    if (result.ok) {
+    if (!result.ok) {
+      throw new Error('Test precondition failed: result.ok');
+    }
+    {
       expect(result.value).toBeUndefined();
     }
 
@@ -869,15 +985,19 @@ describe('freehandSession: 快照稳定性', () => {
       documentRevision: 3,
     });
     expect(success.ok).toBe(true);
-    if (success.ok) {
+    if (!success.ok) {
+      throw new Error('Test precondition failed: success.ok');
+    }
+    {
       expect(Object.isFrozen(success.value)).toBe(true);
     }
     // 已提交快照的 candidate 仍为同一冻结候选。
     const snapshot = session.getSnapshot();
-    if (snapshot.status === 'committed') {
+    if (!(snapshot.status === 'committed')) {
+      throw new Error("Test precondition failed: snapshot.status === 'committed'");
+    }
+    {
       expect(snapshot.candidate).toBe(candidate);
     }
   });
 });
-
-

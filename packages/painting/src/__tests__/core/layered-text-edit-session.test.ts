@@ -19,7 +19,7 @@ import {
   type LayeredTextEditSession,
   type LayeredTextEditTarget,
 } from '../../core/layeredTextEditSession';
-import { IDENTITY_TRANSFORM, type AffineTransform, type Bounds } from '../../model/document';
+import { IDENTITY_TRANSFORM, type AffineTransform } from '../../model/document';
 
 function unwrap<T>(result: LayeredTextEditResult<T>): T {
   if (!result.ok) {
@@ -38,7 +38,9 @@ function draft(overrides: Partial<LayeredTextEditDraft> = {}): LayeredTextEditDr
   };
 }
 
-function newTarget(overrides: Partial<{ expectedDocumentRevision: number; transform: AffineTransform }> = {}): LayeredTextEditTarget {
+function newTarget(
+  overrides: Partial<{ expectedDocumentRevision: number; transform: AffineTransform }> = {}
+): LayeredTextEditTarget {
   return {
     kind: 'new',
     expectedDocumentRevision: overrides.expectedDocumentRevision ?? 0,
@@ -47,7 +49,11 @@ function newTarget(overrides: Partial<{ expectedDocumentRevision: number; transf
 }
 
 function existingTarget(
-  overrides: Partial<{ expectedDocumentRevision: number; objectId: string; expectedObjectRevision: number }> = {}
+  overrides: Partial<{
+    expectedDocumentRevision: number;
+    objectId: string;
+    expectedObjectRevision: number;
+  }> = {}
 ): LayeredTextEditTarget {
   return {
     kind: 'existing',
@@ -57,13 +63,19 @@ function existingTarget(
   };
 }
 
-function begin(target: LayeredTextEditTarget, initial: LayeredTextEditDraft = draft()): LayeredTextEditSession {
+function begin(
+  target: LayeredTextEditTarget,
+  initial: LayeredTextEditDraft = draft()
+): LayeredTextEditSession {
   return unwrap(beginLayeredTextEditSession(target, initial));
 }
 
 function expectCode(result: LayeredTextEditResult<unknown>, code: string): void {
   expect(result.ok).toBe(false);
-  if (!result.ok) {
+  if (result.ok) {
+    throw new Error('Test precondition failed: !result.ok');
+  }
+  {
     expect(result.error.code).toBe(code);
   }
 }
@@ -78,7 +90,10 @@ describe('layeredTextEditSession: begin / draft', () => {
     expect(unwrap(session.requestCommit())).toBeUndefined();
     const candidate = unwrap(session.getCandidate());
     expect(candidate.kind).toBe('create');
-    if (candidate.kind === 'create') {
+    if (!(candidate.kind === 'create')) {
+      throw new Error("Test precondition failed: candidate.kind === 'create'");
+    }
+    {
       expect(candidate.draft.content).toBe('hello');
       expect(candidate.target.expectedDocumentRevision).toBe(2);
     }
@@ -138,19 +153,37 @@ describe('layeredTextEditSession: begin / draft', () => {
 
 describe('layeredTextEditSession: begin 非法', () => {
   it('bad target（未知 kind / objectId 空 / revision 非法）→ invalid-input', () => {
-    expectCode(beginLayeredTextEditSession({ kind: 'weird' } as unknown as LayeredTextEditTarget, draft()), 'invalid-input');
-    expectCode(beginLayeredTextEditSession(existingTarget({ objectId: '' }), draft()), 'invalid-input');
-    expectCode(beginLayeredTextEditSession(existingTarget({ expectedObjectRevision: -1 }), draft()), 'invalid-input');
-    expectCode(beginLayeredTextEditSession(newTarget({ expectedDocumentRevision: 1.5 }), draft()), 'invalid-input');
+    expectCode(
+      beginLayeredTextEditSession({ kind: 'weird' } as unknown as LayeredTextEditTarget, draft()),
+      'invalid-input'
+    );
+    expectCode(
+      beginLayeredTextEditSession(existingTarget({ objectId: '' }), draft()),
+      'invalid-input'
+    );
+    expectCode(
+      beginLayeredTextEditSession(existingTarget({ expectedObjectRevision: -1 }), draft()),
+      'invalid-input'
+    );
+    expectCode(
+      beginLayeredTextEditSession(newTarget({ expectedDocumentRevision: 1.5 }), draft()),
+      'invalid-input'
+    );
   });
 
   it('bad transform（NaN / 奇异）→ invalid-input', () => {
     expectCode(
-      beginLayeredTextEditSession(newTarget({ transform: { ...IDENTITY_TRANSFORM, a: Number.NaN } }), draft()),
+      beginLayeredTextEditSession(
+        newTarget({ transform: { ...IDENTITY_TRANSFORM, a: Number.NaN } }),
+        draft()
+      ),
       'invalid-input'
     );
     expectCode(
-      beginLayeredTextEditSession(newTarget({ transform: { a: 0, b: 0, c: 0, d: 0, tx: 0, ty: 0 } }), draft()),
+      beginLayeredTextEditSession(
+        newTarget({ transform: { a: 0, b: 0, c: 0, d: 0, tx: 0, ty: 0 } }),
+        draft()
+      ),
       'invalid-input'
     );
   });
@@ -159,14 +192,23 @@ describe('layeredTextEditSession: begin 非法', () => {
     expectCode(beginLayeredTextEditSession(newTarget(), draft({ fontSize: 0 })), 'invalid-input');
     expectCode(beginLayeredTextEditSession(newTarget(), draft({ color: '' })), 'invalid-input');
     expectCode(
-      beginLayeredTextEditSession(newTarget(), draft({ localBounds: { minX: 5, minY: 0, maxX: 0, maxY: 5 } })),
+      beginLayeredTextEditSession(
+        newTarget(),
+        draft({ localBounds: { minX: 5, minY: 0, maxX: 0, maxY: 5 } })
+      ),
       'invalid-input'
     );
   });
 
   it('runtime undefined / 非对象 → invalid-input（不 throw）', () => {
-    expectCode(beginLayeredTextEditSession(undefined as unknown as LayeredTextEditTarget, draft()), 'invalid-input');
-    expectCode(beginLayeredTextEditSession(newTarget(), undefined as unknown as LayeredTextEditDraft), 'invalid-input');
+    expectCode(
+      beginLayeredTextEditSession(undefined as unknown as LayeredTextEditTarget, draft()),
+      'invalid-input'
+    );
+    expectCode(
+      beginLayeredTextEditSession(newTarget(), undefined as unknown as LayeredTextEditDraft),
+      'invalid-input'
+    );
   });
 });
 
@@ -225,7 +267,10 @@ describe('layeredTextEditSession: composition', () => {
     expect(done.isComposing).toBe(false);
     const candidate = unwrap(session.getCandidate());
     expect(candidate.kind).toBe('create');
-    if (candidate.kind === 'create') {
+    if (!(candidate.kind === 'create')) {
+      throw new Error("Test precondition failed: candidate.kind === 'create'");
+    }
+    {
       expect(candidate.draft.content).toBe('你好🙂');
     }
   });
@@ -316,7 +361,12 @@ describe('layeredTextEditSession: awaiting', () => {
 
 describe('layeredTextEditSession: failed 与 retry', () => {
   it('四种 failure reason 保候选/target，可 retry', () => {
-    for (const reason of ['stale-target', 'allocation-failed', 'revision-exhausted', 'internal'] as const) {
+    for (const reason of [
+      'stale-target',
+      'allocation-failed',
+      'revision-exhausted',
+      'internal',
+    ] as const) {
       const session = begin(existingTarget());
       unwrap(session.requestCommit());
       const candidate = unwrap(session.getCandidate());
@@ -329,12 +379,17 @@ describe('layeredTextEditSession: failed 与 retry', () => {
   });
 
   it('stale 失败后不换 ID/revs', () => {
-    const session = begin(existingTarget({ objectId: 'text-9', expectedObjectRevision: 4, expectedDocumentRevision: 7 }));
+    const session = begin(
+      existingTarget({ objectId: 'text-9', expectedObjectRevision: 4, expectedDocumentRevision: 7 })
+    );
     unwrap(session.requestCommit());
     unwrap(session.applyCommitFeedback({ type: 'commit-failed', reason: 'stale-target' }));
     const snapshot = session.getSnapshot();
     expect(snapshot.target.kind).toBe('existing');
-    if (snapshot.target.kind === 'existing') {
+    if (!(snapshot.target.kind === 'existing')) {
+      throw new Error("Test precondition failed: snapshot.target.kind === 'existing'");
+    }
+    {
       expect(snapshot.target.objectId).toBe('text-9');
       expect(snapshot.target.expectedObjectRevision).toBe(4);
       expect(snapshot.target.expectedDocumentRevision).toBe(7);
@@ -347,7 +402,11 @@ describe('layeredTextEditSession: failed 与 retry', () => {
 // ---------------------------------------------------------------------------
 
 describe('layeredTextEditSession: success matching', () => {
-  const succeed = (docrev: number, objectId: string | null, objectRevision: number | null): LayeredTextEditFeedback => ({
+  const succeed = (
+    docrev: number,
+    objectId: string | null,
+    objectRevision: number | null
+  ): LayeredTextEditFeedback => ({
     type: 'commit-succeeded',
     documentRevision: docrev,
     objectId,
@@ -378,7 +437,9 @@ describe('layeredTextEditSession: success matching', () => {
   });
 
   it('update：objectId 匹配、objectRevision = expected+1 接受', () => {
-    const session = begin(existingTarget({ expectedDocumentRevision: 3, objectId: 'text-1', expectedObjectRevision: 1 }));
+    const session = begin(
+      existingTarget({ expectedDocumentRevision: 3, objectId: 'text-1', expectedObjectRevision: 1 })
+    );
     unwrap(session.requestCommit());
     unwrap(session.applyCommitFeedback(succeed(4, 'text-1', 2)));
     expect(session.getSnapshot().status).toBe('committed');
@@ -428,14 +489,22 @@ describe('layeredTextEditSession: 终态', () => {
     const session = committedSession();
     unwrap(session.applyCommitFeedback(success));
     expectCode(
-      session.applyCommitFeedback({ type: 'commit-succeeded', documentRevision: 5, objectId: 'text-1', objectRevision: 3 }),
+      session.applyCommitFeedback({
+        type: 'commit-succeeded',
+        documentRevision: 5,
+        objectId: 'text-1',
+        objectRevision: 3,
+      }),
       'session-finalized'
     );
   });
 
   it('committed 后 late failed 不回退；cancel 不回滚', () => {
     const session = committedSession();
-    expectCode(session.applyCommitFeedback({ type: 'commit-failed', reason: 'internal' }), 'session-finalized');
+    expectCode(
+      session.applyCommitFeedback({ type: 'commit-failed', reason: 'internal' }),
+      'session-finalized'
+    );
     expectCode(session.cancel(), 'session-finalized');
     expect(session.getSnapshot().status).toBe('committed');
   });
@@ -507,14 +576,21 @@ describe('layeredTextEditSession: MAX_SAFE_INTEGER', () => {
 // ---------------------------------------------------------------------------
 
 describe('layeredTextEditSession: 边界精修', () => {
-  const suc = (documentRevision: number, objectId: string | null, objectRevision: number | null): LayeredTextEditFeedback => ({
+  const suc = (
+    documentRevision: number,
+    objectId: string | null,
+    objectRevision: number | null
+  ): LayeredTextEditFeedback => ({
     type: 'commit-succeeded',
     documentRevision,
     objectId,
     objectRevision,
   });
 
-  const expectMismatchPreserving = (session: LayeredTextEditSession, feedback: LayeredTextEditFeedback): void => {
+  const expectMismatchPreserving = (
+    session: LayeredTextEditSession,
+    feedback: LayeredTextEditFeedback
+  ): void => {
     const candidate = unwrap(session.getCandidate());
     expectCode(session.applyCommitFeedback(feedback), 'feedback-mismatch');
     expect(session.getSnapshot().status).toBe('awaiting-commit');
@@ -523,7 +599,10 @@ describe('layeredTextEditSession: 边界精修', () => {
 
   it('MAX_SAFE expectedObjectRevision：update 候选，objrev null / MAX_SAFE 均 mismatch 保候选', () => {
     const session = begin(
-      existingTarget({ expectedDocumentRevision: 3, expectedObjectRevision: Number.MAX_SAFE_INTEGER })
+      existingTarget({
+        expectedDocumentRevision: 3,
+        expectedObjectRevision: Number.MAX_SAFE_INTEGER,
+      })
     );
     unwrap(session.requestCommit());
     expect(unwrap(session.getCandidate()).kind).toBe('update');
@@ -533,13 +612,24 @@ describe('layeredTextEditSession: 边界精修', () => {
   });
 
   it('success 排错表：create objrev 0/2 与 docrev 4 错；update rev 0/1/3 与 doc 5 错', () => {
-    for (const [doc, rev] of [[3, 0], [3, 2], [4, 1]] as const) {
+    for (const [doc, rev] of [
+      [3, 0],
+      [3, 2],
+      [4, 1],
+    ] as const) {
       const session = begin(newTarget({ expectedDocumentRevision: 2 }));
       unwrap(session.requestCommit());
       expectMismatchPreserving(session, suc(doc, 'obj-1', rev));
     }
-    for (const [doc, rev] of [[4, 0], [4, 1], [4, 3], [5, 2]] as const) {
-      const session = begin(existingTarget({ expectedDocumentRevision: 3, expectedObjectRevision: 1 }));
+    for (const [doc, rev] of [
+      [4, 0],
+      [4, 1],
+      [4, 3],
+      [5, 2],
+    ] as const) {
+      const session = begin(
+        existingTarget({ expectedDocumentRevision: 3, expectedObjectRevision: 1 })
+      );
       unwrap(session.requestCommit());
       expectMismatchPreserving(session, suc(doc, 'text-1', rev));
     }
@@ -547,18 +637,27 @@ describe('layeredTextEditSession: 边界精修', () => {
 
   it('noop 候选含深冻结 target（expectedDocumentRevision/transform）', () => {
     const transform: AffineTransform = { ...IDENTITY_TRANSFORM };
-    const session = begin(newTarget({ expectedDocumentRevision: 5, transform }), draft({ content: '' }));
+    const session = begin(
+      newTarget({ expectedDocumentRevision: 5, transform }),
+      draft({ content: '' })
+    );
     unwrap(session.requestCommit());
     const candidate = unwrap(session.getCandidate());
     expect(candidate.kind).toBe('noop');
     expect(candidate.target).toBe(session.getSnapshot().target);
     expect(Object.isFrozen(candidate.target)).toBe(true);
-    if (candidate.target.kind === 'new') {
+    if (!(candidate.target.kind === 'new')) {
+      throw new Error("Test precondition failed: candidate.target.kind === 'new'");
+    }
+    {
       expect(candidate.target.expectedDocumentRevision).toBe(5);
       expect(Object.isFrozen(candidate.target.transform)).toBe(true);
     }
     (transform as { a: number }).a = 99;
-    if (candidate.target.kind === 'new') {
+    if (!(candidate.target.kind === 'new')) {
+      throw new Error("Test precondition failed: candidate.target.kind === 'new'");
+    }
+    {
       expect(candidate.target.transform.a).toBe(1);
     }
   });
@@ -568,11 +667,16 @@ describe('layeredTextEditSession: 边界精修', () => {
     const before = session.getSnapshot().draft;
     expectCode(session.updateDraft({ content: 'bad', fontSize: -1 }), 'invalid-input');
     expect(session.getSnapshot().draft).toBe(before);
-    expectCode(session.updateDraft({ content: undefined } as unknown as { content: string }), 'invalid-input');
+    expectCode(
+      session.updateDraft({ content: undefined } as unknown as { content: string }),
+      'invalid-input'
+    );
     expect(session.getSnapshot().draft).toBe(before);
 
     unwrap(session.updateDraft({ unknownField: 1 } as unknown as { content: string }));
-    expect(Object.prototype.hasOwnProperty.call(session.getSnapshot().draft, 'unknownField')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(session.getSnapshot().draft, 'unknownField')).toBe(
+      false
+    );
   });
 
   it('endComposition 真缺 content（{}）原子拒绝后 valid retry；候选嵌套 target/draft/bounds 冻结', () => {
@@ -588,7 +692,10 @@ describe('layeredTextEditSession: 边界精修', () => {
     unwrap(session.endComposition({ content: '你好🙂' }));
     const candidate = unwrap(session.getCandidate());
     expect(candidate.kind).toBe('create');
-    if (candidate.kind === 'create') {
+    if (!(candidate.kind === 'create')) {
+      throw new Error("Test precondition failed: candidate.kind === 'create'");
+    }
+    {
       expect(Object.isFrozen(candidate)).toBe(true);
       expect(Object.isFrozen(candidate.target)).toBe(true);
       expect(Object.isFrozen(candidate.draft)).toBe(true);
@@ -597,7 +704,12 @@ describe('layeredTextEditSession: 边界精修', () => {
     }
     // external new transform mutation 不影响候选/target。
     (transform as { a: number }).a = 42;
-    if (candidate.kind === 'create' && candidate.target.kind === 'new') {
+    if (!(candidate.kind === 'create' && candidate.target.kind === 'new')) {
+      throw new Error(
+        "Test precondition failed: candidate.kind === 'create' && candidate.target.kind === 'new'"
+      );
+    }
+    {
       expect(candidate.target.transform.a).toBe(1);
     }
   });

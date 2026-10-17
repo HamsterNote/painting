@@ -95,7 +95,9 @@ function makeDocument(objects: readonly DocumentObject[] = []): EditorDocument {
   return { schemaVersion: 3, documentRevision: 1, objects };
 }
 
-function baseOptions(overrides: Partial<LayeredEditorControllerOptions> = {}): LayeredEditorControllerOptions {
+function baseOptions(
+  overrides: Partial<LayeredEditorControllerOptions> = {}
+): LayeredEditorControllerOptions {
   return {
     document: makeDocument(),
     viewport: { revision: 1, viewport: VIEWPORT },
@@ -107,10 +109,14 @@ function baseOptions(overrides: Partial<LayeredEditorControllerOptions> = {}): L
 }
 
 function tryCreate(overrides: Partial<LayeredEditorControllerOptions> = {}) {
-  return createLayeredEditorController(baseOptions(overrides)) as AnyResult<LayeredEditorController>;
+  return createLayeredEditorController(
+    baseOptions(overrides)
+  ) as AnyResult<LayeredEditorController>;
 }
 
-function createController(overrides: Partial<LayeredEditorControllerOptions> = {}): LayeredEditorController {
+function createController(
+  overrides: Partial<LayeredEditorControllerOptions> = {}
+): LayeredEditorController {
   return unwrap(tryCreate(overrides));
 }
 
@@ -119,7 +125,15 @@ function sampleInput(
   phase: 'down' | 'move' | 'up',
   overrides: Partial<FreehandSampleInput> = {}
 ): FreehandSampleInput {
-  return { sequence, x: sequence * 4, y: sequence * 3, pressure: 0.5, time: sequence * 16, phase, ...overrides };
+  return {
+    sequence,
+    x: sequence * 4,
+    y: sequence * 3,
+    pressure: 0.5,
+    time: sequence * 16,
+    phase,
+    ...overrides,
+  };
 }
 
 function beginInput(
@@ -160,15 +174,18 @@ function drawStroke(
   unwrap(controller.beginFreehand(begin) as AnyResult<void>);
   if (options.update !== false) {
     unwrap(
-      controller.updateFreehand({ type: 'update', batch: batchLike(begin, 1, [sampleInput(2, 'move')]) }) as AnyResult<void>
+      controller.updateFreehand({
+        type: 'update',
+        batch: batchLike(begin, 1, [sampleInput(2, 'move')]),
+      }) as AnyResult<void>
     );
   }
-  const endBatch = batchLike(
-    begin,
-    options.update === false ? 1 : 2,
-    [sampleInput(options.update === false ? 2 : 3, 'up')]
+  const endBatch = batchLike(begin, options.update === false ? 1 : 2, [
+    sampleInput(options.update === false ? 2 : 3, 'up'),
+  ]);
+  return unwrap(
+    controller.endFreehand({ type: 'end', batch: endBatch }) as AnyResult<FreehandCandidate>
   );
-  return unwrap(controller.endFreehand({ type: 'end', batch: endBatch }) as AnyResult<FreehandCandidate>);
 }
 
 /** 当前文档中 freehand 对象的 commitId 顺序。 */
@@ -180,7 +197,10 @@ function commitIds(controller: LayeredEditorController): readonly string[] {
 }
 
 /** 订阅计数读取器。 */
-function track(controller: LayeredEditorController, channel: Parameters<LayeredEditorController['subscribe']>[0]): () => number {
+function track(
+  controller: LayeredEditorController,
+  channel: Parameters<LayeredEditorController['subscribe']>[0]
+): () => number {
   let count = 0;
   controller.subscribe(channel, () => {
     count += 1;
@@ -208,17 +228,28 @@ describe('layeredEditorController: factory 与 document', () => {
   });
 
   it('非法 schemaVersion / 重复 objectId → invalid-document', () => {
-    const badSchema = tryCreate({ document: { ...makeDocument(), schemaVersion: 2 } as unknown as EditorDocument });
+    const badSchema = tryCreate({
+      document: { ...makeDocument(), schemaVersion: 2 } as unknown as EditorDocument,
+    });
     expect(badSchema.ok).toBe(false);
-    if (!badSchema.ok) {
+    if (badSchema.ok) {
+      throw new Error('Test precondition failed: !badSchema.ok');
+    }
+    {
       expect(badSchema.error.code).toBe('invalid-document');
     }
 
     const dup = tryCreate({
-      document: makeDocument([makeFreehand({ objectId: 'dup' }), makeFreehand({ objectId: 'dup' })]),
+      document: makeDocument([
+        makeFreehand({ objectId: 'dup' }),
+        makeFreehand({ objectId: 'dup' }),
+      ]),
     });
     expect(dup.ok).toBe(false);
-    if (!dup.ok) {
+    if (dup.ok) {
+      throw new Error('Test precondition failed: !dup.ok');
+    }
+    {
       expect(dup.error.code).toBe('invalid-document');
     }
   });
@@ -256,7 +287,9 @@ describe('layeredEditorController: factory 与 document', () => {
     const controller = createController({ document: makeDocument([makeFreehand()]) });
     const before = controller.getSnapshot('document').documentRevision;
 
-    const receipt = unwrap(controller.commitFreehand('seed-commit') as AnyResult<LayeredCommitReceipt>);
+    const receipt = unwrap(
+      controller.commitFreehand('seed-commit') as AnyResult<LayeredCommitReceipt>
+    );
     expect(receipt.status).toBe('duplicate');
     expect(controller.getSnapshot('document').documentRevision).toBe(before);
     expect(controller.getSnapshot('history').canUndo).toBe(false);
@@ -279,7 +312,10 @@ describe('layeredEditorController: 笔迹与提交', () => {
     expect(receipt.commitId).toBe('c1');
     expect(receipt.presentInDocument).toBe(true);
     expect(receipt.presentationIdentity).not.toBeNull();
-    if (receipt.presentationIdentity) {
+    if (!receipt.presentationIdentity) {
+      throw new Error('Test precondition failed: receipt.presentationIdentity');
+    }
+    {
       expect(Object.keys(receipt.presentationIdentity).sort()).toEqual([
         'commitId',
         'documentRevision',
@@ -307,15 +343,22 @@ describe('layeredEditorController: 笔迹与提交', () => {
     const candidate = unwrap(
       controller.endFreehand({
         type: 'end',
-        batch: batchLike(begin, 1, [{ sequence: 2, x: 9, y: 9, pressure: 0, time: 20, phase: 'up' }]),
+        batch: batchLike(begin, 1, [
+          { sequence: 2, x: 9, y: 9, pressure: 0, time: 20, phase: 'up' },
+        ]),
       }) as AnyResult<FreehandCandidate>
     );
     expect(candidate.samples.map((sample) => sample.pressure)).toEqual([0.7, undefined, 0]);
     expect(Object.prototype.hasOwnProperty.call(candidate.samples[1], 'pressure')).toBe(false);
 
     unwrap(controller.commitFreehand('c-raw') as AnyResult<LayeredCommitReceipt>);
-    const committed = controller.getSnapshot('document').objects.find((object) => object.objectId === 'obj-c-raw');
-    if (committed?.kind === 'freehand') {
+    const committed = controller
+      .getSnapshot('document')
+      .objects.find((object) => object.objectId === 'obj-c-raw');
+    if (!(committed?.kind === 'freehand')) {
+      throw new Error("Test precondition failed: committed?.kind === 'freehand'");
+    }
+    {
       expect(committed.samples.map((sample) => sample.pressure)).toEqual([0.7, undefined, 0]);
       expect(Object.isFrozen(committed)).toBe(true);
       expect(Object.isFrozen(committed.samples)).toBe(true);
@@ -330,8 +373,13 @@ describe('layeredEditorController: 笔迹与提交', () => {
     const controller = createController();
     drawStroke(controller, 'c-rev');
     const receipt = unwrap(controller.commitFreehand('c-rev') as AnyResult<LayeredCommitReceipt>);
-    const committed = controller.getSnapshot('document').objects.find((object) => object.objectId === 'obj-c-rev');
-    if (committed?.kind === 'freehand') {
+    const committed = controller
+      .getSnapshot('document')
+      .objects.find((object) => object.objectId === 'obj-c-rev');
+    if (!(committed?.kind === 'freehand')) {
+      throw new Error("Test precondition failed: committed?.kind === 'freehand'");
+    }
+    {
       expect(committed.objectRevision).toBe(1);
       expect(committed.samplesRevision).toBe(1);
       expect(committed.brushRevision).toBe(1);
@@ -366,7 +414,10 @@ describe('layeredEditorController: 笔迹与提交', () => {
     expect(documentNotify()).toBe(1); // 仅 created 提交通知一次
 
     const begin = beginInput('dup');
-    const differentOwner = { ...begin, batch: { ...begin.batch, sessionId: 'sess-other', pointerId: 99 } };
+    const differentOwner = {
+      ...begin,
+      batch: { ...begin.batch, sessionId: 'sess-other', pointerId: 99 },
+    };
     unwrap(controller.beginFreehand(differentOwner) as AnyResult<void>);
     // 复制首次 payload（相同 samples/phase），仅 owner 不同。
     unwrap(
@@ -401,12 +452,18 @@ describe('layeredEditorController: 设置隔离', () => {
     const begin = beginInput('b1');
     unwrap(controller.beginFreehand(begin) as AnyResult<void>);
 
-    unwrap(controller.setFreehandSettings(makeBrush({ color: '#ffffff', nominalSize: 20 })) as AnyResult<void>);
+    unwrap(
+      controller.setFreehandSettings(
+        makeBrush({ color: '#ffffff', nominalSize: 20 })
+      ) as AnyResult<void>
+    );
 
     const candidate = unwrap(
       controller.endFreehand({
         type: 'end',
-        batch: batchLike(begin, 1, [{ sequence: 2, x: 9, y: 9, pressure: 0, time: 32, phase: 'up' }]),
+        batch: batchLike(begin, 1, [
+          { sequence: 2, x: 9, y: 9, pressure: 0, time: 32, phase: 'up' },
+        ]),
       }) as AnyResult<FreehandCandidate>
     );
     expect(candidate.brushSnapshot.color).toBe('#123456');
@@ -417,7 +474,9 @@ describe('layeredEditorController: 设置隔离', () => {
     const nextCandidate = unwrap(
       controller.endFreehand({
         type: 'end',
-        batch: batchLike(nextBegin, 1, [{ sequence: 2, x: 9, y: 9, pressure: 0, time: 32, phase: 'up' }]),
+        batch: batchLike(nextBegin, 1, [
+          { sequence: 2, x: 9, y: 9, pressure: 0, time: 32, phase: 'up' },
+        ]),
       }) as AnyResult<FreehandCandidate>
     );
     expect(nextCandidate.brushSnapshot.color).toBe('#ffffff');
@@ -426,7 +485,9 @@ describe('layeredEditorController: 设置隔离', () => {
 
   it('shape dash 与 freehand 设置相互独立', () => {
     const controller = createController();
-    unwrap(controller.setShapeSettings(makeShapeStyle({ dash: [1, 1], width: 5 })) as AnyResult<void>);
+    unwrap(
+      controller.setShapeSettings(makeShapeStyle({ dash: [1, 1], width: 5 })) as AnyResult<void>
+    );
     unwrap(controller.setFreehandSettings(makeBrush({ nominalSize: 3 })) as AnyResult<void>);
 
     const tools = controller.getSnapshot('tools');
@@ -474,7 +535,10 @@ describe('layeredEditorController: update 热路径', () => {
       const revisionBefore = controller.getSnapshot('document').documentRevision;
 
       unwrap(
-        controller.updateFreehand({ type: 'update', batch: batchLike(begin, 1, [sampleInput(2, 'move')]) }) as AnyResult<void>
+        controller.updateFreehand({
+          type: 'update',
+          batch: batchLike(begin, 1, [sampleInput(2, 'move')]),
+        }) as AnyResult<void>
       );
 
       expect(spy).toHaveBeenCalled();
@@ -494,8 +558,18 @@ describe('layeredEditorController: update 热路径', () => {
     unwrap(controller.beginFreehand(begin) as AnyResult<void>);
     const revisionBefore = controller.getSnapshot('document').documentRevision;
 
-    unwrap(controller.updateFreehand({ type: 'update', batch: batchLike(begin, 1, [sampleInput(2, 'move')]) }) as AnyResult<void>);
-    unwrap(controller.updateFreehand({ type: 'update', batch: batchLike(begin, 2, [sampleInput(3, 'move')]) }) as AnyResult<void>);
+    unwrap(
+      controller.updateFreehand({
+        type: 'update',
+        batch: batchLike(begin, 1, [sampleInput(2, 'move')]),
+      }) as AnyResult<void>
+    );
+    unwrap(
+      controller.updateFreehand({
+        type: 'update',
+        batch: batchLike(begin, 2, [sampleInput(3, 'move')]),
+      }) as AnyResult<void>
+    );
 
     expect(controller.getSnapshot('document').documentRevision).toBe(revisionBefore);
     expect(controller.getSnapshot('history').canUndo).toBe(false);
@@ -514,14 +588,25 @@ describe('layeredEditorController: update 热路径', () => {
       batch: batchLike(begin, 5, [sampleInput(2, 'move')]),
     }) as AnyResult<void>;
     expect(gap.ok).toBe(false);
-    if (!gap.ok) {
+    if (gap.ok) {
+      throw new Error('Test precondition failed: !gap.ok');
+    }
+    {
       expect(gap.error.code).toBe('session-rejected');
       expect(gap.error.sessionCode).toBe('batch-sequence-mismatch');
     }
 
-    unwrap(controller.updateFreehand({ type: 'update', batch: batchLike(begin, 1, [sampleInput(2, 'move')]) }) as AnyResult<void>);
+    unwrap(
+      controller.updateFreehand({
+        type: 'update',
+        batch: batchLike(begin, 1, [sampleInput(2, 'move')]),
+      }) as AnyResult<void>
+    );
     const candidate = unwrap(
-      controller.endFreehand({ type: 'end', batch: batchLike(begin, 2, [sampleInput(3, 'up')]) }) as AnyResult<FreehandCandidate>
+      controller.endFreehand({
+        type: 'end',
+        batch: batchLike(begin, 2, [sampleInput(3, 'up')]),
+      }) as AnyResult<FreehandCandidate>
     );
     expect(candidate.samples.map((sample) => sample.sequence)).toEqual([0, 1, 2, 3]);
   });
@@ -552,7 +637,10 @@ describe('layeredEditorController: 生命周期', () => {
 
     const commit = controller.commitFreehand('tc') as AnyResult<LayeredCommitReceipt>;
     expect(commit.ok).toBe(false);
-    if (!commit.ok) {
+    if (commit.ok) {
+      throw new Error('Test precondition failed: !commit.ok');
+    }
+    {
       expect(commit.error.code).toBe('pending-commit-not-found');
     }
   });
@@ -564,7 +652,10 @@ describe('layeredEditorController: 生命周期', () => {
     unwrap(controller.setTool('freehand') as AnyResult<void>);
 
     const candidate = unwrap(
-      controller.endFreehand({ type: 'end', batch: batchLike(begin, 1, [sampleInput(2, 'up')]) }) as AnyResult<FreehandCandidate>
+      controller.endFreehand({
+        type: 'end',
+        batch: batchLike(begin, 1, [sampleInput(2, 'up')]),
+      }) as AnyResult<FreehandCandidate>
     );
     expect(candidate.commitId).toBe('same');
   });
@@ -624,7 +715,12 @@ describe('layeredEditorController: viewport', () => {
     expect(dropped.reason).toBe('active-freehand');
     expect(controller.getSnapshot('viewport').revision).toBe(revisionDuring);
 
-    unwrap(controller.endFreehand({ type: 'end', batch: batchLike(begin, 1, [sampleInput(2, 'up')]) }) as AnyResult<FreehandCandidate>);
+    unwrap(
+      controller.endFreehand({
+        type: 'end',
+        batch: batchLike(begin, 1, [sampleInput(2, 'up')]),
+      }) as AnyResult<FreehandCandidate>
+    );
     expect(controller.getSnapshot('viewport').revision).toBe(revisionDuring);
 
     const applied = unwrap(
@@ -649,7 +745,10 @@ describe('layeredEditorController: viewport', () => {
       viewport: { scale: 2, tx: 1, ty: 1 },
     }) as AnyResult<unknown>;
     expect(stale.ok).toBe(false);
-    if (!stale.ok) {
+    if (stale.ok) {
+      throw new Error('Test precondition failed: !stale.ok');
+    }
+    {
       expect(stale.error.code).toBe('stale-viewport-revision');
     }
     expect(controller.getSnapshot('viewport').revision).toBe(current);
@@ -687,7 +786,9 @@ describe('layeredEditorController: viewport', () => {
 
 describe('layeredEditorController: selection 与 history', () => {
   it('setSelection 去重；缺失目标拒绝；selection 不产生 history；undo 过滤', () => {
-    const controller = createController({ document: makeDocument([makeFreehand({ objectId: 'a' })]) });
+    const controller = createController({
+      document: makeDocument([makeFreehand({ objectId: 'a' })]),
+    });
     const historyNotify = track(controller, 'history');
 
     unwrap(controller.setSelection(['a', 'a']) as AnyResult<void>);
@@ -696,7 +797,10 @@ describe('layeredEditorController: selection 与 history', () => {
 
     const missing = controller.setSelection(['a', 'missing']) as AnyResult<void>;
     expect(missing.ok).toBe(false);
-    if (!missing.ok) {
+    if (missing.ok) {
+      throw new Error('Test precondition failed: !missing.ok');
+    }
+    {
       expect(missing.error.code).toBe('selection-target-missing');
     }
     expect([...controller.getSnapshot('selection')]).toEqual(['a']);
@@ -744,12 +848,18 @@ describe('layeredEditorController: selection 与 history', () => {
 
     const undo = controller.undo() as AnyResult<EditorDocument>;
     expect(undo.ok).toBe(false);
-    if (!undo.ok) {
+    if (undo.ok) {
+      throw new Error('Test precondition failed: !undo.ok');
+    }
+    {
       expect(undo.error.code).toBe('nothing-to-undo');
     }
     const redo = controller.redo() as AnyResult<EditorDocument>;
     expect(redo.ok).toBe(false);
-    if (!redo.ok) {
+    if (redo.ok) {
+      throw new Error('Test precondition failed: !redo.ok');
+    }
+    {
       expect(redo.error.code).toBe('nothing-to-redo');
     }
 
@@ -804,7 +914,10 @@ describe('layeredEditorController: 提交失败恢复', () => {
 
     const first = controller.commitFreehand('alloc') as AnyResult<LayeredCommitReceipt>;
     expect(first.ok).toBe(false);
-    if (!first.ok) {
+    if (first.ok) {
+      throw new Error('Test precondition failed: !first.ok');
+    }
+    {
       expect(['object-id-conflict', 'object-id-allocation-failed']).toContain(first.error.code);
     }
     expect(controller.getSnapshot('document').objects).toHaveLength(1);
@@ -836,7 +949,10 @@ describe('layeredEditorController: 提交失败恢复', () => {
     const begin = beginInput('cache');
     unwrap(controller.beginFreehand(begin) as AnyResult<void>);
 
-    const endBatch = () => ({ type: 'end' as const, batch: batchLike(begin, 1, [sampleInput(2, 'up')]) });
+    const endBatch = () => ({
+      type: 'end' as const,
+      batch: batchLike(begin, 1, [sampleInput(2, 'up')]),
+    });
     const end = controller.endFreehand(endBatch()) as AnyResult<FreehandCandidate>;
     let failureCode: string | undefined;
     if (!end.ok) {
@@ -857,7 +973,10 @@ describe('layeredEditorController: 提交失败恢复', () => {
       receipt = unwrap(controller.commitFreehand('cache') as AnyResult<LayeredCommitReceipt>);
     } else {
       unwrap(
-        controller.endFreehand({ type: 'end', batch: batchLike(begin, 1, [sampleInput(2, 'up')]) }) as AnyResult<FreehandCandidate>
+        controller.endFreehand({
+          type: 'end',
+          batch: batchLike(begin, 1, [sampleInput(2, 'up')]),
+        }) as AnyResult<FreehandCandidate>
       );
       receipt = unwrap(controller.commitFreehand('cache') as AnyResult<LayeredCommitReceipt>);
     }
@@ -882,13 +1001,18 @@ describe('layeredEditorController: 提交失败恢复', () => {
     unwrap(
       controller.endFreehand({
         type: 'end',
-        batch: batchLike(different, 1, [{ sequence: 2, x: 104, y: 103, pressure: 0, time: 32, phase: 'up' }]),
+        batch: batchLike(different, 1, [
+          { sequence: 2, x: 104, y: 103, pressure: 0, time: 32, phase: 'up' },
+        ]),
       }) as AnyResult<FreehandCandidate>
     );
 
     const conflict = controller.commitFreehand('conf') as AnyResult<LayeredCommitReceipt>;
     expect(conflict.ok).toBe(false);
-    if (!conflict.ok) {
+    if (conflict.ok) {
+      throw new Error('Test precondition failed: !conflict.ok');
+    }
+    {
       expect(conflict.error.code).toBe('commit-id-conflict');
     }
     expect(controller.getSnapshot('document').objects).toHaveLength(1);
@@ -903,7 +1027,10 @@ describe('layeredEditorController: 提交失败恢复', () => {
 
     const result = controller.commitFreehand('max') as AnyResult<LayeredCommitReceipt>;
     expect(result.ok).toBe(false);
-    if (!result.ok) {
+    if (result.ok) {
+      throw new Error('Test precondition failed: !result.ok');
+    }
+    {
       expect(result.error.code).toBe('revision-exhausted');
     }
     expect(controller.getSnapshot('document').documentRevision).toBe(Number.MAX_SAFE_INTEGER);
@@ -1033,7 +1160,9 @@ describe('layeredEditorController: 有界回归', () => {
     // reentrant 命令应被拒（无历史/无 pending），不改变外层结果。
     expect(outcomes).toEqual(['undo:false', 'commit:false']);
     const document = controller.getSnapshot('document');
-    expect(document.objects.filter((object) => object.objectId === 'obj-reentrant')).toHaveLength(1);
+    expect(document.objects.filter((object) => object.objectId === 'obj-reentrant')).toHaveLength(
+      1
+    );
     expect(document.documentRevision).toBe(2); // 初始 1 + 外层一次 commit
   });
 
@@ -1075,10 +1204,17 @@ describe('layeredEditorController: 有界回归', () => {
       document: makeDocument([freehandWithNoise, shapeWithSkia, image, text]),
     });
     const document = controller.getSnapshot('document');
-    expect(document.objects.map((object) => object.kind)).toEqual(['freehand', 'shape', 'image', 'text']);
+    expect(document.objects.map((object) => object.kind)).toEqual([
+      'freehand',
+      'shape',
+      'image',
+      'text',
+    ]);
     expect(Object.isFrozen(document)).toBe(true);
     expect(document.objects.every((object) => Object.isFrozen(object))).toBe(true);
-    expect(Object.prototype.hasOwnProperty.call(document.objects[0], 'privateInterpolation')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(document.objects[0], 'privateInterpolation')).toBe(
+      false
+    );
     expect(Object.prototype.hasOwnProperty.call(document.objects[1], 'skiaDescriptor')).toBe(false);
   });
 
@@ -1095,7 +1231,10 @@ describe('layeredEditorController: 有界回归', () => {
     drawStroke(controller, 'x2');
     const reused = controller.commitFreehand('x2') as AnyResult<LayeredCommitReceipt>;
     expect(reused.ok).toBe(false);
-    if (!reused.ok) {
+    if (reused.ok) {
+      throw new Error('Test precondition failed: !reused.ok');
+    }
+    {
       expect(reused.error.code).toBe('object-id-conflict');
     }
 
@@ -1145,19 +1284,30 @@ describe('layeredEditorController: oracle material-fix 支持', () => {
 
     const malformed: readonly unknown[] = [
       { type: 'replace', expectedRevision: revisionBefore },
-      { type: 'replace', expectedRevision: revisionBefore, viewport: { scale: Number.NaN, tx: 0, ty: 0 } },
+      {
+        type: 'replace',
+        expectedRevision: revisionBefore,
+        viewport: { scale: Number.NaN, tx: 0, ty: 0 },
+      },
       { type: 'replace', expectedRevision: revisionBefore, viewport: { scale: 100, tx: 0, ty: 0 } },
       {
         type: 'transform',
         expectedRevision: revisionBefore,
-        intent: { startFocal: { x: 0, y: 0 }, currentFocal: { x: 0, y: 0 }, scaleRatio: Number.NaN },
+        intent: {
+          startFocal: { x: 0, y: 0 },
+          currentFocal: { x: 0, y: 0 },
+          scaleRatio: Number.NaN,
+        },
       },
     ];
 
     for (const command of malformed) {
       const result = controller.updateViewport(command as never) as AnyResult<unknown>;
       expect(result.ok).toBe(false);
-      if (!result.ok) {
+      if (result.ok) {
+        throw new Error('Test precondition failed: !result.ok');
+      }
+      {
         expect(result.error.code).toBe('invalid-input');
       }
       expect(controller.getSnapshot('viewport').revision).toBe(revisionBefore);
@@ -1188,7 +1338,10 @@ describe('layeredEditorController: oracle material-fix 支持', () => {
       } as never) as AnyResult<unknown>;
     }).not.toThrow();
     expect(missingResult?.ok).toBe(false);
-    if (missingResult && !missingResult.ok) {
+    if (!(missingResult && !missingResult.ok)) {
+      throw new Error('Test precondition failed: missingResult && !missingResult.ok');
+    }
+    {
       expect(missingResult.error.code).toBe('invalid-input');
     }
 
@@ -1198,7 +1351,10 @@ describe('layeredEditorController: oracle material-fix 支持', () => {
       viewport: { scale: 100, tx: 0, ty: 0 },
     }) as AnyResult<unknown>;
     expect(scaled.ok).toBe(false);
-    if (!scaled.ok) {
+    if (scaled.ok) {
+      throw new Error('Test precondition failed: !scaled.ok');
+    }
+    {
       expect(scaled.error.code).toBe('invalid-input');
     }
     expect(controller.getSnapshot('viewport').revision).toBe(revisionBefore);
@@ -1258,7 +1414,10 @@ describe('layeredEditorController: oracle material-fix 支持', () => {
 
     const outOfOrder = controller.commitFreehand('second') as AnyResult<LayeredCommitReceipt>;
     expect(outOfOrder.ok).toBe(false);
-    if (!outOfOrder.ok) {
+    if (outOfOrder.ok) {
+      throw new Error('Test precondition failed: !outOfOrder.ok');
+    }
+    {
       expect(outOfOrder.error.code).toBe('pending-commit-out-of-order');
     }
     expect(controller.getSnapshot('document').objects).toHaveLength(0);
@@ -1269,12 +1428,18 @@ describe('layeredEditorController: oracle material-fix 支持', () => {
     allocatorShouldFail = true;
     const headFail = controller.commitFreehand('first') as AnyResult<LayeredCommitReceipt>;
     expect(headFail.ok).toBe(false);
-    if (!headFail.ok) {
+    if (headFail.ok) {
+      throw new Error('Test precondition failed: !headFail.ok');
+    }
+    {
       expect(headFail.error.code).toBe('object-id-allocation-failed');
     }
     const stillBlocked = controller.commitFreehand('second') as AnyResult<LayeredCommitReceipt>;
     expect(stillBlocked.ok).toBe(false);
-    if (!stillBlocked.ok) {
+    if (stillBlocked.ok) {
+      throw new Error('Test precondition failed: !stillBlocked.ok');
+    }
+    {
       expect(stillBlocked.error.code).toBe('pending-commit-out-of-order');
     }
 
@@ -1344,7 +1509,10 @@ describe('layeredEditorController: oracle material-fix 支持', () => {
     const candidate = drawStroke(controller, 'prep');
     const failed = controller.commitFreehand('prep') as AnyResult<LayeredCommitReceipt>;
     expect(failed.ok).toBe(false);
-    if (!failed.ok) {
+    if (failed.ok) {
+      throw new Error('Test precondition failed: !failed.ok');
+    }
+    {
       expect(failed.error.code).toBe('final-geometry-failed');
     }
     // 失败原子 + 临时 slot 清理。
@@ -1371,7 +1539,9 @@ describe('layeredEditorController: oracle material-fix 支持', () => {
     const controller = createController({ geometryCache: cache });
 
     drawStroke(controller, 'syncfail');
-    const created = unwrap(controller.commitFreehand('syncfail') as AnyResult<LayeredCommitReceipt>);
+    const created = unwrap(
+      controller.commitFreehand('syncfail') as AnyResult<LayeredCommitReceipt>
+    );
     expect(created.status).toBe('created');
     expect(created.documentRevision).toBe(2);
 
@@ -1422,7 +1592,9 @@ describe('layeredEditorController: oracle material-fix 支持', () => {
     unwrap(
       controller.endFreehand({
         type: 'end',
-        batch: batchLike(beginMissing, 1, [{ sequence: 2, x: 8, y: 6, pressure: 0, time: 32, phase: 'up' }]),
+        batch: batchLike(beginMissing, 1, [
+          { sequence: 2, x: 8, y: 6, pressure: 0, time: 32, phase: 'up' },
+        ]),
       }) as AnyResult<FreehandCandidate>
     );
     const created = unwrap(controller.commitFreehand('p') as AnyResult<LayeredCommitReceipt>);
@@ -1436,12 +1608,17 @@ describe('layeredEditorController: oracle material-fix 支持', () => {
     unwrap(
       controller.endFreehand({
         type: 'end',
-        batch: batchLike(beginZero, 1, [{ sequence: 2, x: 8, y: 6, pressure: 0, time: 32, phase: 'up' }]),
+        batch: batchLike(beginZero, 1, [
+          { sequence: 2, x: 8, y: 6, pressure: 0, time: 32, phase: 'up' },
+        ]),
       }) as AnyResult<FreehandCandidate>
     );
     const conflict = controller.commitFreehand('p') as AnyResult<LayeredCommitReceipt>;
     expect(conflict.ok).toBe(false);
-    if (!conflict.ok) {
+    if (conflict.ok) {
+      throw new Error('Test precondition failed: !conflict.ok');
+    }
+    {
       expect(conflict.error.code).toBe('commit-id-conflict');
     }
     expect(controller.getSnapshot('document').objects).toHaveLength(1);
@@ -1449,8 +1626,24 @@ describe('layeredEditorController: oracle material-fix 支持', () => {
 
   it('mixed 嵌套原始对象 mutation 隔离且深冻结（samples/brush/transform/points/dash/bounds）', () => {
     const samples = [
-      { sequence: 0, x: 0, y: 0, pressure: 0.5, time: 0, phase: 'down' as const, source: 'pen' as const },
-      { sequence: 1, x: 4, y: 3, pressure: 0.6, time: 16, phase: 'up' as const, source: 'pen' as const },
+      {
+        sequence: 0,
+        x: 0,
+        y: 0,
+        pressure: 0.5,
+        time: 0,
+        phase: 'down' as const,
+        source: 'pen' as const,
+      },
+      {
+        sequence: 1,
+        x: 4,
+        y: 3,
+        pressure: 0.6,
+        time: 16,
+        phase: 'up' as const,
+        source: 'pen' as const,
+      },
     ];
     const transform = { a: 1, b: 0, c: 0, d: 1, tx: 5, ty: 5 };
     const freehandInput = {
@@ -1461,7 +1654,13 @@ describe('layeredEditorController: oracle material-fix 支持', () => {
       transformRevision: 1,
       commitId: 'cf',
       samples,
-      brushSnapshot: { color: '#111111', nominalSize: 4, opacity: 1, pressureMode: 'real', presetRevision: 1 },
+      brushSnapshot: {
+        color: '#111111',
+        nominalSize: 4,
+        opacity: 1,
+        pressureMode: 'real',
+        presetRevision: 1,
+      },
       resolvedPressureMode: 'real',
       samplesRevision: 1,
       brushRevision: 1,
@@ -1505,7 +1704,12 @@ describe('layeredEditorController: oracle material-fix 支持', () => {
     };
 
     const controller = createController({
-      document: makeDocument([freehandInput, shapeInput, imageInput, textInput] as unknown as DocumentObject[]),
+      document: makeDocument([
+        freehandInput,
+        shapeInput,
+        imageInput,
+        textInput,
+      ] as unknown as DocumentObject[]),
     });
     const document = controller.getSnapshot('document');
 
@@ -1533,21 +1737,33 @@ describe('layeredEditorController: oracle material-fix 支持', () => {
     expect(text?.kind === 'text' && text.localBounds.maxY).toBe(20);
 
     expect(document.objects.every((object) => Object.isFrozen(object))).toBe(true);
-    if (freehand?.kind === 'freehand') {
+    if (!(freehand?.kind === 'freehand')) {
+      throw new Error("Test precondition failed: freehand?.kind === 'freehand'");
+    }
+    {
       expect(Object.isFrozen(freehand.samples)).toBe(true);
       expect(Object.isFrozen(freehand.samples[0])).toBe(true);
       expect(Object.isFrozen(freehand.brushSnapshot)).toBe(true);
       expect(Object.isFrozen(freehand.transform)).toBe(true);
     }
-    if (shape?.kind === 'shape') {
+    if (!(shape?.kind === 'shape')) {
+      throw new Error("Test precondition failed: shape?.kind === 'shape'");
+    }
+    {
       expect(Object.isFrozen(shape.points)).toBe(true);
       expect(Object.isFrozen(shape.points[0])).toBe(true);
       expect(Object.isFrozen(shape.style.dash)).toBe(true);
     }
-    if (image?.kind === 'image') {
+    if (!(image?.kind === 'image')) {
+      throw new Error("Test precondition failed: image?.kind === 'image'");
+    }
+    {
       expect(Object.isFrozen(image.localBounds)).toBe(true);
     }
-    if (text?.kind === 'text') {
+    if (!(text?.kind === 'text')) {
+      throw new Error("Test precondition failed: text?.kind === 'text'");
+    }
+    {
       expect(Object.isFrozen(text.localBounds)).toBe(true);
     }
   });
@@ -1571,6 +1787,3 @@ describe('layeredEditorController: oracle material-fix 支持', () => {
     expect(controller.getSnapshot('document').documentRevision).toBe(revisionBefore);
   });
 });
-
-
-

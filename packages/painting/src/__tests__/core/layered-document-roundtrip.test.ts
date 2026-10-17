@@ -52,7 +52,10 @@ function unwrap<T>(result: DocumentReadResult<T>): T {
   return result.value;
 }
 
-function expectError(result: DocumentReadResult<unknown>, code: DocumentReadError['code']): DocumentReadError {
+function expectError(
+  result: DocumentReadResult<unknown>,
+  code: DocumentReadError['code']
+): DocumentReadError {
   expect(result.ok).toBe(false);
   if (result.ok) {
     throw new Error('expected error');
@@ -111,7 +114,10 @@ function makeShape(overrides: Partial<ShapeObject> = {}): ShapeObject {
     transform: IDENTITY_TRANSFORM,
     transformRevision: 2,
     shapeType: 'rect',
-    points: [{ x: 0, y: 0 }, { x: 10, y: 10 }],
+    points: [
+      { x: 0, y: 0 },
+      { x: 10, y: 10 },
+    ],
     style: { color: '#000000', width: 2, opacity: 1, dash: [4, 2] },
     ...overrides,
   };
@@ -176,15 +182,39 @@ function createController(document: EditorDocument): LayeredEditorController {
 describe('layeredDocument roundtrip: 合法与 mixed order', () => {
   it('mixed 四类四种顺序 round-trip 保序且内容一致', () => {
     const variants: readonly DocumentObject[][] = [
-      [makeFreehand({ objectId: 'a', commitId: 'ca' }), makeShape({ objectId: 'b' }), makeImage({ objectId: 'c' }), makeText({ objectId: 'd' })],
-      [makeText({ objectId: 'a' }), makeFreehand({ objectId: 'b', commitId: 'cb' }), makeShape({ objectId: 'c' }), makeImage({ objectId: 'd' })],
-      [makeImage({ objectId: 'a' }), makeText({ objectId: 'b' }), makeFreehand({ objectId: 'c', commitId: 'cc' }), makeShape({ objectId: 'd' })],
-      [makeShape({ objectId: 'a' }), makeImage({ objectId: 'b' }), makeText({ objectId: 'c' }), makeFreehand({ objectId: 'd', commitId: 'cd' })],
+      [
+        makeFreehand({ objectId: 'a', commitId: 'ca' }),
+        makeShape({ objectId: 'b' }),
+        makeImage({ objectId: 'c' }),
+        makeText({ objectId: 'd' }),
+      ],
+      [
+        makeText({ objectId: 'a' }),
+        makeFreehand({ objectId: 'b', commitId: 'cb' }),
+        makeShape({ objectId: 'c' }),
+        makeImage({ objectId: 'd' }),
+      ],
+      [
+        makeImage({ objectId: 'a' }),
+        makeText({ objectId: 'b' }),
+        makeFreehand({ objectId: 'c', commitId: 'cc' }),
+        makeShape({ objectId: 'd' }),
+      ],
+      [
+        makeShape({ objectId: 'a' }),
+        makeImage({ objectId: 'b' }),
+        makeText({ objectId: 'c' }),
+        makeFreehand({ objectId: 'd', commitId: 'cd' }),
+      ],
     ];
     for (const objects of variants) {
       const parsed = roundtrip(makeDocument(objects));
-      expect(parsed.objects.map((object) => object.kind)).toEqual(objects.map((object) => object.kind));
-      expect(parsed.objects.map((object) => object.objectId)).toEqual(objects.map((object) => object.objectId));
+      expect(parsed.objects.map((object) => object.kind)).toEqual(
+        objects.map((object) => object.kind)
+      );
+      expect(parsed.objects.map((object) => object.objectId)).toEqual(
+        objects.map((object) => object.objectId)
+      );
       expect(parsed).toEqual(makeDocument(objects));
     }
   });
@@ -315,7 +345,12 @@ describe('layeredDocument roundtrip: 白名单与冻结', () => {
       expect(json).not.toContain(forbidden);
     }
     // 注入到 freehand brush 的非法 dash 被剔除；shape 自身合法 dash 保留。
-    expect(Object.prototype.hasOwnProperty.call((parsed.objects[0] as FreehandObject).brushSnapshot, 'dash')).toBe(false);
+    expect(
+      Object.prototype.hasOwnProperty.call(
+        (parsed.objects[0] as FreehandObject).brushSnapshot,
+        'dash'
+      )
+    ).toBe(false);
     expect((parsed.objects[1] as ShapeObject).style.dash).toEqual([4, 2]);
     expect(Object.keys(parsed as unknown as Record<string, unknown>).sort()).toEqual([
       'documentRevision',
@@ -327,7 +362,12 @@ describe('layeredDocument roundtrip: 白名单与冻结', () => {
 
   it('深冻结嵌套（sample/brush/transform/points/dash/bounds）', () => {
     const parsed = roundtrip(makeDocument([makeFreehand(), makeShape(), makeImage(), makeText()]));
-    const [freehand, shape, image, text] = parsed.objects as [FreehandObject, ShapeObject, ImageObject, TextObject];
+    const [freehand, shape, image, text] = parsed.objects as [
+      FreehandObject,
+      ShapeObject,
+      ImageObject,
+      TextObject,
+    ];
     expect(Object.isFrozen(freehand.samples)).toBe(true);
     expect(Object.isFrozen(freehand.samples[0])).toBe(true);
     expect(Object.isFrozen(freehand.brushSnapshot)).toBe(true);
@@ -408,7 +448,15 @@ describe('layeredDocument roundtrip: freehand raw', () => {
     const raw = makeFreehand({
       samples: [
         { sequence: 0, x: -1e12, y: 1e12, pressure: 2, time: 0, phase: 'down', source: 'pen' },
-        { sequence: 1, x: 1e12, y: -1e12, pressure: 0, time: Number.MAX_SAFE_INTEGER, phase: 'up', source: 'pen' },
+        {
+          sequence: 1,
+          x: 1e12,
+          y: -1e12,
+          pressure: 0,
+          time: Number.MAX_SAFE_INTEGER,
+          phase: 'up',
+          source: 'pen',
+        },
       ],
     });
     const samples = (roundtrip(makeDocument([raw])).objects[0] as FreehandObject).samples;
@@ -417,12 +465,24 @@ describe('layeredDocument roundtrip: freehand raw', () => {
   });
 
   it('mode 与 pressureMode 一致性：auto 不重新判（resolved 原样）', () => {
-    const autoReal = makeFreehand({ brushSnapshot: makeBrush({ pressureMode: 'auto' }), resolvedPressureMode: 'real' });
+    const autoReal = makeFreehand({
+      brushSnapshot: makeBrush({ pressureMode: 'auto' }),
+      resolvedPressureMode: 'real',
+    });
     const parsed = roundtrip(makeDocument([autoReal]));
     const freehand = parsed.objects[0] as FreehandObject;
     expect(freehand.brushSnapshot.pressureMode).toBe('auto');
     expect(freehand.resolvedPressureMode).toBe('real');
-    expect(roundtrip(makeDocument([makeFreehand({ brushSnapshot: makeBrush({ pressureMode: 'constant' }), resolvedPressureMode: 'constant' })]))).toBeDefined();
+    expect(
+      roundtrip(
+        makeDocument([
+          makeFreehand({
+            brushSnapshot: makeBrush({ pressureMode: 'constant' }),
+            resolvedPressureMode: 'constant',
+          }),
+        ])
+      )
+    ).toBeDefined();
   });
 });
 
@@ -505,46 +565,211 @@ describe('layeredDocument roundtrip: 非法输入', () => {
     }
   });
 
-  const invalidDocumentCases: ReadonlyArray<readonly [string, () => DocumentReadResult<unknown>]> = [
-    ['null', () => readLayeredDocument(null)],
-    ['JSON null 文档', () => parseLayeredDocument('null')],
-    ['非对象', () => readLayeredDocument(42)],
-    ['旧 schema2', () => readLayeredDocument({ ...makeDocument([makeFreehand()]), schemaVersion: 2 })],
-    ['未知 kind', () => readLayeredDocument(makeDocument([{ kind: 'unknown', objectId: 'x' } as unknown as DocumentObject]))],
-    ['缺 samples', () => readLayeredDocument(makeDocument([{ ...makeFreehand(), samples: undefined } as unknown as DocumentObject]))],
-    ['documentRevision 负数', () => readLayeredDocument({ ...makeDocument([]), documentRevision: -1 })],
-    ['documentRevision 非整数', () => readLayeredDocument({ ...makeDocument([]), documentRevision: 1.5 })],
-    ['objectId 重复', () => readLayeredDocument(makeDocument([makeFreehand({ objectId: 'dup', commitId: 'c1' }), makeShape({ objectId: 'dup' })]))],
-    ['commitId 重复', () => readLayeredDocument(makeDocument([makeFreehand({ objectId: 'a', commitId: 'same' }), makeFreehand({ objectId: 'b', commitId: 'same' })]))],
-    ['phase 首帧非 down', () => readLayeredDocument(makeDocument([makeFreehand({ samples: makeSamples(['move', 'up']) })]))],
-    ['sequence gap', () => readLayeredDocument(gapDocument())],
-    ['mixed source', () => readLayeredDocument(mixedSourceDocument())],
-    ['brush size<=0', () => readLayeredDocument(makeDocument([makeFreehand({ brushSnapshot: makeBrush({ nominalSize: 0 }) })]))],
-    ['brush opacity 越界', () => readLayeredDocument(makeDocument([makeFreehand({ brushSnapshot: makeBrush({ opacity: 2 }) })]))],
-    ['brush presetRevision 非法', () => readLayeredDocument(makeDocument([makeFreehand({ brushSnapshot: makeBrush({ presetRevision: -1 }) })]))],
-    ['transform NaN', () => readLayeredDocument(makeDocument([makeFreehand({ transform: { ...IDENTITY_TRANSFORM, a: Number.NaN } })]))],
-    ['transform 奇异', () => readLayeredDocument(makeDocument([makeFreehand({ transform: { a: 0, b: 0, c: 0, d: 0, tx: 0, ty: 0 } })]))],
-    ['bounds 顺序反转', () => readLayeredDocument(makeDocument([makeImage({ localBounds: { minX: 10, minY: 0, maxX: 0, maxY: 10 } })]))],
-    ['image src 空', () => readLayeredDocument(makeDocument([makeImage({ src: '' })]))],
-    ['text fontSize<=0', () => readLayeredDocument(makeDocument([makeText({ fontSize: 0 })]))],
-    ['shape dash 负数', () => readLayeredDocument(makeDocument([makeShape({ style: { color: '#000', width: 1, opacity: 1, dash: [-1] } })]))],
-    ['shape dash 非有限', () => readLayeredDocument(makeDocument([makeShape({ style: { color: '#000', width: 1, opacity: 1, dash: [Number.POSITIVE_INFINITY] } })]))],
-    ['raw pressure NaN', () => firstSampleDoc({ pressure: Number.NaN })],
-    ['raw pressure Infinity', () => firstSampleDoc({ pressure: Number.POSITIVE_INFINITY })],
-    ['raw x Infinity', () => firstSampleDoc({ x: Number.POSITIVE_INFINITY })],
-    ['raw time NaN', () => firstSampleDoc({ time: Number.NaN })],
-    ['objectRevision unsafe+1', () => readLayeredDocument(makeDocument([makeFreehand({ objectRevision: Number.MAX_SAFE_INTEGER + 1 })]))],
-    ['samplesRevision unsafe', () => readLayeredDocument(makeDocument([makeFreehand({ samplesRevision: -1 })]))],
-    ['transformRevision unsafe', () => readLayeredDocument(makeDocument([makeShape({ transformRevision: Number.MAX_SAFE_INTEGER + 1 })]))],
-    ['middle phase 非 move', () => readLayeredDocument(makeDocument([makeFreehand({ samples: makeSamples(['down', 'down', 'up']) })]))],
-    ['end phase 非 up', () => readLayeredDocument(makeDocument([makeFreehand({ samples: makeSamples(['down', 'move', 'move']) })]))],
-    ['显式 constant 与 resolved real 不一致', () => readLayeredDocument(makeDocument([makeFreehand({ brushSnapshot: makeBrush({ pressureMode: 'constant' }), resolvedPressureMode: 'real' })]))],
-    ['resolvedPressureMode 未知', () => readLayeredDocument(makeDocument([makeFreehand({ resolvedPressureMode: 'weird' as never })]))],
-    ['brush pressureMode 未知', () => readLayeredDocument(makeDocument([makeFreehand({ brushSnapshot: makeBrush({ pressureMode: 'weird' as never }) })]))],
-    ['sample source 未知', () => firstSampleDoc({ source: 'weird' as never })],
-    ['image resourceId 空', () => readLayeredDocument(makeDocument([makeImage({ resourceId: '' })]))],
-    ['bounds 非有限', () => readLayeredDocument(makeDocument([makeImage({ localBounds: { minX: 0, minY: 0, maxX: Number.POSITIVE_INFINITY, maxY: 10 } })]))],
-  ];
+  const invalidDocumentCases: ReadonlyArray<readonly [string, () => DocumentReadResult<unknown>]> =
+    [
+      ['null', () => readLayeredDocument(null)],
+      ['JSON null 文档', () => parseLayeredDocument('null')],
+      ['非对象', () => readLayeredDocument(42)],
+      [
+        '旧 schema2',
+        () => readLayeredDocument({ ...makeDocument([makeFreehand()]), schemaVersion: 2 }),
+      ],
+      [
+        '未知 kind',
+        () =>
+          readLayeredDocument(
+            makeDocument([{ kind: 'unknown', objectId: 'x' } as unknown as DocumentObject])
+          ),
+      ],
+      [
+        '缺 samples',
+        () =>
+          readLayeredDocument(
+            makeDocument([{ ...makeFreehand(), samples: undefined } as unknown as DocumentObject])
+          ),
+      ],
+      [
+        'documentRevision 负数',
+        () => readLayeredDocument({ ...makeDocument([]), documentRevision: -1 }),
+      ],
+      [
+        'documentRevision 非整数',
+        () => readLayeredDocument({ ...makeDocument([]), documentRevision: 1.5 }),
+      ],
+      [
+        'objectId 重复',
+        () =>
+          readLayeredDocument(
+            makeDocument([
+              makeFreehand({ objectId: 'dup', commitId: 'c1' }),
+              makeShape({ objectId: 'dup' }),
+            ])
+          ),
+      ],
+      [
+        'commitId 重复',
+        () =>
+          readLayeredDocument(
+            makeDocument([
+              makeFreehand({ objectId: 'a', commitId: 'same' }),
+              makeFreehand({ objectId: 'b', commitId: 'same' }),
+            ])
+          ),
+      ],
+      [
+        'phase 首帧非 down',
+        () =>
+          readLayeredDocument(
+            makeDocument([makeFreehand({ samples: makeSamples(['move', 'up']) })])
+          ),
+      ],
+      ['sequence gap', () => readLayeredDocument(gapDocument())],
+      ['mixed source', () => readLayeredDocument(mixedSourceDocument())],
+      [
+        'brush size<=0',
+        () =>
+          readLayeredDocument(
+            makeDocument([makeFreehand({ brushSnapshot: makeBrush({ nominalSize: 0 }) })])
+          ),
+      ],
+      [
+        'brush opacity 越界',
+        () =>
+          readLayeredDocument(
+            makeDocument([makeFreehand({ brushSnapshot: makeBrush({ opacity: 2 }) })])
+          ),
+      ],
+      [
+        'brush presetRevision 非法',
+        () =>
+          readLayeredDocument(
+            makeDocument([makeFreehand({ brushSnapshot: makeBrush({ presetRevision: -1 }) })])
+          ),
+      ],
+      [
+        'transform NaN',
+        () =>
+          readLayeredDocument(
+            makeDocument([makeFreehand({ transform: { ...IDENTITY_TRANSFORM, a: Number.NaN } })])
+          ),
+      ],
+      [
+        'transform 奇异',
+        () =>
+          readLayeredDocument(
+            makeDocument([makeFreehand({ transform: { a: 0, b: 0, c: 0, d: 0, tx: 0, ty: 0 } })])
+          ),
+      ],
+      [
+        'bounds 顺序反转',
+        () =>
+          readLayeredDocument(
+            makeDocument([makeImage({ localBounds: { minX: 10, minY: 0, maxX: 0, maxY: 10 } })])
+          ),
+      ],
+      ['image src 空', () => readLayeredDocument(makeDocument([makeImage({ src: '' })]))],
+      ['text fontSize<=0', () => readLayeredDocument(makeDocument([makeText({ fontSize: 0 })]))],
+      [
+        'shape dash 负数',
+        () =>
+          readLayeredDocument(
+            makeDocument([
+              makeShape({ style: { color: '#000', width: 1, opacity: 1, dash: [-1] } }),
+            ])
+          ),
+      ],
+      [
+        'shape dash 非有限',
+        () =>
+          readLayeredDocument(
+            makeDocument([
+              makeShape({
+                style: { color: '#000', width: 1, opacity: 1, dash: [Number.POSITIVE_INFINITY] },
+              }),
+            ])
+          ),
+      ],
+      ['raw pressure NaN', () => firstSampleDoc({ pressure: Number.NaN })],
+      ['raw pressure Infinity', () => firstSampleDoc({ pressure: Number.POSITIVE_INFINITY })],
+      ['raw x Infinity', () => firstSampleDoc({ x: Number.POSITIVE_INFINITY })],
+      ['raw time NaN', () => firstSampleDoc({ time: Number.NaN })],
+      [
+        'objectRevision unsafe+1',
+        () =>
+          readLayeredDocument(
+            makeDocument([makeFreehand({ objectRevision: Number.MAX_SAFE_INTEGER + 1 })])
+          ),
+      ],
+      [
+        'samplesRevision unsafe',
+        () => readLayeredDocument(makeDocument([makeFreehand({ samplesRevision: -1 })])),
+      ],
+      [
+        'transformRevision unsafe',
+        () =>
+          readLayeredDocument(
+            makeDocument([makeShape({ transformRevision: Number.MAX_SAFE_INTEGER + 1 })])
+          ),
+      ],
+      [
+        'middle phase 非 move',
+        () =>
+          readLayeredDocument(
+            makeDocument([makeFreehand({ samples: makeSamples(['down', 'down', 'up']) })])
+          ),
+      ],
+      [
+        'end phase 非 up',
+        () =>
+          readLayeredDocument(
+            makeDocument([makeFreehand({ samples: makeSamples(['down', 'move', 'move']) })])
+          ),
+      ],
+      [
+        '显式 constant 与 resolved real 不一致',
+        () =>
+          readLayeredDocument(
+            makeDocument([
+              makeFreehand({
+                brushSnapshot: makeBrush({ pressureMode: 'constant' }),
+                resolvedPressureMode: 'real',
+              }),
+            ])
+          ),
+      ],
+      [
+        'resolvedPressureMode 未知',
+        () =>
+          readLayeredDocument(
+            makeDocument([makeFreehand({ resolvedPressureMode: 'weird' as never })])
+          ),
+      ],
+      [
+        'brush pressureMode 未知',
+        () =>
+          readLayeredDocument(
+            makeDocument([
+              makeFreehand({ brushSnapshot: makeBrush({ pressureMode: 'weird' as never }) }),
+            ])
+          ),
+      ],
+      ['sample source 未知', () => firstSampleDoc({ source: 'weird' as never })],
+      [
+        'image resourceId 空',
+        () => readLayeredDocument(makeDocument([makeImage({ resourceId: '' })])),
+      ],
+      [
+        'bounds 非有限',
+        () =>
+          readLayeredDocument(
+            makeDocument([
+              makeImage({
+                localBounds: { minX: 0, minY: 0, maxX: Number.POSITIVE_INFINITY, maxY: 10 },
+              }),
+            ])
+          ),
+      ],
+    ];
 
   it('read 非法输入 → invalid-document（分组）', () => {
     for (const [name, run] of invalidDocumentCases) {
@@ -565,12 +790,19 @@ describe('layeredDocument roundtrip: 非法输入', () => {
     const result = readLayeredDocument(
       makeDocument([
         makeFreehand({
-          samples: [makeSamples()[0], { ...makeSamples()[1], pressure: Number.NaN }, makeSamples()[2]],
+          samples: [
+            makeSamples()[0],
+            { ...makeSamples()[1], pressure: Number.NaN },
+            makeSamples()[2],
+          ],
         }),
       ])
     );
     expect(result.ok).toBe(false);
-    if (!result.ok) {
+    if (result.ok) {
+      throw new Error('Test precondition failed: !result.ok');
+    }
+    {
       expect(result.error.code).toBe('invalid-document');
       expect(result.error.path).toBe('$.objects[0].samples[1].pressure');
     }
@@ -649,7 +881,9 @@ describe('layeredDocument roundtrip: controller 集成', () => {
   it('parse 后的文档可继续 commit + 真实 undo', () => {
     const controller = createController(makeDocument([]));
     commitStroke(controller, 'c1');
-    const parsed = unwrap(parseLayeredDocument(unwrap(serializeLayeredDocument(controller.getSnapshot('document')))));
+    const parsed = unwrap(
+      parseLayeredDocument(unwrap(serializeLayeredDocument(controller.getSnapshot('document'))))
+    );
     const revived = createController(parsed);
 
     expect(commitStroke(revived, 'c2').status).toBe('created');
@@ -677,5 +911,3 @@ describe('layeredDocument roundtrip: controller 集成', () => {
     expect(commitIds).toEqual(['c1', 'c2']);
   });
 });
-
-
