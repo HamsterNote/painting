@@ -67,3 +67,12 @@
 - [ ] 7.8 在实施阶段接入或提供独立 WebKit 测试运行配置，执行 foreignObject 与 shape/image/freehand interleave 的真实像素顺序、focus/IME/viewport 用例，并记录 Safari/iOS WebView 实际观察；验证 WebKit 运行证据独立于默认 Chromium 项目，自动化 WebKit 通过不冒充 Safari 真机验收，无法运行则保留未验证状态。
 - [ ] 7.9 主编排完整审核 capability→实现→测试证据映射及用户决策保真，运行 `openspec validate layered-perfect-freehand-surface --strict` 并核对任务真实完成状态；交付删除清单、测试报告和未验证风险，不以规划 artifacts done 声称实现完成。
 - [ ] 7.10 承接被取代 change 11.4：更新 CI 覆盖分层 Web 交付/打包、iOS/Android Expo 静态导出及 native 最小挂载，移除 CanvasKit 专用门；验证配置已提交并记录实际 CI 结果，静态导出不冒充设备运行。（覆盖关系见 `docs/implementation/layered-perfect-freehand-surface/skia-supersession.md`。）
+
+## 本轮抢救与分批续做证据
+
+- 抢救：失败树保存为仅本地 `agent/ham40-wip-failed-run` / `97ccfac`，功能分支恢复 `d78159a` 后复验。`pnpm test` 88 suites / 1472 tests PASS；`pnpm typecheck` 首次发现 board 缺少 `/layered` 源码路径映射，修正后完整 exit 0；Chromium 分层 15/15 PASS。可用提交及修复已普通推送至原 PR 分支 `7e74637`，WIP 不推。详见 `rescue-verification.md`。
+- 3.3 / 7.8：新增真实鼠标覆盖已有 HTML 文字的 active/final 像素回归；独立 WebKit 配置修正 Chromium 专用参数继承。`pnpm exec playwright test --config=playwright.webkit.config.ts --workers=1 --trace=off` 在受支持的 Ubuntu 24.04 Podman 环境实际 WebKit 16/16 PASS；Chromium 同套件 16/16 PASS。宿主 Ubuntu 26 不受支持，用容器等效验证；不覆盖 Safari/iOS WebView 真机，因此这两项保持未完成。
+- 5.6 回归修正：按 CONTEXT 以可视裁切段中点旋转、角度反馈投影到尺子中线，恢复尺子/纸张触点独立归属并发。`pnpm exec jest --runInBand --testPathPattern 'rulerGestureController|layered-navigation'` 2 suites / 10 tests PASS；`pnpm typecheck` exit 0。
+- 6.3 / 7.1 / 7.2 分批迁移：原尺子控制器测试完整搬入 `input/web/__tests__`，旧 DrawingSurface 改为直接引用该实现；资源编辑 2 个与尺边 mouse/pen/touch 3 个 UI 回归改在新入口执行。`pnpm test:ui tests/ui/resource-editing-fixture.spec.ts --workers=1 --trace=off` 2/2 PASS；对应 `ruler-edge-inputs.spec.ts` 3/3 PASS。其他旧路由/调用方/测试尚待迁移，这三项不勾选，未提前退役旧目录。
+- 待人工验收：Safari/iOS WebView 混排与焦点/中文 IME/软键盘；iOS/Android 真机启动；Web 实际 pen 四压力模式、up=0、掌触与高刷新率交接；目标设备长笔 CPU/内存/rAF/历史 reconcile 与 WebView 预算。3.3 / 6.1 / 7.5 / 7.6 / 7.8 相关设备部分未验证。完整边界见 `docs/implementation/layered-perfect-freehand-surface/webkit-verification.md`。
+- 合并后实际复核：`pnpm test:ui tests/ui/layered-editor.spec.ts tests/ui/resource-editing-fixture.spec.ts tests/ui/ruler-edge-inputs.spec.ts --workers=1 --trace=off` Chromium 21/21 PASS；独立 WebKit 同三文件 21/21 PASS。`pnpm exec jest --listTests --runInBand --json` 收集 88 文件，包含 22 个分层测试文件及迁移后的尺子测试；`pnpm test` 88 suites / 1474 tests PASS。`pnpm lint` 首次 124 errors，修正五份新测试的条件断言后 exit 0（0 errors / 36 warnings），未禁用规则。`pnpm build`、`pnpm pack:dry` exit 0，但仍有待退役 Skia 资源，7.3 不勾选。Android/iOS 两个静态导出命令再次 exit 0（非真机证据）。`openspec validate layered-perfect-freehand-surface --strict` PASS。当前完整完成数仍为 30/45；本轮无未完成项被误勾。
