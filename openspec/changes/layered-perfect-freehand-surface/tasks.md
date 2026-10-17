@@ -57,7 +57,7 @@
 
 ## 7. Integrated Verification and Delivery Evidence
 
-- [ ] 7.1 实施时把新增 unit tests 放入被收集路径或显式接入测试工程，运行 `pnpm exec jest --listTests` 将每个新增测试文件与收集结果比对，再运行 `pnpm test` 保存实际执行报告；核实 web/core-node/native 覆盖、Skia 工程退出及 ruler/virtualpaper/minimap/IME/history/selection/erase 映射，不将未收集的 playground unit tests 当通过，不靠删除失败测试假通过。
+- [x] 7.1 实施时把新增 unit tests 放入被收集路径或显式接入测试工程，运行 `pnpm exec jest --listTests` 将每个新增测试文件与收集结果比对，再运行 `pnpm test` 保存实际执行报告；核实 web/core-node/native 覆盖、Skia 工程退出及 ruler/virtualpaper/minimap/IME/history/selection/erase 映射，不将未收集的 playground unit tests 当通过，不靠删除失败测试假通过。（2026-10-18：7.10 配置修改后实际重跑 `pnpm exec jest --listTests --runInBand --json`，将 packages/tests/jest 下全部 82 个真实测试路径逐个比对：collected=82 / testFiles=82 / missing=[]；`pnpm test` 82 suites / 1065 tests PASS，三个 projects 含 Expo DOM host 最小挂载。测试迁移与专用断言退役理由见 `cutover-regression-map.md`、`retirement-verification.md`，不把退出的 Skia 工程或未收集实验记为通过。）
 - [ ] 7.2 运行 `pnpm run test:ui`（现有真实 Playwright Chromium、5266、prepare artifacts 流程），保留或替换 playground/ruler/virtualpaper/minimap/IME/history/selection/erase/touch regression 并添加分层 fixture；保存 PF dot/压力/半透明交接真实像素、混排、过程反馈、快速半径擦除、工具设置隔离及历史 render 计数证据，区分合成输入与真实硬件证据。
 - [ ] 7.3 运行 `pnpm run typecheck`、`pnpm run lint`、受影响文件格式检查、`pnpm run build` 和 `pnpm run pack:dry`；验证两个发布包/Expo Web 产物无 Skia exports/运行时引用，记录失败原因而非泛化声称通过。
 - [x] 7.4 使用当前 `pnpm --filter @hamster-note/painting-playground build:android` 以及实施时核对的 Expo iOS 导出入口（如 `pnpm --filter @hamster-note/painting-playground exec expo export --platform ios`）验证静态打包/依赖解析；保存记录并明确 Android/iOS `expo export` 不是原生构建运行、模拟器或真机证据，不能代替设备压感、文字键盘或 WebView physical paint 验收。（本次：上述 Android 与 iOS 命令均 exit 0，均实际生成 LayeredEditorDom www.bundle；`[evidence:compat-static][target:android|ios][executor:linux]`；见 `ham40-verification.md`。）
