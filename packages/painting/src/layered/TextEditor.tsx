@@ -74,6 +74,22 @@ export function TextEditor({
       close();
       return;
     }
+    if (value.kind === 'update' && editing.object) {
+      const original = editing.object;
+      const next = value.draft;
+      if (
+        next.content === original.content &&
+        next.fontSize === original.fontSize &&
+        next.color === original.color &&
+        next.localBounds.minX === original.localBounds.minX &&
+        next.localBounds.minY === original.localBounds.minY &&
+        next.localBounds.maxX === original.localBounds.maxX &&
+        next.localBounds.maxY === original.localBounds.maxY
+      ) {
+        close();
+        return;
+      }
+    }
     const result =
       value.kind === 'delete'
         ? controller.editObjects({

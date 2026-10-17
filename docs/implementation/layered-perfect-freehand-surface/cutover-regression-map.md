@@ -1,5 +1,11 @@
 # 分层入口的回归迁移
 
+## 组件回归搬迁（第三批）
+
+旧 DrawingSurface、Minimap、TextDrawingSurface 的保留语义通过真实分层组件重新执行：`layered-surface-regression.test.tsx` 覆盖 dot/raw/up=0、五类形状实时预览/取消、brush 快照、竞争掌触、冻结 viewport、五种生命周期取消和 mouse policy；`layered-minimap.test.tsx` 覆盖开关/混合对象、拖动唯一 viewport、极远/变换对象的有限投影；`layered-text-regression.test.tsx` 覆盖多语言既有文字修改、顺序/图片不变、无修改退出、清空删除、过期修订拒绝及混合文字/图片 move/resize/rotate 预览取消与可逆事务。迁移时修复了未修改文字也产生 history 的问题。
+
+实跑 `pnpm exec jest --runInBand --testPathPattern 'layered-(surface-regression|minimap|text-regression|text-editor)'`：4 suites / 25 tests PASS；五个受影响源文件 ESLint exit 0、Prettier 完成。旧 API 参数/DOM 结构不再作为回归契约，保留语义对应本表和上述新套件；当前批尚未删除旧实现。
+
 ## 首批迁移（2026-10-18）
 
 本批先迁调用方与测试，尚未执行 Skia/旧目录删除。`packages/painting-board` 的 `PaintingBoard` 现在直接使用 `LayeredPaintingBoard`，必须传入唯一 controller；`apps/playground/src/App.tsx` 使用同一 Expo DOM 路由。旧 value/ref/pressureMultiplier 不再是公开 board 契约。
