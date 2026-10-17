@@ -116,18 +116,6 @@ const nativeProject = {
   transform: expoTransform,
 };
 
-const skiaCanvasKitProject = {
-  ...jestExpoPreset,
-  displayName: 'skia-canvaskit',
-  rootDir: '.',
-  testEnvironment: '@shopify/react-native-skia/jestEnv.js',
-  testMatch: ['<rootDir>/tests/jest/skia/**/*.skia.test.tsx'],
-  setupFilesAfterEnv: ['@shopify/react-native-skia/jestSetup.js'],
-  transform: expoTransform,
-  transformIgnorePatterns: [],
-  maxWorkers: 1,
-};
-
 export default {
-  projects: [legacyWebProject, coreNodeProject, nativeProject, skiaCanvasKitProject],
+  projects: [legacyWebProject, coreNodeProject, nativeProject],
 };

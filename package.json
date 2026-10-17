@@ -13,9 +13,11 @@
     "build:demo": "pnpm --filter @hamster-note/painting-playground build",
     "build:all": "pnpm run build:lib && pnpm run build:demo",
     "build": "pnpm run build:all",
-    "prepare:playground-artifacts": "pnpm --filter @hamster-note/painting build && pnpm --filter @hamster-note/painting-board build && pnpm --filter @hamster-note/painting-playground fonts:verify",
+    "prepare:playground-artifacts": "pnpm --filter @hamster-note/painting build && pnpm --filter @hamster-note/painting-board build",
     "test": "jest --runInBand",
     "test:ui": "playwright test --config=playwright.config.ts",
+    "test:webkit": "playwright test --config=playwright.webkit.config.ts",
+    "verify:layered": "node scripts/verify-layered-delivery.mjs",
     "ci:local": "pnpm install --frozen-lockfile && pnpm run lint && pnpm run test && pnpm run test:ui && pnpm run build && pnpm run pack:dry",
     "pack:dry": "cd packages/painting && npm pack --dry-run && cd ../painting-board && npm pack --dry-run",
     "dev": "pnpm --filter @hamster-note/painting-playground dev"

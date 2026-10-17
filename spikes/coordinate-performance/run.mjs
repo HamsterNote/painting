@@ -20,7 +20,7 @@
  *   - 本脚本不设定任何最终性能阈值，也不作 CanvasKit / native 结论。
  *
  * 运行：node spikes/coordinate-performance/run.mjs
- * 输出：openspec/changes/migrate-expo57-skia-surface/spikes/phase-2/
+ * 输出：artifacts/research/coordinate-performance/
  *        coordinate-performance-measurements.json（稳定覆盖）
  */
 
@@ -35,7 +35,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..', '..');
 const OUTPUT_PATH = resolve(
   REPO_ROOT,
-  'openspec/changes/migrate-expo57-skia-surface/spikes/phase-2/coordinate-performance-measurements.json'
+  'artifacts/research/coordinate-performance/coordinate-performance-measurements.json'
 );
 
 // ---------------------------------------------------------------------------

@@ -17,7 +17,7 @@ const REPO_ROOT = resolve(__dirname, '..', '..');
 const PRODUCT_SOURCE = resolve(REPO_ROOT, 'packages/painting/src/core/spatialIndex.ts');
 const OUTPUT_PATH = resolve(
   REPO_ROOT,
-  'openspec/changes/migrate-expo57-skia-surface/spikes/phase-10/product-performance-measurements.json'
+  'artifacts/research/product-performance/product-performance-measurements.json'
 );
 const TYPESCRIPT_CLI = resolve(REPO_ROOT, 'node_modules/typescript/bin/tsc');
 

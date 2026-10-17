@@ -15,13 +15,13 @@ node spikes/coordinate-performance/run.mjs
 命令会稳定覆盖输出文件（无需先删除旧文件）：
 
 ```
-openspec/changes/migrate-expo57-skia-surface/spikes/phase-2/coordinate-performance-measurements.json
+artifacts/research/coordinate-performance/coordinate-performance-measurements.json
 ```
 
 校验 JSON 合法：
 
 ```bash
-node -e "JSON.parse(require('fs').readFileSync('openspec/changes/migrate-expo57-skia-surface/spikes/phase-2/coordinate-performance-measurements.json','utf8')); console.log('ok')"
+node -e "JSON.parse(require('fs').readFileSync('artifacts/research/coordinate-performance/coordinate-performance-measurements.json','utf8')); console.log('ok')"
 ```
 
 ## 与产品 viewport 的关系（同构，非产品运行时）

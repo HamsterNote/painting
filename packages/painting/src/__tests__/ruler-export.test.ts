@@ -85,7 +85,8 @@ describe('@hamster-note/painting/ruler', () => {
     // 与既有子路径同构：条件键集合一致。
     const referenceKeys = Object.keys(exports['./core']).sort();
     expect(Object.keys(rulerExport).sort()).toEqual(referenceKeys);
-    expect(Object.keys(rulerExport).sort()).toEqual(Object.keys(exports['./skia']).sort());
+    expect(Object.keys(rulerExport).sort()).toEqual(Object.keys(exports['./layered']).sort());
+    expect(exports).not.toHaveProperty('./skia');
     expect(Object.keys(rulerExport).sort()).toEqual(Object.keys(exports['./input/web']).sort());
 
     // 回归护栏：任一条件为 null 都会让携带该条件的解析器解析失败。

@@ -1,6 +1,6 @@
 # Painting
 
-HamsterNote 的画布绘制包：提供 DrawingSurface 组件及其工具（笔、形状、套索、文字、橡皮）、视口变换与虚拟纸渲染。
+HamsterNote 的 schema3 分层画布：controller 是文档、事务历史与 viewport 的唯一真源；Web Canvas 绘制活动/待交接自由笔，有序 SVG 呈现历史对象。根 DrawingSurface/PaintingBoard 与 `/layered` 均使用同一实现，必传 controller。三平台首期均由 Web 编辑器承载；iOS/Android 使用 Expo DOM，不提供 native ink。
 
 ## Language
 
@@ -55,5 +55,5 @@ _Avoid_: 固定线宽、不缩放线宽
 _Avoid_: 逻辑像素、世界坐标长度
 
 **虚拟纸模式（Virtual Paper Mode）**:
-由 virtual-paper 容器接管视口变换的渲染模式，与 SVG 内部变换的非虚拟纸模式相对。
+虚拟纸展示与可配置导航交互。纸张、历史 SVG、活动 Canvas 和选择层均读取 controller 的同一个 viewport；没有额外容器变换或第二份视口状态。
 _Avoid_: VP 模式（口头缩写，不落入文档）

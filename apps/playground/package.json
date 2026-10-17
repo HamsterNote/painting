@@ -10,17 +10,13 @@
     "dev:ios": "expo start --ios",
     "build": "expo export --platform web",
     "build:android": "expo export --platform android",
-    "typecheck": "tsc --noEmit",
-    "setup:skia-web": "setup-skia-web",
-    "fonts:generate": "bash scripts/generate-font-assets.sh",
-    "fonts:verify": "bash scripts/generate-font-assets.sh --verify"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.16",
     "@hamster-note/components": "0.3.0",
     "@hamster-note/painting": "*",
     "@hamster-note/painting-board": "*",
-    "@shopify/react-native-skia": "2.6.2",
     "expo": "~57.0.24",
     "expo-constants": "~57.0.19",
     "expo-linking": "~57.0.10",

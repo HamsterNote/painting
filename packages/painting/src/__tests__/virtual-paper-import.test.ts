@@ -4,11 +4,11 @@ import {
   viewportToVirtualPaperTransform,
   virtualPaperTransformToViewport,
 } from '@hamster-note/painting';
-import { VirtualPaperSurfaceFrame } from '../VirtualPaperSurfaceFrame';
+import { VirtualPaper } from '../layered/NavigationOverlay';
 
 describe('internal virtual paper contract', () => {
   it('uses the internal display-only Frame and retains public option enablement', () => {
-    expect(VirtualPaperSurfaceFrame).toBeDefined();
+    expect(VirtualPaper).toBeDefined();
     expect(isVirtualPaperEnabled(true)).toBe(true);
     expect(isVirtualPaperEnabled({ enabled: false })).toBe(false);
 

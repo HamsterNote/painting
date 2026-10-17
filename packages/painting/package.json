@@ -54,20 +54,6 @@
         "default": "./lib/commonjs/core/index.js"
       }
     },
-    "./skia": {
-      "react-native": {
-        "types": "./lib/typescript/module/skia/index.d.ts",
-        "default": "./src/skia/index.ts"
-      },
-      "import": {
-        "types": "./lib/typescript/module/skia/index.d.ts",
-        "default": "./lib/module/skia/index.js"
-      },
-      "require": {
-        "types": "./lib/typescript/commonjs/skia/index.d.ts",
-        "default": "./lib/commonjs/skia/index.js"
-      }
-    },
     "./input/web": {
       "react-native": {
         "types": "./lib/typescript/module/input/web/index.d.ts",
@@ -108,17 +94,10 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "@shopify/react-native-skia": "^2.6.2",
     "react": "^19.0.0",
     "react-native": ">=0.74"
   },
-  "peerDependenciesMeta": {
-    "@shopify/react-native-skia": {
-      "optional": true
-    }
-  },
   "devDependencies": {
-    "@shopify/react-native-skia": "2.6.2",
     "@testing-library/dom": "^10.0.0",
     "@testing-library/react": "^16.0.0",
     "@types/jest": "^29.5.12",

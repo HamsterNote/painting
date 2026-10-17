@@ -19,7 +19,7 @@ import { relative, resolve, sep } from 'node:path';
 
 /** 必须存在且可读的源码身份文件（缺失/不可读 => fail-closed）。 */
 export const REQUIRED_IDENTITY_FILES = Object.freeze([
-  'scripts/perf/editor-production-performance.mjs',
+  'tests/ui/editor-candidate-canvas2d-pen.spec.ts',
   'scripts/perf/editor-production-performance-oracle.mjs',
   'scripts/perf/editor-production-performance-oracle.test.mjs',
   'scripts/perf/static-spa-server.mjs',

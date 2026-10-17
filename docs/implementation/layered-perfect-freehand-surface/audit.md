@@ -1,7 +1,7 @@
 # Task 1.2 / 1.3 Skia 复用审计（固化清单）
 
 - 来源：`.slim/deepwork/layered-perfect-freehand-surface.md` 已接收只读审计（exp-1 完整补充 + 主编排源码核对）。
-- 状态：**未授权删除**。本文件仅固化 keep/remove/replace 与复审项；实际删除须经 gate 1 与主编排批准。
+- 状态：初始清单的“未授权删除”为历史状态；2026-10-18 最新交接已明确授权完整 cutover。已完成调用方/回归迁移并实跑后，按本清单退出专用运行时；最终删除范围与结果见 `retirement-verification.md`，非 Skia 纯工具继续保留。
 - 备份：`/home/zhangxiao/.cache/opencode-tmp/opencode/backups/layered-perfect-freehand-surface-20261005-153833`（349 成员，sha256 校验通过），旧 change 与新 change 均在其中。
 - 旧 change：`migrate-expo57-skia-surface` 实际 **38/46** 完成，未完成 9.2、10.1/10.2/10.3、11.1/11.3/11.4、12.1；仅 6.5 删除，不伪归档。
 

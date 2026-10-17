@@ -15,7 +15,7 @@ node --expose-gc spikes/product-performance/run.mjs
 输出会覆盖：
 
 ```text
-openspec/changes/migrate-expo57-skia-surface/spikes/phase-10/product-performance-measurements.json
+artifacts/research/product-performance/product-performance-measurements.json
 ```
 
 `--expose-gc` 不是计时正确性的前提，但它使 B2 内存快照可在采集前主动执行 GC。若省略，
@@ -24,7 +24,7 @@ JSON 会记录 `memory.gcAvailable: false`。
 JSON 结构校验：
 
 ```bash
-node -e "JSON.parse(require('node:fs').readFileSync('openspec/changes/migrate-expo57-skia-surface/spikes/phase-10/product-performance-measurements.json','utf8')); console.log('valid JSON')"
+node -e "JSON.parse(require('node:fs').readFileSync('artifacts/research/product-performance/product-performance-measurements.json','utf8')); console.log('valid JSON')"
 ```
 
 ## 方法
