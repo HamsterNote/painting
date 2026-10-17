@@ -3,7 +3,11 @@ import type {
   LayeredViewportSnapshot,
 } from '../core/layeredEditorController';
 import { createRulerGestureController } from '../input/web/rulerGestureController';
-import { isInsideRuler } from '../ruler/geometry';
+import {
+  getInfiniteRulerLayout,
+  isInsideRuler,
+  projectPointToRulerCenterline,
+} from '../ruler/geometry';
 import { applyViewportTransformIntent } from '../core/viewportTransform';
 import type { Point } from '../model/document';
 
@@ -17,7 +21,6 @@ export function createNavigationWebAdapter(
   const touches = new Map<number, Point>();
   const suppressed = new Set<number>();
   let baseline: { viewport: LayeredViewportSnapshot; focal: Point; distance: number } | undefined;
-  let rulerBusy = false;
   let drag:
     { id: number; source: string; start: Point; viewport: LayeredViewportSnapshot } | undefined;
   const config = () => controller.getSnapshot('navigation').virtualPaper;
@@ -84,7 +87,6 @@ export function createNavigationWebAdapter(
       return;
     }
     if (event.defaultPrevented) {
-      rulerBusy = true;
       return;
     }
     if (
@@ -100,7 +102,7 @@ export function createNavigationWebAdapter(
         !allows('touchTwoFingerZoom'))
     )
       return;
-    if (writing() || rulerBusy || drag || touches.size >= 2 || suppressed.size) {
+    if (writing() || drag || touches.size >= 2 || suppressed.size) {
       suppressed.add(event.pointerId);
       consume(event);
       return;
@@ -204,7 +206,17 @@ export function createNavigationWebAdapter(
       const state = controller.getSnapshot('navigation').ruler;
       return state.visible && !writing() ? state : null;
     },
-    getRotationPivot: (state) => state.center,
+    getRotationPivot: (state) => {
+      const rect = host.getBoundingClientRect();
+      return rect.width > 0
+        ? getInfiniteRulerLayout({
+            logicalCenter: state.center,
+            rotationRad: state.rotationRad,
+            height: controller.getSnapshot('navigation').ruler.height,
+            viewport: rect,
+          }).visualCenter
+        : state.center;
+    },
     hitTest: (event) => {
       const state = controller.getSnapshot('navigation').ruler;
       return state.visible && !writing() && isInsideRuler(screen(event), { ...state, length: 1 });
@@ -214,13 +226,14 @@ export function createNavigationWebAdapter(
       controller.setNavigation({
         ruler: { ...controller.getSnapshot('navigation').ruler, ...state },
       }),
-    onActiveChange: (active) => {
-      rulerBusy = active;
-    },
+    onActiveChange: () => {},
     onRotationFeedback: (feedback) =>
       controller.setNavigation({
         rotationFeedback: feedback
-          ? { point: feedback.point, rotationRad: feedback.rotationRad }
+          ? {
+              point: projectPointToRulerCenterline(feedback.point, feedback.state),
+              rotationRad: feedback.rotationRad,
+            }
           : null,
       }),
   });

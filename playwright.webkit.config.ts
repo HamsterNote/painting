@@ -6,5 +6,5 @@ export default defineConfig({
   outputDir: 'test-results/webkit',
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report/webkit' }]],
   testMatch: 'layered-editor.spec.ts',
-  projects: [{ name: 'webkit', use: { browserName: 'webkit' } }],
+  projects: [{ name: 'webkit', use: { browserName: 'webkit', launchOptions: { args: [] } } }],
 });

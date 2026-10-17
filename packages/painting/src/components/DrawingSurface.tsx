@@ -56,7 +56,7 @@ import {
   type RulerRect,
 } from '../ruler/geometry';
 import { RulerTicks } from '../ruler/RulerTicks';
-import { createRulerGestureController } from '../legacy-compat/rulerGestureController';
+import { createRulerGestureController } from '../input/web/rulerGestureController';
 import { createSelectionGestureController } from '../legacy-compat/selectionGestureController';
 import { createViewportGestureController } from '../legacy-compat/viewportGestureController';
 import type { SelectionGestureDescriptor, SelectionIntent, TargetRole } from '../core';

@@ -27,6 +27,13 @@ function pixel(png: Awaited<ReturnType<typeof decodeRgbaPng>>, x: number, y: num
   return Array.from(png.pixels.slice(offset, offset + 3));
 }
 
+function expectCompositedPixel(actual: number[], expected: number[]) {
+  // Canvas and SVG alpha compositing in WebKit can round a channel one unit apart.
+  for (let channel = 0; channel < 3; channel++) {
+    expect(Math.abs(actual[channel] - expected[channel])).toBeLessThanOrEqual(1);
+  }
+}
+
 test('mixed SVG document order equals actual pixel order', async ({ page }, testInfo) => {
   await openEditor(page, '&fixture=mixed');
   await expect(page.locator('[data-object-id]')).toHaveCount(5);
@@ -43,6 +50,27 @@ test('mixed SVG document order equals actual pixel order', async ({ page }, test
   expect(pixel(png, 140, 150)).toEqual([0, 0, 255]);
   expect(pixel(png, 200, 230)).toEqual([255, 255, 0]);
   expect(pixel(png, 230, 180)).toEqual([255, 0, 0]);
+});
+
+test('new mouse ink covers existing HTML text in active and historical pixels', async ({
+  page,
+}) => {
+  await openEditor(page, '&fixture=mixed');
+  await page.getByLabel('笔宽', { exact: true }).fill('40');
+  await page.getByLabel('压力模式', { exact: true }).selectOption('constant');
+  const surface = page.getByTestId('layered-surface');
+  const box = (await surface.boundingBox())!;
+  expect(pixel(await decodeRgbaPng(await surface.screenshot()), 90, 150)).toEqual([0, 0, 0]);
+  await page.mouse.move(box.x + 90, box.y + 150);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 110, box.y + 150);
+  await expect
+    .poll(async () => pixel(await decodeRgbaPng(await surface.screenshot()), 90, 150))
+    .toEqual([20, 125, 100]);
+  await page.mouse.up();
+  await expect(page.locator('[data-object-id]')).toHaveCount(6);
+  await expect(page.locator('[data-object-id]').last()).toHaveCSS('visibility', 'visible');
+  expect(pixel(await decodeRgbaPng(await surface.screenshot()), 90, 150)).toEqual([20, 125, 100]);
 });
 
 test('default route opens the layered editor and responds over LAN', async ({ page, request }) => {
@@ -69,6 +97,10 @@ test('dot, pressure width and half-opacity delayed handoff remain visible', asyn
   const surfacePixel = (png: Awaited<ReturnType<typeof decodeRgbaPng>>, x: number, y: number) =>
     pixel(png, Math.round(box.x + x), Math.round(box.y + y));
   await pointer(page, 'down', 100, 100);
+  // WebKit screenshots may precede the rAF that draws the accepted input.
+  await expect
+    .poll(async () => surfacePixel(await decodeRgbaPng(await page.screenshot()), 100, 100))
+    .toEqual([137, 190, 177]);
   const active = await decodeRgbaPng(await page.screenshot());
   expect(surfacePixel(active, 100, 100)).toEqual([137, 190, 177]);
   await pointer(page, 'up', 100, 100, 0);
@@ -79,7 +111,8 @@ test('dot, pressure width and half-opacity delayed handoff remain visible', asyn
   await expect(page.locator('[data-object-id]')).toHaveCSS('visibility', 'visible');
   const final = await page.screenshot();
   await testInfo.attach('dot-final', { body: final, contentType: 'image/png' });
-  expect(surfacePixel(await decodeRgbaPng(final), 100, 100)).toEqual(
+  expectCompositedPixel(
+    surfacePixel(await decodeRgbaPng(final), 100, 100),
     surfacePixel(pending, 100, 100)
   );
   await page.getByLabel('压力模式', { exact: true }).selectOption('real');
@@ -103,7 +136,7 @@ test('dot, pressure width and half-opacity delayed handoff remain visible', asyn
   await pointer(page, 'up', 360, 100, 0);
   await expect(page.locator('[data-object-id]').last()).toHaveCSS('visibility', 'visible');
   const short = await decodeRgbaPng(await page.screenshot());
-  expect(surfacePixel(short, 355, 100)).toEqual([137, 190, 177]);
+  expectCompositedPixel(surfacePixel(short, 355, 100), [137, 190, 177]);
 });
 
 test('active samples do not reconcile history; tools preview and IME commit through the controller', async ({

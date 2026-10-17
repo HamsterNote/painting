@@ -27,6 +27,53 @@ function pointer(
   target.dispatchEvent(event);
 }
 
+test('ruler and paper touches retain independent concurrent ownership', () => {
+  const controller = makeLayeredController();
+  controller.setNavigation({
+    ruler: { visible: true, center: { x: 200, y: 200 }, rotationRad: 0, height: 80 },
+  });
+  const host = document.createElement('div');
+  document.body.append(host);
+  const adapter = createNavigationWebAdapter(host, controller);
+  pointer(host, 'down', 1, 150, 200);
+  pointer(host, 'down', 2, 250, 200);
+  pointer(host, 'down', 3, 100, 50);
+  pointer(host, 'down', 4, 200, 50);
+  pointer(window, 'move', 4, 300, 50);
+  expect(controller.getSnapshot('viewport').viewport.scale).toBe(2);
+  const viewport = controller.getSnapshot('viewport');
+  pointer(window.document, 'move', 2, 200, 280);
+  expect(controller.getSnapshot('navigation').ruler.rotationRad).toBeGreaterThan(0.5);
+  const feedback = controller.getSnapshot('navigation').rotationFeedback!;
+  const ruler = controller.getSnapshot('navigation').ruler;
+  const dx = feedback.point.x - ruler.center.x;
+  const dy = feedback.point.y - ruler.center.y;
+  expect(-dx * Math.sin(ruler.rotationRad) + dy * Math.cos(ruler.rotationRad)).toBeCloseTo(0);
+  expect(controller.getSnapshot('viewport')).toBe(viewport);
+  for (let id = 1; id <= 4; id++) pointer(window.document, 'up', id, 200, 200);
+  expect(controller.getSnapshot('history').canUndo).toBe(false);
+  adapter.destroy();
+  host.remove();
+});
+
+test('mouse ruler rotation uses the visible segment midpoint instead of its logical origin', () => {
+  const controller = makeLayeredController();
+  controller.setNavigation({
+    ruler: { visible: true, center: { x: 100, y: 200 }, rotationRad: 0, height: 80 },
+  });
+  const host = document.createElement('div');
+  host.getBoundingClientRect = () => ({ width: 800, height: 600, left: 0, top: 0 }) as DOMRect;
+  document.body.append(host);
+  const adapter = createNavigationWebAdapter(host, controller);
+  pointer(host, 'down', 1, 450, 200, 'mouse', { altKey: true });
+  pointer(window.document, 'move', 1, 400, 250, 'mouse', { altKey: true });
+  expect(controller.getSnapshot('navigation').ruler.rotationRad).toBeCloseTo(Math.PI / 2);
+  expect(controller.getSnapshot('navigation').rotationFeedback?.point).toEqual({ x: 400, y: 200 });
+  pointer(window.document, 'up', 1, 400, 250, 'mouse', { altKey: true });
+  adapter.destroy();
+  host.remove();
+});
+
 test('touch navigation keeps its fixed pair, rejects third contacts, and never replays a palm after writing', () => {
   const controller = makeLayeredController();
   const host = document.createElement('div');

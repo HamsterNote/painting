@@ -1,5 +1,5 @@
 import { createRulerGestureController } from '../rulerGestureController';
-import * as webInput from '../../input/web/normalizePointerInput';
+import * as webInput from '../normalizePointerInput';
 
 function pointer(
   type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel',
@@ -30,7 +30,7 @@ function pointer(
   return event as PointerEvent;
 }
 
-describe('legacy-compat/rulerGestureController', () => {
+describe('input/web/rulerGestureController', () => {
   let host: HTMLDivElement;
   let state: { center: { x: number; y: number }; rotationRad?: number };
   let onState: jest.Mock;
@@ -156,14 +156,22 @@ describe('legacy-compat/rulerGestureController', () => {
     host.dispatchEvent(
       pointer('pointerdown', { pointerType: 'mouse', ctrlKey: true, clientX: 50, clientY: 50 })
     );
-    document.dispatchEvent(pointer('pointermove', { pointerType: 'mouse', clientX: 70, clientY: 70 }));
-    document.dispatchEvent(pointer('pointerup', { pointerType: 'mouse', clientX: 70, clientY: 70 }));
+    document.dispatchEvent(
+      pointer('pointermove', { pointerType: 'mouse', clientX: 70, clientY: 70 })
+    );
+    document.dispatchEvent(
+      pointer('pointerup', { pointerType: 'mouse', clientX: 70, clientY: 70 })
+    );
 
     expect(normalize).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ host, targetRole: 'ruler', point: expect.any(Object) })
     );
-    expect(normalize.mock.calls.map(([, options]) => options.phase)).toEqual(['down', 'move', 'up']);
+    expect(normalize.mock.calls.map(([, options]) => options.phase)).toEqual([
+      'down',
+      'move',
+      'up',
+    ]);
     normalize.mockRestore();
   });
 });
