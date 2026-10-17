@@ -136,7 +136,7 @@ export default function App() {
   const [boardBViewport, setBoardBViewport] = useState<DrawingViewport>(DEFAULT_DRAWING_VIEWPORT);
   const [rulerEnabled, setRulerEnabled] = useState(false);
   // ===== Virtual-paper 滚动/平移模式开关 (Task 9) =====
-  // 启用后 DrawingSurface 将虚拟纸张交给 @hamster-note/virtual-paper 管理视口变换
+  // 启用后 DrawingSurface 由内部虚拟纸 Frame 管理视口变换
   const [virtualPaperEnabled, setVirtualPaperEnabled] = useState(false);
   const [minimapEnabled, setMinimapEnabled] = useState(true);
   const [rulerStateControlled, setRulerStateControlled] = useState<DrawingRulerState>();

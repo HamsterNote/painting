@@ -63,18 +63,22 @@ jobs:
           echo "Package version: $PKG_VERSION"
           echo "Publish tag: $PUBLISH_TAG"
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22.13
           registry-url: https://registry.npmjs.org
-          cache: yarn
+          cache: pnpm
 
       - name: Install dependencies
         run: |
-          corepack enable
-          yarn --version
-          yarn install --frozen-lockfile
+          pnpm --version
+          pnpm install --frozen-lockfile
 
       - name: Check if version already published
         id: version
@@ -109,7 +113,7 @@ jobs:
       - name: Build project
         if: steps.version.outputs.should_publish == 'true'
         run: |
-          yarn build
+          pnpm build
 
       - name: Publish to npm
         if: steps.version.outputs.should_publish == 'true'

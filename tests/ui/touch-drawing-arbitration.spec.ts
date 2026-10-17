@@ -1,5 +1,7 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
+import { LEGACY_PATH } from './legacy-path';
+
 type TouchEventType = 'pointerdown' | 'pointermove' | 'pointerup';
 
 interface TouchEventInput {
@@ -69,7 +71,7 @@ async function dispatchTouch(
 
 test.describe('touch drawing arbitration browser contract', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto(LEGACY_PATH);
   });
 
   test('hands a pending first touch to two-finger viewport manipulation without drawing', async ({

@@ -2,25 +2,44 @@
   "name": "@hamster-note/painting-playground",
   "private": true,
   "version": "0.1.0",
-  "type": "module",
+  "main": "expo-router/entry",
   "scripts": {
-    "dev": "vite --port 5266",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "dev": "pnpm run dev:web",
+    "dev:web": "expo start --web --lan --port 5266",
+    "dev:android": "expo start --android",
+    "dev:ios": "expo start --ios",
+    "build": "expo export --platform web",
+    "build:android": "expo export --platform android",
+    "typecheck": "tsc --noEmit",
+    "setup:skia-web": "setup-skia-web",
+    "fonts:generate": "bash scripts/generate-font-assets.sh",
+    "fonts:verify": "bash scripts/generate-font-assets.sh --verify"
   },
   "dependencies": {
+    "@expo/metro-runtime": "~57.0.16",
+    "@hamster-note/components": "0.3.0",
     "@hamster-note/painting": "*",
     "@hamster-note/painting-board": "*",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "react-native-web": "~0.19.13"
+    "@shopify/react-native-skia": "2.6.2",
+    "expo": "~57.0.24",
+    "expo-constants": "~57.0.19",
+    "expo-linking": "~57.0.10",
+    "expo-router": "~57.0.22",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-gesture-handler": "~2.32.0",
+    "react-native-reanimated": "4.5.1",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-web": "~0.21.0",
+    "react-native-worklets": "0.10.1"
   },
   "devDependencies": {
-    "@types/react": "~18.3.12",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.0",
-    "typescript": "^5.3.3",
-    "vite": "^6.0.0"
+    "@types/react": "~19.2.0",
+    "@types/react-dom": "~19.2.0",
+    "babel-preset-expo": "~57.0.12",
+    "typescript": "~6.0.3"
   }
 }

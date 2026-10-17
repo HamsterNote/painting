@@ -1,5 +1,7 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
+import { LEGACY_PATH } from './legacy-path';
+
 async function enableRuler(page: Page): Promise<{
   readonly surface: Locator;
   readonly overlay: Locator;
@@ -30,7 +32,7 @@ async function readRulerCenter(
 
 test.describe('ruler first-phase browser contract', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto(LEGACY_PATH);
   });
 
   test('clips an endpoint-free physical ruler to the drawing surface', async ({ page }) => {

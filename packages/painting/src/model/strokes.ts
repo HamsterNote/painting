@@ -43,6 +43,8 @@ export type TextStrokeV2 = DrawingStrokeBaseV2<'text'> & {
   fontSize: number;
 };
 export type ImageStrokeV2 = DrawingStrokeBaseV2<'image'> & {
+  /** 可选的宿主资源表标识；旧文档仍仅使用必填的 src。 */
+  resourceId?: string;
   src: string;
 };
 

@@ -1,8 +1,10 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
+import { LEGACY_PATH } from './legacy-path';
+
 test.describe('DrawingSurface playground', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto(LEGACY_PATH);
   });
 
   async function dispatchPointerDrag(

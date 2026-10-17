@@ -1,0 +1,2 @@
+/home/zhangxiao/.cache/opencode-tmp/opencode/pf-type-probe.IotAt0
+/home/zhangxiao/frontend/HamsterNote/painting.feat-use-perfect-freehand/node_modules/.pnpm/perfect-freehand@1.2.3/node_modules/perfect-freehand

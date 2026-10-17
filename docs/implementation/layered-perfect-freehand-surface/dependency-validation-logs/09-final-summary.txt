@@ -1,0 +1,20 @@
+# 09 — final state summary
+2026-10-08T04:46:23Z
+
+## hashes pre vs post install
+2ac1374748dd1de90107196a59cf2a1c36dce639f4ac345f1d2797e84bea0c04  pnpm-lock.yaml
+2fef87fd470f06bde3d8441cf2bfc0d1d42d416eb7a248fae07d8efe37ec8d3b  packages/painting/package.json
+---
+2ac1374748dd1de90107196a59cf2a1c36dce639f4ac345f1d2797e84bea0c04  pnpm-lock.yaml
+2fef87fd470f06bde3d8441cf2bfc0d1d42d416eb7a248fae07d8efe37ec8d3b  packages/painting/package.json
+HASH_UNCHANGED=YES
+
+## git status pre vs post (diff should be empty)
+GIT_STATUS_IDENTICAL=YES
+
+## lock tracked?
+error: 路径规格 'pnpm-lock.yaml' 未匹配任何 Git 已知文件
+Did you forget to 'git add'?
+
+## HEAD
+ba4b1342ad2dc423fd0f5879bcb73b6610e6dc33

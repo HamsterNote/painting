@@ -1,0 +1,2 @@
+/home/zhangxiao/frontend/HamsterNote/painting.feat-use-perfect-freehand/tests/jest/native/native-adapter-smoke.native.test.tsx
+/home/zhangxiao/frontend/HamsterNote/painting.feat-use-perfect-freehand/tests/jest/native/view-text.native.test.tsx

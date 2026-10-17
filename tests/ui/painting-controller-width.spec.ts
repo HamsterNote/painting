@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test';
 
+import { LEGACY_PATH } from './legacy-path';
+
 test.describe('PaintingController stroke width', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto(LEGACY_PATH);
   });
 
   test('updates the shared boards from a five-option width menu', async ({ page }) => {

@@ -1,0 +1,9 @@
+# pnpm 工作区定义：pnpm 从本文件读取工作区，不再读取根 package.json 的 workspaces 字段
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# 保持与原 Yarn workspaces 一致的链接行为：
+# 当本地工作区包版本满足依赖范围时，优先链接本地包而非从 registry 下载。
+# pnpm 9+ 起该选项默认为 false，故显式开启以保留原有本地开发/构建行为。
+linkWorkspacePackages: true

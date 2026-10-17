@@ -1,0 +1,12 @@
+# 工具版本与环境（基线）
+date: 2026-10-05T15:41:05+08:00
+os: Linux GameCode 7.0.0-31-generic #31-Ubuntu SMP PREEMPT_DYNAMIC Sat Aug  1 04:26:38 UTC 2026 x86_64 GNU/Linux
+distro: PRETTY_NAME="Ubuntu 26.04 LTS"
+node: v24.15.0
+pnpm: 10.28.2
+git: git version 2.53.0
+npx jest: 29.7.0
+playwright: Version 1.59.1
+typescript: Version 5.9.3
+cpu: Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz
+mem: 

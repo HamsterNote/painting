@@ -1,0 +1,923 @@
+{
+  "spike": "phase-2.2-coordinate-performance",
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-23T04:00:46.853Z",
+  "command": "node spikes/coordinate-performance/run.mjs",
+  "method": {
+    "isolation": "独立 spike：不导入 packages/painting、React、DOM、Skia、DrawingSurface 或任何产品依赖。",
+    "affineIsomorphism": "affine 公式为对 packages/painting/src/viewport.ts 中 canvasToScreen/screenToCanvas 与 normalizeViewport(scale 夹取) 的内联复刻，与其同构；但本脚本不是产品运行时，不消费产品代码。",
+    "float32MinStep": "先以 Math.fround 取 float32 表示，再用 IEEE-754 相邻位模式（DataView nextUp）之差作为该量级最小可分辨步长；并用 Math.fround 验证 step 会改变值、step/2 不会。",
+    "float64MinStep": "用 8-byte DataView 按 IEEE-754 位模式实现 nextUpFloat64（正确处理 NaN、±Infinity、±0、正负有限数），再取 value 与相邻 double 之差作为 float64 最小可分辨步长（double ULP）。",
+    "cameraOriginRebase": "固定 global=(1000000000.125, -1000000000.125)、origin=(1000000000, -1000000000)、scale=1；先做 JS number（f64）减法得 local，再用 Math.fround 模拟 f32 local affine 得 screen，比较 double 参考并记录逐轴误差与有限性。这是 f64-to-f32 输入预算示例，非 CanvasKit / native / 视觉结论；重基不能恢复在接近 2^53 已丢失的 JS number 精度。",
+    "float32Affine": "对输入坐标、scale、平移及每步中间结果分别做 Math.fround，模拟全链路 float32 affine；double 参考使用纯 JS number 公式。",
+    "extremeScales": "scale 1e-6 / 1e6 超出产品 viewport 支持范围 [0.25, 8]；对该极端值使用未夹取的原始 scale，仅用于考察 f32 数学，不代表产品会接受该 scale。",
+    "performance": "确定性 mulberry32 生成矩形文档；每档对象数先用同样方法预热若干轮，再做 30 轮测量；每轮遍历 4x4=16 个确定性查询窗口。耗时用 process.hrtime.bigint()。",
+    "gridRole": "uniform grid 仅为「候选决策对照」，用于比较可见区域查询的候选规模与耗时趋势，不代表产品已实现或选定该空间索引。",
+    "gridCorrectness": "不计时校验：对 4x4=16 个固定 query rect，分别收集 linear 与 grid（候选去重后精确相交）的完整命中 index ID，比较去重集合、按升序恢复的文档顺序序列与逗号 join 的 checksum；任一差异 throw。该 validation 只证明此固定生成文档与该 16-query bank 上两种查询一致，非实际产品 / CanvasKit / native 性能或行为结论。",
+    "percentiles": "最近邻百分位：对 30 个样本升序后取 floor(p*(n-1)) 的下标。",
+    "hashGridEdgeCases": "非计时、合成样例（spikes/coordinate-performance/hash-grid-edge-cases.mjs）：用小型确定性文档验证未来 core 候选索引需要支持的逻辑等价——稀疏 Map 网格（cellKey=`x,y`）跨 cell 注册候选、候选去重 + 精确相交 + 按 order 排序；MAX_CELLS_PER_OBJECT 超限的 huge bbox 进入 overflow，查询同时检查相关 Map bucket 与 overflow 以避免无界复制；负坐标/远正/远负/huge bbox 的确定性 queries 下 linear/grid 的 ID 集合、order 序列、ids.join(\",\") checksum 一致，另含 update（先注销旧 cell/overflow 再注册）与 remove 后重新校验。任一差异 throw。这是逻辑等价验证，不是产品实现、性能 benchmark，也不是 CanvasKit/Web GPU/native 证据。"
+  },
+  "limitations": [
+    "Node 端纯 JS 数学与计时不是 CanvasKit / Skia GPU 渲染路径，性能数值不能外推为端上渲染性能。",
+    "理论 float32 精度只描述坐标可分辨性，不能据此断言某场景一定发生渲染失效；真实失效还取决于渲染管线、变换层级与绘制实现。",
+    "affine 精度为全链路 float32 的保守模拟，CanvasKit 真实实现可能使用 double 或不同中间精度，结论需以实际实现为准。",
+    "uniform grid 结果是候选决策对照，不代表产品空间索引已实现或已决策。",
+    "grid correctness 校验只覆盖本脚本固定生成的文档与 4x4=16 固定 query bank，不能推广为实际产品 / CanvasKit / native 的性能或行为结论。",
+    "本 spike 不设定任何最终性能阈值，也不作 CanvasKit / native / 默认渲染器的结论。",
+    "cameraOriginRebase 是 f64-to-f32 输入预算示例（重基后 local 的 f32 输入可表示性），非 CanvasKit / native / 视觉结论。",
+    "重基不能恢复在接近 2^53 已丢失的 JS number 精度：若 global 本身在 f64 层面已无法分辨某偏移，先减 origin 也无法找回。",
+    "单机单次运行，未做多机、多进程、GC 隔离或多版本 Node 对照，时序数据存在噪声。",
+    "hashGridEdgeCases 是非计时、合成的逻辑等价样例，仅验证未来 core 候选索引需要支持负 key / overflow / update / remove 的行为等价；它不是产品实现、性能 benchmark，也不构成 CanvasKit / Web GPU / native 证据。",
+    "hashGridEdgeCases 的 correctness 只覆盖其内置的固定小型文档与固定 query bank（9 条），不能推广为实际产品行为或性能结论。"
+  ],
+  "environment": {
+    "node": "v24.15.0",
+    "platform": "linux",
+    "arch": "x64",
+    "cpuModel": "Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz",
+    "cpuCount": 6,
+    "totalMemoryBytes": 38900867072,
+    "hostname": "GameCode",
+    "timingSource": "process.hrtime.bigint()（单调纳秒时钟，转换为毫秒）",
+    "note": "Node/CPU 环境信息仅用于标注测量条件，不构成跨机可比性保证。"
+  },
+  "inputs": {
+    "precision": {
+      "worldMagnitudes": [
+        1000,
+        1000000,
+        10000000,
+        100000000,
+        1000000000,
+        16777216,
+        9007199254740992
+      ],
+      "offsetProbes": [
+        1,
+        0.5,
+        0.1,
+        0.01
+      ],
+      "affineScales": [
+        0.25,
+        1,
+        8,
+        0.000001,
+        1000000
+      ],
+      "affineTranslations": [
+        0,
+        1000,
+        1000000,
+        1000000000
+      ],
+      "affinePoints": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 0.1,
+          "y": 0.1
+        },
+        {
+          "x": 1,
+          "y": 1
+        },
+        {
+          "x": 1000,
+          "y": 1000
+        },
+        {
+          "x": 1000000,
+          "y": 1000000
+        },
+        {
+          "x": 16777216,
+          "y": 16777216
+        },
+        {
+          "x": 1000000000,
+          "y": 1000000000
+        },
+        {
+          "x": 9007199254740992,
+          "y": 9007199254740992
+        },
+        {
+          "x": -1000000000,
+          "y": -1000000000
+        }
+      ]
+    },
+    "performance": {
+      "objectCounts": [
+        1000,
+        10000,
+        100000
+      ],
+      "worldSize": 4096,
+      "objectSizeRange": [
+        8,
+        48
+      ],
+      "cellSize": 256,
+      "seed": 1592594996,
+      "warmupRounds": 5,
+      "measuredRounds": 30,
+      "queryGrid": 4,
+      "queryWindow": {
+        "w": 800,
+        "h": 600
+      }
+    }
+  },
+  "precision": {
+    "float32MinStep": [
+      {
+        "magnitude": 1000,
+        "magnitudeAsPow2": null,
+        "float32Value": 1000,
+        "float32MinStep": 0.00006103515625,
+        "float32RelativeStep": 6.103515625e-8,
+        "representableInFloat32": true,
+        "roundAbsError": 0,
+        "roundRelError": 0,
+        "froundStepChanged": true,
+        "froundHalfStepChanged": false,
+        "offsetResolution": [
+          {
+            "offset": 1,
+            "resolvedDelta": 1,
+            "lost": false
+          },
+          {
+            "offset": 0.5,
+            "resolvedDelta": 0.5,
+            "lost": false
+          },
+          {
+            "offset": 0.1,
+            "resolvedDelta": 0.0999755859375,
+            "lost": false
+          },
+          {
+            "offset": 0.01,
+            "resolvedDelta": 0.010009765625,
+            "lost": false
+          }
+        ]
+      },
+      {
+        "magnitude": 1000000,
+        "magnitudeAsPow2": null,
+        "float32Value": 1000000,
+        "float32MinStep": 0.0625,
+        "float32RelativeStep": 6.25e-8,
+        "representableInFloat32": true,
+        "roundAbsError": 0,
+        "roundRelError": 0,
+        "froundStepChanged": true,
+        "froundHalfStepChanged": false,
+        "offsetResolution": [
+          {
+            "offset": 1,
+            "resolvedDelta": 1,
+            "lost": false
+          },
+          {
+            "offset": 0.5,
+            "resolvedDelta": 0.5,
+            "lost": false
+          },
+          {
+            "offset": 0.1,
+            "resolvedDelta": 0.125,
+            "lost": false
+          },
+          {
+            "offset": 0.01,
+            "resolvedDelta": 0,
+            "lost": true
+          }
+        ]
+      },
+      {
+        "magnitude": 10000000,
+        "magnitudeAsPow2": null,
+        "float32Value": 10000000,
+        "float32MinStep": 1,
+        "float32RelativeStep": 1e-7,
+        "representableInFloat32": true,
+        "roundAbsError": 0,
+        "roundRelError": 0,
+        "froundStepChanged": true,
+        "froundHalfStepChanged": false,
+        "offsetResolution": [
+          {
+            "offset": 1,
+            "resolvedDelta": 1,
+            "lost": false
+          },
+          {
+            "offset": 0.5,
+            "resolvedDelta": 0,
+            "lost": true
+          },
+          {
+            "offset": 0.1,
+            "resolvedDelta": 0,
+            "lost": true
+          },
+          {
+            "offset": 0.01,
+            "resolvedDelta": 0,
+            "lost": true
+          }
+        ]
+      },
+      {
+        "magnitude": 100000000,
+        "magnitudeAsPow2": null,
+        "float32Value": 100000000,
+        "float32MinStep": 8,
+        "float32RelativeStep": 8e-8,
+        "representableInFloat32": true,
+        "roundAbsError": 0,
+        "roundRelError": 0,
+        "froundStepChanged": true,
+        "froundHalfStepChanged": false,
+        "offsetResolution": [
+          {
+            "offset": 1,
+            "resolvedDelta": 0,
+            "lost": true
+          },
+          {
+            "offset": 0.5,
+            "resolvedDelta": 0,
+            "lost": true
+          },
+          {
+            "offset": 0.1,
+            "resolvedDelta": 0,
+            "lost": true
+          },
+          {
+            "offset": 0.01,
+            "resolvedDelta": 0,
+            "lost": true
+          }
+        ]
+      },
+      {
+        "magnitude": 1000000000,
+        "magnitudeAsPow2": null,
+        "float32Value": 1000000000,
+        "float32MinStep": 64,
+        "float32RelativeStep": 6.4e-8,
+        "representableInFloat32": true,
+        "roundAbsError": 0,
+        "roundRelError": 0,
+        "froundStepChanged": true,
+        "froundHalfStepChanged": false,
+        "offsetResolution": [
+          {
+            "offset": 1,
+            "resolvedDelta": 0,
+            "lost": true
+          },
+          {
+            "offset": 0.5,
+            "resolvedDelta": 0,
+            "lost": true
+          },
+          {
+            "offset": 0.1,
+            "resolvedDelta": 0,
+            "lost": true
+          },
+          {
+            "offset": 0.01,
+            "resolvedDelta": 0,
+            "lost": true
+          }
+        ]
+      },
+      {
+        "magnitude": 16777216,
+        "magnitudeAsPow2": 24,
+        "float32Value": 16777216,
+        "float32MinStep": 2,
+        "float32RelativeStep": 1.1920928955078125e-7,
+        "representableInFloat32": true,
+        "roundAbsError": 0,
+        "roundRelError": 0,
+        "froundStepChanged": true,
+        "froundHalfStepChanged": false,
+        "offsetResolution": [
+          {
+            "offset": 1,
+            "resolvedDelta": 0,
+            "lost": true
+          },
+          {
+            "offset": 0.5,
+            "resolvedDelta": 0,
+            "lost": true
+          },
+          {
+            "offset": 0.1,
+            "resolvedDelta": 0,
+            "lost": true
+          },
+          {
+            "offset": 0.01,
+            "resolvedDelta": 0,
+            "lost": true
+          }
+        ]
+      },
+      {
+        "magnitude": 9007199254740992,
+        "magnitudeAsPow2": 53,
+        "float32Value": 9007199254740992,
+        "float32MinStep": 1073741824,
+        "float32RelativeStep": 1.1920928955078125e-7,
+        "representableInFloat32": true,
+        "roundAbsError": 0,
+        "roundRelError": 0,
+        "froundStepChanged": true,
+        "froundHalfStepChanged": false,
+        "offsetResolution": [
+          {
+            "offset": 1,
+            "resolvedDelta": 0,
+            "lost": true
+          },
+          {
+            "offset": 0.5,
+            "resolvedDelta": 0,
+            "lost": true
+          },
+          {
+            "offset": 0.1,
+            "resolvedDelta": 0,
+            "lost": true
+          },
+          {
+            "offset": 0.01,
+            "resolvedDelta": 0,
+            "lost": true
+          }
+        ]
+      }
+    ],
+    "float64MinStep": [
+      {
+        "magnitude": 1000,
+        "float64MinStep": 1.1368683772161603e-13,
+        "finite": true
+      },
+      {
+        "magnitude": 1000000,
+        "float64MinStep": 1.1641532182693481e-10,
+        "finite": true
+      },
+      {
+        "magnitude": 10000000,
+        "float64MinStep": 1.862645149230957e-9,
+        "finite": true
+      },
+      {
+        "magnitude": 100000000,
+        "float64MinStep": 1.4901161193847656e-8,
+        "finite": true
+      },
+      {
+        "magnitude": 1000000000,
+        "float64MinStep": 1.1920928955078125e-7,
+        "finite": true
+      },
+      {
+        "magnitude": 16777216,
+        "float64MinStep": 3.725290298461914e-9,
+        "finite": true
+      },
+      {
+        "magnitude": 9007199254740992,
+        "float64MinStep": 2,
+        "finite": true
+      }
+    ],
+    "cameraOriginRebase": {
+      "global": {
+        "x": 1000000000.125,
+        "y": -1000000000.125
+      },
+      "origin": {
+        "x": 1000000000,
+        "y": -1000000000
+      },
+      "scale": 1,
+      "local": {
+        "x": 0.125,
+        "y": -0.125
+      },
+      "screen": {
+        "x": 0.125,
+        "y": -0.125
+      },
+      "screenDouble": {
+        "x": 0.125,
+        "y": -0.125
+      },
+      "perAxisError": {
+        "x": 0,
+        "y": 0
+      },
+      "allFinite": true
+    },
+    "affine": [
+      {
+        "scale": 0.25,
+        "translation": 0,
+        "withinProductScaleRange": true,
+        "effectiveClampedScale": 0.25,
+        "clampedOriginToScreen": {
+          "x": 0,
+          "y": 0
+        },
+        "maxForwardAbsError": 3.725290284584126e-10,
+        "maxForwardRelError": 1.4901161138336505e-8,
+        "maxInverseAbsError": 1.4901161138336505e-9,
+        "maxDoubleRoundTripAbsError": 0,
+        "maxFloat32RoundTripAbsError": 1.4901161138336505e-9,
+        "anyNonFinite": false
+      },
+      {
+        "scale": 0.25,
+        "translation": 1000,
+        "withinProductScaleRange": true,
+        "effectiveClampedScale": 0.25,
+        "clampedOriginToScreen": {
+          "x": 1000,
+          "y": 1000
+        },
+        "maxForwardAbsError": 1000,
+        "maxForwardRelError": 3.2000128000512e-8,
+        "maxInverseAbsError": 0.00009765624999999445,
+        "maxDoubleRoundTripAbsError": 9.095502129241595e-14,
+        "maxFloat32RoundTripAbsError": 0.00009765624999999445,
+        "anyNonFinite": false
+      },
+      {
+        "scale": 0.25,
+        "translation": 1000000,
+        "withinProductScaleRange": true,
+        "effectiveClampedScale": 0.25,
+        "clampedOriginToScreen": {
+          "x": 1000000,
+          "y": 1000000
+        },
+        "maxForwardAbsError": 1000000,
+        "maxForwardRelError": 2.499999939828308e-8,
+        "maxInverseAbsError": 0.1,
+        "maxDoubleRoundTripAbsError": 9.313225191043273e-11,
+        "maxFloat32RoundTripAbsError": 0.1,
+        "anyNonFinite": false
+      },
+      {
+        "scale": 0.25,
+        "translation": 1000000000,
+        "withinProductScaleRange": true,
+        "effectiveClampedScale": 0.25,
+        "clampedOriginToScreen": {
+          "x": 1000000000,
+          "y": 1000000000
+        },
+        "maxForwardAbsError": 73741824,
+        "maxForwardRelError": 3.2747933810058336e-8,
+        "maxInverseAbsError": 64,
+        "maxDoubleRoundTripAbsError": 9.536743164617612e-8,
+        "maxFloat32RoundTripAbsError": 64,
+        "anyNonFinite": false
+      },
+      {
+        "scale": 1,
+        "translation": 0,
+        "withinProductScaleRange": true,
+        "effectiveClampedScale": 1,
+        "clampedOriginToScreen": {
+          "x": 0,
+          "y": 0
+        },
+        "maxForwardAbsError": 1.4901161138336505e-9,
+        "maxForwardRelError": 1.4901161138336505e-8,
+        "maxInverseAbsError": 1.4901161138336505e-9,
+        "maxDoubleRoundTripAbsError": 0,
+        "maxFloat32RoundTripAbsError": 1.4901161138336505e-9,
+        "anyNonFinite": false
+      },
+      {
+        "scale": 1,
+        "translation": 1000,
+        "withinProductScaleRange": true,
+        "effectiveClampedScale": 1,
+        "clampedOriginToScreen": {
+          "x": 1000,
+          "y": 1000
+        },
+        "maxForwardAbsError": 1000,
+        "maxForwardRelError": 2.4411621360601307e-8,
+        "maxInverseAbsError": 0.00002441406250000555,
+        "maxDoubleRoundTripAbsError": 2.273181642920008e-14,
+        "maxFloat32RoundTripAbsError": 0.00002441406250000555,
+        "anyNonFinite": false
+      },
+      {
+        "scale": 1,
+        "translation": 1000000,
+        "withinProductScaleRange": true,
+        "effectiveClampedScale": 1,
+        "clampedOriginToScreen": {
+          "x": 1000000,
+          "y": 1000000
+        },
+        "maxForwardAbsError": 1000000,
+        "maxForwardRelError": 2.4999997523283314e-8,
+        "maxInverseAbsError": 0.024999999999999994,
+        "maxDoubleRoundTripAbsError": 2.3283069916502086e-11,
+        "maxFloat32RoundTripAbsError": 0.024999999999999994,
+        "anyNonFinite": false
+      },
+      {
+        "scale": 1,
+        "translation": 1000000000,
+        "withinProductScaleRange": true,
+        "effectiveClampedScale": 1,
+        "clampedOriginToScreen": {
+          "x": 1000000000,
+          "y": 1000000000
+        },
+        "maxForwardAbsError": 73741824,
+        "maxForwardRelError": 2.3999976000024e-8,
+        "maxInverseAbsError": 24,
+        "maxDoubleRoundTripAbsError": 2.3841857904605135e-8,
+        "maxFloat32RoundTripAbsError": 24,
+        "anyNonFinite": false
+      },
+      {
+        "scale": 8,
+        "translation": 0,
+        "withinProductScaleRange": true,
+        "effectiveClampedScale": 8,
+        "clampedOriginToScreen": {
+          "x": 0,
+          "y": 0
+        },
+        "maxForwardAbsError": 1.1920928910669204e-8,
+        "maxForwardRelError": 1.4901161138336505e-8,
+        "maxInverseAbsError": 1.4901161138336505e-9,
+        "maxDoubleRoundTripAbsError": 0,
+        "maxFloat32RoundTripAbsError": 1.4901161138336505e-9,
+        "anyNonFinite": false
+      },
+      {
+        "scale": 8,
+        "translation": 1000,
+        "withinProductScaleRange": true,
+        "effectiveClampedScale": 8,
+        "clampedOriginToScreen": {
+          "x": 1000,
+          "y": 1000
+        },
+        "maxForwardAbsError": 992,
+        "maxForwardRelError": 5.960420068948947e-8,
+        "maxInverseAbsError": 1,
+        "maxDoubleRoundTripAbsError": 1,
+        "maxFloat32RoundTripAbsError": 1,
+        "anyNonFinite": false
+      },
+      {
+        "scale": 8,
+        "translation": 1000000,
+        "withinProductScaleRange": true,
+        "effectiveClampedScale": 8,
+        "clampedOriginToScreen": {
+          "x": 1000000,
+          "y": 1000000
+        },
+        "maxForwardAbsError": 1000000,
+        "maxForwardRelError": 1.2499989953441907e-8,
+        "maxInverseAbsError": 0.0015624999999999944,
+        "maxDoubleRoundTripAbsError": 5.820760540231618e-12,
+        "maxFloat32RoundTripAbsError": 0.0015624999999999944,
+        "anyNonFinite": false
+      },
+      {
+        "scale": 8,
+        "translation": 1000000000,
+        "withinProductScaleRange": true,
+        "effectiveClampedScale": 8,
+        "clampedOriginToScreen": {
+          "x": 1000000000,
+          "y": 1000000000
+        },
+        "maxForwardAbsError": 1000000000,
+        "maxForwardRelError": 5.6888888888888887e-8,
+        "maxInverseAbsError": 64,
+        "maxDoubleRoundTripAbsError": 5.960464483090178e-9,
+        "maxFloat32RoundTripAbsError": 64,
+        "anyNonFinite": false
+      },
+      {
+        "scale": 0.000001,
+        "translation": 0,
+        "withinProductScaleRange": false,
+        "effectiveClampedScale": 0.25,
+        "clampedOriginToScreen": {
+          "x": 0,
+          "y": 0
+        },
+        "maxForwardAbsError": 22.740991592407227,
+        "maxForwardRelError": 4.749745128457272e-8,
+        "maxInverseAbsError": 0.00006103515625,
+        "maxDoubleRoundTripAbsError": 1.1368683772161603e-13,
+        "maxFloat32RoundTripAbsError": 0.00006103515625,
+        "anyNonFinite": false
+      },
+      {
+        "scale": 0.000001,
+        "translation": 1000,
+        "withinProductScaleRange": false,
+        "effectiveClampedScale": 0.25,
+        "clampedOriginToScreen": {
+          "x": 1000,
+          "y": 1000
+        },
+        "maxForwardAbsError": 1.2590084075927734,
+        "maxForwardRelError": 2.34374765388766e-8,
+        "maxInverseAbsError": 23.4375,
+        "maxDoubleRoundTripAbsError": 4.6566128730773926e-8,
+        "maxFloat32RoundTripAbsError": 23.4375,
+        "anyNonFinite": false
+      },
+      {
+        "scale": 0.000001,
+        "translation": 1000000,
+        "withinProductScaleRange": false,
+        "effectiveClampedScale": 0.25,
+        "clampedOriginToScreen": {
+          "x": 1000000,
+          "y": 1000000
+        },
+        "maxForwardAbsError": 425.2590084075928,
+        "maxForwardRelError": 4.720799311624686e-8,
+        "maxInverseAbsError": 27216,
+        "maxDoubleRoundTripAbsError": 0.000047497451305389404,
+        "maxFloat32RoundTripAbsError": 27216,
+        "anyNonFinite": false
+      },
+      {
+        "scale": 0.000001,
+        "translation": 1000000000,
+        "withinProductScaleRange": false,
+        "effectiveClampedScale": 0.25,
+        "clampedOriginToScreen": {
+          "x": 1000000000,
+          "y": 1000000000
+        },
+        "maxForwardAbsError": 489.2590084075928,
+        "maxForwardRelError": 4.8890703178094744e-8,
+        "maxInverseAbsError": 1073741824,
+        "maxDoubleRoundTripAbsError": 0.04673004150390625,
+        "maxFloat32RoundTripAbsError": 1073741824,
+        "anyNonFinite": false
+      },
+      {
+        "scale": 1000000,
+        "translation": 0,
+        "withinProductScaleRange": false,
+        "effectiveClampedScale": 8,
+        "clampedOriginToScreen": {
+          "x": 0,
+          "y": 0
+        },
+        "maxForwardAbsError": 13008896,
+        "maxForwardRelError": 1.3008896e-8,
+        "maxInverseAbsError": 1.4901161138336505e-9,
+        "maxDoubleRoundTripAbsError": 0,
+        "maxFloat32RoundTripAbsError": 1.4901161138336505e-9,
+        "anyNonFinite": false
+      },
+      {
+        "scale": 1000000,
+        "translation": 1000,
+        "withinProductScaleRange": false,
+        "effectiveClampedScale": 8,
+        "clampedOriginToScreen": {
+          "x": 1000,
+          "y": 1000
+        },
+        "maxForwardAbsError": 13009896,
+        "maxForwardRelError": 2.3999976000024e-8,
+        "maxInverseAbsError": 1.4901161138336505e-9,
+        "maxDoubleRoundTripAbsError": 0,
+        "maxFloat32RoundTripAbsError": 1.4901161138336505e-9,
+        "anyNonFinite": false
+      },
+      {
+        "scale": 1000000,
+        "translation": 1000000,
+        "withinProductScaleRange": false,
+        "effectiveClampedScale": 8,
+        "clampedOriginToScreen": {
+          "x": 1000000,
+          "y": 1000000
+        },
+        "maxForwardAbsError": 14008896,
+        "maxForwardRelError": 2.1055978944021055e-8,
+        "maxInverseAbsError": 1.4901161138336505e-9,
+        "maxDoubleRoundTripAbsError": 0,
+        "maxFloat32RoundTripAbsError": 1.4901161138336505e-9,
+        "anyNonFinite": false
+      },
+      {
+        "scale": 1000000,
+        "translation": 1000000000,
+        "withinProductScaleRange": false,
+        "effectiveClampedScale": 8,
+        "clampedOriginToScreen": {
+          "x": 1000000000,
+          "y": 1000000000
+        },
+        "maxForwardAbsError": 1000341504,
+        "maxForwardRelError": 3.1996800319968e-8,
+        "maxInverseAbsError": 0.00003199875354767401,
+        "maxDoubleRoundTripAbsError": 0,
+        "maxFloat32RoundTripAbsError": 0.00003199875354767401,
+        "anyNonFinite": false
+      }
+    ]
+  },
+  "performance": [
+    {
+      "objectCount": 1000,
+      "worldSize": 4096,
+      "cellSize": 256,
+      "gridCols": 16,
+      "gridRows": 16,
+      "queryBankSize": 16,
+      "queryWindow": {
+        "w": 800,
+        "h": 600
+      },
+      "rounds": {
+        "warmup": 5,
+        "measured": 30
+      },
+      "gridBuildMs": 0.767203,
+      "correctness": {
+        "idSetMatch": true,
+        "documentOrderMatch": true,
+        "checksumMatch": true,
+        "queryCount": 16
+      },
+      "linear": {
+        "p50Ms": 0.086101,
+        "p95Ms": 0.1009,
+        "maxMs": 0.1323,
+        "minMs": 0.084901,
+        "meanMs": 0.09093360000000002,
+        "hitsPerRound": 506,
+        "candidatesPerRound": null
+      },
+      "candidateGrid": {
+        "p50Ms": 0.0207,
+        "p95Ms": 0.0246,
+        "maxMs": 0.0543,
+        "minMs": 0.019,
+        "meanMs": 0.022316733333333328,
+        "hitsPerRound": 506,
+        "candidatesPerRound": 1050,
+        "avgCandidatesPerQuery": 65.625
+      },
+      "hitsMatchBetweenQueries": true
+    },
+    {
+      "objectCount": 10000,
+      "worldSize": 4096,
+      "cellSize": 256,
+      "gridCols": 16,
+      "gridRows": 16,
+      "queryBankSize": 16,
+      "queryWindow": {
+        "w": 800,
+        "h": 600
+      },
+      "rounds": {
+        "warmup": 5,
+        "measured": 30
+      },
+      "gridBuildMs": 3.875712,
+      "correctness": {
+        "idSetMatch": true,
+        "documentOrderMatch": true,
+        "checksumMatch": true,
+        "queryCount": 16
+      },
+      "linear": {
+        "p50Ms": 0.945903,
+        "p95Ms": 2.165007,
+        "maxMs": 2.239707,
+        "minMs": 0.914003,
+        "meanMs": 1.3066439333333337,
+        "hitsPerRound": 5107,
+        "candidatesPerRound": null
+      },
+      "candidateGrid": {
+        "p50Ms": 0.1248,
+        "p95Ms": 0.150401,
+        "maxMs": 0.174001,
+        "minMs": 0.123,
+        "meanMs": 0.13075040000000002,
+        "hitsPerRound": 5107,
+        "candidatesPerRound": 10427,
+        "avgCandidatesPerQuery": 651.6875
+      },
+      "hitsMatchBetweenQueries": true
+    },
+    {
+      "objectCount": 100000,
+      "worldSize": 4096,
+      "cellSize": 256,
+      "gridCols": 16,
+      "gridRows": 16,
+      "queryBankSize": 16,
+      "queryWindow": {
+        "w": 800,
+        "h": 600
+      },
+      "rounds": {
+        "warmup": 5,
+        "measured": 30
+      },
+      "gridBuildMs": 3.902812,
+      "correctness": {
+        "idSetMatch": true,
+        "documentOrderMatch": true,
+        "checksumMatch": true,
+        "queryCount": 16
+      },
+      "linear": {
+        "p50Ms": 21.704465,
+        "p95Ms": 22.078867,
+        "maxMs": 22.649768,
+        "minMs": 21.506065,
+        "meanMs": 21.78780563333333,
+        "hitsPerRound": 50930,
+        "candidatesPerRound": null
+      },
+      "candidateGrid": {
+        "p50Ms": 1.675006,
+        "p95Ms": 1.752705,
+        "maxMs": 1.758105,
+        "minMs": 1.603905,
+        "meanMs": 1.6754250666666666,
+        "hitsPerRound": 50930,
+        "candidatesPerRound": 104209,
+        "avgCandidatesPerQuery": 6513.0625
+      },
+      "hitsMatchBetweenQueries": true
+    }
+  ],
+  "hashGridEdgeCases": {
+    "cellSize": 256,
+    "maxCellsPerObject": 64,
+    "initial": {
+      "queryCount": 9,
+      "idSetMatch": true,
+      "documentOrderMatch": true,
+      "checksumMatch": true
+    },
+    "afterUpdate": {
+      "queryCount": 9,
+      "idSetMatch": true,
+      "documentOrderMatch": true,
+      "checksumMatch": true
+    },
+    "afterRemove": {
+      "queryCount": 9,
+      "idSetMatch": true,
+      "documentOrderMatch": true,
+      "checksumMatch": true
+    },
+    "overflow": {
+      "used": true,
+      "objectIds": [
+        4
+      ]
+    }
+  }
+}

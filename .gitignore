@@ -25,6 +25,7 @@ packages/painting/lib/
 
 # OpenCode
 .omo/
+.slim/deepwork/
 
 # Misc
 .DS_Store

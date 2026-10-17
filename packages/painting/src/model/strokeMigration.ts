@@ -20,6 +20,7 @@ type StrokeLike = {
   readonly rotationRad?: unknown;
   readonly text?: unknown;
   readonly fontSize?: unknown;
+  readonly resourceId?: unknown;
   readonly src?: unknown;
 };
 
@@ -140,6 +141,10 @@ function buildStroke(stroke: StrokeLike, tool: DrawingStrokeToolV2): DrawingStro
       return {
         ...base,
         tool,
+        // 资源 ID 是 V2 的可选增量字段。空 ID 不具备引用语义，保持旧 src-only 文档形态。
+        ...(typeof stroke.resourceId === 'string' && stroke.resourceId.length > 0
+          ? { resourceId: stroke.resourceId }
+          : {}),
         src: typeof stroke.src === 'string' ? stroke.src : '',
       };
     default:

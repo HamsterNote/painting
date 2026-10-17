@@ -1,0 +1,85 @@
+ M .github/workflows/ci-pr.yml
+ M .github/workflows/publish.yml
+ M .gitignore
+ D apps/playground/index.html
+ M apps/playground/package.json
+ M apps/playground/src/App.tsx
+ D apps/playground/src/main.tsx
+ M apps/playground/tsconfig.json
+ D apps/playground/vite.config.ts
+ M jest.config.js
+ M jest.setup.js
+ M package.json
+ M packages/painting-board/package.json
+ M packages/painting/CONTEXT.md
+ M packages/painting/package.json
+ M packages/painting/src/VirtualPaperSurfaceFrame.tsx
+ M packages/painting/src/__tests__/DrawingSurface.test.tsx
+ M packages/painting/src/__tests__/stroke-helpers.test.ts
+ M packages/painting/src/__tests__/task15-regression.test.ts
+ M packages/painting/src/__tests__/viewport.test.ts
+ M packages/painting/src/__tests__/virtual-paper-import.test.ts
+ M packages/painting/src/components/DrawingSurface.tsx
+ M packages/painting/src/components/Minimap.tsx
+ M packages/painting/src/index.ts
+ M packages/painting/src/model/strokeMigration.ts
+ M packages/painting/src/model/strokes.ts
+ M packages/painting/src/ruler/index.ts
+ D packages/painting/src/types/virtual-paper.d.ts
+ M packages/painting/src/viewport.ts
+ M packages/painting/src/virtualPaperAdapter.ts
+ M playwright.config.ts
+ M tests/ui/interaction-feedback.spec.ts
+ M tests/ui/painting-controller-color.spec.ts
+ M tests/ui/painting-controller-width.spec.ts
+ M tests/ui/playground.spec.ts
+ M tests/ui/ruler-edge-inputs.spec.ts
+ M tests/ui/ruler-test.spec.ts
+ M tests/ui/touch-drawing-arbitration.spec.ts
+ M tests/ui/touch-ruler-feedback.spec.ts
+?? .ignore
+?? .tmp-jestprobe/
+?? apps/playground/app.json
+?? apps/playground/app/
+?? apps/playground/babel.config.cjs
+?? apps/playground/metro.config.cjs
+?? apps/playground/public/
+?? apps/playground/scripts/
+?? apps/playground/src/LegacyPlaygroundRoute.tsx
+?? apps/playground/src/LegacyPlaygroundRoute.web.tsx
+?? apps/playground/src/canvas-runtime/
+?? apps/playground/src/editor-candidate/
+?? apps/playground/src/native-adapter/
+?? apps/playground/src/resource-editing-fixture/
+?? apps/playground/src/skia-fixture/
+?? apps/playground/src/skia/
+?? apps/playground/types/
+?? docs/
+?? openspec/changes/layered-perfect-freehand-surface/
+?? openspec/changes/migrate-expo57-skia-surface/
+?? packages/painting/src/__tests__/VirtualPaperSurfaceFrame.test.tsx
+?? packages/painting/src/__tests__/core/
+?? packages/painting/src/__tests__/input/
+?? packages/painting/src/__tests__/ruler-export.test.ts
+?? packages/painting/src/__tests__/skia/
+?? packages/painting/src/__tests__/viewport-affine.test.ts
+?? packages/painting/src/core/
+?? packages/painting/src/geometry/
+?? packages/painting/src/input/native/
+?? packages/painting/src/input/web/
+?? packages/painting/src/legacy-compat/
+?? packages/painting/src/model/document.ts
+?? packages/painting/src/skia/
+?? pnpm-lock.yaml
+?? pnpm-workspace.yaml
+?? scripts/
+?? spikes/
+?? tests/jest/
+?? tests/ui/canvas-runtime.spec.ts
+?? tests/ui/canvas2d-pen-pixel-helpers.ts
+?? tests/ui/editor-candidate-canvas2d-pen.spec.ts
+?? tests/ui/editor-candidate.spec.ts
+?? tests/ui/legacy-path.ts
+?? tests/ui/resource-editing-fixture.spec.ts
+?? tests/ui/skia-drawing-fixture.spec.ts
+?? tests/ui/skia-performance.spec.ts

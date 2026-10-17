@@ -1,7 +1,9 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
+import { LEGACY_PATH } from './legacy-path';
+
 async function openPlayground(page: Page): Promise<void> {
-  await page.goto('/');
+  await page.goto(LEGACY_PATH);
 }
 
 async function getSurface(page: Page): Promise<Locator> {

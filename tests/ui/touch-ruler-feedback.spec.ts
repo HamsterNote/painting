@@ -1,5 +1,7 @@
 import { expect, type Locator, test } from '@playwright/test';
 
+import { LEGACY_PATH } from './legacy-path';
+
 interface Point {
   readonly x: number;
   readonly y: number;
@@ -72,7 +74,7 @@ test('moves touch ruler angle feedback along the live midpoint projection withou
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
-  await page.goto('/');
+  await page.goto(LEGACY_PATH);
   await page.getByTestId('drawing-ruler-toggle').first().click();
   const surface = page.getByTestId('drawing-surface-uncontrolled');
   await surface.scrollIntoViewIfNeeded();

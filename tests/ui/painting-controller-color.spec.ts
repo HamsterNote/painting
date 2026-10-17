@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test';
 
+import { LEGACY_PATH } from './legacy-path';
+
 test.describe('PaintingController stroke color', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto(LEGACY_PATH);
   });
 
   test('updates shared boards from six fixed colors and a custom color input', async ({ page }) => {

@@ -1435,7 +1435,7 @@ describe('DrawingSurface', () => {
       mockHostRect(host);
       mockHostRect(wrapper);
 
-      // Given: 两根触点已归属于尺子并形成 ruler multi-drag。
+      // Given: 两根触点已归属于尺子并形成尺子双指刚体变换。
       dispatchElementPointerEvent(
         ruler,
         'pointerdown',
@@ -6898,7 +6898,9 @@ describe('DrawingSurface', () => {
       expect(rotatedStroke?.points[0]?.y).toBeCloseTo(0);
       expect(rotatedStroke?.points[1]?.x).toBeCloseTo(40);
       expect(rotatedStroke?.points[1]?.y).toBeCloseTo(40);
-      expect(onChange).toHaveBeenCalledTimes(3);
+      // 旋转过程只渲染 transient 预览；释放指针时才一次性提交最终笔迹，
+      // 避免把高频预览写入历史或向受控调用方泄漏中间值。
+      expect(onChange).toHaveBeenCalledTimes(1);
     });
 
     it('undoes and redoes one complete rotation gesture through PaintingBoard history', () => {
@@ -9271,7 +9273,7 @@ describe('eraserCursorAndTrajectory', () => {
       ]);
     });
 
-    it('waits for two ruler touches before multi-drag starts', () => {
+    it('waits for two ruler touches before the ruler two-touch transform starts', () => {
       const onRulerChange = jest.fn();
       render(
         <DrawingSurface
@@ -9318,8 +9320,8 @@ describe('eraserCursorAndTrajectory', () => {
       });
     });
 
-    it('uses multi-drag to rotate two ruler touches and snaps near a 45-degree multiple', () => {
-      // Given: 两个触点水平落在尺子上，形成可旋转的 multi-drag 手势。
+    it('rotates two ruler touches as a rigid two-touch transform and snaps near a 45-degree multiple', () => {
+      // Given: 两个触点水平落在尺子上，形成可旋转的尺子双指刚体变换。
       const onRulerChange = jest.fn();
       render(
         <DrawingSurface
@@ -9403,7 +9405,7 @@ describe('eraserCursorAndTrajectory', () => {
     });
 
     it('keeps a two-touch ruler gesture active when an ordinary mouse pointer ends', () => {
-      // Given: 普通鼠标按住尺子后，两个触点开始 ruler multi-drag。
+      // Given: 普通鼠标按住尺子后，两个触点开始尺子双指刚体变换。
       const onRulerChange = jest.fn();
       render(
         <DrawingSurface

@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "license": {
+    "spdx": "OFL-1.1",
+    "file": "/fonts/OFL-1.1.txt",
+    "notice": "Subsetted Noto font derivatives. See README.md and OFL-1.1.txt."
+  },
+  "assets": [
+    {
+      "id": "latin",
+      "tier": "initial",
+      "url": "/fonts/latin/hamsternote-web-latin-regular.ttf",
+      "format": "ttf",
+      "family": "HamsterNote Web Latin",
+      "source": {
+        "path": "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "sha256": "89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d",
+        "upstream": "https://github.com/notofonts/noto-fonts"
+      },
+      "unicodeRanges": "U+0000-00FF,U+0100-024F,U+0259,U+1E00-1EFF,U+0300-036F,U+2000-206F,U+20AC,U+2122",
+      "sample": "Café",
+      "command": "pyftsubset /usr/share/fonts/truetype/noto/NotoSans-Regular.ttf --unicodes=U+0000-00FF,U+0100-024F,U+0259,U+1E00-1EFF,U+0300-036F,U+2000-206F,U+20AC,U+2122 --layout-features=* --no-hinting",
+      "bytes": 115608,
+      "sha256": "ed420adf8500a45e4cb11d8b4e1c0f248a183a74fd5290181aa02a111f111cec"
+    },
+    {
+      "id": "cjk-on-demand",
+      "tier": "on-demand",
+      "url": "/fonts/cjk/hamsternote-web-cjk-sc-fixed-3500.otf",
+      "format": "otf-cff",
+      "family": "HamsterNote Web CJK SC Fixed 3500",
+      "source": {
+        "path": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "sha256": "b76b0433203017ca80401b2ee0dd69350349871c4b19d504c34dbdd80541690a",
+        "upstream": "https://github.com/notofonts/noto-cjk",
+        "fontNumber": 2
+      },
+      "unicodeRanges": "U+4E00-5BAA,U+6587,U+754C",
+      "listSource": "Internal fixed Unicode selection declared as CJK_UNICODES in apps/playground/scripts/generate-font-assets.sh.",
+      "selection": "Fixed deterministic tier: contiguous U+4E00-U+5BAA (3,499 codepoints) plus explicitly appended extras U+6587 (文) and U+754C (界), for 3,501 codepoints total. Extras are concatenated after the range so the range semantics stay stable rather than becoming an opaque full-CJK claim. It provides a reproducible bootstrap tier and required sample coverage; it is not frequency-ranked and not all CJK coverage.",
+      "sample": "世界文",
+      "command": "pyftsubset /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc --font-number=2 --unicodes=U+4E00-5BAA,U+6587,U+754C --layout-features=* --no-hinting",
+      "bytes": 1268092,
+      "sha256": "58a43a9f048a4d639e4558686247633fb42ca09b618f4adc27985d5088240731"
+    },
+    {
+      "id": "arabic-on-demand",
+      "tier": "on-demand",
+      "url": "/fonts/arabic/hamsternote-web-arabic-regular.ttf",
+      "format": "ttf",
+      "family": "HamsterNote Web Arabic",
+      "source": {
+        "path": "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
+        "sha256": "8c67eaa2f0086872628fc3f7f760386f83c8be5c5e9a1ba3a38891237b2ac7cb",
+        "upstream": "https://github.com/notofonts/arabic"
+      },
+      "unicodeRanges": "U+0000-00FF,U+0300-036F,U+0600-06FF,U+0750-077F,U+08A0-08FF,U+200C-200D,U+2010-2015,U+2018-201F,U+2026",
+      "sample": "مرحبا",
+      "command": "pyftsubset /usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf --unicodes=U+0000-00FF,U+0300-036F,U+0600-06FF,U+0750-077F,U+08A0-08FF,U+200C-200D,U+2010-2015,U+2018-201F,U+2026 --layout-features=* --no-hinting",
+      "bytes": 84444,
+      "sha256": "f82ad3d2c3309efd648d397b7d65255ae77a9602572dbe51732e4ecf2971b9b8"
+    },
+    {
+      "id": "emoji-on-demand",
+      "tier": "on-demand",
+      "url": "/fonts/emoji/hamsternote-web-emoji-family.ttf",
+      "format": "ttf-color",
+      "family": "HamsterNote Web Emoji Family",
+      "source": {
+        "path": "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+        "sha256": "9fd0a3d0ce84d77e3185dfbae77bd1abf3926aa49a032e354d076c4f17151f10",
+        "upstream": "https://github.com/googlefonts/noto-emoji"
+      },
+      "unicodeRanges": "U+1F466,U+1F467,U+1F468,U+1F469,U+200D",
+      "sample": "👨‍👩‍👧‍👦",
+      "command": "pyftsubset /usr/share/fonts/truetype/noto/NotoColorEmoji.ttf --text=👨‍👩‍👧‍👦 --layout-features=* --no-hinting",
+      "bytes": 44928,
+      "sha256": "b2dd82c15d48e284182b3ed1d4ef9a94d4bba4cce8d5ec0108960df81fc8f189"
+    }
+  ]
+}

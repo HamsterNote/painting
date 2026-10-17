@@ -12,8 +12,9 @@
  *  - Filled-shape eraser: `DrawingSurface.test.tsx`.
  */
 // NOTE: import directly from model/* (not `../index`) — index.ts re-exports
-// `DrawingSurface`, which pulls in the ESM-only `@system-ui-js/multi-drag` and
-// breaks Jest's CommonJS transform. The model helpers are pure and have no DOM.
+// `DrawingSurface`, which pulls in the DOM/SVG legacy surface and its runtime
+// dependencies, breaking Jest's CommonJS transform. The model helpers are pure
+// and have no DOM.
 import {
 	migrateStroke,
 	normalizeDrawingValue,

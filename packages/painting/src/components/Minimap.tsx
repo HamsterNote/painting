@@ -325,7 +325,7 @@ export function Minimap({
     [contentBounds, width, height]
   );
 
-  // fit ref 用于 multi-drag 回调中读取最新值
+  // fit ref 用于拖拽回调中读取最新值
   const fitRef = useRef(fit);
   fitRef.current = fit;
 
@@ -356,7 +356,7 @@ export function Minimap({
   const activePointerIdRef = useRef<number>(-1);
 
   // ---- 指针事件处理 ----
-  // 使用原生 Pointer Events 而非 @system-ui-js/multi-drag Mixin，
+  // 使用原生 Pointer Events 而非宿主手势 Mixin，
   // 因为 minimap 只需要简单的单指针拖拽，不需要多指/旋转/惯性等复杂手势。
   // 原生事件更直接、更可靠，且避免了 Mixin 内部 Pose 状态管理的潜在问题。
 
@@ -366,7 +366,7 @@ export function Minimap({
     }
 
     // ⚠️ 关键：在捕获阶段拦截 pointerdown 并阻止冒泡。
-    // DrawingSurface 自身有 @system-ui-js/multi-drag Mixin，在其容器元素上注册了
+    // DrawingSurface 自身的手势 Mixin，在其容器元素上注册了
     // 原生 pointerdown 监听器（冒泡阶段）。如果不阻止，pointerdown 会从 minimap
     // 容器冒泡到 DrawingSurface 容器，Mixin 会创建 Finger 并处理相同的指针事件，
     // 导致 minimap 拖拽时主画布也被干扰（例如意外缩放/平移/绘制）。

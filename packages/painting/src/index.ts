@@ -1,3 +1,8 @@
+// canonical 纯 V2 API 只从 @hamster-note/painting/core 导入。
+// 根入口是既有使用方的旧 API shim，不再 star 重导出 ./core，
+// 以免 core 与 legacy 的同名 utils 操作在根入口发生隐蔽语义遮蔽。
+//
+// 旧 V1 DrawingSurface/types 是兼容 shim，legacy renderer 的双形态分支留待后续 Skia 阶段处理。
 export type {
   DrawingEraserCommitMode,
   DrawingEraserTrajectoryOptions,
@@ -106,7 +111,7 @@ export {
   viewportToVirtualPaperTransform,
   virtualPaperTransformToViewport,
 } from './viewport';
-export { isVirtualPaperEnabled, toVirtualPaperProps } from './virtualPaperAdapter';
+export { isVirtualPaperEnabled } from './virtualPaperAdapter';
 export type {
   DrawingSurfaceVirtualPaperInteraction,
   DrawingSurfaceVirtualPaperOptions,

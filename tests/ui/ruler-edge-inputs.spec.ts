@@ -1,5 +1,7 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
+import { LEGACY_PATH } from './legacy-path';
+
 async function enableRuler(page: Page): Promise<{
   readonly surface: Locator;
   readonly ruler: Locator;
@@ -25,7 +27,7 @@ async function readRulerCenter(
 
 test.describe('ruler edge input browser contract', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto(LEGACY_PATH);
   });
 
   for (const pointerType of ['mouse', 'pen', 'touch'] as const) {
