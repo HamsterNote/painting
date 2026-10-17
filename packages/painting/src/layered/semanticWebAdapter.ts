@@ -2,6 +2,7 @@ import type { LayeredEditorController } from '../core/layeredEditorController';
 import { createLayeredToolSession, type SelectionOperation } from '../core/layeredToolSession';
 import type { Point } from '../model/document';
 import type { WebFreehandPolicy } from '../input/web/freehandWebAdapter';
+import { createZoomFeedback } from './zoomFeedback';
 
 /** Object identity is for ordinary hover/click only; captured trajectories use geometry. */
 export function resolveObjectId(target: EventTarget | null): string | null {
@@ -22,6 +23,7 @@ export function createSemanticWebAdapter(options: {
 }) {
   const { host, controller } = options;
   const view = host.ownerDocument.defaultView!;
+  const zoomFeedback = createZoomFeedback(controller, view);
   const engine = createLayeredToolSession(controller, options.allocateId);
   let owner: { id: number; source: string; start: Point; pan: boolean } | undefined;
   let snapshot = controller.getSnapshot('viewport');
@@ -148,6 +150,7 @@ export function createSemanticWebAdapter(options: {
     release();
   }
   function cancel() {
+    zoomFeedback.clear();
     engine.cancel();
     release();
   }
@@ -177,7 +180,7 @@ export function createSemanticWebAdapter(options: {
       config.minScale,
       Math.min(config.maxScale, current.viewport.scale * ratio)
     );
-    controller.updateViewport({
+    const result = controller.updateViewport({
       type: 'replace',
       expectedRevision: current.revision,
       viewport:
@@ -193,6 +196,7 @@ export function createSemanticWebAdapter(options: {
               ty: current.viewport.ty - event.deltaY * unit,
             },
     });
+    if (result.ok && zoom) zoomFeedback.show(scale, anchor);
   }
   const unsubscribe = controller.subscribe('tools', () => {
     if (owner) cancel();

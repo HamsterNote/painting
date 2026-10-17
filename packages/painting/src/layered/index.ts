@@ -1,6 +1,7 @@
 export { createEditor } from './createEditor';
 export { Toolbar } from './Toolbar';
 export { LayeredPaintingBoard } from './PaintingBoard';
+export type { LayeredPaintingBoardProps } from './PaintingBoard';
 export { LayeredDrawingSurface } from './DrawingSurface';
 export type { LayeredDrawingSurfaceProps } from './DrawingSurface';
 export { DrawingLayer } from './DrawingLayer';

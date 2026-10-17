@@ -2,10 +2,9 @@ import type { LayeredDrawingSurfaceProps } from './DrawingSurface';
 import { LayeredDrawingSurface } from './DrawingSurface';
 import { Toolbar } from './Toolbar';
 
-export function LayeredPaintingBoard({
-  toolbar = true,
-  ...props
-}: LayeredDrawingSurfaceProps & { toolbar?: boolean }) {
+export type LayeredPaintingBoardProps = LayeredDrawingSurfaceProps & { toolbar?: boolean };
+
+export function LayeredPaintingBoard({ toolbar = true, ...props }: LayeredPaintingBoardProps) {
   return (
     <div
       style={{

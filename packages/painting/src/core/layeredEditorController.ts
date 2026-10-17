@@ -168,6 +168,7 @@ export type LayeredNavigationSnapshot = Readonly<{
   minimap: boolean;
   ruler: Readonly<{ visible: boolean; center: Point; rotationRad: number; height: number }>;
   rotationFeedback: Readonly<{ point: Point; rotationRad: number }> | null;
+  zoomFeedback: Readonly<{ point: Point; scale: number; token: number }> | null;
   virtualPaper: Readonly<{
     enabled: boolean;
     initialPlacement: 'top-left' | 'center';
@@ -1413,6 +1414,7 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
     paper: false,
     minimap: false,
     rotationFeedback: null,
+    zoomFeedback: null,
     virtualPaper: Object.freeze({
       enabled: true,
       initialPlacement: 'top-left',
@@ -1537,6 +1539,15 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
     )
       return errResult('invalid-input');
     const feedback = next.rotationFeedback;
+    const zoomFeedback = next.zoomFeedback;
+    if (
+      zoomFeedback !== null &&
+      (!isFinitePointLike(zoomFeedback?.point) ||
+        !Number.isFinite(zoomFeedback?.scale) ||
+        zoomFeedback.scale <= 0 ||
+        !Number.isSafeInteger(zoomFeedback?.token))
+    )
+      return errResult('invalid-input');
     if (
       feedback !== null &&
       (!isFinitePointLike(feedback?.point) || !Number.isFinite(feedback?.rotationRad))
@@ -1550,7 +1561,8 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
       typeof next.minimap !== 'boolean'
     )
       return errResult('invalid-input');
-    if (this.activeSession) return errResult('active-session-conflict');
+    if (this.activeSession && Object.keys(patch).some((key) => key !== 'zoomFeedback'))
+      return errResult('active-session-conflict');
     this.navigation = Object.freeze({
       paper: next.paper,
       minimap: next.minimap,
@@ -1564,6 +1576,9 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
             point: Object.freeze({ ...feedback.point }),
             rotationRad: feedback.rotationRad,
           })
+        : null,
+      zoomFeedback: zoomFeedback
+        ? Object.freeze({ ...zoomFeedback, point: Object.freeze({ ...zoomFeedback.point }) })
         : null,
     });
     this.emit(['navigation']);

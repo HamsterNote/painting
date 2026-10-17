@@ -70,6 +70,8 @@
 
 ## 本轮抢救与分批续做证据
 
+- 2026-10-18 首批 cutover：board 的公开组件与 playground App 调用方迁到分层入口；七份旧 UI 文件按保留行为迁移，补齐鼠标/双指缩放百分比浮层及过期 timer 归属。`pnpm exec jest --runInBand --testPathPattern 'layered-|painting-board/src/__tests__'` 24 suites / 343 tests PASS；七文件专项 `pnpm test:ui ... --workers=1 --trace=off` Chromium 17/17 PASS。完整命令和逐类迁移映射见 `cutover-regression-map.md`。尚未删除 Skia/旧目录，6.3 / 7.1 / 7.2 / 7.9 保持未完成。
+
 - 抢救：失败树保存为仅本地 `agent/ham40-wip-failed-run` / `97ccfac`，功能分支恢复 `d78159a` 后复验。`pnpm test` 88 suites / 1472 tests PASS；`pnpm typecheck` 首次发现 board 缺少 `/layered` 源码路径映射，修正后完整 exit 0；Chromium 分层 15/15 PASS。可用提交及修复已普通推送至原 PR 分支 `7e74637`，WIP 不推。详见 `rescue-verification.md`。
 - 3.3 / 7.8：新增真实鼠标覆盖已有 HTML 文字的 active/final 像素回归；独立 WebKit 配置修正 Chromium 专用参数继承。`pnpm exec playwright test --config=playwright.webkit.config.ts --workers=1 --trace=off` 在受支持的 Ubuntu 24.04 Podman 环境实际 WebKit 16/16 PASS；Chromium 同套件 16/16 PASS。宿主 Ubuntu 26 不受支持，用容器等效验证；不覆盖 Safari/iOS WebView 真机，因此这两项保持未完成。
 - 5.6 回归修正：按 CONTEXT 以可视裁切段中点旋转、角度反馈投影到尺子中线，恢复尺子/纸张触点独立归属并发。`pnpm exec jest --runInBand --testPathPattern 'rulerGestureController|layered-navigation'` 2 suites / 10 tests PASS；`pnpm typecheck` exit 0。

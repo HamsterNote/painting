@@ -154,6 +154,23 @@ export function NavigationOverlay({ controller }: { controller: LayeredEditorCon
           {Math.round((navigation.rotationFeedback.rotationRad * 180) / Math.PI)}°
         </output>
       ) : null}
+      {navigation.zoomFeedback ? (
+        <output
+          data-testid="drawing-zoom-feedback"
+          style={{
+            position: 'absolute',
+            left: Math.max(8, Math.min(size.width - 80, navigation.zoomFeedback.point.x - 32)),
+            top: Math.max(8, Math.min(size.height - 32, navigation.zoomFeedback.point.y - 44)),
+            background: '#20262d',
+            color: '#fff',
+            padding: '4px 8px',
+            borderRadius: 4,
+            pointerEvents: 'none',
+          }}
+        >
+          {Math.round(navigation.zoomFeedback.scale * 100)}%
+        </output>
+      ) : null}
       {navigation.minimap ? (
         <svg
           data-testid="layered-minimap"

@@ -10,6 +10,7 @@ import {
 } from '../ruler/geometry';
 import { applyViewportTransformIntent } from '../core/viewportTransform';
 import type { Point } from '../model/document';
+import { createZoomFeedback } from './zoomFeedback';
 
 /** Touch navigation owns a fixed pair; ignored contacts never become a deferred gesture. */
 export function createNavigationWebAdapter(
@@ -18,6 +19,7 @@ export function createNavigationWebAdapter(
   touchDraw = false
 ) {
   const view = host.ownerDocument.defaultView!;
+  const zoomFeedback = createZoomFeedback(controller, view);
   const touches = new Map<number, Point>();
   const suppressed = new Set<number>();
   let baseline: { viewport: LayeredViewportSnapshot; focal: Point; distance: number } | undefined;
@@ -162,12 +164,15 @@ export function createNavigationWebAdapter(
       },
       { min: config().minScale, max: config().maxScale }
     );
-    if (viewport)
-      controller.updateViewport({
+    if (viewport) {
+      const result = controller.updateViewport({
         type: 'replace',
         expectedRevision: controller.getSnapshot('viewport').revision,
         viewport,
       });
+      if (result.ok && touches.size === 2 && viewport.scale !== baseline.viewport.viewport.scale)
+        zoomFeedback.show(viewport.scale, current.focal);
+    }
     consume(event);
   }
   function end(event: PointerEvent) {
@@ -194,6 +199,7 @@ export function createNavigationWebAdapter(
     consume(event);
   }
   function cancel() {
+    zoomFeedback.clear();
     drag = undefined;
     touches.clear();
     suppressed.clear();
