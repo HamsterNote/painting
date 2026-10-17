@@ -1,4 +1,8 @@
-import { describeDrawingGeometryContour, type DrawingGeometryDescriptor, type GeometryPoint } from './geometry';
+import {
+  describeDrawingGeometryContour,
+  type DrawingGeometryDescriptor,
+  type GeometryPoint,
+} from './geometry';
 import { hitTestNonzeroRings } from './polygonBoolean';
 import {
   clipPreparedDrawingEntry,
@@ -19,7 +23,11 @@ import {
   isFrameProgramWithinBudget,
   type FrameDrawBudget,
 } from './frameBudget';
-import type { DrawingBounds, PreparedDrawingDocument, PreparedDrawingEntry } from './preparedDocument';
+import type {
+  DrawingBounds,
+  PreparedDrawingDocument,
+  PreparedDrawingEntry,
+} from './preparedDocument';
 import { appendPreparedDrawingStroke } from './preparedDocument';
 import {
   SparseSpatialIndex,
@@ -29,13 +37,25 @@ import {
   type SpatialQueryIndex,
 } from './spatialIndex';
 import type { DrawingStrokeV2 } from '../model/strokes';
-import { createViewportAffine, invertViewportAffine, mapViewportAffinePoint, type Affine2D, type DrawingViewport } from '../viewport';
+import {
+  createViewportAffine,
+  invertViewportAffine,
+  mapViewportAffinePoint,
+  type Affine2D,
+  type DrawingViewport,
+} from '../viewport';
 
 export const DEFAULT_CULL_GUARD_SCREEN_DIP = 1;
 export const DEFAULT_MAX_LOCAL_COORDINATE = 1_000_000;
 
 export type DrawingFrameDiagnostic = Readonly<{
-  type: 'invalid-input' | 'prepared-index-mismatch' | 'non-finite-transform' | 'requires-clipping' | 'unresolved-clipping' | 'draw-budget-exceeded';
+  type:
+    | 'invalid-input'
+    | 'prepared-index-mismatch'
+    | 'non-finite-transform'
+    | 'requires-clipping'
+    | 'unresolved-clipping'
+    | 'draw-budget-exceeded';
   field?: string;
   entryKey?: number;
   reason?: FrameClippingDiagnostic['reason'];
@@ -107,37 +127,68 @@ export type CreateDrawingFrameOptions = Readonly<{
 }>;
 
 export type DrawingFrameHit = Readonly<{ entry: DrawingFrameEntry; point: GeometryPoint }>;
-export type CreateDrawingFrameResult = Readonly<{ ok: true; frame: DrawingFrame }> | Readonly<{ ok: false; diagnostics: readonly DrawingFrameDiagnostic[] }>;
+export type CreateDrawingFrameResult =
+  | Readonly<{ ok: true; frame: DrawingFrame }>
+  | Readonly<{ ok: false; diagnostics: readonly DrawingFrameDiagnostic[] }>;
 
-function finite(value: number): boolean { return Number.isFinite(value); }
-function finitePoint(point: GeometryPoint): boolean { return finite(point.x) && finite(point.y); }
-function strictViewport(viewport: DrawingViewport): boolean { return finite(viewport.scale) && viewport.scale > 0 && finite(viewport.tx) && finite(viewport.ty); }
-function strictAffine(affine: Affine2D): boolean { return [affine.a, affine.b, affine.c, affine.d, affine.tx, affine.ty].every(finite); }
+function finite(value: number): boolean {
+  return Number.isFinite(value);
+}
+function finitePoint(point: GeometryPoint): boolean {
+  return finite(point.x) && finite(point.y);
+}
+function strictViewport(viewport: DrawingViewport): boolean {
+  return finite(viewport.scale) && viewport.scale > 0 && finite(viewport.tx) && finite(viewport.ty);
+}
+function strictAffine(affine: Affine2D): boolean {
+  return [affine.a, affine.b, affine.c, affine.d, affine.tx, affine.ty].every(finite);
+}
 
 function boundsFromCorners(corners: readonly GeometryPoint[]): DrawingBounds | null {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
   for (const point of corners) {
     if (!finitePoint(point)) return null;
-    minX = Math.min(minX, point.x); minY = Math.min(minY, point.y);
-    maxX = Math.max(maxX, point.x); maxY = Math.max(maxY, point.y);
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
   }
   return [minX, minY, maxX, maxY].every(finite) ? Object.freeze({ minX, minY, maxX, maxY }) : null;
 }
 
-function midpoint(min: number, max: number): number { return min / 2 + max / 2; }
+function midpoint(min: number, max: number): number {
+  return min / 2 + max / 2;
+}
 
-function translateAuditGeometry(geometry: DrawingGeometryDescriptor, origin: GeometryPoint, limit: number): DrawingGeometryDescriptor | null {
+function translateAuditGeometry(
+  geometry: DrawingGeometryDescriptor,
+  origin: GeometryPoint,
+  limit: number
+): DrawingGeometryDescriptor | null {
   const point = (value: GeometryPoint): GeometryPoint | null => {
     const x = value.x - origin.x;
     const y = value.y - origin.y;
-    return finite(x) && finite(y) && Math.abs(x) <= limit && Math.abs(y) <= limit ? Object.freeze({ x, y }) : null;
+    return finite(x) && finite(y) && Math.abs(x) <= limit && Math.abs(y) <= limit
+      ? Object.freeze({ x, y })
+      : null;
   };
   if (geometry.kind === 'path' || geometry.kind === 'cubic-bezier') {
     const points = geometry.points.map(point);
     if (points.some((value) => value === null)) return null;
     return geometry.kind === 'path'
       ? Object.freeze({ ...geometry, points: Object.freeze(points as GeometryPoint[]) })
-      : Object.freeze({ ...geometry, points: Object.freeze(points as GeometryPoint[]) as unknown as readonly [GeometryPoint, GeometryPoint, GeometryPoint, GeometryPoint] });
+      : Object.freeze({
+          ...geometry,
+          points: Object.freeze(points as GeometryPoint[]) as unknown as readonly [
+            GeometryPoint,
+            GeometryPoint,
+            GeometryPoint,
+            GeometryPoint,
+          ],
+        });
   }
   const center = point(geometry.center);
   return center === null ? null : Object.freeze({ ...geometry, center });
@@ -158,8 +209,12 @@ function safeCompatibilityGeometry(
   });
 }
 
-function pointQueryUpperBound(value: number): number { return value + Math.max(Math.abs(value) * Number.EPSILON, Number.MIN_VALUE); }
-function failure(diagnostics: readonly DrawingFrameDiagnostic[]): CreateDrawingFrameResult { return Object.freeze({ ok: false, diagnostics: Object.freeze([...diagnostics]) }); }
+function pointQueryUpperBound(value: number): number {
+  return value + Math.max(Math.abs(value) * Number.EPSILON, Number.MIN_VALUE);
+}
+function failure(diagnostics: readonly DrawingFrameDiagnostic[]): CreateDrawingFrameResult {
+  return Object.freeze({ ok: false, diagnostics: Object.freeze([...diagnostics]) });
+}
 
 function localRegionFromScreen(
   screenCorners: readonly GeometryPoint[],
@@ -178,18 +233,29 @@ function localRegionFromScreen(
   const minY = Math.max(-limit, bounds.minY);
   const maxX = Math.min(limit, bounds.maxX);
   const maxY = Math.min(limit, bounds.maxY);
-  return [minX, minY, maxX, maxY].every(finite) && minX <= maxX && minY <= maxY ? Object.freeze({ minX, minY, maxX, maxY }) : null;
+  return [minX, minY, maxX, maxY].every(finite) && minX <= maxX && minY <= maxY
+    ? Object.freeze({ minX, minY, maxX, maxY })
+    : null;
 }
 
 function normalizedPressure(pressure: number | undefined): number {
-  return typeof pressure === 'number' && finite(pressure) && pressure >= 0 && pressure <= 1 ? pressure : 1;
+  return typeof pressure === 'number' && finite(pressure) && pressure >= 0 && pressure <= 1
+    ? pressure
+    : 1;
 }
 
-function distanceSquaredToSegment(point: GeometryPoint, start: GeometryPoint, end: GeometryPoint): number {
+function distanceSquaredToSegment(
+  point: GeometryPoint,
+  start: GeometryPoint,
+  end: GeometryPoint
+): number {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const length = dx * dx + dy * dy;
-  const t = length === 0 ? 0 : Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / length));
+  const t =
+    length === 0
+      ? 0
+      : Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / length));
   const distanceX = point.x - (start.x + dx * t);
   const distanceY = point.y - (start.y + dy * t);
   return distanceX * distanceX + distanceY * distanceY;
@@ -205,16 +271,20 @@ function hitFragments(entry: DrawingFrameEntry, point: GeometryPoint, tolerance:
     }
     const program = fragment.resourceBox.textProgram;
     if (!program || program.kind === 'empty-text') continue;
-    if (program.semanticRegions.some((region) => hitTestNonzeroRings([region.polygon], point, tolerance))) return true;
+    if (
+      program.semanticRegions.some((region) =>
+        hitTestNonzeroRings([region.polygon], point, tolerance)
+      )
+    )
+      return true;
   }
   for (const fragment of entry.program.strokes) {
     {
       // 使用 fragment 保存的源端 pressure，而非 clip 交点 pressure，保持渲染宽度语义。
       const width = Math.max(0, entry.source.stroke.strokeWidth ?? 2);
-      const pressure = entry.source.stroke.tool === 'pen'
-        ? normalizedPressure(fragment.sourcePressures.end)
-        : 1;
-      const radius = tolerance + width * pressure / 2;
+      const pressure =
+        entry.source.stroke.tool === 'pen' ? normalizedPressure(fragment.sourcePressures.end) : 1;
+      const radius = tolerance + (width * pressure) / 2;
       const squared = radius * radius;
       if (!finite(squared)) return false;
       for (let index = 0; index < fragment.points.length - 1; index += 1) {
@@ -238,32 +308,39 @@ function hitFragments(entry: DrawingFrameEntry, point: GeometryPoint, tolerance:
 }
 
 function contourDeviation(entry: PreparedDrawingEntry): number {
-  const contour = entry.geometry.kind === 'path' || entry.geometry.kind === 'rect'
-    ? null
-    : describeDrawingGeometryContour(entry.geometry);
-  return contour && !contour.capped && contour.isWithinRequestedMaxDeviation && finite(contour.maxDeviation)
+  const contour =
+    entry.geometry.kind === 'path' || entry.geometry.kind === 'rect'
+      ? null
+      : describeDrawingGeometryContour(entry.geometry);
+  return contour &&
+    !contour.capped &&
+    contour.isWithinRequestedMaxDeviation &&
+    finite(contour.maxDeviation)
     ? Math.max(0, contour.maxDeviation)
     : 0;
 }
 
-function isResourceBoxFragment(fragment: DrawingFrameFragment): fragment is FrameResourceBoxFragment {
+function isResourceBoxFragment(
+  fragment: DrawingFrameFragment
+): fragment is FrameResourceBoxFragment {
   return fragment.kind === 'semantic-area' && 'resourceBox' in fragment;
 }
 
 /** program 是 render/hit 的唯一权威；复合 fill 可不投影为 legacy fragment。 */
 function hasRenderableProgram(entry: DrawingFrameEntry): boolean {
-  return entry.status !== 'unresolved' && (
-    entry.program.strokes.length > 0 ||
-    entry.program.fills.length > 0 ||
-    entry.fragments.some((fragment) => {
-      if (!isResourceBoxFragment(fragment)) return false;
-      if (fragment.resourceBox.tool === 'image') return true;
-      const program = fragment.resourceBox.textProgram;
-      // 有 textRequest 表示 partial/超大 text；它必须先由平台 provider 兑现，不能走完整框回退。
-      return fragment.resourceBox.textRequest === undefined
-        ? true
-        : program !== undefined && program.kind !== 'empty-text';
-    })
+  return (
+    entry.status !== 'unresolved' &&
+    (entry.program.strokes.length > 0 ||
+      entry.program.fills.length > 0 ||
+      entry.fragments.some((fragment) => {
+        if (!isResourceBoxFragment(fragment)) return false;
+        if (fragment.resourceBox.tool === 'image') return true;
+        const program = fragment.resourceBox.textProgram;
+        // 有 textRequest 表示 partial/超大 text；它必须先由平台 provider 兑现，不能走完整框回退。
+        return fragment.resourceBox.textRequest === undefined
+          ? true
+          : program !== undefined && program.kind !== 'empty-text';
+      }))
   );
 }
 
@@ -271,9 +348,20 @@ function withResolvedTextProgram(
   fragment: DrawingFrameFragment,
   resolveTextProgram: ((request: FrameTextRequest) => FrameTextProgram | null) | undefined
 ): DrawingFrameFragment {
-  if (!isResourceBoxFragment(fragment) || fragment.resourceBox.tool !== 'text' || !fragment.resourceBox.textRequest || !resolveTextProgram) return fragment;
+  if (
+    !isResourceBoxFragment(fragment) ||
+    fragment.resourceBox.tool !== 'text' ||
+    !fragment.resourceBox.textRequest ||
+    !resolveTextProgram
+  )
+    return fragment;
   const program = resolveTextProgram(fragment.resourceBox.textRequest);
-  return program === null ? fragment : Object.freeze({ ...fragment, resourceBox: Object.freeze({ ...fragment.resourceBox, textProgram: program }) });
+  return program === null
+    ? fragment
+    : Object.freeze({
+        ...fragment,
+        resourceBox: Object.freeze({ ...fragment.resourceBox, textProgram: program }),
+      });
 }
 
 /**
@@ -317,7 +405,14 @@ function sourceStyleWithinBudget(entry: PreparedDrawingEntry, budget: FrameDrawB
   const stroke = entry.stroke;
   const strokeWidth = stroke.strokeWidth ?? 2;
   const fillOpacity = stroke.fillOpacity ?? 1;
-  if (!isDrawNumber(strokeWidth, budget) || strokeWidth < 0 || !isDrawNumber(fillOpacity, budget) || fillOpacity < 0 || fillOpacity > 1) return false;
+  if (
+    !isDrawNumber(strokeWidth, budget) ||
+    strokeWidth < 0 ||
+    !isDrawNumber(fillOpacity, budget) ||
+    fillOpacity < 0 ||
+    fillOpacity > 1
+  )
+    return false;
   if (!isDrawDashInput(stroke.dashArray, stroke.dashOffset ?? 0, budget)) return false;
   if (stroke.tool === 'text') {
     const fontSize = stroke.fontSize ?? 24;
@@ -327,16 +422,29 @@ function sourceStyleWithinBudget(entry: PreparedDrawingEntry, budget: FrameDrawB
 }
 
 /** 最后一道 core gate：program、resource 实参和从 source 形成的 Skia style 同时入预算。 */
-function fragmentsWithinBudget(program: FrameGeometryProgram, fragments: readonly DrawingFrameFragment[], entry: PreparedDrawingEntry, budget: FrameDrawBudget): boolean {
-  return sourceStyleWithinBudget(entry, budget) &&
+function fragmentsWithinBudget(
+  program: FrameGeometryProgram,
+  fragments: readonly DrawingFrameFragment[],
+  entry: PreparedDrawingEntry,
+  budget: FrameDrawBudget
+): boolean {
+  return (
+    sourceStyleWithinBudget(entry, budget) &&
     isFrameProgramWithinBudget(program, budget) &&
-    fragments.every((fragment) =>
-      fragment.points.every((point) => isDrawNumber(point.x, budget) && isDrawNumber(point.y, budget)) &&
-      (!isResourceBoxFragment(fragment) || isDrawResourceBox(fragment, budget))
-    );
+    fragments.every(
+      (fragment) =>
+        fragment.points.every(
+          (point) => isDrawNumber(point.x, budget) && isDrawNumber(point.y, budget)
+        ) &&
+        (!isResourceBoxFragment(fragment) || isDrawResourceBox(fragment, budget))
+    )
+  );
 }
 
-export function createPreparedDrawingSpatialIndex(prepared: PreparedDrawingDocument, options?: SparseSpatialIndexOptions): PreparedDrawingSpatialIndex {
+export function createPreparedDrawingSpatialIndex(
+  prepared: PreparedDrawingDocument,
+  options?: SparseSpatialIndexOptions
+): PreparedDrawingSpatialIndex {
   const index = new SparseSpatialIndex<PreparedDrawingEntry>(options);
   for (const entry of prepared.entries) index.upsert(entry.key, entry, entry.bounds, entry.order);
   return Object.freeze({ prepared, preparedRevision: prepared.revision, index });
@@ -360,44 +468,68 @@ export function appendPreparedDrawingEntry(
   const appendedIndex = prepared.strokeCount - 1;
   const lastEntry = prepared.entries[prepared.entries.length - 1];
   // 仅当确实新增了 entry（key 等于新 document 下标）时才推进索引；invalid geometry 复用旧索引。
-  const appendedEntry = lastEntry !== undefined && lastEntry.key === appendedIndex ? lastEntry : undefined;
-  const index = appendedEntry === undefined
-    ? previous.index
-    : appendSpatialQueryIndex(
-        previous.index,
-        appendedEntry.key,
-        appendedEntry,
-        appendedEntry.bounds,
-        appendedEntry.order,
-        options
-      );
+  const appendedEntry =
+    lastEntry !== undefined && lastEntry.key === appendedIndex ? lastEntry : undefined;
+  const index =
+    appendedEntry === undefined
+      ? previous.index
+      : appendSpatialQueryIndex(
+          previous.index,
+          appendedEntry.key,
+          appendedEntry,
+          appendedEntry.bounds,
+          appendedEntry.order,
+          options
+        );
   return Object.freeze({ prepared, preparedRevision: prepared.revision, index });
 }
 
 /** 严格 frame 构建：只从 indexed canonical global geometry 生成单帧 transient fragments。 */
-export function tryCreateDrawingFrame(options: CreateDrawingFrameOptions): CreateDrawingFrameResult {
+export function tryCreateDrawingFrame(
+  options: CreateDrawingFrameOptions
+): CreateDrawingFrameResult {
   const { prepared, spatialIndex, viewport, layoutSize } = options;
   const guard = options.cullGuardScreenDip ?? DEFAULT_CULL_GUARD_SCREEN_DIP;
   const maxLocalCoordinate = options.maxLocalCoordinate ?? DEFAULT_MAX_LOCAL_COORDINATE;
   const diagnostics: DrawingFrameDiagnostic[] = [];
-  if (spatialIndex.prepared !== prepared || spatialIndex.preparedRevision !== prepared.revision) return failure([Object.freeze({ type: 'prepared-index-mismatch' })]);
-  if (!strictViewport(viewport)) diagnostics.push(Object.freeze({ type: 'invalid-input', field: 'viewport' }));
-  if (!finite(layoutSize.width) || layoutSize.width <= 0 || !finite(layoutSize.height) || layoutSize.height <= 0) diagnostics.push(Object.freeze({ type: 'invalid-input', field: 'layoutSize' }));
-  if (!finite(guard) || guard < 0) diagnostics.push(Object.freeze({ type: 'invalid-input', field: 'cullGuardScreenDip' }));
-  if (!finite(maxLocalCoordinate) || maxLocalCoordinate <= 0 || maxLocalCoordinate > DEFAULT_MAX_LOCAL_COORDINATE) diagnostics.push(Object.freeze({ type: 'invalid-input', field: 'maxLocalCoordinate' }));
+  if (spatialIndex.prepared !== prepared || spatialIndex.preparedRevision !== prepared.revision)
+    return failure([Object.freeze({ type: 'prepared-index-mismatch' })]);
+  if (!strictViewport(viewport))
+    diagnostics.push(Object.freeze({ type: 'invalid-input', field: 'viewport' }));
+  if (
+    !finite(layoutSize.width) ||
+    layoutSize.width <= 0 ||
+    !finite(layoutSize.height) ||
+    layoutSize.height <= 0
+  )
+    diagnostics.push(Object.freeze({ type: 'invalid-input', field: 'layoutSize' }));
+  if (!finite(guard) || guard < 0)
+    diagnostics.push(Object.freeze({ type: 'invalid-input', field: 'cullGuardScreenDip' }));
+  if (
+    !finite(maxLocalCoordinate) ||
+    maxLocalCoordinate <= 0 ||
+    maxLocalCoordinate > DEFAULT_MAX_LOCAL_COORDINATE
+  )
+    diagnostics.push(Object.freeze({ type: 'invalid-input', field: 'maxLocalCoordinate' }));
   if (diagnostics.length > 0) return failure(diagnostics);
 
   const globalToScreen = createViewportAffine(viewport);
   const inverse = invertViewportAffine(globalToScreen);
-  if (!strictAffine(globalToScreen) || !inverse || !strictAffine(inverse)) return failure([Object.freeze({ type: 'non-finite-transform' })]);
+  if (!strictAffine(globalToScreen) || !inverse || !strictAffine(inverse))
+    return failure([Object.freeze({ type: 'non-finite-transform' })]);
   const screenCorners: GeometryPoint[] = [
-    { x: -guard, y: -guard }, { x: layoutSize.width + guard, y: -guard },
-    { x: layoutSize.width + guard, y: layoutSize.height + guard }, { x: -guard, y: layoutSize.height + guard },
+    { x: -guard, y: -guard },
+    { x: layoutSize.width + guard, y: -guard },
+    { x: layoutSize.width + guard, y: layoutSize.height + guard },
+    { x: -guard, y: layoutSize.height + guard },
   ];
   const worldCorners = screenCorners.map((point) => mapViewportAffinePoint(point, inverse));
   const visibleWorldBounds = boundsFromCorners(worldCorners);
   if (!visibleWorldBounds) return failure([Object.freeze({ type: 'non-finite-transform' })]);
-  const frameOrigin = Object.freeze({ x: midpoint(visibleWorldBounds.minX, visibleWorldBounds.maxX), y: midpoint(visibleWorldBounds.minY, visibleWorldBounds.maxY) });
+  const frameOrigin = Object.freeze({
+    x: midpoint(visibleWorldBounds.minX, visibleWorldBounds.maxX),
+    y: midpoint(visibleWorldBounds.minY, visibleWorldBounds.maxY),
+  });
   if (!finitePoint(frameOrigin)) return failure([Object.freeze({ type: 'non-finite-transform' })]);
   const localToScreen = Object.freeze({
     ...globalToScreen,
@@ -405,8 +537,14 @@ export function tryCreateDrawingFrame(options: CreateDrawingFrameOptions): Creat
     ty: globalToScreen.b * frameOrigin.x + globalToScreen.d * frameOrigin.y + globalToScreen.ty,
   });
   const drawBudget = createFrameDrawBudget(maxLocalCoordinate, localToScreen);
-  if (!strictAffine(localToScreen) || !drawBudget) return failure([Object.freeze({ type: 'non-finite-transform' })]);
-  const localClipRegion = localRegionFromScreen(screenCorners, inverse, frameOrigin, maxLocalCoordinate);
+  if (!strictAffine(localToScreen) || !drawBudget)
+    return failure([Object.freeze({ type: 'non-finite-transform' })]);
+  const localClipRegion = localRegionFromScreen(
+    screenCorners,
+    inverse,
+    frameOrigin,
+    maxLocalCoordinate
+  );
   if (!localClipRegion) return failure([Object.freeze({ type: 'non-finite-transform' })]);
 
   const visibleEntries: DrawingFrameEntry[] = [];
@@ -416,51 +554,145 @@ export function tryCreateDrawingFrame(options: CreateDrawingFrameOptions): Creat
   for (const match of spatialIndex.index.query(visibleWorldBounds)) {
     // text/image 的实际内容由 resource clip 精确裁去，不能沿用 stroke 的 visual outset
     // 而让完整 resource box 在当前 frame local clip 之外仍可见/可命中。
-    const entryClipRegion = match.value.stroke.tool === 'text' || match.value.stroke.tool === 'image'
-      ? localClipRegion
-      : visualClipRegion(localClipRegion, match.value, globalToScreen, inverse, maxLocalCoordinate, guard);
-    const contourScreenScale = Math.hypot(globalToScreen.a, globalToScreen.b, globalToScreen.c, globalToScreen.d);
-    const contourMaxDeviation = contourScreenScale > 0 && finite(contourScreenScale)
-      ? Math.min(0.5, 0.25 / contourScreenScale)
-      : Number.NaN;
-    const rawClipped = entryClipRegion === null
-      ? Object.freeze({ status: 'unresolved' as const, fragments: Object.freeze([]), program: Object.freeze({ strokes: Object.freeze([]), fills: Object.freeze([]), maxDeviation: 0 }), diagnostic: Object.freeze({ type: 'unresolved-clipping' as const, reason: 'unsafe-number' as const }) })
-      : clipPreparedDrawingEntry(match.value, frameOrigin, entryClipRegion, maxLocalCoordinate, contourMaxDeviation);
-    const resolvedFragments = rawClipped.fragments.map((fragment) => withResolvedTextProgram(fragment, options.resolveTextProgram));
-    const resolvedClipped = resolvedFragments === rawClipped.fragments
-      ? rawClipped
-      : Object.freeze({ ...rawClipped, fragments: Object.freeze(resolvedFragments) });
-    const pendingText = resolvedClipped.fragments.some((fragment) =>
-      isResourceBoxFragment(fragment) && fragment.resourceBox.tool === 'text' &&
-      fragment.resourceBox.visible !== undefined && fragment.resourceBox.textRequest !== undefined && fragment.resourceBox.textProgram === undefined
+    const entryClipRegion =
+      match.value.stroke.tool === 'text' || match.value.stroke.tool === 'image'
+        ? localClipRegion
+        : visualClipRegion(
+            localClipRegion,
+            match.value,
+            globalToScreen,
+            inverse,
+            maxLocalCoordinate,
+            guard
+          );
+    const contourScreenScale = Math.hypot(
+      globalToScreen.a,
+      globalToScreen.b,
+      globalToScreen.c,
+      globalToScreen.d
+    );
+    const contourMaxDeviation =
+      contourScreenScale > 0 && finite(contourScreenScale)
+        ? Math.min(0.5, 0.25 / contourScreenScale)
+        : Number.NaN;
+    const rawClipped =
+      entryClipRegion === null
+        ? Object.freeze({
+            status: 'unresolved' as const,
+            fragments: Object.freeze([]),
+            program: Object.freeze({
+              strokes: Object.freeze([]),
+              fills: Object.freeze([]),
+              maxDeviation: 0,
+            }),
+            diagnostic: Object.freeze({
+              type: 'unresolved-clipping' as const,
+              reason: 'unsafe-number' as const,
+            }),
+          })
+        : clipPreparedDrawingEntry(
+            match.value,
+            frameOrigin,
+            entryClipRegion,
+            maxLocalCoordinate,
+            contourMaxDeviation
+          );
+    const resolvedFragments = rawClipped.fragments.map((fragment) =>
+      withResolvedTextProgram(fragment, options.resolveTextProgram)
+    );
+    const resolvedClipped =
+      resolvedFragments === rawClipped.fragments
+        ? rawClipped
+        : Object.freeze({ ...rawClipped, fragments: Object.freeze(resolvedFragments) });
+    const pendingText = resolvedClipped.fragments.some(
+      (fragment) =>
+        isResourceBoxFragment(fragment) &&
+        fragment.resourceBox.tool === 'text' &&
+        fragment.resourceBox.visible !== undefined &&
+        fragment.resourceBox.textRequest !== undefined &&
+        fragment.resourceBox.textProgram === undefined
     );
     const clipped = pendingText
       ? Object.freeze({ ...resolvedClipped, status: 'pending' as const })
-      : fragmentsWithinBudget(resolvedClipped.program, resolvedClipped.fragments, match.value, drawBudget)
+      : fragmentsWithinBudget(
+            resolvedClipped.program,
+            resolvedClipped.fragments,
+            match.value,
+            drawBudget
+          )
         ? resolvedClipped
-        : Object.freeze({ status: 'unresolved' as const, fragments: Object.freeze([]), program: Object.freeze({ strokes: Object.freeze([]), fills: Object.freeze([]), maxDeviation: 0 }), diagnostic: Object.freeze({ type: 'unresolved-clipping' as const, reason: 'unsafe-number' as const }) });
-    const canonicalLocalGeometry = translateAuditGeometry(match.value.geometry, frameOrigin, maxLocalCoordinate);
+        : Object.freeze({
+            status: 'unresolved' as const,
+            fragments: Object.freeze([]),
+            program: Object.freeze({
+              strokes: Object.freeze([]),
+              fills: Object.freeze([]),
+              maxDeviation: 0,
+            }),
+            diagnostic: Object.freeze({
+              type: 'unresolved-clipping' as const,
+              reason: 'unsafe-number' as const,
+            }),
+          });
+    const canonicalLocalGeometry = translateAuditGeometry(
+      match.value.geometry,
+      frameOrigin,
+      maxLocalCoordinate
+    );
     const entry = Object.freeze({
-      source: match.value, canonicalLocalGeometry,
-      geometry: safeCompatibilityGeometry(canonicalLocalGeometry, clipped.fragments, match.value.geometry),
-      status: clipped.status, fragments: clipped.fragments, program: clipped.program,
+      source: match.value,
+      canonicalLocalGeometry,
+      geometry: safeCompatibilityGeometry(
+        canonicalLocalGeometry,
+        clipped.fragments,
+        match.value.geometry
+      ),
+      status: clipped.status,
+      fragments: clipped.fragments,
+      program: clipped.program,
       ...(clipped.diagnostic ? { diagnostic: clipped.diagnostic } : {}),
     });
     visibleEntries.push(entry);
-    if (clipped.status !== 'unchanged' && clipped.status !== 'rebased' && clipped.status !== 'empty') unsafeEntryKeys.push(match.value.key);
+    if (
+      clipped.status !== 'unchanged' &&
+      clipped.status !== 'rebased' &&
+      clipped.status !== 'empty'
+    )
+      unsafeEntryKeys.push(match.value.key);
     if (clipped.status === 'unresolved') {
       unresolvedClippingKeys.push(match.value.key);
-      diagnostics.push(Object.freeze({ type: 'unresolved-clipping', entryKey: match.value.key, reason: clipped.diagnostic?.reason }));
+      diagnostics.push(
+        Object.freeze({
+          type: 'unresolved-clipping',
+          entryKey: match.value.key,
+          reason: clipped.diagnostic?.reason,
+        })
+      );
     }
     if (hasRenderableProgram(entry)) renderableEntries.push(entry);
   }
   const requiresClipping = unsafeEntryKeys.length > 0;
-  return Object.freeze({ ok: true, frame: Object.freeze({
-    prepared, spatialIndex, globalToScreen: Object.freeze({ ...globalToScreen }), localToScreen, frameOrigin, visibleWorldBounds, localClipRegion,
-    visibleEntries: Object.freeze(visibleEntries), renderableEntries: Object.freeze(renderableEntries), requiresClipping,
-    hasUnresolvedClipping: unresolvedClippingKeys.length > 0, unresolvedClippingKeys: Object.freeze(unresolvedClippingKeys), unsafeEntryKeys: Object.freeze(unsafeEntryKeys),
-    maxLocalCoordinate, drawBudget, diagnostics: Object.freeze(diagnostics),
-  }) });
+  return Object.freeze({
+    ok: true,
+    frame: Object.freeze({
+      prepared,
+      spatialIndex,
+      globalToScreen: Object.freeze({ ...globalToScreen }),
+      localToScreen,
+      frameOrigin,
+      visibleWorldBounds,
+      localClipRegion,
+      visibleEntries: Object.freeze(visibleEntries),
+      renderableEntries: Object.freeze(renderableEntries),
+      requiresClipping,
+      hasUnresolvedClipping: unresolvedClippingKeys.length > 0,
+      unresolvedClippingKeys: Object.freeze(unresolvedClippingKeys),
+      unsafeEntryKeys: Object.freeze(unsafeEntryKeys),
+      maxLocalCoordinate,
+      drawBudget,
+      diagnostics: Object.freeze(diagnostics),
+    }),
+  });
 }
 
 export function createDrawingFrame(options: CreateDrawingFrameOptions): DrawingFrame | null {
@@ -469,24 +701,45 @@ export function createDrawingFrame(options: CreateDrawingFrameOptions): DrawingF
 }
 
 /** 同一份 frame fragments 是唯一命中来源；canonical geometry 绝不可在这里 fallback 重建。 */
-export function hitTestDrawingFrame(frame: DrawingFrame, screenPoint: GeometryPoint, toleranceScreenDip = 0): DrawingFrameHit | null {
-  if (!finitePoint(screenPoint) || !finite(toleranceScreenDip) || toleranceScreenDip < 0) return null;
+export function hitTestDrawingFrame(
+  frame: DrawingFrame,
+  screenPoint: GeometryPoint,
+  toleranceScreenDip = 0
+): DrawingFrameHit | null {
+  if (!finitePoint(screenPoint) || !finite(toleranceScreenDip) || toleranceScreenDip < 0)
+    return null;
   const inverse = invertViewportAffine(frame.localToScreen);
   if (!inverse) return null;
   const localPoint = mapViewportAffinePoint(screenPoint, inverse);
-  if (!finitePoint(localPoint) || Math.abs(localPoint.x) > frame.maxLocalCoordinate || Math.abs(localPoint.y) > frame.maxLocalCoordinate) return null;
+  if (
+    !finitePoint(localPoint) ||
+    Math.abs(localPoint.x) > frame.maxLocalCoordinate ||
+    Math.abs(localPoint.y) > frame.maxLocalCoordinate
+  )
+    return null;
   const tolerance = toleranceScreenDip / frame.globalToScreen.a;
   if (!finite(tolerance) || tolerance < 0) return null;
   // 按已有 spatial index 的逆序（topmost）过滤，再仅使用同一 entry 的安全 fragments 判定。
-  const globalPoint = { x: localPoint.x + frame.frameOrigin.x, y: localPoint.y + frame.frameOrigin.y };
+  const globalPoint = {
+    x: localPoint.x + frame.frameOrigin.x,
+    y: localPoint.y + frame.frameOrigin.y,
+  };
   if (!finitePoint(globalPoint)) return null;
-  const candidates = tolerance === 0 ? frame.spatialIndex.index.queryPoint(globalPoint) : frame.spatialIndex.index.query({
-    minX: globalPoint.x - tolerance, minY: globalPoint.y - tolerance,
-    maxX: pointQueryUpperBound(globalPoint.x + tolerance), maxY: pointQueryUpperBound(globalPoint.y + tolerance),
-  });
+  const candidates =
+    tolerance === 0
+      ? frame.spatialIndex.index.queryPoint(globalPoint)
+      : frame.spatialIndex.index.query({
+          minX: globalPoint.x - tolerance,
+          minY: globalPoint.y - tolerance,
+          maxX: pointQueryUpperBound(globalPoint.x + tolerance),
+          maxY: pointQueryUpperBound(globalPoint.y + tolerance),
+        });
   for (let index = candidates.length - 1; index >= 0; index -= 1) {
-    const entry = frame.renderableEntries.find(({ source }) => source.key === candidates[index].value.key);
-    if (entry && hitFragments(entry, localPoint, tolerance)) return Object.freeze({ entry, point: Object.freeze(localPoint) });
+    const entry = frame.renderableEntries.find(
+      ({ source }) => source.key === candidates[index].value.key
+    );
+    if (entry && hitFragments(entry, localPoint, tolerance))
+      return Object.freeze({ entry, point: Object.freeze(localPoint) });
   }
   return null;
 }

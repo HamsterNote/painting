@@ -272,8 +272,12 @@ export { SparseSpatialIndex as SpatialIndex };
 function sparseOptionsFrom(options: AppendSpatialQueryIndexOptions): SparseSpatialIndexOptions {
   return {
     ...(options.cellSize === undefined ? {} : { cellSize: options.cellSize }),
-    ...(options.maxCellsPerObject === undefined ? {} : { maxCellsPerObject: options.maxCellsPerObject }),
-    ...(options.maxCellsPerQuery === undefined ? {} : { maxCellsPerQuery: options.maxCellsPerQuery }),
+    ...(options.maxCellsPerObject === undefined
+      ? {}
+      : { maxCellsPerObject: options.maxCellsPerObject }),
+    ...(options.maxCellsPerQuery === undefined
+      ? {}
+      : { maxCellsPerQuery: options.maxCellsPerQuery }),
   };
 }
 
@@ -338,9 +342,10 @@ export function appendSpatialQueryIndex<T>(
   const delta = new SparseSpatialIndex<T>(sparseOptions);
   if (!delta.upsert(key, value, bounds, order)) return previous;
 
-  const maxDeltaDepth = Number.isSafeInteger(options.maxDeltaDepth) && (options.maxDeltaDepth as number) > 0
-    ? (options.maxDeltaDepth as number)
-    : DEFAULT_MAX_SPATIAL_DELTA_DEPTH;
+  const maxDeltaDepth =
+    Number.isSafeInteger(options.maxDeltaDepth) && (options.maxDeltaDepth as number) > 0
+      ? (options.maxDeltaDepth as number)
+      : DEFAULT_MAX_SPATIAL_DELTA_DEPTH;
   const currentDepth = getSpatialQueryIndexDeltaDepth(previous as SpatialQueryIndex<unknown>);
   if (currentDepth >= maxDeltaDepth) {
     const flattened = new SparseSpatialIndex<T>(sparseOptions);

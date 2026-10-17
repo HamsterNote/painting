@@ -109,7 +109,10 @@ describe('stroke-helpers', () => {
         src: 'memory://old-image',
       });
 
-      expect(migrateStroke(image)).toMatchObject({ resourceId: 'resource-1', src: 'memory://image-1' });
+      expect(migrateStroke(image)).toMatchObject({
+        resourceId: 'resource-1',
+        src: 'memory://image-1',
+      });
       expect(migrateStroke(oldImage)).toMatchObject({ src: 'memory://old-image' });
       expect(migrateStroke({ ...image, resourceId: '' })).not.toHaveProperty('resourceId');
     });
@@ -345,7 +348,10 @@ describe('stroke-helpers', () => {
     });
 
     it('generates M + L for two points', () => {
-      const path = pointsToSvgPath([{ x: 10, y: 20 }, { x: 30, y: 40 }]);
+      const path = pointsToSvgPath([
+        { x: 10, y: 20 },
+        { x: 30, y: 40 },
+      ]);
       expect(path).toBe('M 10 20 L 30 40');
     });
 

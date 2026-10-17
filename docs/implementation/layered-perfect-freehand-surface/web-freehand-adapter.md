@@ -5,12 +5,13 @@
 
 ## 1. Hash 与联合证据
 
-| 对象 | sha256 |
-|------|--------|
-| `input/web/freehandWebAdapter.ts`（867 行，冻结） | `3cbc4d485b2733a579ea9ae83fd997ef640d6ff936df8c1d446b8914924ece22` |
+| 对象                                                        | sha256                                                             |
+| ----------------------------------------------------------- | ------------------------------------------------------------------ |
+| `input/web/freehandWebAdapter.ts`（867 行，冻结）           | `3cbc4d485b2733a579ea9ae83fd997ef640d6ff936df8c1d446b8914924ece22` |
 | `input/web/__tests__/freehandWebAdapter.test.ts`（1811 行） | `416b1aa3561d7cfed308785acb0d3184aa438bbaefda8f8b9741d221c3c93a5d` |
 
 联合日志（`~/.cache/opencode-tmp/opencode/pf-webadapter-barrier-{core,dom,typecheck,hashes}.log`）：
+
 - core 5 suites / **125 tests PASS**（0.781s）
 - dom 1 suite / **71 tests PASS**（0.863s，legacy-web）
 - `pnpm --filter @hamster-note/painting typecheck` EXIT 0

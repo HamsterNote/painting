@@ -63,17 +63,20 @@ describe('viewport affine', () => {
   });
 
   describe('forward/inverse roundtrip', () => {
-    it.each(roundTripCases)('round-trips points through affine inverse for $name', ({ viewport }) => {
-      const affine = createViewportAffine(viewport);
-      const inverse = invertViewportAffine(affine);
-      const point = { x: 123.456, y: -78.9 };
+    it.each(roundTripCases)(
+      'round-trips points through affine inverse for $name',
+      ({ viewport }) => {
+        const affine = createViewportAffine(viewport);
+        const inverse = invertViewportAffine(affine);
+        const point = { x: 123.456, y: -78.9 };
 
-      expect(inverse).not.toBeNull();
-      const screenPoint = mapViewportAffinePoint(point, affine);
-      const back = mapViewportAffinePoint(screenPoint, inverse as Affine2D);
+        expect(inverse).not.toBeNull();
+        const screenPoint = mapViewportAffinePoint(point, affine);
+        const back = mapViewportAffinePoint(screenPoint, inverse as Affine2D);
 
-      expectPointClose(back, point);
-    });
+        expectPointClose(back, point);
+      }
+    );
 
     it('maps with the exact forward convention screenX=a*x+c*y+tx', () => {
       const affine: Affine2D = { a: 2, b: 0, c: 0, d: 2, tx: 10, ty: -30 };

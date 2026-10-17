@@ -3,7 +3,12 @@ import { intersectClosedRingWithRect, type PolygonBooleanMultiPolygon } from './
 import type { DrawingBounds, PreparedDrawingEntry } from './preparedDocument';
 
 /** 单帧局部坐标的闭合安全区域。所有 program/fragment 坐标必须位于此区域内。 */
-export type FrameLocalClipRegion = Readonly<{ minX: number; minY: number; maxX: number; maxY: number }>;
+export type FrameLocalClipRegion = Readonly<{
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}>;
 
 export type FrameStrokeFragment = Readonly<{
   kind: 'stroke';
@@ -16,13 +21,23 @@ export type FrameStrokeFragment = Readonly<{
   sourceDistanceEnd: number;
   /** pressure 是每个源段终点的固定宽度契约，裁剪点 pressure 只作审计。 */
   sourcePressures: Readonly<{ start?: number; end?: number }>;
-  clip?: Readonly<{ startT: number; endT: number; insertedPressures: Readonly<{ start?: number; end?: number }> }>;
+  clip?: Readonly<{
+    startT: number;
+    endT: number;
+    insertedPressures: Readonly<{ start?: number; end?: number }>;
+  }>;
 }>;
 
-export type FrameSemanticAreaFragment = Readonly<{ kind: 'semantic-area'; points: readonly GeometryPoint[] }>;
+export type FrameSemanticAreaFragment = Readonly<{
+  kind: 'semantic-area';
+  points: readonly GeometryPoint[];
+}>;
 /** 资源的原始完整 local 布局。它只用于认证与映射，不能假定可直接交给 Skia。 */
 export type FrameResourceLayout = Readonly<{
-  center: GeometryPoint; halfWidth: number; halfHeight: number; rotationRad: number;
+  center: GeometryPoint;
+  halfWidth: number;
+  halfHeight: number;
+  rotationRad: number;
 }>;
 /** partial resource 的可见区域：polygon 是 render/hit 的共同权威，clipBounds 仅为有界审计裁剪区。 */
 export type FrameResourceVisibleRegion = Readonly<{
@@ -30,7 +45,12 @@ export type FrameResourceVisibleRegion = Readonly<{
   clipBounds: FrameLocalClipRegion;
 }>;
 /** 图片 source 使用归一化 [0, 1] 坐标，避免把完整巨大图片的像素或布局数传给 Skia。 */
-export type FrameImageSourceWindow = Readonly<{ x: number; y: number; width: number; height: number }>;
+export type FrameImageSourceWindow = Readonly<{
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}>;
 /** 已解析文本与命中共用的局部语义区域；文本资源框本身不再自动成为命中区。 */
 export type FrameTextSemanticRegion = Readonly<{ polygon: readonly GeometryPoint[] }>;
 
@@ -79,38 +99,51 @@ export type FrameShapedGlyphRun = Readonly<{
 export type FrameTextProgram =
   | Readonly<{ kind: 'empty-text' }>
   | Readonly<{
-      kind: 'paragraph-slice'; text: string; anchor: GeometryPoint; paintOffset: GeometryPoint;
-      paragraphWidth: number; rotationRad: number; semanticRegions: readonly FrameTextSemanticRegion[];
+      kind: 'paragraph-slice';
+      text: string;
+      anchor: GeometryPoint;
+      paintOffset: GeometryPoint;
+      paragraphWidth: number;
+      rotationRad: number;
+      semanticRegions: readonly FrameTextSemanticRegion[];
     }>
   | Readonly<{
-      kind: 'shaped-runs'; anchor: GeometryPoint; rotationRad: number;
-      runs: readonly FrameShapedGlyphRun[]; semanticRegions: readonly FrameTextSemanticRegion[];
+      kind: 'shaped-runs';
+      anchor: GeometryPoint;
+      rotationRad: number;
+      runs: readonly FrameShapedGlyphRun[];
+      semanticRegions: readonly FrameTextSemanticRegion[];
     }>;
-export type FrameResourceBoxFragment = FrameSemanticAreaFragment & Readonly<{
-  resourceBox: Readonly<{
-    kind: 'resource-box'; tool: 'text' | 'image';
-    /** 永远保留资源本身的完整布局，partial 不以可见 AABB 替换它。 */
-    layout: FrameResourceLayout;
-    /** partial 的有限可见区域；renderer 与 hit 必须消费同一个 polygon。 */
-    visible?: FrameResourceVisibleRegion;
-    /**
-     * 仅 image partial 使用。source 是完整图片坐标中的归一化窗口，destination 是相同内容
-     * 在当前 frame 的有限局部绘制框；两者保持完整图片的 scale/rotation 映射，不会 re-fit。
-     */
-    imageMapping?: Readonly<{ source: FrameImageSourceWindow; destination: FrameResourceLayout }>;
-    /** partial text 的待解析请求与已解析 program；二者都不以 visible polygon 的 AABB 重排。 */
-    textRequest?: FrameTextRequest;
-    textProgram?: FrameTextProgram;
-    source: Readonly<{ text?: string; fontSize?: number; resourceId?: string; src?: string }>;
+export type FrameResourceBoxFragment = FrameSemanticAreaFragment &
+  Readonly<{
+    resourceBox: Readonly<{
+      kind: 'resource-box';
+      tool: 'text' | 'image';
+      /** 永远保留资源本身的完整布局，partial 不以可见 AABB 替换它。 */
+      layout: FrameResourceLayout;
+      /** partial 的有限可见区域；renderer 与 hit 必须消费同一个 polygon。 */
+      visible?: FrameResourceVisibleRegion;
+      /**
+       * 仅 image partial 使用。source 是完整图片坐标中的归一化窗口，destination 是相同内容
+       * 在当前 frame 的有限局部绘制框；两者保持完整图片的 scale/rotation 映射，不会 re-fit。
+       */
+      imageMapping?: Readonly<{ source: FrameImageSourceWindow; destination: FrameResourceLayout }>;
+      /** partial text 的待解析请求与已解析 program；二者都不以 visible polygon 的 AABB 重排。 */
+      textRequest?: FrameTextRequest;
+      textProgram?: FrameTextProgram;
+      source: Readonly<{ text?: string; fontSize?: number; resourceId?: string; src?: string }>;
+    }>;
   }>;
-}>;
 export type DrawingFrameFragment = FrameStrokeFragment | FrameSemanticAreaFragment;
 
 /** 一个对象一次 fill 的后端无关复合区域，绝不按 island/hole 拆成多次 fill。 */
 export type FrameFillRegion = Readonly<{
   kind: 'fill-region';
   fillRule: 'nonzero';
-  polygons: readonly Readonly<{ outer: readonly GeometryPoint[]; holes: readonly (readonly GeometryPoint[])[] }>[];
+  polygons: readonly Readonly<{
+    outer: readonly GeometryPoint[];
+    holes: readonly (readonly GeometryPoint[])[];
+  }>[];
 }>;
 export type FrameGeometryProgram = Readonly<{
   strokes: readonly FrameStrokeFragment[];
@@ -119,10 +152,16 @@ export type FrameGeometryProgram = Readonly<{
   maxDeviation: number;
 }>;
 
-export type FrameFragmentStatus = 'unchanged' | 'rebased' | 'clipped' | 'segmented' | 'empty' | 'pending' | 'unresolved';
+export type FrameFragmentStatus =
+  'unchanged' | 'rebased' | 'clipped' | 'segmented' | 'empty' | 'pending' | 'unresolved';
 export type FrameClippingDiagnostic = Readonly<{
   type: 'unresolved-clipping';
-  reason: 'unsafe-number' | 'partial-resource-box' | 'invalid-geometry' | 'clip-failed' | 'unrepresentable-geometry';
+  reason:
+    | 'unsafe-number'
+    | 'partial-resource-box'
+    | 'invalid-geometry'
+    | 'clip-failed'
+    | 'unrepresentable-geometry';
 }>;
 export type FrameClippingResult = Readonly<{
   status: FrameFragmentStatus;
@@ -132,50 +171,124 @@ export type FrameClippingResult = Readonly<{
 }>;
 
 type VisibleSegment = Readonly<{
-  points: readonly [GeometryPoint, GeometryPoint]; index: number; distanceStart: number; distanceEnd: number; startT: number; endT: number;
-  sourceStartPressure?: number; sourceEndPressure?: number;
+  points: readonly [GeometryPoint, GeometryPoint];
+  index: number;
+  distanceStart: number;
+  distanceEnd: number;
+  startT: number;
+  endT: number;
+  sourceStartPressure?: number;
+  sourceEndPressure?: number;
 }>;
 
-function frozen<T>(value: T): T { return Object.freeze(value); }
-function finite(value: number): boolean { return Number.isFinite(value); }
-function finitePoint(point: GeometryPoint): boolean { return finite(point.x) && finite(point.y); }
-function samePoint(first: GeometryPoint, second: GeometryPoint): boolean { return first.x === second.x && first.y === second.y; }
-function emptyProgram(): FrameGeometryProgram { return frozen({ strokes: frozen([]), fills: frozen([]), maxDeviation: 0 }); }
-function unresolved(reason: FrameClippingDiagnostic['reason']): FrameClippingResult {
-  return frozen({ status: 'unresolved', fragments: frozen([]), program: emptyProgram(), diagnostic: frozen({ type: 'unresolved-clipping', reason }) });
+function frozen<T>(value: T): T {
+  return Object.freeze(value);
 }
-function result(status: FrameFragmentStatus, fragments: readonly DrawingFrameFragment[], fills: readonly FrameFillRegion[] = [], maxDeviation = 0): FrameClippingResult {
-  const strokes = fragments.filter((fragment): fragment is FrameStrokeFragment => fragment.kind === 'stroke');
-  return frozen({ status, fragments: frozen([...fragments]), program: frozen({ strokes: frozen(strokes), fills: frozen([...fills]), maxDeviation }) });
+function finite(value: number): boolean {
+  return Number.isFinite(value);
+}
+function finitePoint(point: GeometryPoint): boolean {
+  return finite(point.x) && finite(point.y);
+}
+function samePoint(first: GeometryPoint, second: GeometryPoint): boolean {
+  return first.x === second.x && first.y === second.y;
+}
+function emptyProgram(): FrameGeometryProgram {
+  return frozen({ strokes: frozen([]), fills: frozen([]), maxDeviation: 0 });
+}
+function unresolved(reason: FrameClippingDiagnostic['reason']): FrameClippingResult {
+  return frozen({
+    status: 'unresolved',
+    fragments: frozen([]),
+    program: emptyProgram(),
+    diagnostic: frozen({ type: 'unresolved-clipping', reason }),
+  });
+}
+function result(
+  status: FrameFragmentStatus,
+  fragments: readonly DrawingFrameFragment[],
+  fills: readonly FrameFillRegion[] = [],
+  maxDeviation = 0
+): FrameClippingResult {
+  const strokes = fragments.filter(
+    (fragment): fragment is FrameStrokeFragment => fragment.kind === 'stroke'
+  );
+  return frozen({
+    status,
+    fragments: frozen([...fragments]),
+    program: frozen({ strokes: frozen(strokes), fills: frozen([...fills]), maxDeviation }),
+  });
 }
 
-function localPoint(point: GeometryPoint, origin: GeometryPoint, limit: number): GeometryPoint | null {
+function localPoint(
+  point: GeometryPoint,
+  origin: GeometryPoint,
+  limit: number
+): GeometryPoint | null {
   const x = point.x - origin.x;
   const y = point.y - origin.y;
-  return finite(x) && finite(y) && Math.abs(x) <= limit && Math.abs(y) <= limit ? frozen({ x, y }) : null;
+  return finite(x) && finite(y) && Math.abs(x) <= limit && Math.abs(y) <= limit
+    ? frozen({ x, y })
+    : null;
 }
-function localRing(points: readonly GeometryPoint[], origin: GeometryPoint, limit: number): readonly GeometryPoint[] | null {
+function localRing(
+  points: readonly GeometryPoint[],
+  origin: GeometryPoint,
+  limit: number
+): readonly GeometryPoint[] | null {
   const local = points.map((point) => localPoint(point, origin, limit));
   return local.some((point) => point === null) ? null : frozen(local as GeometryPoint[]);
 }
 function inside(point: GeometryPoint, region: FrameLocalClipRegion): boolean {
-  return point.x >= region.minX && point.x <= region.maxX && point.y >= region.minY && point.y <= region.maxY;
+  return (
+    point.x >= region.minX &&
+    point.x <= region.maxX &&
+    point.y >= region.minY &&
+    point.y <= region.maxY
+  );
 }
-function globalRegion(origin: GeometryPoint, region: FrameLocalClipRegion): FrameLocalClipRegion | null {
-  const output = { minX: origin.x + region.minX, minY: origin.y + region.minY, maxX: origin.x + region.maxX, maxY: origin.y + region.maxY };
+function globalRegion(
+  origin: GeometryPoint,
+  region: FrameLocalClipRegion
+): FrameLocalClipRegion | null {
+  const output = {
+    minX: origin.x + region.minX,
+    minY: origin.y + region.minY,
+    maxX: origin.x + region.maxX,
+    maxY: origin.y + region.maxY,
+  };
   return Object.values(output).every(finite) ? frozen(output) : null;
 }
-function overlaps(bounds: DrawingBounds, origin: GeometryPoint, region: FrameLocalClipRegion): boolean {
+function overlaps(
+  bounds: DrawingBounds,
+  origin: GeometryPoint,
+  region: FrameLocalClipRegion
+): boolean {
   const clip = globalRegion(origin, region);
-  return clip !== null && bounds.maxX >= clip.minX && bounds.minX <= clip.maxX && bounds.maxY >= clip.minY && bounds.minY <= clip.maxY;
+  return (
+    clip !== null &&
+    bounds.maxX >= clip.minX &&
+    bounds.minX <= clip.maxX &&
+    bounds.maxY >= clip.minY &&
+    bounds.minY <= clip.maxY
+  );
 }
 
-function intersection(start: GeometryPoint, end: GeometryPoint, region: FrameLocalClipRegion): readonly [GeometryPoint, GeometryPoint, number, number] | null {
+function intersection(
+  start: GeometryPoint,
+  end: GeometryPoint,
+  region: FrameLocalClipRegion
+): readonly [GeometryPoint, GeometryPoint, number, number] | null {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   let first = 0;
   let last = 1;
-  for (const [p, q] of [[-dx, start.x - region.minX], [dx, region.maxX - start.x], [-dy, start.y - region.minY], [dy, region.maxY - start.y]] as const) {
+  for (const [p, q] of [
+    [-dx, start.x - region.minX],
+    [dx, region.maxX - start.x],
+    [-dy, start.y - region.minY],
+    [dy, region.maxY - start.y],
+  ] as const) {
     if (p === 0) {
       if (q < 0) return null;
       continue;
@@ -192,17 +305,49 @@ function intersection(start: GeometryPoint, end: GeometryPoint, region: FrameLoc
   }
   const clippedStart = frozen({ x: start.x + dx * first, y: start.y + dy * first });
   const clippedEnd = frozen({ x: start.x + dx * last, y: start.y + dy * last });
-  return finitePoint(clippedStart) && finitePoint(clippedEnd) ? [clippedStart, clippedEnd, first, last] : null;
+  return finitePoint(clippedStart) && finitePoint(clippedEnd)
+    ? [clippedStart, clippedEnd, first, last]
+    : null;
 }
 
 /** convex ring 快路径；复杂/自交 ring 一律经 polygonBoolean。 */
-function clipPolygon(points: readonly GeometryPoint[], region: FrameLocalClipRegion): readonly GeometryPoint[] {
-  type Edge = Readonly<{ inside: (point: GeometryPoint) => boolean; at: (from: GeometryPoint, to: GeometryPoint) => GeometryPoint }>;
+function clipPolygon(
+  points: readonly GeometryPoint[],
+  region: FrameLocalClipRegion
+): readonly GeometryPoint[] {
+  type Edge = Readonly<{
+    inside: (point: GeometryPoint) => boolean;
+    at: (from: GeometryPoint, to: GeometryPoint) => GeometryPoint;
+  }>;
   const edges: readonly Edge[] = [
-    { inside: (p) => p.x >= region.minX, at: (a, b) => ({ x: region.minX, y: a.y + (b.y - a.y) * (region.minX - a.x) / (b.x - a.x) }) },
-    { inside: (p) => p.x <= region.maxX, at: (a, b) => ({ x: region.maxX, y: a.y + (b.y - a.y) * (region.maxX - a.x) / (b.x - a.x) }) },
-    { inside: (p) => p.y >= region.minY, at: (a, b) => ({ x: a.x + (b.x - a.x) * (region.minY - a.y) / (b.y - a.y), y: region.minY }) },
-    { inside: (p) => p.y <= region.maxY, at: (a, b) => ({ x: a.x + (b.x - a.x) * (region.maxY - a.y) / (b.y - a.y), y: region.maxY }) },
+    {
+      inside: (p) => p.x >= region.minX,
+      at: (a, b) => ({
+        x: region.minX,
+        y: a.y + ((b.y - a.y) * (region.minX - a.x)) / (b.x - a.x),
+      }),
+    },
+    {
+      inside: (p) => p.x <= region.maxX,
+      at: (a, b) => ({
+        x: region.maxX,
+        y: a.y + ((b.y - a.y) * (region.maxX - a.x)) / (b.x - a.x),
+      }),
+    },
+    {
+      inside: (p) => p.y >= region.minY,
+      at: (a, b) => ({
+        x: a.x + ((b.x - a.x) * (region.minY - a.y)) / (b.y - a.y),
+        y: region.minY,
+      }),
+    },
+    {
+      inside: (p) => p.y <= region.maxY,
+      at: (a, b) => ({
+        x: a.x + ((b.x - a.x) * (region.maxY - a.y)) / (b.y - a.y),
+        y: region.maxY,
+      }),
+    },
   ];
   let output = [...points];
   for (const edge of edges) {
@@ -221,39 +366,100 @@ function clipPolygon(points: readonly GeometryPoint[], region: FrameLocalClipReg
   return frozen(output.map((point) => frozen({ ...point })));
 }
 
-function interpolatedPressure(start: number | undefined, end: number | undefined, t: number): number | undefined {
-  return start !== undefined && end !== undefined && finite(start) && finite(end) ? start + (end - start) * t : undefined;
+function interpolatedPressure(
+  start: number | undefined,
+  end: number | undefined,
+  t: number
+): number | undefined {
+  return start !== undefined && end !== undefined && finite(start) && finite(end)
+    ? start + (end - start) * t
+    : undefined;
 }
-function frozenPolyline(points: readonly GeometryPoint[]): readonly [GeometryPoint, GeometryPoint, ...GeometryPoint[]] | null {
-  return points.length < 2 ? null : frozen([frozen({ ...points[0] }), frozen({ ...points[1] }), ...points.slice(2).map((point) => frozen({ ...point }))]);
+function frozenPolyline(
+  points: readonly GeometryPoint[]
+): readonly [GeometryPoint, GeometryPoint, ...GeometryPoint[]] | null {
+  return points.length < 2
+    ? null
+    : frozen([
+        frozen({ ...points[0] }),
+        frozen({ ...points[1] }),
+        ...points.slice(2).map((point) => frozen({ ...point })),
+      ]);
 }
-function frozenStroke(points: readonly [GeometryPoint, GeometryPoint, ...GeometryPoint[]], closed: boolean, first: VisibleSegment, last: VisibleSegment): FrameStrokeFragment {
-  const clip = first.startT !== 0 || last.endT !== 1 ? frozen({
-    startT: first.startT, endT: last.endT,
-    insertedPressures: frozen({
-      ...(first.startT === 0 ? {} : { start: interpolatedPressure(first.sourceStartPressure, first.sourceEndPressure, first.startT) }),
-      ...(last.endT === 1 ? {} : { end: interpolatedPressure(last.sourceStartPressure, last.sourceEndPressure, last.endT) }),
+function frozenStroke(
+  points: readonly [GeometryPoint, GeometryPoint, ...GeometryPoint[]],
+  closed: boolean,
+  first: VisibleSegment,
+  last: VisibleSegment
+): FrameStrokeFragment {
+  const clip =
+    first.startT !== 0 || last.endT !== 1
+      ? frozen({
+          startT: first.startT,
+          endT: last.endT,
+          insertedPressures: frozen({
+            ...(first.startT === 0
+              ? {}
+              : {
+                  start: interpolatedPressure(
+                    first.sourceStartPressure,
+                    first.sourceEndPressure,
+                    first.startT
+                  ),
+                }),
+            ...(last.endT === 1
+              ? {}
+              : {
+                  end: interpolatedPressure(
+                    last.sourceStartPressure,
+                    last.sourceEndPressure,
+                    last.endT
+                  ),
+                }),
+          }),
+        })
+      : undefined;
+  return frozen({
+    kind: 'stroke',
+    points: frozenPolyline(points)!,
+    closed,
+    sourceSegmentIndex: first.index,
+    sourceSegmentStart: first.index,
+    sourceSegmentEnd: last.index,
+    sourceDistanceStart: first.distanceStart,
+    sourceDistanceEnd: last.distanceEnd,
+    sourcePressures: frozen({
+      ...(first.sourceStartPressure === undefined ? {} : { start: first.sourceStartPressure }),
+      ...(last.sourceEndPressure === undefined ? {} : { end: last.sourceEndPressure }),
     }),
-  }) : undefined;
-  return frozen({ kind: 'stroke', points: frozenPolyline(points)!, closed, sourceSegmentIndex: first.index, sourceSegmentStart: first.index, sourceSegmentEnd: last.index,
-    sourceDistanceStart: first.distanceStart, sourceDistanceEnd: last.distanceEnd,
-    sourcePressures: frozen({ ...(first.sourceStartPressure === undefined ? {} : { start: first.sourceStartPressure }), ...(last.sourceEndPressure === undefined ? {} : { end: last.sourceEndPressure }) }),
     ...(clip === undefined ? {} : { clip }),
   });
 }
-function runFragments(segments: readonly VisibleSegment[], pressureSensitive: boolean): readonly FrameStrokeFragment[] {
+function runFragments(
+  segments: readonly VisibleSegment[],
+  pressureSensitive: boolean
+): readonly FrameStrokeFragment[] {
   const fragments: FrameStrokeFragment[] = [];
   let run: VisibleSegment[] = [];
   const flush = () => {
     if (run.length === 0) return;
-    const points: [GeometryPoint, GeometryPoint, ...GeometryPoint[]] = [run[0].points[0], run[0].points[1]];
+    const points: [GeometryPoint, GeometryPoint, ...GeometryPoint[]] = [
+      run[0].points[0],
+      run[0].points[1],
+    ];
     for (let index = 1; index < run.length; index += 1) points.push(run[index].points[1]);
     fragments.push(frozenStroke(points, false, run[0], run[run.length - 1]));
     run = [];
   };
   for (const segment of segments) {
     const previous = run[run.length - 1];
-    const continuous = !pressureSensitive && previous !== undefined && previous.index + 1 === segment.index && previous.endT === 1 && segment.startT === 0 && samePoint(previous.points[1], segment.points[0]);
+    const continuous =
+      !pressureSensitive &&
+      previous !== undefined &&
+      previous.index + 1 === segment.index &&
+      previous.endT === 1 &&
+      segment.startT === 0 &&
+      samePoint(previous.points[1], segment.points[0]);
     if (!continuous) flush();
     run.push(segment);
     if (pressureSensitive) flush();
@@ -262,26 +468,66 @@ function runFragments(segments: readonly VisibleSegment[], pressureSensitive: bo
   return frozen(fragments);
 }
 
-function localFill(polygons: PolygonBooleanMultiPolygon, origin: GeometryPoint, limit: number): FrameFillRegion | null {
+function localFill(
+  polygons: PolygonBooleanMultiPolygon,
+  origin: GeometryPoint,
+  limit: number
+): FrameFillRegion | null {
   const localPolygons = polygons.map((polygon) => {
     const outer = localRing(polygon.outer, origin, limit);
     const holes = polygon.holes.map((hole) => localRing(hole, origin, limit));
-    return outer === null || holes.some((hole) => hole === null) ? null : frozen({ outer, holes: frozen(holes as (readonly GeometryPoint[])[]) });
+    return outer === null || holes.some((hole) => hole === null)
+      ? null
+      : frozen({ outer, holes: frozen(holes as (readonly GeometryPoint[])[]) });
   });
-  return localPolygons.some((polygon) => polygon === null) ? null : frozen({ kind: 'fill-region', fillRule: 'nonzero', polygons: frozen(localPolygons as FrameFillRegion['polygons']) });
+  return localPolygons.some((polygon) => polygon === null)
+    ? null
+    : frozen({
+        kind: 'fill-region',
+        fillRule: 'nonzero',
+        polygons: frozen(localPolygons as FrameFillRegion['polygons']),
+      });
 }
-function simpleFill(points: readonly GeometryPoint[], origin: GeometryPoint, limit: number): FrameFillRegion | null {
+function simpleFill(
+  points: readonly GeometryPoint[],
+  origin: GeometryPoint,
+  limit: number
+): FrameFillRegion | null {
   const local = localRing(points, origin, limit);
-  return local === null || local.length < 3 ? null : frozen({ kind: 'fill-region', fillRule: 'nonzero', polygons: frozen([frozen({ outer: local, holes: frozen([]) })]) });
+  return local === null || local.length < 3
+    ? null
+    : frozen({
+        kind: 'fill-region',
+        fillRule: 'nonzero',
+        polygons: frozen([frozen({ outer: local, holes: frozen([]) })]),
+      });
 }
 
-function pathFragments(points: readonly GeometryPoint[], closed: boolean, entry: PreparedDrawingEntry, origin: GeometryPoint, region: FrameLocalClipRegion, limit: number): FrameClippingResult {
-  if (points.length < 2 || !points.every(finitePoint) || points.some((point) => Math.abs(point.x) > Number.MAX_SAFE_INTEGER || Math.abs(point.y) > Number.MAX_SAFE_INTEGER)) return unresolved('unsafe-number');
+function pathFragments(
+  points: readonly GeometryPoint[],
+  closed: boolean,
+  entry: PreparedDrawingEntry,
+  origin: GeometryPoint,
+  region: FrameLocalClipRegion,
+  limit: number
+): FrameClippingResult {
+  if (
+    points.length < 2 ||
+    !points.every(finitePoint) ||
+    points.some(
+      (point) =>
+        Math.abs(point.x) > Number.MAX_SAFE_INTEGER || Math.abs(point.y) > Number.MAX_SAFE_INTEGER
+    )
+  )
+    return unresolved('unsafe-number');
   const clip = globalRegion(origin, region);
   if (clip === null) return unresolved('unsafe-number');
-  const fullyContained = points.every((point) => inside({ x: point.x - origin.x, y: point.y - origin.y }, region));
+  const fullyContained = points.every((point) =>
+    inside({ x: point.x - origin.x, y: point.y - origin.y }, region)
+  );
   // concave 的部分交集也可能拆成多个 island，和自交一样必须转入 compound program。
-  const compound = closed && entry.closedPath?.kind !== undefined && entry.closedPath.kind !== 'simple-convex';
+  const compound =
+    closed && entry.closedPath?.kind !== undefined && entry.closedPath.kind !== 'simple-convex';
   let fill: FrameFillRegion | null = null;
   if (closed) {
     if (compound) {
@@ -290,12 +536,13 @@ function pathFragments(points: readonly GeometryPoint[], closed: boolean, entry:
       if (fullyContained && entry.closedPath?.kind === 'simple-concave') {
         fill = simpleFill(points, origin, limit);
       } else {
-      if (entry.closedPath?.canonicalizationFailed) return unresolved('clip-failed');
-      const canonical = fullyContained && entry.closedPath?.canonicalFill
-        ? { ok: true as const, polygons: entry.closedPath.canonicalFill }
-        : intersectClosedRingWithRect(points, clip);
-      if (!canonical.ok) return unresolved('clip-failed');
-      fill = localFill(canonical.polygons, origin, limit);
+        if (entry.closedPath?.canonicalizationFailed) return unresolved('clip-failed');
+        const canonical =
+          fullyContained && entry.closedPath?.canonicalFill
+            ? { ok: true as const, polygons: entry.closedPath.canonicalFill }
+            : intersectClosedRingWithRect(points, clip);
+        if (!canonical.ok) return unresolved('clip-failed');
+        fill = localFill(canonical.polygons, origin, limit);
       }
     } else {
       const globalArea = fullyContained ? points : clipPolygon(points, clip);
@@ -319,34 +566,68 @@ function pathFragments(points: readonly GeometryPoint[], closed: boolean, entry:
       const last = localPoint(globalLast, origin, limit);
       if (first === null || last === null) return unresolved('unsafe-number');
       clipped ||= startT !== 0 || endT !== 1;
-      visible.push({ points: [first, last], index, distanceStart: distance + length * startT, distanceEnd: distance + length * endT, startT, endT,
-        sourceStartPressure: entry.stroke.points[index]?.pressure, sourceEndPressure: entry.stroke.points[(index + 1) % entry.stroke.points.length]?.pressure });
+      visible.push({
+        points: [first, last],
+        index,
+        distanceStart: distance + length * startT,
+        distanceEnd: distance + length * endT,
+        startT,
+        endT,
+        sourceStartPressure: entry.stroke.points[index]?.pressure,
+        sourceEndPressure: entry.stroke.points[(index + 1) % entry.stroke.points.length]?.pressure,
+      });
     } else clipped = true;
     distance += length;
   }
   // 自交没有可直接描边的闭合边界；普通 concave 的完整 source edge 仍可以描边。
-  const strokes = fullyContained && closed && entry.closedPath?.kind !== 'complex'
-    ? (() => {
-        const local = localRing(points, origin, limit);
-        const polyline = local === null ? null : frozenPolyline(local);
-        return local === null || polyline === null || visible.length === 0 ? [] : [frozenStroke(polyline, true, visible[0], visible[visible.length - 1])];
-      })()
-    : runFragments(visible, entry.stroke.tool === 'pen' && entry.stroke.points.some((point) => point.pressure !== undefined));
+  const strokes =
+    fullyContained && closed && entry.closedPath?.kind !== 'complex'
+      ? (() => {
+          const local = localRing(points, origin, limit);
+          const polyline = local === null ? null : frozenPolyline(local);
+          return local === null || polyline === null || visible.length === 0
+            ? []
+            : [frozenStroke(polyline, true, visible[0], visible[visible.length - 1])];
+        })()
+      : runFragments(
+          visible,
+          entry.stroke.tool === 'pen' &&
+            entry.stroke.points.some((point) => point.pressure !== undefined)
+        );
   const fragments: DrawingFrameFragment[] = [...strokes];
   // simple fill 保留一份历史 semantic-area 投影；复合 fill 只能由 program 一次对象填充。
-  if (fill && (!compound || (fullyContained && entry.closedPath?.kind === 'simple-concave')) && fill.polygons.length === 1 && fill.polygons[0].holes.length === 0) {
+  if (
+    fill &&
+    (!compound || (fullyContained && entry.closedPath?.kind === 'simple-concave')) &&
+    fill.polygons.length === 1 &&
+    fill.polygons[0].holes.length === 0
+  ) {
     fragments.push(frozen({ kind: 'semantic-area', points: fill.polygons[0].outer }));
   }
   if (fragments.length === 0 && fill === null) return result('empty', []);
-  return result(clipped ? (strokes.length > 1 ? 'segmented' : 'clipped') : 'rebased', fragments, fill === null ? [] : [fill]);
+  return result(
+    clipped ? (strokes.length > 1 ? 'segmented' : 'clipped') : 'rebased',
+    fragments,
+    fill === null ? [] : [fill]
+  );
 }
 
-function globalRectCorners(geometry: Extract<DrawingGeometryDescriptor, { kind: 'rect' }>): readonly GeometryPoint[] | null {
+function globalRectCorners(
+  geometry: Extract<DrawingGeometryDescriptor, { kind: 'rect' }>
+): readonly GeometryPoint[] | null {
   const cosine = Math.cos(geometry.rotationRad);
   const sine = Math.sin(geometry.rotationRad);
   if (!finite(cosine) || !finite(sine)) return null;
-  const corners = [[-geometry.halfWidth, -geometry.halfHeight], [geometry.halfWidth, -geometry.halfHeight], [geometry.halfWidth, geometry.halfHeight], [-geometry.halfWidth, geometry.halfHeight]] as const;
-  const points = corners.map(([x, y]) => ({ x: geometry.center.x + x * cosine - y * sine, y: geometry.center.y + x * sine + y * cosine }));
+  const corners = [
+    [-geometry.halfWidth, -geometry.halfHeight],
+    [geometry.halfWidth, -geometry.halfHeight],
+    [geometry.halfWidth, geometry.halfHeight],
+    [-geometry.halfWidth, geometry.halfHeight],
+  ] as const;
+  const points = corners.map(([x, y]) => ({
+    x: geometry.center.x + x * cosine - y * sine,
+    y: geometry.center.y + x * sine + y * cosine,
+  }));
   return points.every(finitePoint) ? points : null;
 }
 
@@ -395,8 +676,22 @@ function resourceImageMapping(
     rotationRad,
   };
   return Object.values(source).every((value) => finite(value) && value >= 0 && value <= 1) &&
-    [destination.center.x, destination.center.y, destination.halfWidth, destination.halfHeight, destination.rotationRad].every(finite)
-    ? frozen({ source: frozen(source), destination: frozen({ center: frozen(destination.center), halfWidth: destination.halfWidth, halfHeight: destination.halfHeight, rotationRad: destination.rotationRad }) })
+    [
+      destination.center.x,
+      destination.center.y,
+      destination.halfWidth,
+      destination.halfHeight,
+      destination.rotationRad,
+    ].every(finite)
+    ? frozen({
+        source: frozen(source),
+        destination: frozen({
+          center: frozen(destination.center),
+          halfWidth: destination.halfWidth,
+          halfHeight: destination.halfHeight,
+          rotationRad: destination.rotationRad,
+        }),
+      })
     : null;
 }
 
@@ -409,7 +704,13 @@ function resourceTextRequest(
 ): FrameTextRequest | null {
   const { center, halfWidth, halfHeight, rotationRad } = layout;
   const size = fontSize ?? 24;
-  if (![center.x, center.y, halfWidth, halfHeight, rotationRad, size].every(finite) || halfWidth <= 0 || halfHeight <= 0 || size <= 0) return null;
+  if (
+    ![center.x, center.y, halfWidth, halfHeight, rotationRad, size].every(finite) ||
+    halfWidth <= 0 ||
+    halfHeight <= 0 ||
+    size <= 0
+  )
+    return null;
   const cosine = Math.cos(rotationRad);
   const sine = Math.sin(rotationRad);
   if (![cosine, sine].every(finite)) return null;
@@ -420,13 +721,27 @@ function resourceTextRequest(
     y: center.y - halfWidth * sine - halfHeight * cosine,
   };
   const layoutWidth = halfWidth * 2;
-  if (!finite(layoutWidth) || layoutWidth <= 0 || !finitePoint(paragraphOrigin) || visiblePolygon.length < 3) return null;
+  if (
+    !finite(layoutWidth) ||
+    layoutWidth <= 0 ||
+    !finitePoint(paragraphOrigin) ||
+    visiblePolygon.length < 3
+  )
+    return null;
   // revision 包含所有影响 shaping/layout 的单样式输入；provider 不会把 text 截段后另行 layout。
   const paragraphLayoutWidth = Math.min(layoutWidth, limit);
   const paragraphDirection = layoutWidth > limit ? 'ltr' : 'auto';
   if (!finite(paragraphLayoutWidth) || paragraphLayoutWidth <= 0) return null;
-  return frozen({ revision: `${text ?? ''}\u0000${size}\u0000${layoutWidth}\u0000${paragraphLayoutWidth}\u0000${paragraphDirection}\u0000start\u0000${rotationRad}`, text: text ?? '', fontSize: size,
-    paragraphOrigin: frozen(paragraphOrigin), paragraphWidth: layoutWidth, paragraphLayoutWidth, paragraphDirection, paragraphAlignment: 'start', rotationRad,
+  return frozen({
+    revision: `${text ?? ''}\u0000${size}\u0000${layoutWidth}\u0000${paragraphLayoutWidth}\u0000${paragraphDirection}\u0000start\u0000${rotationRad}`,
+    text: text ?? '',
+    fontSize: size,
+    paragraphOrigin: frozen(paragraphOrigin),
+    paragraphWidth: layoutWidth,
+    paragraphLayoutWidth,
+    paragraphDirection,
+    paragraphAlignment: 'start',
+    rotationRad,
     visiblePolygon: frozen(visiblePolygon.map((point) => frozen({ ...point }))),
   });
 }
@@ -434,90 +749,172 @@ function resourceTextRequest(
 function safeParagraphProgram(request: FrameTextRequest, limit: number): FrameTextProgram | null {
   if (request.text.length === 0) return frozen({ kind: 'empty-text' });
   if (
-    !finite(request.paragraphWidth) || request.paragraphWidth <= 0 || request.paragraphWidth > limit ||
-    !finite(request.paragraphLayoutWidth) || request.paragraphLayoutWidth !== request.paragraphWidth || request.paragraphLayoutWidth > limit ||
-    !finitePoint(request.paragraphOrigin) || Math.abs(request.paragraphOrigin.x) > limit || Math.abs(request.paragraphOrigin.y) > limit
-  ) return null;
-  return frozen({ kind: 'paragraph-slice', text: request.text, anchor: request.paragraphOrigin, paintOffset: frozen({ x: 0, y: 0 }),
-    paragraphWidth: request.paragraphWidth, rotationRad: request.rotationRad,
+    !finite(request.paragraphWidth) ||
+    request.paragraphWidth <= 0 ||
+    request.paragraphWidth > limit ||
+    !finite(request.paragraphLayoutWidth) ||
+    request.paragraphLayoutWidth !== request.paragraphWidth ||
+    request.paragraphLayoutWidth > limit ||
+    !finitePoint(request.paragraphOrigin) ||
+    Math.abs(request.paragraphOrigin.x) > limit ||
+    Math.abs(request.paragraphOrigin.y) > limit
+  )
+    return null;
+  return frozen({
+    kind: 'paragraph-slice',
+    text: request.text,
+    anchor: request.paragraphOrigin,
+    paintOffset: frozen({ x: 0, y: 0 }),
+    paragraphWidth: request.paragraphWidth,
+    rotationRad: request.rotationRad,
     semanticRegions: frozen([frozen({ polygon: request.visiblePolygon })]),
   });
 }
 
-function resourceBoxFragment(entry: PreparedDrawingEntry, origin: GeometryPoint, region: FrameLocalClipRegion, limit: number): FrameClippingResult {
+function resourceBoxFragment(
+  entry: PreparedDrawingEntry,
+  origin: GeometryPoint,
+  region: FrameLocalClipRegion,
+  limit: number
+): FrameClippingResult {
   const geometry = entry.geometry;
-  if (geometry.kind !== 'rect' || (entry.stroke.tool !== 'text' && entry.stroke.tool !== 'image')) return unresolved('invalid-geometry');
+  if (geometry.kind !== 'rect' || (entry.stroke.tool !== 'text' && entry.stroke.tool !== 'image'))
+    return unresolved('invalid-geometry');
   const corners = globalRectCorners(geometry);
   const clip = globalRegion(origin, region);
   const center = unboundedLocalPoint(geometry.center, origin);
   if (corners === null || clip === null) return unresolved('unsafe-number');
-  const fullyContained = corners.every((point) => inside({ x: point.x - origin.x, y: point.y - origin.y }, region));
+  const fullyContained = corners.every((point) =>
+    inside({ x: point.x - origin.x, y: point.y - origin.y }, region)
+  );
   const local = localRing(fullyContained ? corners : clipPolygon(corners, clip), origin, limit);
   if (local === null) return unresolved('unsafe-number');
   if (local.length < 3) return result('empty', []);
   if (center === null) return unresolved('unsafe-number');
-  const layout = frozen({ center, halfWidth: geometry.halfWidth, halfHeight: geometry.halfHeight, rotationRad: geometry.rotationRad });
-  const visible = fullyContained ? undefined : frozen({ polygon: local, clipBounds: frozen({ ...region }) });
+  const layout = frozen({
+    center,
+    halfWidth: geometry.halfWidth,
+    halfHeight: geometry.halfHeight,
+    rotationRad: geometry.rotationRad,
+  });
+  const visible = fullyContained
+    ? undefined
+    : frozen({ polygon: local, clipBounds: frozen({ ...region }) });
   // 图片可把可见 polygon 映到完整资源中的归一化 source 窗口和有限 destination；text 则生成
   // 保留原布局语义的有限 Paragraph 输入，绝不把 clipBounds 作为新的排版宽度。
-  const mappedImage = entry.stroke.tool === 'image' && visible ? resourceImageMapping(layout, visible.polygon) : undefined;
-  if (entry.stroke.tool === 'image' && visible && mappedImage === null) return unresolved('unrepresentable-geometry');
+  const mappedImage =
+    entry.stroke.tool === 'image' && visible
+      ? resourceImageMapping(layout, visible.polygon)
+      : undefined;
+  if (entry.stroke.tool === 'image' && visible && mappedImage === null)
+    return unresolved('unrepresentable-geometry');
   const imageMapping = mappedImage ?? undefined;
   const textPolygon = visible?.polygon ?? local;
-  const mappedText = entry.stroke.tool === 'text'
-    ? resourceTextRequest(layout, entry.stroke.text, entry.stroke.fontSize, textPolygon, limit)
-    : undefined;
-  if (entry.stroke.tool === 'text' && mappedText === null) return unresolved('unrepresentable-geometry');
+  const mappedText =
+    entry.stroke.tool === 'text'
+      ? resourceTextRequest(layout, entry.stroke.text, entry.stroke.fontSize, textPolygon, limit)
+      : undefined;
+  if (entry.stroke.tool === 'text' && mappedText === null)
+    return unresolved('unrepresentable-geometry');
   const textRequest = mappedText ?? undefined;
   // 完整且有限的资源无需等 Web shaping；其实际 Paragraph 与同一 semantic program 一起进入 frame。
-  const textProgram = textRequest && (textRequest.text.length === 0 || !visible)
-    ? safeParagraphProgram(textRequest, limit) ?? undefined
-    : undefined;
-  const fragment: FrameResourceBoxFragment = frozen({ kind: 'semantic-area', points: local, resourceBox: frozen({
-    kind: 'resource-box', tool: entry.stroke.tool,
-    layout,
-     ...(visible === undefined ? {} : { visible }),
-     ...(imageMapping === undefined ? {} : { imageMapping }),
+  const textProgram =
+    textRequest && (textRequest.text.length === 0 || !visible)
+      ? (safeParagraphProgram(textRequest, limit) ?? undefined)
+      : undefined;
+  const fragment: FrameResourceBoxFragment = frozen({
+    kind: 'semantic-area',
+    points: local,
+    resourceBox: frozen({
+      kind: 'resource-box',
+      tool: entry.stroke.tool,
+      layout,
+      ...(visible === undefined ? {} : { visible }),
+      ...(imageMapping === undefined ? {} : { imageMapping }),
       ...(textRequest === undefined ? {} : { textRequest }),
       ...(textProgram === undefined ? {} : { textProgram }),
-    source: frozen(entry.stroke.tool === 'text' ? { text: entry.stroke.text, fontSize: entry.stroke.fontSize } : { src: entry.stroke.src, ...(entry.stroke.resourceId === undefined ? {} : { resourceId: entry.stroke.resourceId }) }),
-  }) });
+      source: frozen(
+        entry.stroke.tool === 'text'
+          ? { text: entry.stroke.text, fontSize: entry.stroke.fontSize }
+          : {
+              src: entry.stroke.src,
+              ...(entry.stroke.resourceId === undefined
+                ? {}
+                : { resourceId: entry.stroke.resourceId }),
+            }
+      ),
+    }),
+  });
   // resource polygon 只是 clip/input 审计数据，不能自动加入通用 geometry hit/fill program。
   return result(fullyContained ? 'rebased' : 'clipped', [fragment]);
 }
 
 type CubicControls = readonly [GeometryPoint, GeometryPoint, GeometryPoint, GeometryPoint];
-type CubicLeaf = Readonly<{ controls: CubicControls; flatness: number; potentiallyVisible: boolean }>;
+type CubicLeaf = Readonly<{
+  controls: CubicControls;
+  flatness: number;
+  potentiallyVisible: boolean;
+}>;
 
 function midpoint(first: number, second: number): number | null {
   const value = first / 2 + second / 2;
   return finite(value) ? value : null;
 }
-function cubicDistanceToChord(point: GeometryPoint, start: GeometryPoint, end: GeometryPoint): number {
+function cubicDistanceToChord(
+  point: GeometryPoint,
+  start: GeometryPoint,
+  end: GeometryPoint
+): number {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const lengthSquared = dx * dx + dy * dy;
   if (!finite(lengthSquared)) return Infinity;
   if (lengthSquared === 0) return Math.hypot(point.x - start.x, point.y - start.y);
-  const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared));
+  const t = Math.max(
+    0,
+    Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared)
+  );
   return Math.hypot(point.x - (start.x + dx * t), point.y - (start.y + dy * t));
 }
 function cubicFlatness(controls: CubicControls): number {
-  return Math.max(cubicDistanceToChord(controls[1], controls[0], controls[3]), cubicDistanceToChord(controls[2], controls[0], controls[3]));
+  return Math.max(
+    cubicDistanceToChord(controls[1], controls[0], controls[3]),
+    cubicDistanceToChord(controls[2], controls[0], controls[3])
+  );
 }
 function splitCubic(controls: CubicControls): readonly [CubicControls, CubicControls] | null {
-  const first = { x: midpoint(controls[0].x, controls[1].x), y: midpoint(controls[0].y, controls[1].y) };
-  const second = { x: midpoint(controls[1].x, controls[2].x), y: midpoint(controls[1].y, controls[2].y) };
-  const third = { x: midpoint(controls[2].x, controls[3].x), y: midpoint(controls[2].y, controls[3].y) };
-  if (![first.x, first.y, second.x, second.y, third.x, third.y].every((value) => value !== null)) return null;
+  const first = {
+    x: midpoint(controls[0].x, controls[1].x),
+    y: midpoint(controls[0].y, controls[1].y),
+  };
+  const second = {
+    x: midpoint(controls[1].x, controls[2].x),
+    y: midpoint(controls[1].y, controls[2].y),
+  };
+  const third = {
+    x: midpoint(controls[2].x, controls[3].x),
+    y: midpoint(controls[2].y, controls[3].y),
+  };
+  if (![first.x, first.y, second.x, second.y, third.x, third.y].every((value) => value !== null))
+    return null;
   const left = { x: midpoint(first.x!, second.x!), y: midpoint(first.y!, second.y!) };
   const right = { x: midpoint(second.x!, third.x!), y: midpoint(second.y!, third.y!) };
   if (![left.x, left.y, right.x, right.y].every((value) => value !== null)) return null;
   const middle = { x: midpoint(left.x!, right.x!), y: midpoint(left.y!, right.y!) };
   if (middle.x === null || middle.y === null) return null;
   return [
-    [controls[0], frozen({ x: first.x!, y: first.y! }), frozen({ x: left.x!, y: left.y! }), frozen({ x: middle.x, y: middle.y })],
-    [frozen({ x: middle.x, y: middle.y }), frozen({ x: right.x!, y: right.y! }), frozen({ x: third.x!, y: third.y! }), controls[3]],
+    [
+      controls[0],
+      frozen({ x: first.x!, y: first.y! }),
+      frozen({ x: left.x!, y: left.y! }),
+      frozen({ x: middle.x, y: middle.y }),
+    ],
+    [
+      frozen({ x: middle.x, y: middle.y }),
+      frozen({ x: right.x!, y: right.y! }),
+      frozen({ x: third.x!, y: third.y! }),
+      controls[3],
+    ],
   ];
 }
 function cubicHullMayIntersect(controls: CubicControls, region: FrameLocalClipRegion): boolean {
@@ -526,26 +923,47 @@ function cubicHullMayIntersect(controls: CubicControls, region: FrameLocalClipRe
   let maxX = controls[0].x;
   let maxY = controls[0].y;
   for (const point of controls.slice(1)) {
-    minX = Math.min(minX, point.x); minY = Math.min(minY, point.y);
-    maxX = Math.max(maxX, point.x); maxY = Math.max(maxY, point.y);
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
   }
-  return [minX, minY, maxX, maxY].every(finite) && maxX >= region.minX && minX <= region.maxX && maxY >= region.minY && minY <= region.maxY;
+  return (
+    [minX, minY, maxX, maxY].every(finite) &&
+    maxX >= region.minX &&
+    minX <= region.maxX &&
+    maxY >= region.minY &&
+    minY <= region.maxY
+  );
 }
 
 /**
  * partial cubic 不先生成整条 65k contour。控制点 hull 是曲线的保守 AABB，因此与扩张 clip
  * 不相交的 branch 可安全跳过；保留下来的 leaf 均以实际 flatness 认证。
  */
-function partialCubicFragments(entry: PreparedDrawingEntry, origin: GeometryPoint, region: FrameLocalClipRegion, limit: number, maxDeviation: number): FrameClippingResult {
+function partialCubicFragments(
+  entry: PreparedDrawingEntry,
+  origin: GeometryPoint,
+  region: FrameLocalClipRegion,
+  limit: number,
+  maxDeviation: number
+): FrameClippingResult {
   if (entry.geometry.kind !== 'cubic-bezier') return unresolved('invalid-geometry');
   const clip = globalRegion(origin, region);
   if (clip === null) return unresolved('unsafe-number');
-  const expanded = frozen({ minX: clip.minX - maxDeviation, minY: clip.minY - maxDeviation, maxX: clip.maxX + maxDeviation, maxY: clip.maxY + maxDeviation });
+  const expanded = frozen({
+    minX: clip.minX - maxDeviation,
+    minY: clip.minY - maxDeviation,
+    maxX: clip.maxX + maxDeviation,
+    maxY: clip.maxY + maxDeviation,
+  });
   if (!Object.values(expanded).every(finite)) return unresolved('unsafe-number');
   const controls = entry.geometry.points;
   if (!controls.every(finitePoint)) return unresolved('invalid-geometry');
   const leaves: CubicLeaf[] = [];
-  const pending: CubicLeaf[] = [frozen({ controls, flatness: cubicFlatness(controls), potentiallyVisible: true })];
+  const pending: CubicLeaf[] = [
+    frozen({ controls, flatness: cubicFlatness(controls), potentiallyVisible: true }),
+  ];
   while (pending.length > 0) {
     const piece = pending.pop()!;
     const potentiallyVisible = cubicHullMayIntersect(piece.controls, expanded);
@@ -562,7 +980,10 @@ function partialCubicFragments(entry: PreparedDrawingEntry, origin: GeometryPoin
     if (split === null) return unresolved('invalid-geometry');
     const leftFlatness = cubicFlatness(split[0]);
     const rightFlatness = cubicFlatness(split[1]);
-    pending.push(frozen({ controls: split[1], flatness: rightFlatness, potentiallyVisible: true }), frozen({ controls: split[0], flatness: leftFlatness, potentiallyVisible: true }));
+    pending.push(
+      frozen({ controls: split[1], flatness: rightFlatness, potentiallyVisible: true }),
+      frozen({ controls: split[0], flatness: leftFlatness, potentiallyVisible: true })
+    );
   }
   const visible: VisibleSegment[] = [];
   let distance = 0;
@@ -581,15 +1002,34 @@ function partialCubicFragments(entry: PreparedDrawingEntry, origin: GeometryPoin
         const first = localPoint(cut[0], origin, limit);
         const last = localPoint(cut[1], origin, limit);
         if (first === null || last === null) return unresolved('unsafe-number');
-        visible.push(frozen({ points: [first, last], index, distanceStart: distance + length * cut[2], distanceEnd: distance + length * cut[3], startT: cut[2], endT: cut[3] }));
+        visible.push(
+          frozen({
+            points: [first, last],
+            index,
+            distanceStart: distance + length * cut[2],
+            distanceEnd: distance + length * cut[3],
+            startT: cut[2],
+            endT: cut[3],
+          })
+        );
         clipped ||= cut[2] !== 0 || cut[3] !== 1;
       } else clipped = true;
     } else clipped = true;
     distance += length;
   }
   const strokes = runFragments(visible, false);
-  const actualMaxDeviation = leaves.reduce((maximum, leaf) => leaf.potentiallyVisible ? Math.max(maximum, leaf.flatness) : maximum, 0);
-  return strokes.length === 0 ? result('empty', [], [], actualMaxDeviation) : result(clipped ? (strokes.length > 1 ? 'segmented' : 'clipped') : 'rebased', strokes, [], actualMaxDeviation);
+  const actualMaxDeviation = leaves.reduce(
+    (maximum, leaf) => (leaf.potentiallyVisible ? Math.max(maximum, leaf.flatness) : maximum),
+    0
+  );
+  return strokes.length === 0
+    ? result('empty', [], [], actualMaxDeviation)
+    : result(
+        clipped ? (strokes.length > 1 ? 'segmented' : 'clipped') : 'rebased',
+        strokes,
+        [],
+        actualMaxDeviation
+      );
 }
 
 type EllipseGeometry = Extract<DrawingGeometryDescriptor, { kind: 'ellipse' }>;
@@ -600,7 +1040,10 @@ function ellipsePoint(geometry: EllipseGeometry, angle: number): GeometryPoint |
   const sine = Math.sin(geometry.rotationRad);
   const localX = geometry.radiusX * Math.cos(angle);
   const localY = geometry.radiusY * Math.sin(angle);
-  const point = { x: geometry.center.x + localX * cosine - localY * sine, y: geometry.center.y + localX * sine + localY * cosine };
+  const point = {
+    x: geometry.center.x + localX * cosine - localY * sine,
+    y: geometry.center.y + localX * sine + localY * cosine,
+  };
   return finitePoint(point) ? frozen(point) : null;
 }
 
@@ -621,8 +1064,10 @@ function ellipseArcBounds(geometry: EllipseGeometry, arc: EllipseArc): FrameLoca
   if (points.some((point) => point === null)) return null;
   const resolved = points as GeometryPoint[];
   const bounds = {
-    minX: Math.min(...resolved.map((point) => point.x)), minY: Math.min(...resolved.map((point) => point.y)),
-    maxX: Math.max(...resolved.map((point) => point.x)), maxY: Math.max(...resolved.map((point) => point.y)),
+    minX: Math.min(...resolved.map((point) => point.x)),
+    minY: Math.min(...resolved.map((point) => point.y)),
+    maxX: Math.max(...resolved.map((point) => point.x)),
+    maxY: Math.max(...resolved.map((point) => point.y)),
   };
   return Object.values(bounds).every(finite) ? frozen(bounds) : null;
 }
@@ -634,14 +1079,18 @@ function ellipseContains(geometry: EllipseGeometry, point: GeometryPoint): boole
   const y = point.y - geometry.center.y;
   const localX = x * cosine + y * sine;
   const localY = -x * sine + y * cosine;
-  const value = localX * localX / (geometry.radiusX * geometry.radiusX) + localY * localY / (geometry.radiusY * geometry.radiusY);
+  const value =
+    (localX * localX) / (geometry.radiusX * geometry.radiusX) +
+    (localY * localY) / (geometry.radiusY * geometry.radiusY);
   return finite(value) && value <= 1;
 }
 
 function rectangleCorners(region: FrameLocalClipRegion): readonly GeometryPoint[] {
   return frozen([
-    frozen({ x: region.minX, y: region.minY }), frozen({ x: region.maxX, y: region.minY }),
-    frozen({ x: region.maxX, y: region.maxY }), frozen({ x: region.minX, y: region.maxY }),
+    frozen({ x: region.minX, y: region.minY }),
+    frozen({ x: region.maxX, y: region.minY }),
+    frozen({ x: region.maxX, y: region.maxY }),
+    frozen({ x: region.minX, y: region.maxY }),
   ]);
 }
 
@@ -650,8 +1099,19 @@ function convexRing(points: readonly GeometryPoint[]): readonly GeometryPoint[] 
   for (const point of points) {
     if (!unique.some((candidate) => samePoint(candidate, point))) unique.push(point);
   }
-  const center = unique.reduce((sum, point) => ({ x: sum.x + point.x / unique.length, y: sum.y + point.y / unique.length }), { x: 0, y: 0 });
-  return frozen(unique.sort((left, right) => Math.atan2(left.y - center.y, left.x - center.x) - Math.atan2(right.y - center.y, right.x - center.x)).map((point) => frozen({ ...point })));
+  const center = unique.reduce(
+    (sum, point) => ({ x: sum.x + point.x / unique.length, y: sum.y + point.y / unique.length }),
+    { x: 0, y: 0 }
+  );
+  return frozen(
+    unique
+      .sort(
+        (left, right) =>
+          Math.atan2(left.y - center.y, left.x - center.x) -
+          Math.atan2(right.y - center.y, right.x - center.x)
+      )
+      .map((point) => frozen({ ...point }))
+  );
 }
 
 /**
@@ -659,10 +1119,26 @@ function convexRing(points: readonly GeometryPoint[]): readonly GeometryPoint[] 
  * frame 输出会先裁剪到局部安全区，且每个输出点仍经过完整 f32 输入预算。若 program 本身
  * 无法以 JavaScript 有界数组表达，则如实给出明确诊断，而非把已认证的有限几何误报为 cap。
  */
-function partialEllipseFragments(entry: PreparedDrawingEntry, origin: GeometryPoint, region: FrameLocalClipRegion, limit: number, maxDeviation: number): FrameClippingResult {
+function partialEllipseFragments(
+  entry: PreparedDrawingEntry,
+  origin: GeometryPoint,
+  region: FrameLocalClipRegion,
+  limit: number,
+  maxDeviation: number
+): FrameClippingResult {
   if (entry.geometry.kind !== 'ellipse') return unresolved('invalid-geometry');
   const geometry = entry.geometry;
-  if (![geometry.center.x, geometry.center.y, geometry.radiusX, geometry.radiusY, geometry.rotationRad].every(finite) || geometry.radiusX <= 0 || geometry.radiusY <= 0) {
+  if (
+    ![
+      geometry.center.x,
+      geometry.center.y,
+      geometry.radiusX,
+      geometry.radiusY,
+      geometry.rotationRad,
+    ].every(finite) ||
+    geometry.radiusX <= 0 ||
+    geometry.radiusY <= 0
+  ) {
     return unresolved('invalid-geometry');
   }
   const clip = globalRegion(origin, region);
@@ -673,14 +1149,25 @@ function partialEllipseFragments(entry: PreparedDrawingEntry, origin: GeometryPo
     const fill = simpleFill(rectangleCorners(clip), origin, limit);
     return fill === null
       ? unresolved('unsafe-number')
-      : result('clipped', [frozen({ kind: 'semantic-area', points: fill.polygons[0].outer })], [fill]);
+      : result(
+          'clipped',
+          [frozen({ kind: 'semantic-area', points: fill.polygons[0].outer })],
+          [fill]
+        );
   }
   // 对叶子弦使用误差扩张的 clip，保证真实曲线进入 frame 时不会被其近似弦漏掉。
-  const expanded = frozen({ minX: clip.minX - maxDeviation, minY: clip.minY - maxDeviation, maxX: clip.maxX + maxDeviation, maxY: clip.maxY + maxDeviation });
+  const expanded = frozen({
+    minX: clip.minX - maxDeviation,
+    minY: clip.minY - maxDeviation,
+    maxX: clip.maxX + maxDeviation,
+    maxY: clip.maxY + maxDeviation,
+  });
   if (!Object.values(expanded).every(finite)) return unresolved('unsafe-number');
   const pending: EllipseArc[] = [frozen({ start: 0, end: Math.PI * 2 })];
   const visible: VisibleSegment[] = [];
-  const fillPoints: GeometryPoint[] = rectangleCorners(expanded).filter((point) => ellipseContains(geometry, point));
+  const fillPoints: GeometryPoint[] = rectangleCorners(expanded).filter((point) =>
+    ellipseContains(geometry, point)
+  );
   let actualMaxDeviation = 0;
   let distance = 0;
   let index = 0;
@@ -688,15 +1175,25 @@ function partialEllipseFragments(entry: PreparedDrawingEntry, origin: GeometryPo
     const arc = pending.pop()!;
     const bounds = ellipseArcBounds(geometry, arc);
     if (bounds === null) return unresolved('unsafe-number');
-    if (bounds.maxX < expanded.minX || bounds.minX > expanded.maxX || bounds.maxY < expanded.minY || bounds.minY > expanded.maxY) continue;
+    if (
+      bounds.maxX < expanded.minX ||
+      bounds.minX > expanded.maxX ||
+      bounds.maxY < expanded.minY ||
+      bounds.minY > expanded.maxY
+    )
+      continue;
     const halfAngle = (arc.end - arc.start) / 2;
     // 椭圆是半径不超过 max(radiusX,radiusY) 的单位圆线性像；该 sagitta 上界经线性映射后仍成立。
     const deviation = Math.max(geometry.radiusX, geometry.radiusY) * (1 - Math.cos(halfAngle));
     if (!finite(deviation)) return unresolved('unrepresentable-geometry');
     if (deviation > maxDeviation) {
       const middle = midpoint(arc.start, arc.end);
-      if (middle === null || middle === arc.start || middle === arc.end) return unresolved('unrepresentable-geometry');
-      pending.push(frozen({ start: middle, end: arc.end }), frozen({ start: arc.start, end: middle }));
+      if (middle === null || middle === arc.start || middle === arc.end)
+        return unresolved('unrepresentable-geometry');
+      pending.push(
+        frozen({ start: middle, end: arc.end }),
+        frozen({ start: arc.start, end: middle })
+      );
       continue;
     }
     const start = ellipsePoint(geometry, arc.start);
@@ -709,7 +1206,16 @@ function partialEllipseFragments(entry: PreparedDrawingEntry, origin: GeometryPo
       const first = localPoint(cut[0], origin, limit);
       const last = localPoint(cut[1], origin, limit);
       if (first === null || last === null) return unresolved('unsafe-number');
-      visible.push(frozen({ points: [first, last], index, distanceStart: distance + length * cut[2], distanceEnd: distance + length * cut[3], startT: cut[2], endT: cut[3] }));
+      visible.push(
+        frozen({
+          points: [first, last],
+          index,
+          distanceStart: distance + length * cut[2],
+          distanceEnd: distance + length * cut[3],
+          startT: cut[2],
+          endT: cut[3],
+        })
+      );
       fillPoints.push(cut[0], cut[1]);
       actualMaxDeviation = Math.max(actualMaxDeviation, deviation);
       index += 1;
@@ -721,19 +1227,39 @@ function partialEllipseFragments(entry: PreparedDrawingEntry, origin: GeometryPo
   const strokes = runFragments(visible, false);
   if (fill === null && strokes.length === 0) return result('empty', [], [], actualMaxDeviation);
   const fragments: DrawingFrameFragment[] = [...strokes];
-  if (fill && fill.polygons.length === 1 && fill.polygons[0].holes.length === 0) fragments.push(frozen({ kind: 'semantic-area', points: fill.polygons[0].outer }));
-  return result(strokes.length > 1 ? 'segmented' : 'clipped', fragments, fill === null ? [] : [fill], actualMaxDeviation);
+  if (fill && fill.polygons.length === 1 && fill.polygons[0].holes.length === 0)
+    fragments.push(frozen({ kind: 'semantic-area', points: fill.polygons[0].outer }));
+  return result(
+    strokes.length > 1 ? 'segmented' : 'clipped',
+    fragments,
+    fill === null ? [] : [fill],
+    actualMaxDeviation
+  );
 }
 
 /** 仅从 immutable prepared 几何生成 transient frame program；不会回写 document/effects。 */
-export function clipPreparedDrawingEntry(entry: PreparedDrawingEntry, origin: GeometryPoint, region: FrameLocalClipRegion, limit: number, maxDeviation = 0.25): FrameClippingResult {
+export function clipPreparedDrawingEntry(
+  entry: PreparedDrawingEntry,
+  origin: GeometryPoint,
+  region: FrameLocalClipRegion,
+  limit: number,
+  maxDeviation = 0.25
+): FrameClippingResult {
   if (!overlaps(entry.bounds, origin, region)) return result('empty', []);
-  if (!finite(maxDeviation) || maxDeviation <= 0 || maxDeviation > 0.5) return unresolved('invalid-geometry');
+  if (!finite(maxDeviation) || maxDeviation <= 0 || maxDeviation > 0.5)
+    return unresolved('invalid-geometry');
   const geometry = entry.geometry;
-  if (geometry.kind === 'path') return pathFragments(geometry.points, geometry.closed, entry, origin, region, limit);
-  if (geometry.kind === 'rect') return entry.stroke.tool === 'text' || entry.stroke.tool === 'image'
-    ? resourceBoxFragment(entry, origin, region, limit)
-    : (() => { const corners = globalRectCorners(geometry); return corners === null ? unresolved('unsafe-number') : pathFragments(corners, true, entry, origin, region, limit); })();
+  if (geometry.kind === 'path')
+    return pathFragments(geometry.points, geometry.closed, entry, origin, region, limit);
+  if (geometry.kind === 'rect')
+    return entry.stroke.tool === 'text' || entry.stroke.tool === 'image'
+      ? resourceBoxFragment(entry, origin, region, limit)
+      : (() => {
+          const corners = globalRectCorners(geometry);
+          return corners === null
+            ? unresolved('unsafe-number')
+            : pathFragments(corners, true, entry, origin, region, limit);
+        })();
   return geometry.kind === 'cubic-bezier'
     ? partialCubicFragments(entry, origin, region, limit, maxDeviation)
     : partialEllipseFragments(entry, origin, region, limit, maxDeviation);

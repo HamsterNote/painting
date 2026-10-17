@@ -1,4 +1,8 @@
-import { DRAWING_STROKE_SCHEMA_VERSION, type DrawingPointV2, type DrawingValueV2 } from '../model/strokes';
+import {
+  DRAWING_STROKE_SCHEMA_VERSION,
+  type DrawingPointV2,
+  type DrawingValueV2,
+} from '../model/strokes';
 
 /** 文本编辑期间可替换的草稿字段；字符串不做 trim、规范化或测量修正。 */
 export type TextEditDraft = Readonly<{
@@ -76,7 +80,10 @@ function withStatus(session: TextEditSession, status: TextEditSession['status'])
 }
 
 /** 从新笔迹目标开始纯文本编辑会话。 */
-export function beginNewTextEditSession(target: NewTextEditTarget, draft: TextEditDraft): TextEditSession {
+export function beginNewTextEditSession(
+  target: NewTextEditTarget,
+  draft: TextEditDraft
+): TextEditSession {
   return {
     target: { id: target.id, points: copyPoints(target.points), fontSize: target.fontSize },
     mode: 'new',
@@ -114,18 +121,26 @@ export function updateTextEditDraft(
   // 外部未类型化调用即使传入 text: undefined，也不能破坏 session 的 string 不变量。
   return {
     ...session,
-    draft: toEditableDraft({ ...session.draft, ...update, text: update.text ?? session.draft.text }),
+    draft: toEditableDraft({
+      ...session.draft,
+      ...update,
+      text: update.text ?? session.draft.text,
+    }),
   };
 }
 
 /** 标记输入法 composition 开始；它不会写入 document。 */
 export function startTextEditComposition(session: TextEditSession): TextEditSession {
-  return session.status === 'editing' && !session.isComposing ? { ...session, isComposing: true } : session;
+  return session.status === 'editing' && !session.isComposing
+    ? { ...session, isComposing: true }
+    : session;
 }
 
 /** 标记 composition 结束。已挂起的提交现在可由 commit 消费。 */
 export function endTextEditComposition(session: TextEditSession): TextEditSession {
-  return session.status === 'editing' && session.isComposing ? { ...session, isComposing: false } : session;
+  return session.status === 'editing' && session.isComposing
+    ? { ...session, isComposing: false }
+    : session;
 }
 
 /** 请求一次提交；composition 期间仅挂起请求，绝不写入 document。 */
@@ -182,16 +197,27 @@ export function commitTextEditSession(
       points: copyPoints(session.draft.points ?? target.points),
       text: session.draft.text,
       fontSize: session.draft.fontSize ?? target.fontSize,
-      ...(session.draft.strokeColor === undefined ? {} : { strokeColor: session.draft.strokeColor }),
-      ...(session.draft.strokeWidth === undefined ? {} : { strokeWidth: session.draft.strokeWidth }),
+      ...(session.draft.strokeColor === undefined
+        ? {}
+        : { strokeColor: session.draft.strokeColor }),
+      ...(session.draft.strokeWidth === undefined
+        ? {}
+        : { strokeWidth: session.draft.strokeWidth }),
       ...(session.draft.dashArray === undefined ? {} : { dashArray: [...session.draft.dashArray] }),
       ...(session.draft.dashOffset === undefined ? {} : { dashOffset: session.draft.dashOffset }),
       ...(session.draft.fillColor === undefined ? {} : { fillColor: session.draft.fillColor }),
-      ...(session.draft.fillOpacity === undefined ? {} : { fillOpacity: session.draft.fillOpacity }),
-      ...(session.draft.rotationRad === undefined ? {} : { rotationRad: session.draft.rotationRad }),
+      ...(session.draft.fillOpacity === undefined
+        ? {}
+        : { fillOpacity: session.draft.fillOpacity }),
+      ...(session.draft.rotationRad === undefined
+        ? {}
+        : { rotationRad: session.draft.rotationRad }),
     };
     return {
-      document: { schemaVersion: DRAWING_STROKE_SCHEMA_VERSION, strokes: [...document.strokes, stroke] },
+      document: {
+        schemaVersion: DRAWING_STROKE_SCHEMA_VERSION,
+        strokes: [...document.strokes, stroke],
+      },
       session: completed,
       diagnostics: NO_DIAGNOSTICS,
     };
@@ -207,7 +233,10 @@ export function commitTextEditSession(
     return {
       document: {
         schemaVersion: DRAWING_STROKE_SCHEMA_VERSION,
-        strokes: [...document.strokes.slice(0, target.index), ...document.strokes.slice(target.index + 1)],
+        strokes: [
+          ...document.strokes.slice(0, target.index),
+          ...document.strokes.slice(target.index + 1),
+        ],
       },
       session: completed,
       diagnostics: NO_DIAGNOSTICS,

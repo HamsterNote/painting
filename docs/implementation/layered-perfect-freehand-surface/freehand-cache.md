@@ -38,6 +38,7 @@
 - 类型：`FreehandPresentation = { worldBounds, transformedPolygon }`、`FreehandGeometryKeyInput`。
 
 设计取舍：
+
 - 缓存只依赖 `model/document.ts` 类型与 `deriveFreehandGeometry`，不依赖 controller/DOM/Canvas/SVG/Skia/legacy（无旧 V2/frame/skia）。
 - 引用身份无法字符串化，故 key 由「版本字符串 + `===` 引用守护」共同构成；`buildFreehandGeometryCacheKey` 仅负责可断言的版本部分。
 - algorithm revision 目前是常量 `FREEHAND_ALGORITHM_REVISION`；它进入 key，但**不设计人为的公共算法开关**，派生始终用当前实现。测试用 const assert + 纯 key 敏感性锁定该机制。
@@ -71,13 +72,13 @@ pnpm exec jest --selectProjects core-node --runTestsByPath \
 
 覆盖用例：
 
-| 分组 | 用例 |
-|------|------|
-| 复用/分离 | 重复 getGeometry/getPresentation 命中同一 frozen 引用；active 与 final 分开 key |
-| 版本/身份失效 | samplesRevision；同 revisions 新 samples 引用；同值新 brush 引用；brushRevision；presetRevision；resolvedPressureMode；algorithm revision（const assert + key 敏感性） |
-| transform | 仅 transform 变化→几何复用、呈现重算、samples/brush 引用与版本不变；transformRevision 单独变化→几何复用、呈现按 revision 重算且数值 bounds/polygon 相等；有限矩阵乘大坐标溢出拒绝；非有限拒绝；奇异变换拒绝 |
-| 生命周期 | syncDocument 删除后失效 + reinsert；文档替换不同 objectId；undo/redo 快照不 stale 且同引用复用；clear |
-| 保存数据 | 文档序列化不含 polygon/commands/worldBounds/geometryRevision；raw samples/对象未被修改、引用保持 |
+| 分组          | 用例                                                                                                                                                                                                        |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 复用/分离     | 重复 getGeometry/getPresentation 命中同一 frozen 引用；active 与 final 分开 key                                                                                                                             |
+| 版本/身份失效 | samplesRevision；同 revisions 新 samples 引用；同值新 brush 引用；brushRevision；presetRevision；resolvedPressureMode；algorithm revision（const assert + key 敏感性）                                      |
+| transform     | 仅 transform 变化→几何复用、呈现重算、samples/brush 引用与版本不变；transformRevision 单独变化→几何复用、呈现按 revision 重算且数值 bounds/polygon 相等；有限矩阵乘大坐标溢出拒绝；非有限拒绝；奇异变换拒绝 |
+| 生命周期      | syncDocument 删除后失效 + reinsert；文档替换不同 objectId；undo/redo 快照不 stale 且同引用复用；clear                                                                                                       |
+| 保存数据      | 文档序列化不含 polygon/commands/worldBounds/geometryRevision；raw samples/对象未被修改、引用保持                                                                                                            |
 
 ### 3.3 类型（bounded，非全量 typecheck）
 

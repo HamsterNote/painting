@@ -19,14 +19,14 @@
 
 后续补齐并执行：`pnpm test` 88 suites / 1472 tests PASS；上述 Chromium 命令 15/15 PASS；native route 最小挂载 1/1 PASS（DOM host mock，不是 WebView 启动）。
 
-| 保留能力 | 分层实现 | 实际覆盖 |
-| --- | --- | --- |
-| 尺子平移/旋转/双指固定 pair/45 度吸附 | input/web/rulerGestureController + core gesture/session；navigation 持有姿态和角度反馈 | 原 rulerGestureController 5 tests、geometry/ticks；新增导航鼠标位姿测试 |
-| 尺边约束 | begin 锁定 rulerSnapshot，PF 派生前投影，raw 保真 | 非单位 viewport、原 raw、JSON/undo/redo、cache 失效测试 |
-| 虚拟纸张 | VirtualPaper 只读 controller viewport，NavigationOverlay 支持 center/top-left 初始放置 | UI 与主 SVG matrix 完全一致；不再叠包 CSS transform |
-| 交互配置 | virtualPaper.enabled/minScale/maxScale/enabledInteractions；Surface virtualPaper props 委托 controller | 单独 mouseDragPan/penPan/wheel/touch 开关和缩放限制测试；默认固定双指和第三触点 suppression |
-| 小地图 | 同一 ObjectNode/有序 SVG/PF 缓存；真实内容 bounds，点击/捕获拖动发 viewport replace | UI 点击、唯一 viewport revision、主 SVG 对齐，书写期拒绝更新 |
-| 非笔工具 | semantic adapter + layeredToolSession | 五种 shape 的 preview/cancel/undo、lasso/move/resize/rotate、快速 sweep erase、设置隔离 UI |
+| 保留能力                              | 分层实现                                                                                               | 实际覆盖                                                                                    |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| 尺子平移/旋转/双指固定 pair/45 度吸附 | input/web/rulerGestureController + core gesture/session；navigation 持有姿态和角度反馈                 | 原 rulerGestureController 5 tests、geometry/ticks；新增导航鼠标位姿测试                     |
+| 尺边约束                              | begin 锁定 rulerSnapshot，PF 派生前投影，raw 保真                                                      | 非单位 viewport、原 raw、JSON/undo/redo、cache 失效测试                                     |
+| 虚拟纸张                              | VirtualPaper 只读 controller viewport，NavigationOverlay 支持 center/top-left 初始放置                 | UI 与主 SVG matrix 完全一致；不再叠包 CSS transform                                         |
+| 交互配置                              | virtualPaper.enabled/minScale/maxScale/enabledInteractions；Surface virtualPaper props 委托 controller | 单独 mouseDragPan/penPan/wheel/touch 开关和缩放限制测试；默认固定双指和第三触点 suppression |
+| 小地图                                | 同一 ObjectNode/有序 SVG/PF 缓存；真实内容 bounds，点击/捕获拖动发 viewport replace                    | UI 点击、唯一 viewport revision、主 SVG 对齐，书写期拒绝更新                                |
+| 非笔工具                              | semantic adapter + layeredToolSession                                                                  | 五种 shape 的 preview/cancel/undo、lasso/move/resize/rotate、快速 sweep erase、设置隔离 UI  |
 
 Expo57 `--no-open` 等效：`BROWSER=none`，见 CLI `build/src/utils/open.js` 的明确分支；webServer 的 `pnpm dev` 实测 LAN 非 loopback IPv4:5266 HTTP 200。未启动供用户验收的持久服务。
 

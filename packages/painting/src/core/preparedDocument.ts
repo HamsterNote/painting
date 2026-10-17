@@ -1,6 +1,11 @@
 import type { DrawingGeometryDescriptor, GeometryPoint } from './geometry';
 import { describeDrawingStrokeGeometry } from './geometry';
-import { canonicalizeClosedRing, classifyClosedRing, type ClosedRingKind, type PolygonBooleanMultiPolygon } from './polygonBoolean';
+import {
+  canonicalizeClosedRing,
+  classifyClosedRing,
+  type ClosedRingKind,
+  type PolygonBooleanMultiPolygon,
+} from './polygonBoolean';
 import type { DrawingPointV2, DrawingStrokeV2, DrawingValueV2 } from '../model/strokes';
 
 /** 世界 DIP 的保守轴对齐包围盒，采用半开区间供空间索引精确过滤。 */
@@ -72,7 +77,10 @@ function freezeGeometryPoint(point: GeometryPoint): GeometryPoint {
 
 function freezeGeometry(geometry: DrawingGeometryDescriptor): DrawingGeometryDescriptor {
   if (geometry.kind === 'path') {
-    return Object.freeze({ ...geometry, points: Object.freeze(geometry.points.map(freezeGeometryPoint)) });
+    return Object.freeze({
+      ...geometry,
+      points: Object.freeze(geometry.points.map(freezeGeometryPoint)),
+    });
   }
   if (geometry.kind === 'cubic-bezier') {
     return Object.freeze({
@@ -100,7 +108,9 @@ function expand(bounds: DrawingBounds, amount: number): DrawingBounds | null {
     : null;
 }
 
-function boundsForPoints(points: readonly { readonly x: number; readonly y: number }[]): DrawingBounds | null {
+function boundsForPoints(
+  points: readonly { readonly x: number; readonly y: number }[]
+): DrawingBounds | null {
   if (points.length === 0) {
     return null;
   }
@@ -124,7 +134,9 @@ function boundsForPoints(points: readonly { readonly x: number; readonly y: numb
 }
 
 /** 从已生成的 descriptor 得到语义 hull；绝不再次描述原始 stroke。 */
-export function getPreparedGeometryBounds(geometry: DrawingGeometryDescriptor): DrawingBounds | null {
+export function getPreparedGeometryBounds(
+  geometry: DrawingGeometryDescriptor
+): DrawingBounds | null {
   if (geometry.kind === 'path' || geometry.kind === 'cubic-bezier') {
     // 三次曲线的控制点 hull 包含完整曲线，故为保守 bounds。
     return boundsForPoints(geometry.points);
@@ -192,17 +204,18 @@ function prepareEntry(
     return { diagnostic: Object.freeze({ type: 'invalid-bounds', index }) };
   }
 
-  const closedPath = geometry.kind === 'path' && geometry.closed
-    ? (() => {
-        const kind = classifyClosedRing(geometry.points);
-        if (kind === null) return undefined;
-        if (kind === 'simple-convex') return Object.freeze({ kind });
-        const canonical = canonicalizeClosedRing(geometry.points);
-        return canonical.ok
-          ? Object.freeze({ kind, canonicalFill: canonical.polygons })
-          : Object.freeze({ kind, canonicalizationFailed: true as const });
-      })()
-    : undefined;
+  const closedPath =
+    geometry.kind === 'path' && geometry.closed
+      ? (() => {
+          const kind = classifyClosedRing(geometry.points);
+          if (kind === null) return undefined;
+          if (kind === 'simple-convex') return Object.freeze({ kind });
+          const canonical = canonicalizeClosedRing(geometry.points);
+          return canonical.ok
+            ? Object.freeze({ kind, canonicalFill: canonical.polygons })
+            : Object.freeze({ kind, canonicalizationFailed: true as const });
+        })()
+      : undefined;
 
   return {
     entry: Object.freeze({
@@ -253,12 +266,17 @@ export function appendPreparedDrawingStroke(
 ): PreparedDrawingDocument {
   const documentIndex = previous.strokeCount;
   const prepared = prepareEntry(stroke, documentIndex);
-  const entries = 'entry' in prepared
-    ? (Object.freeze([...previous.entries, prepared.entry]) as readonly PreparedDrawingEntry[])
-    : previous.entries;
-  const diagnostics = 'diagnostic' in prepared
-    ? (Object.freeze([...previous.diagnostics, prepared.diagnostic]) as readonly PreparedDrawingDiagnostic[])
-    : previous.diagnostics;
+  const entries =
+    'entry' in prepared
+      ? (Object.freeze([...previous.entries, prepared.entry]) as readonly PreparedDrawingEntry[])
+      : previous.entries;
+  const diagnostics =
+    'diagnostic' in prepared
+      ? (Object.freeze([
+          ...previous.diagnostics,
+          prepared.diagnostic,
+        ]) as readonly PreparedDrawingDiagnostic[])
+      : previous.diagnostics;
   return Object.freeze({
     revision: nextPreparedRevision++,
     strokeCount: documentIndex + 1,

@@ -5,9 +5,9 @@
 
 ## 1. Hash 与验证
 
-| 对象 | sha256 | 规模 |
-|------|--------|------|
-| `geometry/worldBounds.ts` | `0754477961dd6144ac049a24b807f6886eccc627549f7d87835b75b18135edac` | 当前落盘 |
+| 对象                                          | sha256                                                             | 规模              |
+| --------------------------------------------- | ------------------------------------------------------------------ | ----------------- |
+| `geometry/worldBounds.ts`                     | `0754477961dd6144ac049a24b807f6886eccc627549f7d87835b75b18135edac` | 当前落盘          |
 | `__tests__/core/layered-world-bounds.test.ts` | `3644caa81326bdb141812253f7fc7ab08e04846f2e02ac520525927b352e20d5` | 581 行 / 35 tests |
 
 - `core-node` focused：**35 tests PASS，EXIT_CODE=0**

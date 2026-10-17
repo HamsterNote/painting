@@ -69,7 +69,10 @@ function cubicPoint(cp: readonly [Point, Point, Point, Point], t: number): Point
   };
 }
 
-function transformCubic(cp: readonly [Point, Point, Point, Point], t: AffineTransform): [Point, Point, Point, Point] {
+function transformCubic(
+  cp: readonly [Point, Point, Point, Point],
+  t: AffineTransform
+): [Point, Point, Point, Point] {
   return cp.map((p) => applyAffine(t, p)!) as [Point, Point, Point, Point];
 }
 
@@ -151,7 +154,9 @@ describe('adaptiveContour: cubic 基础与变换', () => {
       const contour = unwrap(flattenLayeredCubic(S, transform));
       expect(contour.worldPoints.length).toBeGreaterThan(1);
       expectCorrespondence(contour, transform);
-      expect(denseCubicMaxError(S, transform, contour.worldPoints)).toBeLessThanOrEqual(MAX_DEV + 1e-9);
+      expect(denseCubicMaxError(S, transform, contour.worldPoints)).toBeLessThanOrEqual(
+        MAX_DEV + 1e-9
+      );
     }
   });
 
@@ -160,7 +165,9 @@ describe('adaptiveContour: cubic 基础与变换', () => {
     const contour = unwrap(flattenLayeredCubic(S, transform));
     expect(contour.localPoints.length).toBeGreaterThanOrEqual(2);
     expectCorrespondence(contour, transform);
-    expect(denseCubicMaxError(S, transform, contour.worldPoints)).toBeLessThanOrEqual(MAX_DEV + 1e-9);
+    expect(denseCubicMaxError(S, transform, contour.worldPoints)).toBeLessThanOrEqual(
+      MAX_DEV + 1e-9
+    );
   });
 
   it('P0 = P3 的 loop 不被误判为直线', () => {
@@ -173,11 +180,17 @@ describe('adaptiveContour: cubic 基础与变换', () => {
     const contour = unwrap(flattenLayeredCubic(loop, IDENTITY_TRANSFORM));
     expect(contour.localPoints.length).toBeGreaterThan(2);
     // 真实转折：存在远离弦（起点~终点）的点。
-    const chord = distanceToSegment(contour.localPoints[1]!, contour.localPoints[0]!, contour.localPoints[contour.localPoints.length - 1]!);
+    const chord = distanceToSegment(
+      contour.localPoints[1]!,
+      contour.localPoints[0]!,
+      contour.localPoints[contour.localPoints.length - 1]!
+    );
     expect(chord).toBeLessThan(1e9);
     const maxY = Math.max(...contour.localPoints.map((p) => p.y));
     expect(maxY).toBeGreaterThan(10);
-    expect(denseCubicMaxError(loop, IDENTITY_TRANSFORM, contour.worldPoints)).toBeLessThanOrEqual(MAX_DEV + 1e-9);
+    expect(denseCubicMaxError(loop, IDENTITY_TRANSFORM, contour.worldPoints)).toBeLessThanOrEqual(
+      MAX_DEV + 1e-9
+    );
   });
 
   it('共线但 CP 越出两端：产生真实转折而非假单段', () => {
@@ -225,14 +238,24 @@ describe('adaptiveContour: ellipse', () => {
   const C: Point = { x: 0, y: 0 };
 
   it('full arc signed ±2π：起终闭合且 dense 误差 <= 0.125+1e-9', () => {
-    for (const [start, end] of [[0, Math.PI * 2], [0, -Math.PI * 2], [Math.PI / 3, Math.PI / 3 + Math.PI * 2]] as const) {
+    for (const [start, end] of [
+      [0, Math.PI * 2],
+      [0, -Math.PI * 2],
+      [Math.PI / 3, Math.PI / 3 + Math.PI * 2],
+    ] as const) {
       const contour = unwrap(flattenLayeredEllipse(C, 10, 5, IDENTITY_TRANSFORM, start, end));
       expect(contour.localPoints.length).toBeGreaterThan(8);
-      expect(contour.localPoints[0].x).toBeCloseTo(contour.localPoints[contour.localPoints.length - 1].x, 9);
-      expect(contour.localPoints[0].y).toBeCloseTo(contour.localPoints[contour.localPoints.length - 1].y, 9);
-      expect(ellipseOracleMaxError(C, 10, 5, IDENTITY_TRANSFORM, start, end, contour.worldPoints)).toBeLessThanOrEqual(
-        MAX_DEV + 1e-9
+      expect(contour.localPoints[0].x).toBeCloseTo(
+        contour.localPoints[contour.localPoints.length - 1].x,
+        9
       );
+      expect(contour.localPoints[0].y).toBeCloseTo(
+        contour.localPoints[contour.localPoints.length - 1].y,
+        9
+      );
+      expect(
+        ellipseOracleMaxError(C, 10, 5, IDENTITY_TRANSFORM, start, end, contour.worldPoints)
+      ).toBeLessThanOrEqual(MAX_DEV + 1e-9);
     }
   });
 
@@ -241,9 +264,9 @@ describe('adaptiveContour: ellipse', () => {
     const contour = unwrap(flattenLayeredEllipse(C, 10, 5, transform, 0, Math.PI / 2));
     expect(contour.localPoints.length).toBeGreaterThan(2);
     expectCorrespondence(contour, transform);
-    expect(ellipseOracleMaxError(C, 10, 5, transform, 0, Math.PI / 2, contour.worldPoints)).toBeLessThanOrEqual(
-      MAX_DEV + 1e-9
-    );
+    expect(
+      ellipseOracleMaxError(C, 10, 5, transform, 0, Math.PI / 2, contour.worldPoints)
+    ).toBeLessThanOrEqual(MAX_DEV + 1e-9);
   });
 
   it('zero span 为单点；零 radius 轴退化', () => {
@@ -265,9 +288,9 @@ describe('adaptiveContour: ellipse', () => {
     const contour = unwrap(flattenLayeredEllipse(center, 10, 5, transform, -0.4, 2.1));
     expect(contour.localPoints.length).toBeGreaterThan(2);
     expectCorrespondence(contour, transform);
-    expect(ellipseOracleMaxError(center, 10, 5, transform, -0.4, 2.1, contour.worldPoints)).toBeLessThanOrEqual(
-      MAX_DEV + 1e-9
-    );
+    expect(
+      ellipseOracleMaxError(center, 10, 5, transform, -0.4, 2.1, contour.worldPoints)
+    ).toBeLessThanOrEqual(MAX_DEV + 1e-9);
   });
 });
 
@@ -284,10 +307,37 @@ describe('adaptiveContour: 错误路径', () => {
   ];
 
   it('cubic invalid：点数 / null / NaN / 奇异 transform → invalid-input', () => {
-    expectCode(flattenLayeredCubic([{ x: 0, y: 0 }] as unknown as Point[], IDENTITY_TRANSFORM), 'invalid-input');
-    expectCode(flattenLayeredCubic(null as unknown as Point[], IDENTITY_TRANSFORM), 'invalid-input');
-    expectCode(flattenLayeredCubic([{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 2 }] as unknown as Point[], IDENTITY_TRANSFORM), 'invalid-input');
-    expectCode(flattenLayeredCubic([{ x: 0, y: 0 }, { x: Number.NaN, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 2 }], IDENTITY_TRANSFORM), 'invalid-input');
+    expectCode(
+      flattenLayeredCubic([{ x: 0, y: 0 }] as unknown as Point[], IDENTITY_TRANSFORM),
+      'invalid-input'
+    );
+    expectCode(
+      flattenLayeredCubic(null as unknown as Point[], IDENTITY_TRANSFORM),
+      'invalid-input'
+    );
+    expectCode(
+      flattenLayeredCubic(
+        [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+          { x: 2, y: 2 },
+        ] as unknown as Point[],
+        IDENTITY_TRANSFORM
+      ),
+      'invalid-input'
+    );
+    expectCode(
+      flattenLayeredCubic(
+        [
+          { x: 0, y: 0 },
+          { x: Number.NaN, y: 0 },
+          { x: 1, y: 1 },
+          { x: 2, y: 2 },
+        ],
+        IDENTITY_TRANSFORM
+      ),
+      'invalid-input'
+    );
     expectCode(flattenLayeredCubic(S, { ...IDENTITY_TRANSFORM, a: Number.NaN }), 'invalid-input');
     expectCode(flattenLayeredCubic(S, { a: 0, b: 0, c: 0, d: 0, tx: 0, ty: 0 }), 'invalid-input');
   });
@@ -298,18 +348,59 @@ describe('adaptiveContour: 错误路径', () => {
   });
 
   it('ellipse invalid：center/rx/ry/angles/span/singular → invalid-input', () => {
-    expectCode(flattenLayeredEllipse(null as unknown as Point, 10, 5, IDENTITY_TRANSFORM, 0, 1), 'invalid-input');
-    expectCode(flattenLayeredEllipse({ x: Number.NaN, y: 0 }, 10, 5, IDENTITY_TRANSFORM, 0, 1), 'invalid-input');
-    expectCode(flattenLayeredEllipse({ x: 0, y: 0 }, -1, 5, IDENTITY_TRANSFORM, 0, 1), 'invalid-input');
-    expectCode(flattenLayeredEllipse({ x: 0, y: 0 }, Number.NaN, 5, IDENTITY_TRANSFORM, 0, 1), 'invalid-input');
-    expectCode(flattenLayeredEllipse({ x: 0, y: 0 }, 10, 5, { a: 0, b: 0, c: 0, d: 0, tx: 0, ty: 0 }, 0, 1), 'invalid-input');
-    expectCode(flattenLayeredEllipse({ x: 0, y: 0 }, 10, 5, IDENTITY_TRANSFORM, Number.NaN, 1), 'invalid-input');
-    expectCode(flattenLayeredEllipse({ x: 0, y: 0 }, 10, 5, IDENTITY_TRANSFORM, 0, Math.PI * 2 + 0.1), 'invalid-input');
+    expectCode(
+      flattenLayeredEllipse(null as unknown as Point, 10, 5, IDENTITY_TRANSFORM, 0, 1),
+      'invalid-input'
+    );
+    expectCode(
+      flattenLayeredEllipse({ x: Number.NaN, y: 0 }, 10, 5, IDENTITY_TRANSFORM, 0, 1),
+      'invalid-input'
+    );
+    expectCode(
+      flattenLayeredEllipse({ x: 0, y: 0 }, -1, 5, IDENTITY_TRANSFORM, 0, 1),
+      'invalid-input'
+    );
+    expectCode(
+      flattenLayeredEllipse({ x: 0, y: 0 }, Number.NaN, 5, IDENTITY_TRANSFORM, 0, 1),
+      'invalid-input'
+    );
+    expectCode(
+      flattenLayeredEllipse({ x: 0, y: 0 }, 10, 5, { a: 0, b: 0, c: 0, d: 0, tx: 0, ty: 0 }, 0, 1),
+      'invalid-input'
+    );
+    expectCode(
+      flattenLayeredEllipse({ x: 0, y: 0 }, 10, 5, IDENTITY_TRANSFORM, Number.NaN, 1),
+      'invalid-input'
+    );
+    expectCode(
+      flattenLayeredEllipse({ x: 0, y: 0 }, 10, 5, IDENTITY_TRANSFORM, 0, Math.PI * 2 + 0.1),
+      'invalid-input'
+    );
   });
 
   it('ellipse finite 变换/中间算术溢出 → geometry-failed', () => {
-    expectCode(flattenLayeredEllipse({ x: 10, y: 0 }, 10, 5, { a: 1e308, b: 0, c: 0, d: 1, tx: 0, ty: 0 }, 0, 1), 'geometry-failed');
-    expectCode(flattenLayeredEllipse({ x: 0, y: 0 }, 1e308, 1e308, { a: 1e308, b: 0, c: 0, d: 1, tx: 0, ty: 0 }, 0, Math.PI / 2), 'geometry-failed');
+    expectCode(
+      flattenLayeredEllipse(
+        { x: 10, y: 0 },
+        10,
+        5,
+        { a: 1e308, b: 0, c: 0, d: 1, tx: 0, ty: 0 },
+        0,
+        1
+      ),
+      'geometry-failed'
+    );
+    expectCode(
+      flattenLayeredEllipse(
+        { x: 0, y: 0 },
+        1e308,
+        1e308,
+        { a: 1e308, b: 0, c: 0, d: 1, tx: 0, ty: 0 },
+        0,
+        Math.PI / 2
+      ),
+      'geometry-failed'
+    );
   });
 
   it('预算超限：巨大 finite cubic / ellipse → budget-exceeded（无 partial）', () => {
@@ -353,21 +444,53 @@ describe('adaptiveContour: 冻结与隔离', () => {
   });
 
   it('maxDeviation 恒为固定上限 0.125（非测量值）', () => {
-    const cubic = unwrap(flattenLayeredCubic([{ x: 0, y: 0 }, { x: 0, y: 100 }, { x: 100, y: 100 }, { x: 100, y: 0 }], IDENTITY_TRANSFORM));
-    const ellipse = unwrap(flattenLayeredEllipse({ x: 0, y: 0 }, 10, 5, IDENTITY_TRANSFORM, 0, Math.PI * 2));
+    const cubic = unwrap(
+      flattenLayeredCubic(
+        [
+          { x: 0, y: 0 },
+          { x: 0, y: 100 },
+          { x: 100, y: 100 },
+          { x: 100, y: 0 },
+        ],
+        IDENTITY_TRANSFORM
+      )
+    );
+    const ellipse = unwrap(
+      flattenLayeredEllipse({ x: 0, y: 0 }, 10, 5, IDENTITY_TRANSFORM, 0, Math.PI * 2)
+    );
     expect(cubic.maxDeviation).toBe(0.125);
     expect(ellipse.maxDeviation).toBe(0.125);
   });
 
   it('每个成功结果 precondition：local/world 等长且 >1 点（曲线）', () => {
-    const contour = unwrap(flattenLayeredCubic([{ x: 0, y: 0 }, { x: 0, y: 100 }, { x: 100, y: 100 }, { x: 100, y: 0 }], rotation(Math.PI / 7)));
+    const contour = unwrap(
+      flattenLayeredCubic(
+        [
+          { x: 0, y: 0 },
+          { x: 0, y: 100 },
+          { x: 100, y: 100 },
+          { x: 100, y: 0 },
+        ],
+        rotation(Math.PI / 7)
+      )
+    );
     expect(contour.localPoints.length).toBe(contour.worldPoints.length);
     expect(contour.localPoints.length).toBeGreaterThan(1);
   });
 
   it('translate-only：world 为 local 平移（精确）', () => {
     const transform: AffineTransform = { ...IDENTITY_TRANSFORM, tx: -30, ty: 12 };
-    const contour = unwrap(flattenLayeredCubic([{ x: 0, y: 0 }, { x: 0, y: 100 }, { x: 100, y: 100 }, { x: 100, y: 0 }], transform));
+    const contour = unwrap(
+      flattenLayeredCubic(
+        [
+          { x: 0, y: 0 },
+          { x: 0, y: 100 },
+          { x: 100, y: 100 },
+          { x: 100, y: 0 },
+        ],
+        transform
+      )
+    );
     contour.localPoints.forEach((local, index) => {
       expect(contour.worldPoints[index]!.x).toBeCloseTo(local.x - 30, 9);
       expect(contour.worldPoints[index]!.y).toBeCloseTo(local.y + 12, 9);
@@ -376,7 +499,15 @@ describe('adaptiveContour: 冻结与隔离', () => {
 
   it('真直线 cubic → 恰两段点（接受为单段）', () => {
     const straight = unwrap(
-      flattenLayeredCubic([{ x: 0, y: 0 }, { x: 3, y: 0 }, { x: 7, y: 0 }, { x: 10, y: 0 }], IDENTITY_TRANSFORM)
+      flattenLayeredCubic(
+        [
+          { x: 0, y: 0 },
+          { x: 3, y: 0 },
+          { x: 7, y: 0 },
+          { x: 10, y: 0 },
+        ],
+        IDENTITY_TRANSFORM
+      )
     );
     expect(straight.localPoints).toHaveLength(2);
     expect(straight.localPoints[0]).toEqual({ x: 0, y: 0 });
@@ -387,9 +518,8 @@ describe('adaptiveContour: 冻结与隔离', () => {
     const transform: AffineTransform = { a: -1, b: 0, c: 0, d: 1, tx: 5, ty: 0 };
     const contour = unwrap(flattenLayeredEllipse({ x: 0, y: 0 }, 10, 5, transform, 0, Math.PI * 2));
     expectCorrespondence(contour, transform);
-    expect(ellipseOracleMaxError({ x: 0, y: 0 }, 10, 5, transform, 0, Math.PI * 2, contour.worldPoints)).toBeLessThanOrEqual(
-      MAX_DEV + 1e-9
-    );
+    expect(
+      ellipseOracleMaxError({ x: 0, y: 0 }, 10, 5, transform, 0, Math.PI * 2, contour.worldPoints)
+    ).toBeLessThanOrEqual(MAX_DEV + 1e-9);
   });
 });
-

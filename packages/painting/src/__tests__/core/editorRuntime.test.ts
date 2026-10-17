@@ -46,7 +46,12 @@ describe('core/editorRuntime', () => {
     const replaced = applyEditorRuntimeCommand(appended.state, {
       type: 'replace-strokes',
       expectedRevision: 1,
-      replacements: [{ target: target(1, appended.state.documentState.document.strokes[1]), stroke: pen('second', 20) }],
+      replacements: [
+        {
+          target: target(1, appended.state.documentState.document.strokes[1]),
+          stroke: pen('second', 20),
+        },
+      ],
     });
     const removed = applyEditorRuntimeCommand(replaced.state, {
       type: 'remove-strokes',
@@ -57,12 +62,13 @@ describe('core/editorRuntime', () => {
     expect(ids(removed.state)).toEqual(['second']);
     expect(removed.state.undoStack).toHaveLength(3);
     expect(ids(undoEditorRuntime(removed.state).state)).toEqual(['first', 'second']);
-    expect(undoEditorRuntime(undoEditorRuntime(removed.state).state).state.documentState.document.strokes[1].points).toEqual([
-      { x: 0, y: 0, pressure: 0.5 },
-    ]);
-    expect(ids(undoEditorRuntime(undoEditorRuntime(undoEditorRuntime(removed.state).state).state).state)).toEqual([
-      'first',
-    ]);
+    expect(
+      undoEditorRuntime(undoEditorRuntime(removed.state).state).state.documentState.document
+        .strokes[1].points
+    ).toEqual([{ x: 0, y: 0, pressure: 0.5 }]);
+    expect(
+      ids(undoEditorRuntime(undoEditorRuntime(undoEditorRuntime(removed.state).state).state).state)
+    ).toEqual(['first']);
   });
 
   it('moves A to B to C through two undo and redo operations with exact snapshots', () => {
@@ -162,15 +168,21 @@ describe('core/editorRuntime', () => {
       kind: 'move',
       delta: { x: 3, y: -2 },
     });
-    const rejected = commitSelectionIntent(moved.state, [target(0, moved.state.documentState.document.strokes[0])], {
-      kind: 'resize',
-      anchor: { x: 0, y: 0 },
-      axis: { x: 1, y: 1 },
-      scale: { x: 2, y: 3 },
-    });
+    const rejected = commitSelectionIntent(
+      moved.state,
+      [target(0, moved.state.documentState.document.strokes[0])],
+      {
+        kind: 'resize',
+        anchor: { x: 0, y: 0 },
+        axis: { x: 1, y: 1 },
+        scale: { x: 2, y: 3 },
+      }
+    );
 
     expect(moved.state.undoStack).toHaveLength(1);
-    expect(moved.state.documentState.document.strokes[0].points).toEqual([{ x: 7, y: -2, pressure: 0.5 }]);
+    expect(moved.state.documentState.document.strokes[0].points).toEqual([
+      { x: 7, y: -2, pressure: 0.5 },
+    ]);
     expect(rejected.state).toBe(moved.state);
     expect(rejected.diagnostics).toEqual([
       { type: 'non-uniform-selection-scale', scale: { x: 2, y: 3 } },
@@ -184,12 +196,22 @@ describe('core/editorRuntime', () => {
     const result = applyEditorRuntimeCommand(state, {
       type: 'replace-strokes',
       expectedRevision: 0,
-      replacements: [{ target: target(1, second), stroke: { ...second, points: [{ x: 10, y: 0 }] } }],
+      replacements: [
+        { target: target(1, second), stroke: { ...second, points: [{ x: 10, y: 0 }] } },
+      ],
     });
 
-    expect(result.state.documentState.document.strokes[0]).toMatchObject({ tool: 'pen', points: [{ x: 1, y: 0 }] });
-    expect(result.state.documentState.document.strokes[1]).toMatchObject({ tool: 'line', points: [{ x: 10, y: 0 }] });
-    expect(undoEditorRuntime(result.state).state.documentState.document.strokes[1]).toMatchObject({ points: [{ x: 2, y: 0 }] });
+    expect(result.state.documentState.document.strokes[0]).toMatchObject({
+      tool: 'pen',
+      points: [{ x: 1, y: 0 }],
+    });
+    expect(result.state.documentState.document.strokes[1]).toMatchObject({
+      tool: 'line',
+      points: [{ x: 10, y: 0 }],
+    });
+    expect(undoEditorRuntime(result.state).state.documentState.document.strokes[1]).toMatchObject({
+      points: [{ x: 2, y: 0 }],
+    });
   });
 
   it('protects initial input and history snapshots from later caller array mutation', () => {
@@ -210,7 +232,9 @@ describe('core/editorRuntime', () => {
 
     expect(state.documentState.document.strokes).toEqual([pen('input', 1)]);
     expect(committed.state.documentState.document.strokes[1]).toEqual(pen('append', 2));
-    expect(undoEditorRuntime(committed.state).state.documentState.document.strokes).toEqual([pen('input', 1)]);
+    expect(undoEditorRuntime(committed.state).state.documentState.document.strokes).toEqual([
+      pen('input', 1),
+    ]);
   });
 
   it('returns explicit diagnostics without replacing state when undo or redo is unavailable', () => {
@@ -226,7 +250,11 @@ describe('core/editorRuntime', () => {
     const committed = commitEditorRuntimeDocument(state, 0, committedDocument);
     committedDocument.strokes[1].points[0].x = 99;
     const stale = commitEditorRuntimeDocument(committed.state, 0, documentWith(pen('other')));
-    const noop = commitEditorRuntimeDocument(committed.state, 1, committed.state.documentState.document);
+    const noop = commitEditorRuntimeDocument(
+      committed.state,
+      1,
+      committed.state.documentState.document
+    );
 
     expect(ids(committed.state)).toEqual(['first', 'second']);
     expect(committed.state.documentState.document.strokes[1].points[0].x).toBe(0);
@@ -317,7 +345,11 @@ describe('core/editorRuntime', () => {
       stroke: pen('c'),
     }).state;
 
-    expect(second.documentState.document.strokes.map((stroke) => stroke.id)).toEqual(['a', 'b', 'c']);
+    expect(second.documentState.document.strokes.map((stroke) => stroke.id)).toEqual([
+      'a',
+      'b',
+      'c',
+    ]);
 
     // undo/redo 仍精确指向历史中同一个 snapshot 引用，未被结构共享覆盖。
     const undoOne = undoEditorRuntime(second).state;
@@ -341,7 +373,9 @@ describe('core/editorRuntime', () => {
     const replaced = applyEditorRuntimeCommand(initial, {
       type: 'replace-strokes',
       expectedRevision: 0,
-      replacements: [{ target: target(0, initial.documentState.document.strokes[0]), stroke: pen('first', 9) }],
+      replacements: [
+        { target: target(0, initial.documentState.document.strokes[0]), stroke: pen('first', 9) },
+      ],
     });
     const strokes = replaced.state.documentState.document.strokes;
 

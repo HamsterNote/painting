@@ -5,9 +5,9 @@
 
 ## 1. Hash 与验证
 
-| 对象 | sha256 | 规模 |
-|------|--------|------|
-| `core/layeredTextEditSession.ts` | `2ec1962e72d272f6745a42143e00f5287bc9b854ad9c1d9285153f06329a2cc9` | 终态 |
+| 对象                                               | sha256                                                             | 规模              |
+| -------------------------------------------------- | ------------------------------------------------------------------ | ----------------- |
+| `core/layeredTextEditSession.ts`                   | `2ec1962e72d272f6745a42143e00f5287bc9b854ad9c1d9285153f06329a2cc9` | 终态              |
 | `__tests__/core/layered-text-edit-session.test.ts` | `1011e7df1fa215670c10174455740a8035b7a51057f24472463788d2ab8ce816` | 604 行 / 35 tests |
 
 - `core-node` focused：**35 tests PASS，EXIT_CODE=0**；直接 strict tsc EXIT 0；`--listTests` 收集 1

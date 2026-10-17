@@ -19,7 +19,14 @@
  */
 
 import { difference, intersection } from 'polyclip-ts';
-import type { AffineTransform, Bounds, DocumentObject, EditorDocument, FreehandObject, Point } from '../model/document';
+import type {
+  AffineTransform,
+  Bounds,
+  DocumentObject,
+  EditorDocument,
+  FreehandObject,
+  Point,
+} from '../model/document';
 import { readLayeredDocument } from '../model/documentReader';
 import { applyAffine } from '../geometry/affine';
 import { flattenLayeredCubic, flattenLayeredEllipse } from '../geometry/adaptiveContour';
@@ -36,10 +43,7 @@ import {
 
 /** 查询错误码。 */
 export type LayeredObjectQueryErrorCode =
-  | 'invalid-input'
-  | 'invalid-document'
-  | 'geometry-failed'
-  | 'budget-exceeded';
+  'invalid-input' | 'invalid-document' | 'geometry-failed' | 'budget-exceeded';
 
 /** 统一 Result；value/error 只读。 */
 export type LayeredObjectQueryResult<T> =
@@ -386,7 +390,12 @@ function pointsBounds(points: readonly Point[]): Bounds | null {
     if (point.x > maxX) maxX = point.x;
     if (point.y > maxY) maxY = point.y;
   }
-  if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+  if (
+    !Number.isFinite(minX) ||
+    !Number.isFinite(minY) ||
+    !Number.isFinite(maxX) ||
+    !Number.isFinite(maxY)
+  ) {
     return null;
   }
   return Object.freeze({ minX, minY, maxX, maxY });
@@ -426,7 +435,10 @@ function countPieceVertices(pieces: readonly PreparedPiece[]): number {
 }
 
 /** 冻结 piece 的 polygons（caller 数据不可变）。 */
-function freezePiece(ringsInput: readonly PolygonRing[], holesOf?: readonly (readonly PolygonRing[])[]): PreparedPiece {
+function freezePiece(
+  ringsInput: readonly PolygonRing[],
+  holesOf?: readonly (readonly PolygonRing[])[]
+): PreparedPiece {
   const polygons: PolygonBooleanPolygon[] = ringsInput.map((outer, index) =>
     Object.freeze({ outer, holes: Object.freeze((holesOf?.[index] ?? []).slice()) })
   );
@@ -454,7 +466,10 @@ function pathSegments(path: readonly Point[]): ReadonlyArray<readonly [Point, Po
 }
 
 /** path（点 + 段）到 piece 边界的最小距离。 */
-function pathMultiDistance(path: readonly Point[], multi: PolygonBooleanMultiPolygon): number | null {
+function pathMultiDistance(
+  path: readonly Point[],
+  multi: PolygonBooleanMultiPolygon
+): number | null {
   let best = Infinity;
   for (const point of path) {
     const distance = pointMultiDistance(point, multi);
@@ -482,7 +497,12 @@ function pathMultiDistance(path: readonly Point[], multi: PolygonBooleanMultiPol
 }
 
 /** 点命中：region nonzero 内，或到所有边界距离 <= tolerance+margin。 */
-function pointPieceHit(piece: PreparedPiece, point: Point, tolerance: number, margin: number): PieceHit {
+function pointPieceHit(
+  piece: PreparedPiece,
+  point: Point,
+  tolerance: number,
+  margin: number
+): PieceHit {
   if (pointInMulti(point, piece.polygons)) {
     return true;
   }
@@ -753,9 +773,7 @@ function buildBoundsQuadEntry(
   if (!worldBounds) {
     return err('geometry-failed');
   }
-  return ok(
-    entryFrom(object, order, 0, [freezePiece([ring])], worldBounds.visualWorldBounds)
-  );
+  return ok(entryFrom(object, order, 0, [freezePiece([ring])], worldBounds.visualWorldBounds));
 }
 
 /** freehand：PF final 实际 transformedPolygon（无中心线 fallback）。 */
@@ -781,9 +799,7 @@ function buildFreehandEntry(
   if (!worldBounds) {
     return err('geometry-failed');
   }
-  return ok(
-    entryFrom(object, order, 0, [freezePiece([ring])], worldBounds.visualWorldBounds)
-  );
+  return ok(entryFrom(object, order, 0, [freezePiece([ring])], worldBounds.visualWorldBounds));
 }
 
 /** shape：中心线粗描边 pieces（矩形 + 顶点圆盘）+ 可选 fill region。 */

@@ -27,7 +27,9 @@ export type PointerOwnershipSnapshot = Readonly<{
   nextDownOrder: number;
 }>;
 
-function freezeEntries(entries: readonly PointerOwnershipEntry[]): readonly PointerOwnershipEntry[] {
+function freezeEntries(
+  entries: readonly PointerOwnershipEntry[]
+): readonly PointerOwnershipEntry[] {
   return Object.freeze(entries.map((entry) => Object.freeze({ ...entry })));
 }
 

@@ -76,13 +76,18 @@ describe('core/textEditSession', () => {
   it('commits each session at most once and treats empty drafts as no document change', () => {
     const document = documentWith(text('existing', 'before'));
     const newSession = requestTextEditCommit(
-      beginNewTextEditSession({ id: 'new', points: [{ x: 4, y: 5 }], fontSize: 20 }, { text: 'created' })
+      beginNewTextEditSession(
+        { id: 'new', points: [{ x: 4, y: 5 }], fontSize: 20 },
+        { text: 'created' }
+      )
     );
     const created = commitTextEditSession(document, newSession);
     const replay = commitTextEditSession(created.document, created.session);
     const emptyNew = commitTextEditSession(
       document,
-      requestTextEditCommit(beginNewTextEditSession({ id: 'empty', points: [], fontSize: 20 }, { text: '' }))
+      requestTextEditCommit(
+        beginNewTextEditSession({ id: 'empty', points: [], fontSize: 20 }, { text: '' })
+      )
     );
     const emptyExisting = commitTextEditSession(
       document,
@@ -116,6 +121,8 @@ describe('core/textEditSession', () => {
     const committed = commitTextEditSession(document, session);
 
     expect(committed.document.strokes[0]).toMatchObject({ text: value, fontSize: 18 });
-    expect(commitTextEditSession(committed.document, committed.session).document).toBe(committed.document);
+    expect(commitTextEditSession(committed.document, committed.session).document).toBe(
+      committed.document
+    );
   });
 });

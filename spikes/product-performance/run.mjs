@@ -58,7 +58,12 @@ function createComparableNormalRecords(count, seed = SEED + count) {
       key,
       value: key,
       order: key,
-      bounds: bounds(random() * (worldSize - maxSize), random() * (worldSize - maxSize), width, height),
+      bounds: bounds(
+        random() * (worldSize - maxSize),
+        random() * (worldSize - maxSize),
+        width,
+        height
+      ),
     });
   }
   return records;
@@ -83,7 +88,12 @@ function createSparseNormalRecords(count, seed) {
       key,
       value: key,
       order: key,
-      bounds: bounds(random() * worldSize - worldSize / 2, random() * worldSize - worldSize / 2, 8 + random() * 40, 8 + random() * 40),
+      bounds: bounds(
+        random() * worldSize - worldSize / 2,
+        random() * worldSize - worldSize / 2,
+        8 + random() * 40,
+        8 + random() * 40
+      ),
     });
   }
   return records;
@@ -92,7 +102,12 @@ function createSparseNormalRecords(count, seed) {
 function createDistributedQueries(count, seed, worldSize, width, height) {
   const random = mulberry32(seed);
   return Array.from({ length: count }, () =>
-    bounds(random() * worldSize - worldSize / 2, random() * worldSize - worldSize / 2, width, height)
+    bounds(
+      random() * worldSize - worldSize / 2,
+      random() * worldSize - worldSize / 2,
+      width,
+      height
+    )
   );
 }
 
@@ -107,7 +122,12 @@ function createSkewDenseRecords(count, seed) {
       key,
       value: key,
       order: key,
-      bounds: bounds(random() * span - span / 2, random() * span - span / 2, 16 + random() * 96, 16 + random() * 96),
+      bounds: bounds(
+        random() * span - span / 2,
+        random() * span - span / 2,
+        16 + random() * 96,
+        16 + random() * 96
+      ),
     });
   }
   return records;
@@ -123,7 +143,12 @@ function createHugeOverflowRecords(normalCount, hugeCount, seed) {
       key,
       value: key,
       order: key,
-      bounds: bounds(-500_000 + random() * 10_000, -500_000 + random() * 10_000, 1_000_000, 1_000_000),
+      bounds: bounds(
+        -500_000 + random() * 10_000,
+        -500_000 + random() * 10_000,
+        1_000_000,
+        1_000_000
+      ),
     });
   }
   return records;
@@ -131,7 +156,12 @@ function createHugeOverflowRecords(normalCount, hugeCount, seed) {
 
 /** oracle 自己实现半开 AABB，不能调用产品 intersectsSpatialBounds。 */
 function oracleIntersects(left, right) {
-  return left.minX < right.maxX && left.maxX > right.minX && left.minY < right.maxY && left.maxY > right.minY;
+  return (
+    left.minX < right.maxX &&
+    left.maxX > right.minX &&
+    left.minY < right.maxY &&
+    left.maxY > right.minY
+  );
 }
 
 class LinearOracle {
@@ -169,7 +199,8 @@ function buildProductIndex(SparseSpatialIndex, records, options = PRODUCT_OPTION
 
 function buildOracle(records) {
   const oracle = new LinearOracle();
-  for (const record of records) oracle.upsert(record.key, record.value, record.bounds, record.order);
+  for (const record of records)
+    oracle.upsert(record.key, record.value, record.bounds, record.order);
   return oracle;
 }
 
@@ -182,13 +213,20 @@ function assertQueriesMatch(label, index, oracle, queries) {
       throw new Error(`${label}: 命中数不一致 actual=${actual.length} expected=${expected.length}`);
     }
     for (let position = 0; position < actual.length; position += 1) {
-      if (actual[position].key !== expected[position].key || actual[position].order !== expected[position].order) {
+      if (
+        actual[position].key !== expected[position].key ||
+        actual[position].order !== expected[position].order
+      ) {
         throw new Error(`${label}: 第 ${position} 项 key/order 不一致`);
       }
     }
     matches += actual.length;
   }
-  return { queryCount: queries.length, matchedRecordsAcrossQueries: matches, exactOrderAndKeys: true };
+  return {
+    queryCount: queries.length,
+    matchedRecordsAcrossQueries: matches,
+    exactOrderAndKeys: true,
+  };
 }
 
 /** 计时的线性基线只累加命中数，不包含 oracle 的排序、数组分配和断言。 */
@@ -258,13 +296,21 @@ function makeUpdates(records, count) {
     const original = records[(position * 17) % records.length];
     return {
       ...original,
-      bounds: bounds(original.bounds.minX + 173, original.bounds.minY - 211, original.bounds.maxX - original.bounds.minX, original.bounds.maxY - original.bounds.minY),
+      bounds: bounds(
+        original.bounds.minX + 173,
+        original.bounds.minY - 211,
+        original.bounds.maxX - original.bounds.minX,
+        original.bounds.maxY - original.bounds.minY
+      ),
     };
   });
 }
 
 function makeRemovalKeys(records, count) {
-  return Array.from({ length: count }, (_, position) => records[records.length - 1 - position * 19].key);
+  return Array.from(
+    { length: count },
+    (_, position) => records[records.length - 1 - position * 19].key
+  );
 }
 
 function applyUpdates(index, updates) {
@@ -280,7 +326,14 @@ function applyRemovals(index, keys) {
 function memorySnapshot(label) {
   if (typeof global.gc === 'function') global.gc();
   const usage = process.memoryUsage();
-  return { label, rss: usage.rss, heapTotal: usage.heapTotal, heapUsed: usage.heapUsed, external: usage.external, arrayBuffers: usage.arrayBuffers };
+  return {
+    label,
+    rss: usage.rss,
+    heapTotal: usage.heapTotal,
+    heapUsed: usage.heapUsed,
+    external: usage.external,
+    arrayBuffers: usage.arrayBuffers,
+  };
 }
 
 function inputFingerprint(records, queries) {
@@ -288,7 +341,8 @@ function inputFingerprint(records, queries) {
   for (const item of [...records, ...queries]) {
     for (const value of Object.values(item.bounds ?? item)) {
       const text = String(value);
-      for (let index = 0; index < text.length; index += 1) hash = Math.imul(hash ^ text.charCodeAt(index), 0x01000193);
+      for (let index = 0; index < text.length; index += 1)
+        hash = Math.imul(hash ^ text.charCodeAt(index), 0x01000193);
     }
   }
   return `fnv1a32:${(hash >>> 0).toString(16).padStart(8, '0')}`;
@@ -298,16 +352,25 @@ function runB1(SparseSpatialIndex) {
   const records = createComparableNormalRecords(100_000);
   const queries = createComparableQueries();
   const index = buildProductIndex(SparseSpatialIndex, records);
-  const correctness = assertQueriesMatch('B1 comparable normal', index, buildOracle(records), queries);
+  const correctness = assertQueriesMatch(
+    'B1 comparable normal',
+    index,
+    buildOracle(records),
+    queries
+  );
   const expectedHits = queryLinearHitCount(records, queries);
   const indexed = measure(() => queryProductHitCount(index, queries));
   const linear = measure(() => queryLinearHitCount(records, queries));
-  if (indexed.checksum / (WARMUP_ROUNDS + MEASURED_ROUNDS) !== expectedHits || linear.checksum / (WARMUP_ROUNDS + MEASURED_ROUNDS) !== expectedHits) {
+  if (
+    indexed.checksum / (WARMUP_ROUNDS + MEASURED_ROUNDS) !== expectedHits ||
+    linear.checksum / (WARMUP_ROUNDS + MEASURED_ROUNDS) !== expectedHits
+  ) {
     throw new Error('B1 计时路径命中总数偏离 oracle');
   }
   return {
     id: 'B1-comparable-normal-100k-16q',
-    purpose: '复核阶段 2.3 输入规模，但实际测量当前 SparseSpatialIndex，绝不将旧 dense-grid 数值当作 sparse 数值。',
+    purpose:
+      '复核阶段 2.3 输入规模，但实际测量当前 SparseSpatialIndex，绝不将旧 dense-grid 数值当作 sparse 数值。',
     recordCount: records.length,
     queryCount: queries.length,
     queryShape: { width: 800, height: 600, worldSize: 4096 },
@@ -329,10 +392,13 @@ function runB2(SparseSpatialIndex) {
   const snapshots = [memorySnapshot('before-build')];
   const retained = buildProductIndex(SparseSpatialIndex, records);
   const oracle = buildOracle(records);
-  const correctness = { beforeMutation: assertQueriesMatch('B2 before mutation', retained, oracle, queries) };
+  const correctness = {
+    beforeMutation: assertQueriesMatch('B2 before mutation', retained, oracle, queries),
+  };
   snapshots.push(memorySnapshot('after-build-100k'));
   applyUpdates(retained, updates);
-  for (const record of updates) oracle.upsert(record.key, record.value, record.bounds, record.order);
+  for (const record of updates)
+    oracle.upsert(record.key, record.value, record.bounds, record.order);
   correctness.afterUpdate = assertQueriesMatch('B2 after update', retained, oracle, queries);
   snapshots.push(memorySnapshot('after-update-5k'));
   applyRemovals(retained, removals);
@@ -371,7 +437,12 @@ function runB2(SparseSpatialIndex) {
 
 function runProductScenario(SparseSpatialIndex, definition) {
   const index = buildProductIndex(SparseSpatialIndex, definition.records, definition.options);
-  const correctness = assertQueriesMatch(definition.id, index, buildOracle(definition.records), definition.queries);
+  const correctness = assertQueriesMatch(
+    definition.id,
+    index,
+    buildOracle(definition.records),
+    definition.queries
+  );
   const hitsPerRound = queryLinearHitCount(definition.records, definition.queries);
   const query = measure(() => queryProductHitCount(index, definition.queries));
   if (query.checksum / (WARMUP_ROUNDS + MEASURED_ROUNDS) !== hitsPerRound) {
@@ -395,16 +466,50 @@ function runB3(SparseSpatialIndex) {
   const sparseRecords = createSparseNormalRecords(50_000, SEED ^ 0x301);
   const sparseQueries = createDistributedQueries(16, SEED ^ 0x302, 1_000_000, 1_200, 900);
   const denseRecords = createSkewDenseRecords(50_000, SEED ^ 0x303);
-  const denseQueries = Array.from({ length: 16 }, (_, index) => bounds(-512 + (index % 4) * 128, -512 + Math.floor(index / 4) * 128, 768, 768));
+  const denseQueries = Array.from({ length: 16 }, (_, index) =>
+    bounds(-512 + (index % 4) * 128, -512 + Math.floor(index / 4) * 128, 768, 768)
+  );
   const hugeRecords = createHugeOverflowRecords(30_000, 250, SEED ^ 0x304);
   const hugeQueries = createDistributedQueries(16, SEED ^ 0x305, 1_000_000, 1_200, 900);
   const fallbackRecords = createSparseNormalRecords(30_000, SEED ^ 0x306);
-  const fallbackQueries = Array.from({ length: 8 }, (_, index) => bounds(-500_000 + index * 1_000, -500_000 + index * 1_000, 64_000, 64_000));
+  const fallbackQueries = Array.from({ length: 8 }, (_, index) =>
+    bounds(-500_000 + index * 1_000, -500_000 + index * 1_000, 64_000, 64_000)
+  );
   const scenarios = [
-    runProductScenario(SparseSpatialIndex, { id: 'B3-sparse-normal', scope: '50k 对象分散在 1,000,000 DIP 世界，16 个局部查询。', records: sparseRecords, queries: sparseQueries, options: PRODUCT_OPTIONS, seed: SEED ^ 0x301 }),
-    runProductScenario(SparseSpatialIndex, { id: 'B3-skew-dense', scope: '50k 对象中 90% 聚集于 1024 DIP 区域，16 个局部密集查询。', records: denseRecords, queries: denseQueries, options: PRODUCT_OPTIONS, seed: SEED ^ 0x303 }),
-    runProductScenario(SparseSpatialIndex, { id: 'B3-huge-overflow', scope: '30k 常规对象加 250 个 1,000,000 DIP huge bbox；每个 huge bbox 超过 maxCellsPerObject=64，应以 overflow 参与候选。', records: hugeRecords, queries: hugeQueries, options: PRODUCT_OPTIONS, seed: SEED ^ 0x304 }),
-    runProductScenario(SparseSpatialIndex, { id: 'B3-large-query-fallback', scope: '30k 稀疏对象、64,000x64,000 DIP 查询。该尺寸约覆盖 62,500 个 256 DIP cell，超过 maxCellsPerQuery=4,096，产品应回退到全 records 精确过滤。', records: fallbackRecords, queries: fallbackQueries, options: PRODUCT_OPTIONS, seed: SEED ^ 0x306 }),
+    runProductScenario(SparseSpatialIndex, {
+      id: 'B3-sparse-normal',
+      scope: '50k 对象分散在 1,000,000 DIP 世界，16 个局部查询。',
+      records: sparseRecords,
+      queries: sparseQueries,
+      options: PRODUCT_OPTIONS,
+      seed: SEED ^ 0x301,
+    }),
+    runProductScenario(SparseSpatialIndex, {
+      id: 'B3-skew-dense',
+      scope: '50k 对象中 90% 聚集于 1024 DIP 区域，16 个局部密集查询。',
+      records: denseRecords,
+      queries: denseQueries,
+      options: PRODUCT_OPTIONS,
+      seed: SEED ^ 0x303,
+    }),
+    runProductScenario(SparseSpatialIndex, {
+      id: 'B3-huge-overflow',
+      scope:
+        '30k 常规对象加 250 个 1,000,000 DIP huge bbox；每个 huge bbox 超过 maxCellsPerObject=64，应以 overflow 参与候选。',
+      records: hugeRecords,
+      queries: hugeQueries,
+      options: PRODUCT_OPTIONS,
+      seed: SEED ^ 0x304,
+    }),
+    runProductScenario(SparseSpatialIndex, {
+      id: 'B3-large-query-fallback',
+      scope:
+        '30k 稀疏对象、64,000x64,000 DIP 查询。该尺寸约覆盖 62,500 个 256 DIP cell，超过 maxCellsPerQuery=4,096，产品应回退到全 records 精确过滤。',
+      records: fallbackRecords,
+      queries: fallbackQueries,
+      options: PRODUCT_OPTIONS,
+      seed: SEED ^ 0x306,
+    }),
   ];
 
   const cellSizeSweep = [64, 128, 256, 512, 1024].map((cellSize) =>
@@ -424,7 +529,10 @@ function collectEnvironment() {
   const cpus = os.cpus();
   let commit = null;
   try {
-    commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
+    commit = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+    }).trim();
   } catch {
     commit = 'unavailable';
   }
@@ -444,8 +552,32 @@ async function loadProductIndex() {
   if (!existsSync(TYPESCRIPT_CLI)) throw new Error(`未找到 TypeScript CLI: ${TYPESCRIPT_CLI}`);
   const temporaryOutput = mkdtempSync(join(os.tmpdir(), 'hamster-note-product-performance-'));
   try {
-    execFileSync(process.execPath, [TYPESCRIPT_CLI, PRODUCT_SOURCE, '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', '--rootDir', dirname(PRODUCT_SOURCE), '--outDir', temporaryOutput, '--skipLibCheck', '--declaration', 'false', '--sourceMap', 'false'], { cwd: REPO_ROOT, stdio: 'pipe' });
-    return await import(`${pathToFileURL(join(temporaryOutput, 'spatialIndex.js')).href}?run=${Date.now()}`);
+    execFileSync(
+      process.execPath,
+      [
+        TYPESCRIPT_CLI,
+        PRODUCT_SOURCE,
+        '--target',
+        'ES2022',
+        '--module',
+        'NodeNext',
+        '--moduleResolution',
+        'NodeNext',
+        '--rootDir',
+        dirname(PRODUCT_SOURCE),
+        '--outDir',
+        temporaryOutput,
+        '--skipLibCheck',
+        '--declaration',
+        'false',
+        '--sourceMap',
+        'false',
+      ],
+      { cwd: REPO_ROOT, stdio: 'pipe' }
+    );
+    return await import(
+      `${pathToFileURL(join(temporaryOutput, 'spatialIndex.js')).href}?run=${Date.now()}`
+    );
   } finally {
     // ESM 已完成加载，模块没有相对依赖；清理临时编译目录不影响已加载定义。
     rmSync(temporaryOutput, { recursive: true, force: true });
@@ -462,11 +594,14 @@ async function main() {
     verificationOwner: 'parent orchestrator',
     productSource: 'packages/painting/src/core/spatialIndex.ts',
     method: {
-      productLoading: '每次运行用仓库已安装的 TypeScript CLI 将当前 spatialIndex.ts 编译到 OS 临时目录后直接 ESM import；不导入旧 coordinate-performance dense grid，不修改 packages 或 lib。',
+      productLoading:
+        '每次运行用仓库已安装的 TypeScript CLI 将当前 spatialIndex.ts 编译到 OS 临时目录后直接 ESM import；不导入旧 coordinate-performance dense grid，不修改 packages 或 lib。',
       input: '全部场景使用确定性 mulberry32 seed；JSON 记录 seed 和 FNV-1a 输入 fingerprint。',
-      correctness: '每个场景先以独立 LinearOracle 的半开 AABB 谓词全扫描并按 order 排序，再逐项比较产品 query 的 key 与 order。oracle 与计时逻辑分离。',
+      correctness:
+        '每个场景先以独立 LinearOracle 的半开 AABB 谓词全扫描并按 order 排序，再逐项比较产品 query 的 key 与 order。oracle 与计时逻辑分离。',
       timing: `${WARMUP_ROUNDS} 次 warmup 后测量 ${MEASURED_ROUNDS} 轮；query 每轮完整遍历该场景 query bank。B2 的 update/remove 每轮在计时前构建全新 100k 索引，因此只记录 mutation 本身。p50/p95 使用排序样本 floor(p*(n-1))，计时来源为 process.hrtime.bigint()。`,
-      memory: 'B2 使用 process.memoryUsage()，在 --expose-gc 可用时于每个快照前调用 global.gc()；快照本身不在操作计时中。',
+      memory:
+        'B2 使用 process.memoryUsage()，在 --expose-gc 可用时于每个快照前调用 global.gc()；快照本身不在操作计时中。',
     },
     limitations: [
       '所有耗时仅用于同一机器、相近 Node/V8 条件下的趋势与回归观察；不可跨机器、跨 Node 版本或跨负载比较。',
@@ -478,14 +613,21 @@ async function main() {
       '本报告只记录测得基线，不自行设定任何百分比回归阈值或 SLA。',
     ],
     environment: collectEnvironment(),
-    inputs: { seed: SEED, warmupRounds: WARMUP_ROUNDS, measuredRounds: MEASURED_ROUNDS, defaultOptions: PRODUCT_OPTIONS },
+    inputs: {
+      seed: SEED,
+      warmupRounds: WARMUP_ROUNDS,
+      measuredRounds: MEASURED_ROUNDS,
+      defaultOptions: PRODUCT_OPTIONS,
+    },
     B1: runB1(SparseSpatialIndex),
     B2: runB2(SparseSpatialIndex),
     B3: runB3(SparseSpatialIndex),
   };
   mkdirSync(dirname(OUTPUT_PATH), { recursive: true });
   writeFileSync(OUTPUT_PATH, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
-  process.stdout.write(`[product-performance] wrote ${OUTPUT_PATH}\nB1 sparse p50=${result.B1.productSparseIndexQuery.p50Ms.toFixed(3)}ms p95=${result.B1.productSparseIndexQuery.p95Ms.toFixed(3)}ms max=${result.B1.productSparseIndexQuery.maxMs.toFixed(3)}ms\n`);
+  process.stdout.write(
+    `[product-performance] wrote ${OUTPUT_PATH}\nB1 sparse p50=${result.B1.productSparseIndexQuery.p50Ms.toFixed(3)}ms p95=${result.B1.productSparseIndexQuery.p95Ms.toFixed(3)}ms max=${result.B1.productSparseIndexQuery.maxMs.toFixed(3)}ms\n`
+  );
 }
 
 await main();

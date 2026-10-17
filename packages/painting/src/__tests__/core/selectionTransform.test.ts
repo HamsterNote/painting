@@ -1,9 +1,6 @@
 /** @jest-environment node */
 
-import {
-  transformSelection,
-  type DocumentStrokeTarget,
-} from '../../core/selectionTransform';
+import { transformSelection, type DocumentStrokeTarget } from '../../core/selectionTransform';
 import type { SelectionIntent } from '../../core/gesture/session';
 import { describeDrawingStrokeGeometry } from '../../core/geometry';
 import type { DrawingStrokeToolV2, DrawingStrokeV2, DrawingValueV2 } from '../../model/strokes';
@@ -13,7 +10,10 @@ function strokeFor(tool: DrawingStrokeToolV2, id: string = tool): DrawingStrokeV
     schemaVersion: 2 as const,
     id,
     tool,
-    points: [{ x: 0, y: 0, pressure: 0.3 }, { x: 20, y: 10, pressure: 0.8 }],
+    points: [
+      { x: 0, y: 0, pressure: 0.3 },
+      { x: 20, y: 10, pressure: 0.8 },
+    ],
     strokeColor: '#123456',
     strokeWidth: 4,
     dashArray: [2, 3],
@@ -28,7 +28,16 @@ function strokeFor(tool: DrawingStrokeToolV2, id: string = tool): DrawingStrokeV
     return { ...base, tool, points: [...base.points, { x: 10, y: 20, pressure: 0.6 }] };
   }
   if (tool === 'bezier') {
-    return { ...base, tool, points: [{ x: 0, y: 0 }, { x: 5, y: 20 }, { x: 15, y: -10 }, { x: 20, y: 10 }] };
+    return {
+      ...base,
+      tool,
+      points: [
+        { x: 0, y: 0 },
+        { x: 5, y: 20 },
+        { x: 15, y: -10 },
+        { x: 20, y: 10 },
+      ],
+    };
   }
   return base as DrawingStrokeV2;
 }
@@ -70,7 +79,9 @@ describe('core/selectionTransform', () => {
         expect(next?.tool).toBe(tool);
         expect(next?.schemaVersion).toBe(2);
         expect(next?.points).not.toBe(stroke.points);
-        expect(next?.points.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y))).toBe(true);
+        expect(
+          next?.points.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+        ).toBe(true);
         expect(next && describeDrawingStrokeGeometry(next)).not.toBeNull();
       }
       expect(input).toEqual(documentWith(stroke));
@@ -108,7 +119,10 @@ describe('core/selectionTransform', () => {
       scale: { x: 0, y: 0 },
     });
 
-    expect(nonUniform).toEqual({ replacements: [], diagnostics: [{ type: 'non-uniform-selection-scale', scale: { x: 2, y: 3 } }] });
+    expect(nonUniform).toEqual({
+      replacements: [],
+      diagnostics: [{ type: 'non-uniform-selection-scale', scale: { x: 2, y: 3 } }],
+    });
     expect(invalid.replacements).toEqual([]);
     expect(invalid.diagnostics).toEqual([{ type: 'invalid-selection-intent' }]);
     expect(tooSmall.diagnostics).toEqual([{ type: 'invalid-selection-scale', scale: 0 }]);
@@ -119,16 +133,31 @@ describe('core/selectionTransform', () => {
     const first = strokeFor('pen', 'first');
     const second = strokeFor('line', 'second');
     const document = documentWith(first, second);
-    const stale = transformSelection(document, [target(0, first), { index: 1, expectedId: 'stale' }], move);
+    const stale = transformSelection(
+      document,
+      [target(0, first), { index: 1, expectedId: 'stale' }],
+      move
+    );
     const duplicate = transformSelection(document, [target(0, first), target(0, first)], move);
     const identity = transformSelection(document, [target(0, first)], {
       kind: 'move',
       delta: { x: 0, y: 0 },
     });
 
-    expect(stale).toEqual({ replacements: [], diagnostics: [{ type: 'selection-target-mismatch', target: { index: 1, expectedId: 'stale' } }] });
-    expect(duplicate).toEqual({ replacements: [], diagnostics: [{ type: 'duplicate-selection-target', index: 0 }] });
-    expect(identity).toEqual({ replacements: [], diagnostics: [{ type: 'selection-transform-noop' }] });
+    expect(stale).toEqual({
+      replacements: [],
+      diagnostics: [
+        { type: 'selection-target-mismatch', target: { index: 1, expectedId: 'stale' } },
+      ],
+    });
+    expect(duplicate).toEqual({
+      replacements: [],
+      diagnostics: [{ type: 'duplicate-selection-target', index: 0 }],
+    });
+    expect(identity).toEqual({
+      replacements: [],
+      diagnostics: [{ type: 'selection-transform-noop' }],
+    });
   });
 
   it('rejects a fallback text box scale that cannot be represented without schema expansion', () => {
@@ -176,14 +205,30 @@ describe('core/selectionTransform', () => {
     expect(valid.diagnostics).toEqual([]);
     expect(valid.replacements).toHaveLength(2);
     expect(valid.replacements.map(({ stroke }) => stroke.id)).toEqual(['first', 'second']);
-    expect(transformSelection(document, [target(0, first), { index: 1, expectedId: 'stale' }], uniformScale))
-      .toEqual({ replacements: [], diagnostics: [{ type: 'selection-target-mismatch', target: { index: 1, expectedId: 'stale' } }] });
-    expect(transformSelection(document, [target(0, first), target(0, first)], uniformScale))
-      .toEqual({ replacements: [], diagnostics: [{ type: 'duplicate-selection-target', index: 0 }] });
-    expect(transformSelection(document, [target(0, first), target(1, second)], {
-      ...uniformScale,
-      scale: Number.NaN,
-    })).toEqual({ replacements: [], diagnostics: [{ type: 'invalid-selection-intent' }] });
+    expect(
+      transformSelection(
+        document,
+        [target(0, first), { index: 1, expectedId: 'stale' }],
+        uniformScale
+      )
+    ).toEqual({
+      replacements: [],
+      diagnostics: [
+        { type: 'selection-target-mismatch', target: { index: 1, expectedId: 'stale' } },
+      ],
+    });
+    expect(
+      transformSelection(document, [target(0, first), target(0, first)], uniformScale)
+    ).toEqual({
+      replacements: [],
+      diagnostics: [{ type: 'duplicate-selection-target', index: 0 }],
+    });
+    expect(
+      transformSelection(document, [target(0, first), target(1, second)], {
+        ...uniformScale,
+        scale: Number.NaN,
+      })
+    ).toEqual({ replacements: [], diagnostics: [{ type: 'invalid-selection-intent' }] });
     expect(document).toEqual(documentWith(first, second));
   });
 });

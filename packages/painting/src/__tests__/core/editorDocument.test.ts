@@ -22,7 +22,11 @@ function documentWith(...strokes: DrawingStrokeV2[]): DrawingValueV2 {
   return { schemaVersion: 2, strokes };
 }
 
-function target(index: number, expectedId: string, expectedTool?: DocumentStrokeTarget['expectedTool']): DocumentStrokeTarget {
+function target(
+  index: number,
+  expectedId: string,
+  expectedTool?: DocumentStrokeTarget['expectedTool']
+): DocumentStrokeTarget {
   return { index, expectedId, ...(expectedTool ? { expectedTool } : {}) };
 }
 
@@ -86,13 +90,19 @@ describe('core/editorDocument', () => {
     const result = applyEditorDocumentCommand(state, {
       type: 'replace-strokes',
       expectedRevision: 0,
-      replacements: [{ target: target(1, 'duplicate', 'line'), stroke: { ...second, points: [{ x: 9, y: 0 }] } }],
+      replacements: [
+        { target: target(1, 'duplicate', 'line'), stroke: { ...second, points: [{ x: 9, y: 0 }] } },
+      ],
     });
 
     expect(result.diagnostics).toEqual([]);
     expect(result.state.revision).toBe(1);
     expect(result.state.document.strokes[0]).toBe(first);
-    expect(result.state.document.strokes[1]).toMatchObject({ id: 'duplicate', tool: 'line', points: [{ x: 9, y: 0 }] });
+    expect(result.state.document.strokes[1]).toMatchObject({
+      id: 'duplicate',
+      tool: 'line',
+      points: [{ x: 9, y: 0 }],
+    });
   });
 
   it('keeps an atomic command unchanged when a target is stale or repeated', () => {
@@ -111,7 +121,9 @@ describe('core/editorDocument', () => {
     });
 
     expect(stale.state).toBe(state);
-    expect(stale.diagnostics).toEqual([{ type: 'document-target-mismatch', target: target(1, 'missing') }]);
+    expect(stale.diagnostics).toEqual([
+      { type: 'document-target-mismatch', target: target(1, 'missing') },
+    ]);
     expect(duplicate.state).toBe(state);
     expect(duplicate.diagnostics).toEqual([{ type: 'duplicate-document-target', index: 0 }]);
   });
@@ -172,15 +184,18 @@ describe('core/editorDocument', () => {
     const first = pen('first', 1);
     const state = createEditorDocumentState(documentWith(first), 3);
     const preview = materializeEditorDocumentPreview(state, {
-      type: 'replace-strokes', expectedRevision: 3,
+      type: 'replace-strokes',
+      expectedRevision: 3,
       replacements: [{ target: target(0, 'first', 'pen'), stroke: pen('first', 8) }],
     });
     const stale = materializeEditorDocumentPreview(state, {
-      type: 'replace-strokes', expectedRevision: 2,
+      type: 'replace-strokes',
+      expectedRevision: 2,
       replacements: [{ target: target(0, 'first', 'pen'), stroke: pen('first', 8) }],
     });
     const duplicate = materializeEditorDocumentPreview(state, {
-      type: 'replace-strokes', expectedRevision: 3,
+      type: 'replace-strokes',
+      expectedRevision: 3,
       replacements: [
         { target: target(0, 'first', 'pen'), stroke: pen('first', 8) },
         { target: target(0, 'first', 'pen'), stroke: pen('first', 9) },

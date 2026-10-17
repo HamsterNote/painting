@@ -33,7 +33,10 @@ function pen(id: string, x: number, y = 0): DrawingStrokeV2 {
     schemaVersion: 2,
     id,
     tool: 'pen',
-    points: [{ x, y }, { x: x + 2, y }],
+    points: [
+      { x, y },
+      { x: x + 2, y },
+    ],
   };
 }
 
@@ -81,38 +84,59 @@ function input(
 }
 
 describe('core/editorController', () => {
-  it.each(['pen', 'line'] as const)('keeps a %s candidate out of history until explicitly committed, then supports undo', (tool) => {
-    const initial = controller(documentWith(), tool);
-    const begun = beginEditorControllerToolPointer(initial, { x: 1, y: 2 }).state;
-    const moved = moveEditorControllerToolPointer(begun, { x: 4, y: 3 }).state;
-    const finished = finishEditorControllerToolPointer(moved, { x: 8, y: 4 });
-    const committed = commitEditorControllerCandidate(finished.state);
-    const undone = undoEditorInteraction(committed.state.interaction).state;
+  it.each(['pen', 'line'] as const)(
+    'keeps a %s candidate out of history until explicitly committed, then supports undo',
+    (tool) => {
+      const initial = controller(documentWith(), tool);
+      const begun = beginEditorControllerToolPointer(initial, { x: 1, y: 2 }).state;
+      const moved = moveEditorControllerToolPointer(begun, { x: 4, y: 3 }).state;
+      const finished = finishEditorControllerToolPointer(moved, { x: 8, y: 4 });
+      const committed = commitEditorControllerCandidate(finished.state);
+      const undone = undoEditorInteraction(committed.state.interaction).state;
 
-    expect(finished.state.strokeCandidate).toMatchObject({ tool, id: `created-${tool}` });
-    expect(finished.state.interaction.runtime.documentState.document.strokes).toEqual([]);
-    expect(committed.state.interaction.runtime.documentState.document.strokes).toMatchObject([{ tool }]);
-    expect(committed.state.interaction.runtime.undoStack).toHaveLength(1);
-    expect(undone.runtime.documentState.document.strokes).toEqual([]);
-  });
+      expect(finished.state.strokeCandidate).toMatchObject({ tool, id: `created-${tool}` });
+      expect(finished.state.interaction.runtime.documentState.document.strokes).toEqual([]);
+      expect(committed.state.interaction.runtime.documentState.document.strokes).toMatchObject([
+        { tool },
+      ]);
+      expect(committed.state.interaction.runtime.undoStack).toHaveLength(1);
+      expect(undone.runtime.documentState.document.strokes).toEqual([]);
+    }
+  );
 
   it('builds polygon and Bézier candidates through explicit vertices before a single append commit', () => {
     let polygon = controller(documentWith(), 'polygon');
-    for (const point of [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: 10 }]) {
+    for (const point of [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 5, y: 10 },
+    ]) {
       polygon = addEditorControllerToolVertex(polygon, point).state;
     }
     const polygonFinished = finishEditorControllerPolygon(polygon);
     const polygonCommitted = commitEditorControllerCandidate(polygonFinished.state);
 
     let bezier = controller(documentWith(), 'bezier');
-    for (const point of [{ x: 0, y: 0 }, { x: 2, y: 8 }, { x: 8, y: 8 }, { x: 10, y: 0 }]) {
+    for (const point of [
+      { x: 0, y: 0 },
+      { x: 2, y: 8 },
+      { x: 8, y: 8 },
+      { x: 10, y: 0 },
+    ]) {
       bezier = addEditorControllerToolVertex(bezier, point).state;
     }
     const bezierFinished = finishEditorControllerBezier(bezier);
 
-    expect(polygonFinished.state.strokeCandidate?.points).toEqual([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: 10 }]);
+    expect(polygonFinished.state.strokeCandidate?.points).toEqual([
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 5, y: 10 },
+    ]);
     expect(polygonCommitted.state.interaction.runtime.undoStack).toHaveLength(1);
-    expect(bezierFinished.state.strokeCandidate).toMatchObject({ tool: 'bezier', id: 'created-bezier' });
+    expect(bezierFinished.state.strokeCandidate).toMatchObject({
+      tool: 'bezier',
+      id: 'created-bezier',
+    });
     expect(bezierFinished.state.interaction.runtime.documentState.document.strokes).toEqual([]);
   });
 
@@ -152,17 +176,30 @@ describe('core/editorController', () => {
     const bottom = pen('bottom', 0);
     const top = pen('top', 0);
     const state = controller(documentWith(bottom, top));
-    const queried = queryEditorControllerEraser(state, [{ x: 1, y: 0 }, { x: 1, y: 0 }], 1, {
-      topmostOnly: true,
-    });
+    const queried = queryEditorControllerEraser(
+      state,
+      [
+        { x: 1, y: 0 },
+        { x: 1, y: 0 },
+      ],
+      1,
+      {
+        topmostOnly: true,
+      }
+    );
     const committed = commitEditorControllerEraser(queried.state);
     const undone = undoEditorInteraction(committed.state.interaction).state;
 
     expect(queried.state.selectionTargets).toEqual([target(1, top)]);
     expect(queried.state.interaction.runtime.undoStack).toEqual([]);
-    expect(committed.state.interaction.runtime.documentState.document.strokes.map((stroke) => stroke.id)).toEqual(['bottom']);
+    expect(
+      committed.state.interaction.runtime.documentState.document.strokes.map((stroke) => stroke.id)
+    ).toEqual(['bottom']);
     expect(committed.state.interaction.runtime.undoStack).toHaveLength(1);
-    expect(undone.runtime.documentState.document.strokes.map((stroke) => stroke.id)).toEqual(['bottom', 'top']);
+    expect(undone.runtime.documentState.document.strokes.map((stroke) => stroke.id)).toEqual([
+      'bottom',
+      'top',
+    ]);
   });
 
   it('keeps stale candidate commits, empty eraser commits, and invalid query input out of history', () => {
@@ -176,7 +213,9 @@ describe('core/editorController', () => {
 
     expect(stale.state.interaction).toBe(finished.interaction);
     expect(stale.state.interaction.runtime).toBe(finished.interaction.runtime);
-    expect(stale.diagnostics).toEqual([{ type: 'revision-mismatch', expectedRevision: 1, actualRevision: 0 }]);
+    expect(stale.diagnostics).toEqual([
+      { type: 'revision-mismatch', expectedRevision: 1, actualRevision: 0 },
+    ]);
     expect(emptyErase.diagnostics).toEqual([{ type: 'no-eraser-targets' }]);
     expect(emptyErase.state.interaction.runtime.undoStack).toEqual([]);
     expect(invalidLasso.diagnostics).toEqual([{ type: 'invalid-lasso-polygon' }]);
@@ -190,19 +229,35 @@ describe('core/editorController', () => {
     const frame = drawingFrame(document);
     const state = controller(document);
     const lasso = queryEditorControllerDrawingFrameLasso(state, frame, 0, [
-      { x: -1, y: -1 }, { x: 4, y: -1 }, { x: 4, y: 1 }, { x: -1, y: 1 },
+      { x: -1, y: -1 },
+      { x: 4, y: -1 },
+      { x: 4, y: 1 },
+      { x: -1, y: 1 },
     ]);
-    const eraser = queryEditorControllerDrawingFrameEraser(state, frame, 0, [{ x: 1, y: 0 }], 1, { topmostOnly: true });
+    const eraser = queryEditorControllerDrawingFrameEraser(state, frame, 0, [{ x: 1, y: 0 }], 1, {
+      topmostOnly: true,
+    });
     const stale = queryEditorControllerDrawingFrameLasso(state, frame, 1, [
-      { x: -1, y: -1 }, { x: 4, y: -1 }, { x: 4, y: 1 }, { x: -1, y: 1 },
+      { x: -1, y: -1 },
+      { x: 4, y: -1 },
+      { x: 4, y: 1 },
+      { x: -1, y: 1 },
     ]);
     const foreignFrame = drawingFrame(documentWith(pen('other', 0)));
-    const foreign = queryEditorControllerDrawingFrameEraser(state, foreignFrame, 0, [{ x: 1, y: 0 }], 1);
+    const foreign = queryEditorControllerDrawingFrameEraser(
+      state,
+      foreignFrame,
+      0,
+      [{ x: 1, y: 0 }],
+      1
+    );
 
     expect(lasso.diagnostics).toEqual([]);
     expect(lasso.state.selectionTargets).toEqual([target(0, bottom), target(1, top)]);
     expect(eraser.state.selectionTargets).toEqual([target(1, top)]);
-    expect(stale.diagnostics).toEqual([{ type: 'frame-revision-mismatch', frameRevision: 1, expectedRevision: 0 }]);
+    expect(stale.diagnostics).toEqual([
+      { type: 'frame-revision-mismatch', frameRevision: 1, expectedRevision: 0 },
+    ]);
     expect(stale.state.selectionTargets).toEqual([]);
     expect(foreign.diagnostics).toEqual([{ type: 'frame-document-identity-mismatch' }]);
     expect(foreign.state.selectionTargets).toEqual([]);
@@ -242,19 +297,38 @@ describe('core/editorController', () => {
 
   it('clears selection for text removal and clear, including eraser undo/redo lifecycle', () => {
     const text: DrawingStrokeV2 = {
-      schemaVersion: 2, id: 'text', tool: 'text', text: 'hello', fontSize: 16,
-      points: [{ x: 0, y: 0 }, { x: 20, y: 10 }],
+      schemaVersion: 2,
+      id: 'text',
+      tool: 'text',
+      text: 'hello',
+      fontSize: 16,
+      points: [
+        { x: 0, y: 0 },
+        { x: 20, y: 10 },
+      ],
     };
     const other = pen('other', 30);
-    const textSelected = setEditorControllerSelection(controller(documentWith(text, other)), [target(0, text)]).state;
+    const textSelected = setEditorControllerSelection(controller(documentWith(text, other)), [
+      target(0, text),
+    ]).state;
     const textRemoved = commitEditorControllerDocumentCommand(textSelected, {
-      type: 'remove-strokes', expectedRevision: 0, targets: [target(0, text)],
+      type: 'remove-strokes',
+      expectedRevision: 0,
+      targets: [target(0, text)],
     }).state;
-    const clearSelected = setEditorControllerSelection(controller(documentWith(text, other)), [target(0, text), target(1, other)]).state;
+    const clearSelected = setEditorControllerSelection(controller(documentWith(text, other)), [
+      target(0, text),
+      target(1, other),
+    ]).state;
     const cleared = commitEditorControllerDocumentCommand(clearSelected, {
-      type: 'clear-strokes', expectedRevision: 0,
+      type: 'clear-strokes',
+      expectedRevision: 0,
     }).state;
-    const eraseQueried = queryEditorControllerEraser(controller(documentWith(other)), [{ x: 31, y: 0 }], 2).state;
+    const eraseQueried = queryEditorControllerEraser(
+      controller(documentWith(other)),
+      [{ x: 31, y: 0 }],
+      2
+    ).state;
     const erased = commitEditorControllerEraser(eraseQueried).state;
     const undone = undoEditorController(erased).state;
     const redone = redoEditorController(undone).state;
@@ -265,10 +339,14 @@ describe('core/editorController', () => {
       expect(state.interaction.selectionDescriptor).toBeUndefined();
       expect(state.interaction.selectionPreview).toBeUndefined();
     }
-    expect(textRemoved.interaction.runtime.documentState.document.strokes.map((stroke) => stroke.id)).toEqual(['other']);
+    expect(
+      textRemoved.interaction.runtime.documentState.document.strokes.map((stroke) => stroke.id)
+    ).toEqual(['other']);
     expect(cleared.interaction.runtime.documentState.document.strokes).toEqual([]);
     expect(erased.interaction.runtime.documentState.document.strokes).toEqual([]);
-    expect(undone.interaction.runtime.documentState.document.strokes.map((stroke) => stroke.id)).toEqual(['other']);
+    expect(
+      undone.interaction.runtime.documentState.document.strokes.map((stroke) => stroke.id)
+    ).toEqual(['other']);
     expect(redone.interaction.runtime.documentState.document.strokes).toEqual([]);
   });
 });

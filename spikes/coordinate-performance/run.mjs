@@ -281,11 +281,7 @@ function runAffineTable() {
           y: Math.fround(Math.fround(Math.fround(fwdDouble.y) - tf) / sf),
         };
         if (!Number.isFinite(invF32.x) || !Number.isFinite(invF32.y)) anyNonFinite = true;
-        maxInvAbsErr = Math.max(
-          maxInvAbsErr,
-          Math.abs(invF32.x - p.x),
-          Math.abs(invF32.y - p.y)
-        );
+        maxInvAbsErr = Math.max(maxInvAbsErr, Math.abs(invF32.x - p.x), Math.abs(invF32.y - p.y));
 
         // f32 round-trip：f32 正变换 -> f32 逆变换
         const f32back = {
@@ -545,7 +541,7 @@ function runGridCorrectness(doc, grid, bank) {
     if (!setOk || !orderOk || !checksumOk) {
       throw new Error(
         `grid/linear 命中不一致：rect=${JSON.stringify(rect)} ` +
-          `idSetMatch=${setOk} documentOrderMatch=${orderOk} checksumMatch=${checksumOk}`,
+          `idSetMatch=${setOk} documentOrderMatch=${orderOk} checksumMatch=${checksumOk}`
       );
     }
     idSetMatch = idSetMatch && setOk;
@@ -783,9 +779,7 @@ function main() {
         )}ms | hits=${p.linear.hitsPerRound} candidates=${p.candidateGrid.candidatesPerRound} match=${p.hitsMatchBetweenQueries}`
     )
     .join('\n');
-  process.stdout.write(
-    `[coordinate-performance spike] 已写入 ${OUTPUT_PATH}\n${perfSummary}\n`
-  );
+  process.stdout.write(`[coordinate-performance spike] 已写入 ${OUTPUT_PATH}\n${perfSummary}\n`);
 }
 
 main();

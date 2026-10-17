@@ -112,11 +112,7 @@ function expectClosedFiniteGeometry(geometry: DerivedFreehandGeometry): void {
 
 describe('P0 fix: derivePressureSamples 接触压力语义', () => {
   it('down0.7 → move0 → up0 得到 0.7,0,0', () => {
-    const object = makeFreehand([
-      sample(0, 'down', 0.7),
-      sample(1, 'move', 0),
-      sample(2, 'up', 0),
-    ]);
+    const object = makeFreehand([sample(0, 'down', 0.7), sample(1, 'move', 0), sample(2, 'up', 0)]);
     expect(derivedPressures(object)).toEqual([0.7, 0, 0]);
   });
 
@@ -266,10 +262,7 @@ describe('P0 fix: ClosedPathTarget 无 beginPath（Path2D 形状）', () => {
 describe('freehand 派生几何 fixture 补证', () => {
   it('单点 / 短笔 / 零位移：polygon 有限且命令为闭合 M..Z', () => {
     const singlePoint = makeFreehand([sample(0, 'down', 0.5, 20, 30)]);
-    const shortStroke = makeFreehand([
-      sample(0, 'down', 0.4, 0, 0),
-      sample(1, 'up', 0, 12, 9),
-    ]);
+    const shortStroke = makeFreehand([sample(0, 'down', 0.4, 0, 0), sample(1, 'up', 0, 12, 9)]);
     const zeroDisplacement = makeFreehand([
       sample(0, 'down', 0.6, 5, 5),
       sample(1, 'move', 0.6, 5, 5),

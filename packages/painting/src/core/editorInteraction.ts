@@ -22,10 +22,7 @@ import {
   type EditorRuntimeState,
 } from './editorRuntime';
 import { materializeEditorDocumentPreview, type EditorDocumentCommand } from './editorDocument';
-import {
-  transformSelection,
-  type DocumentStrokeTarget,
-} from './selectionTransform';
+import { transformSelection, type DocumentStrokeTarget } from './selectionTransform';
 import { applyViewportTransformIntent, normalizeViewportTransform } from './viewportTransform';
 import type { DrawingValueV2 } from '../model/strokes';
 
@@ -84,11 +81,15 @@ function freezeTargets(targets: readonly DocumentStrokeTarget[]): readonly Docum
   return Object.freeze(targets.map((target) => Object.freeze({ ...target })));
 }
 
-function freezePoint(point: Readonly<{ x: number; y: number }>): Readonly<{ x: number; y: number }> {
+function freezePoint(
+  point: Readonly<{ x: number; y: number }>
+): Readonly<{ x: number; y: number }> {
   return Object.freeze({ x: point.x, y: point.y });
 }
 
-function copySelectionDescriptor(descriptor: SelectionGestureDescriptor): SelectionGestureDescriptor {
+function copySelectionDescriptor(
+  descriptor: SelectionGestureDescriptor
+): SelectionGestureDescriptor {
   const box = Object.freeze({
     center: freezePoint(descriptor.box.center),
     width: descriptor.box.width,
@@ -129,7 +130,10 @@ function copyRuler(
   ruler: Readonly<{ state: GestureRulerState; pivot?: Readonly<{ x: number; y: number }> }>
 ): Readonly<{ state: GestureRulerState; pivot?: Readonly<{ x: number; y: number }> }> {
   return Object.freeze({
-    state: Object.freeze({ center: freezePoint(ruler.state.center), rotationRad: ruler.state.rotationRad }),
+    state: Object.freeze({
+      center: freezePoint(ruler.state.center),
+      rotationRad: ruler.state.rotationRad,
+    }),
     ...(ruler.pivot ? { pivot: freezePoint(ruler.pivot) } : {}),
   });
 }
@@ -174,15 +178,21 @@ export function selectionIntentToWorld(
       : null;
   }
   return Number.isFinite(intent.scale.x) && Number.isFinite(intent.scale.y)
-    ? Object.freeze({ kind: 'resize', anchor, axis: Object.freeze({ ...intent.axis }), scale: Object.freeze({ ...intent.scale }) })
+    ? Object.freeze({
+        kind: 'resize',
+        anchor,
+        axis: Object.freeze({ ...intent.axis }),
+        scale: Object.freeze({ ...intent.scale }),
+      })
     : null;
 }
 
-function transientInWorld(session: GestureSession, beginViewport: DrawingViewport): GestureTransientState {
+function transientInWorld(
+  session: GestureSession,
+  beginViewport: DrawingViewport
+): GestureTransientState {
   const screenIntent = session.transient.selection ?? session.transient.uniformScaleSelection;
-  const selection = screenIntent
-    ? selectionIntentToWorld(screenIntent, beginViewport)
-    : undefined;
+  const selection = screenIntent ? selectionIntentToWorld(screenIntent, beginViewport) : undefined;
   if (!selection) return Object.freeze({ ...session.transient });
   return selection.kind === 'uniform-scale'
     ? Object.freeze({ ...session.transient, uniformScaleSelection: selection })
@@ -208,23 +218,39 @@ function previewFor(
 
 function targetMatchesDocument(document: DrawingValueV2, target: DocumentStrokeTarget): boolean {
   const stroke = document.strokes[target.index];
-  return stroke !== undefined &&
-    Number.isInteger(target.index) && target.index >= 0 &&
+  return (
+    stroke !== undefined &&
+    Number.isInteger(target.index) &&
+    target.index >= 0 &&
     stroke.id === target.expectedId &&
-    (target.expectedTool === undefined || stroke.tool === target.expectedTool);
+    (target.expectedTool === undefined || stroke.tool === target.expectedTool)
+  );
 }
 
-function hasValidSelectionTargets(document: DrawingValueV2, targets: readonly DocumentStrokeTarget[]): boolean {
+function hasValidSelectionTargets(
+  document: DrawingValueV2,
+  targets: readonly DocumentStrokeTarget[]
+): boolean {
   const indexes = new Set<number>();
-  return targets.length > 0 && targets.every((target) => {
-    if (indexes.has(target.index) || !targetMatchesDocument(document, target)) return false;
-    indexes.add(target.index);
-    return true;
-  });
+  return (
+    targets.length > 0 &&
+    targets.every((target) => {
+      if (indexes.has(target.index) || !targetMatchesDocument(document, target)) return false;
+      indexes.add(target.index);
+      return true;
+    })
+  );
 }
 
-function clearSelection(): Pick<EditorInteractionState, 'selectionTargets' | 'selectionDescriptor' | 'selectionPreview'> {
-  return { selectionTargets: Object.freeze([]), selectionDescriptor: undefined, selectionPreview: undefined };
+function clearSelection(): Pick<
+  EditorInteractionState,
+  'selectionTargets' | 'selectionDescriptor' | 'selectionPreview'
+> {
+  return {
+    selectionTargets: Object.freeze([]),
+    selectionDescriptor: undefined,
+    selectionPreview: undefined,
+  };
 }
 
 /**
@@ -236,7 +262,10 @@ function selectionAfterDocumentChange(
   runtime: EditorRuntimeState,
   policy: 'append' | 'selection-transform' | 'clear'
 ): Pick<EditorInteractionState, 'selectionTargets' | 'selectionDescriptor' | 'selectionPreview'> {
-  if (policy !== 'clear' && hasValidSelectionTargets(runtime.documentState.document, state.selectionTargets)) {
+  if (
+    policy !== 'clear' &&
+    hasValidSelectionTargets(runtime.documentState.document, state.selectionTargets)
+  ) {
     return {
       selectionTargets: state.selectionTargets,
       // 自身变换后 targets 仍有效，但原 descriptor 的 box/anchor 属于旧 frame，不能复用。
@@ -282,7 +311,17 @@ function sessionOptions(state: EditorInteractionState): CreateGestureSessionOpti
 
 function configuredState(
   state: EditorInteractionState,
-  updates: Partial<Pick<EditorInteractionState, 'viewport' | 'tool' | 'selectionTargets' | 'selectionDescriptor' | 'ruler' | 'interactionPolicy'>>
+  updates: Partial<
+    Pick<
+      EditorInteractionState,
+      | 'viewport'
+      | 'tool'
+      | 'selectionTargets'
+      | 'selectionDescriptor'
+      | 'ruler'
+      | 'interactionPolicy'
+    >
+  >
 ): EditorInteractionState {
   return createState({
     ...state,
@@ -304,9 +343,13 @@ export function createEditorInteractionState(
     viewport: copyViewport(viewport ?? DEFAULT_DRAWING_VIEWPORT),
     tool: options.tool ?? 'pen',
     selectionTargets: freezeTargets(options.selectionTargets ?? []),
-    ...(options.selectionDescriptor ? { selectionDescriptor: copySelectionDescriptor(options.selectionDescriptor) } : {}),
+    ...(options.selectionDescriptor
+      ? { selectionDescriptor: copySelectionDescriptor(options.selectionDescriptor) }
+      : {}),
     ...(options.ruler ? { ruler: copyRuler(options.ruler) } : {}),
-    ...(options.interactionPolicy ? { interactionPolicy: Object.freeze({ ...options.interactionPolicy }) } : {}),
+    ...(options.interactionPolicy
+      ? { interactionPolicy: Object.freeze({ ...options.interactionPolicy }) }
+      : {}),
     transient: Object.freeze({}),
   });
 }
@@ -371,10 +414,17 @@ export function commitEditorInteractionCommand(
   const selection = selectionAfterDocumentChange(
     state,
     committed.state,
-    command.type === 'append-stroke' ? 'append' : command.type === 'apply-selection-transform' ? 'selection-transform' : 'clear'
+    command.type === 'append-stroke'
+      ? 'append'
+      : command.type === 'apply-selection-transform'
+        ? 'selection-transform'
+        : 'clear'
   );
   return {
-    state: createState({ ...state, runtime: committed.state, transient: Object.freeze({}), ...selection }, committed.diagnostics),
+    state: createState(
+      { ...state, runtime: committed.state, transient: Object.freeze({}), ...selection },
+      committed.diagnostics
+    ),
     diagnostics: committed.diagnostics,
   };
 }
@@ -392,7 +442,10 @@ export function commitEditorInteractionDocument(
   const committed = commitEditorRuntimeDocument(state.runtime, expectedRevision, document);
   if (committed.state === state.runtime) return { state, diagnostics: committed.diagnostics };
   return {
-    state: createState({ ...state, runtime: committed.state, transient: Object.freeze({}), ...clearSelection() }, committed.diagnostics),
+    state: createState(
+      { ...state, runtime: committed.state, transient: Object.freeze({}), ...clearSelection() },
+      committed.diagnostics
+    ),
     diagnostics: committed.diagnostics,
   };
 }
@@ -466,29 +519,32 @@ export function reduceEditorGesture(
     const runtimeBeforeCommit = runtime;
     const committed = commitSelectionIntent(runtime, state.selectionTargets, worldIntent);
     runtime = committed.state;
-    committedSelectionTransform ||= committed.state !== runtimeBeforeCommit && committed.diagnostics.length === 0;
+    committedSelectionTransform ||=
+      committed.state !== runtimeBeforeCommit && committed.diagnostics.length === 0;
     diagnostics.push(...committed.diagnostics);
   }
 
   const navigationIntent = transition.session.transient.navigation?.intent;
   const previewViewport = navigationIntent
-    ? applyViewportTransformIntent(active.beginViewport, navigationIntent) ?? state.viewport
+    ? (applyViewportTransformIntent(active.beginViewport, navigationIntent) ?? state.viewport)
     : state.viewport;
   const isActive = transition.session.status === 'active';
   const transient = transientInWorld(transition.session, active.beginViewport);
   // 外部 revision 已推进时，活动手势既不能提交，也不能产生基于错误 snapshot 的 preview。
-  const selectionPreview = runtime.documentState.revision === active.beginRevision
-    ? previewFor(runtime, state.selectionTargets, transient)
-    : undefined;
-  const selection = runtime.documentState.revision !== active.beginRevision
-    ? clearSelection()
-    : runtime === state.runtime
-      ? undefined
-      : selectionAfterDocumentChange(
-          state,
-          runtime,
-          committedSelectionTransform ? 'selection-transform' : 'clear'
-        );
+  const selectionPreview =
+    runtime.documentState.revision === active.beginRevision
+      ? previewFor(runtime, state.selectionTargets, transient)
+      : undefined;
+  const selection =
+    runtime.documentState.revision !== active.beginRevision
+      ? clearSelection()
+      : runtime === state.runtime
+        ? undefined
+        : selectionAfterDocumentChange(
+            state,
+            runtime,
+            committedSelectionTransform ? 'selection-transform' : 'clear'
+          );
   const next = createState(
     {
       ...state,
@@ -500,11 +556,14 @@ export function reduceEditorGesture(
             activeGesture: Object.freeze({ ...active, session: transition.session }),
             transient,
             ...(selection ?? {}),
-            ...(selectionPreview
-              ? { selectionPreview }
-              : { selectionPreview: undefined }),
+            ...(selectionPreview ? { selectionPreview } : { selectionPreview: undefined }),
           }
-        : { activeGesture: undefined, transient: Object.freeze({}), ...(selection ?? {}), selectionPreview: undefined }),
+        : {
+            activeGesture: undefined,
+            transient: Object.freeze({}),
+            ...(selection ?? {}),
+            selectionPreview: undefined,
+          }),
     },
     diagnostics
   );
@@ -518,13 +577,16 @@ export function undoEditorInteraction(state: EditorInteractionState): EditorInte
   }
   const undone = undoEditorRuntime(state.runtime);
   return {
-    state: createState({
-      ...state,
-      runtime: undone.state,
-      transient: Object.freeze({}),
-      ...(undone.state === state.runtime ? {} : clearSelection()),
-      selectionPreview: undefined,
-    }, undone.diagnostics),
+    state: createState(
+      {
+        ...state,
+        runtime: undone.state,
+        transient: Object.freeze({}),
+        ...(undone.state === state.runtime ? {} : clearSelection()),
+        selectionPreview: undefined,
+      },
+      undone.diagnostics
+    ),
     diagnostics: undone.diagnostics,
   };
 }
@@ -536,13 +598,16 @@ export function redoEditorInteraction(state: EditorInteractionState): EditorInte
   }
   const redone = redoEditorRuntime(state.runtime);
   return {
-    state: createState({
-      ...state,
-      runtime: redone.state,
-      transient: Object.freeze({}),
-      ...(redone.state === state.runtime ? {} : clearSelection()),
-      selectionPreview: undefined,
-    }, redone.diagnostics),
+    state: createState(
+      {
+        ...state,
+        runtime: redone.state,
+        transient: Object.freeze({}),
+        ...(redone.state === state.runtime ? {} : clearSelection()),
+        selectionPreview: undefined,
+      },
+      redone.diagnostics
+    ),
     diagnostics: redone.diagnostics,
   };
 }

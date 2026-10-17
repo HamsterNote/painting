@@ -1,4 +1,9 @@
-import type { DrawingPointV2, DrawingStrokeV2, DrawingToolModeV2, DrawingValueV2 } from '../model/strokes';
+import type {
+  DrawingPointV2,
+  DrawingStrokeV2,
+  DrawingToolModeV2,
+  DrawingValueV2,
+} from '../model/strokes';
 import {
   beginEditorGesture,
   commitEditorInteractionDocument,
@@ -119,12 +124,16 @@ function copyTargets(targets: readonly DocumentStrokeTarget[]): readonly Documen
 }
 
 function targetsForQuery(
-  targets: readonly (Readonly<{ index: number; id: string; tool: DrawingStrokeV2['tool'] }> | DocumentStrokeTargetQueryTarget)[]
+  targets: readonly (
+    | Readonly<{ index: number; id: string; tool: DrawingStrokeV2['tool'] }>
+    | DocumentStrokeTargetQueryTarget
+  )[]
 ): readonly DocumentStrokeTarget[] {
   return copyTargets(
-    targets.map((target) => 'stroke' in target
-      ? { index: target.index, expectedId: target.stroke.id, expectedTool: target.stroke.tool }
-      : { index: target.index, expectedId: target.id, expectedTool: target.tool }
+    targets.map((target) =>
+      'stroke' in target
+        ? { index: target.index, expectedId: target.stroke.id, expectedTool: target.stroke.tool }
+        : { index: target.index, expectedId: target.id, expectedTool: target.tool }
     )
   );
 }
@@ -133,21 +142,41 @@ type DocumentStrokeTargetQueryTarget = Readonly<{ index: number; stroke: Drawing
 
 function documentValuesEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) return true;
-  if (typeof left !== 'object' || left === null || typeof right !== 'object' || right === null || Array.isArray(left) !== Array.isArray(right)) return false;
-  if (Array.isArray(left) && Array.isArray(right)) return left.length === right.length && left.every((value, index) => documentValuesEqual(value, right[index]));
+  if (
+    typeof left !== 'object' ||
+    left === null ||
+    typeof right !== 'object' ||
+    right === null ||
+    Array.isArray(left) !== Array.isArray(right)
+  )
+    return false;
+  if (Array.isArray(left) && Array.isArray(right))
+    return (
+      left.length === right.length &&
+      left.every((value, index) => documentValuesEqual(value, right[index]))
+    );
   const leftRecord = left as Record<string, unknown>;
   const rightRecord = right as Record<string, unknown>;
   const leftKeys = Object.keys(leftRecord);
   const rightKeys = Object.keys(rightRecord);
-  return leftKeys.length === rightKeys.length && leftKeys.every((key) =>
-    Object.prototype.hasOwnProperty.call(rightRecord, key) && documentValuesEqual(leftRecord[key], rightRecord[key])
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key) =>
+        Object.prototype.hasOwnProperty.call(rightRecord, key) &&
+        documentValuesEqual(leftRecord[key], rightRecord[key])
+    )
   );
 }
 
 /** 只核对冻结值身份，不描述或重建 document geometry。 */
 function frameMatchesDocument(frame: DrawingFrame, document: DrawingValueV2): boolean {
-  return frame.prepared.entries.length === document.strokes.length && frame.prepared.entries.every((entry, index) =>
-    entry.key === index && documentValuesEqual(entry.stroke, document.strokes[index])
+  return (
+    frame.prepared.entries.length === document.strokes.length &&
+    frame.prepared.entries.every(
+      (entry, index) =>
+        entry.key === index && documentValuesEqual(entry.stroke, document.strokes[index])
+    )
   );
 }
 
@@ -170,7 +199,10 @@ function withInteraction(
   interaction: EditorInteractionState,
   diagnostics: readonly EditorControllerDiagnostic[] = []
 ): EditorControllerResult {
-  return controllerResult({ ...state, interaction, selectionTargets: copyTargets(interaction.selectionTargets) }, diagnostics);
+  return controllerResult(
+    { ...state, interaction, selectionTargets: copyTargets(interaction.selectionTargets) },
+    diagnostics
+  );
 }
 
 function activeConflict(state: EditorControllerState): EditorControllerResult | null {
@@ -180,7 +212,11 @@ function activeConflict(state: EditorControllerState): EditorControllerResult | 
 }
 
 function toolSessionFor(state: EditorControllerState, tool = state.tool) {
-  return createEditorToolSession({ tool, style: state.toolStyle, ...(state.createId ? { createId: state.createId } : {}) });
+  return createEditorToolSession({
+    tool,
+    style: state.toolStyle,
+    ...(state.createId ? { createId: state.createId } : {}),
+  });
 }
 
 function setToolResult(
@@ -242,17 +278,15 @@ export function setEditorControllerTool(
   if (conflict) {
     return conflict;
   }
-  const interactionResult = tool === 'image'
-    ? { state: state.interaction, diagnostics: [] as readonly EditorInteractionDiagnostic[] }
-    : setEditorInteractionTool(state.interaction, tool);
+  const interactionResult =
+    tool === 'image'
+      ? { state: state.interaction, diagnostics: [] as readonly EditorInteractionDiagnostic[] }
+      : setEditorInteractionTool(state.interaction, tool);
   const sessionResult = toolSessionFor(state, tool);
-  return setToolResult(
-    state,
-    tool,
-    interactionResult.state,
-    sessionResult,
-    [...interactionResult.diagnostics, ...sessionResult.diagnostics]
-  );
+  return setToolResult(state, tool, interactionResult.state, sessionResult, [
+    ...interactionResult.diagnostics,
+    ...sessionResult.diagnostics,
+  ]);
 }
 
 /** 配置 selection 的稳定目标与可选 gesture descriptor；变换提交仍由 EditorInteraction 完成。 */
@@ -279,7 +313,9 @@ function updateToolSession(
     {
       ...state,
       toolSession: toolResult.session,
-      ...(toolResult.stroke ? { strokeCandidate: toolResult.stroke } : { strokeCandidate: undefined }),
+      ...(toolResult.stroke
+        ? { strokeCandidate: toolResult.stroke }
+        : { strokeCandidate: undefined }),
     },
     toolResult.diagnostics
   );
@@ -334,7 +370,9 @@ export function addEditorControllerToolVertex(
 }
 
 /** 完成 polygon，仅产生候选 stroke。 */
-export function finishEditorControllerPolygon(state: EditorControllerState): EditorControllerResult {
+export function finishEditorControllerPolygon(
+  state: EditorControllerState
+): EditorControllerResult {
   const conflict = activeConflict(state);
   if (conflict) return conflict;
   return state.toolSession
@@ -451,7 +489,11 @@ export function queryEditorControllerLasso(
   if (conflict) return conflict;
   const query = queryLassoStrokeTargets(state.interaction.runtime.documentState.document, polygon);
   const targets = targetsForQuery(query.targets);
-  const selection = setEditorSelection(state.interaction, targets, state.interaction.selectionDescriptor);
+  const selection = setEditorSelection(
+    state.interaction,
+    targets,
+    state.interaction.selectionDescriptor
+  );
   const diagnostics = [...query.diagnostics, ...selection.diagnostics];
   return controllerResult(
     {
@@ -474,9 +516,18 @@ export function queryEditorControllerEraser(
 ): EditorControllerResult {
   const conflict = activeConflict(state);
   if (conflict) return conflict;
-  const query = queryEraserStrokeTargets(state.interaction.runtime.documentState.document, samples, radius, options);
+  const query = queryEraserStrokeTargets(
+    state.interaction.runtime.documentState.document,
+    samples,
+    radius,
+    options
+  );
   const targets = targetsForQuery(query.targets);
-  const selection = setEditorSelection(state.interaction, targets, state.interaction.selectionDescriptor);
+  const selection = setEditorSelection(
+    state.interaction,
+    targets,
+    state.interaction.selectionDescriptor
+  );
   const diagnostics = [...query.diagnostics, ...selection.diagnostics];
   return controllerResult(
     {
@@ -510,16 +561,31 @@ export function queryEditorControllerDrawingFrameLasso(
   if (conflict) return conflict;
   const query = frameMatchesDocument(frame, state.interaction.runtime.documentState.document)
     ? queryDrawingFrameLassoTargets(frame, polygon, {
-      frameRevision,
-      expectedRevision: state.interaction.runtime.documentState.revision,
-      coordinateSpace,
-    })
-    : { targets: [], diagnostics: [{ type: 'frame-document-identity-mismatch' } satisfies EditorControllerDiagnostic] };
+        frameRevision,
+        expectedRevision: state.interaction.runtime.documentState.revision,
+        coordinateSpace,
+      })
+    : {
+        targets: [],
+        diagnostics: [
+          { type: 'frame-document-identity-mismatch' } satisfies EditorControllerDiagnostic,
+        ],
+      };
   const targets = targetsForQuery(query.targets);
-  const selection = setEditorSelection(state.interaction, targets, state.interaction.selectionDescriptor);
+  const selection = setEditorSelection(
+    state.interaction,
+    targets,
+    state.interaction.selectionDescriptor
+  );
   const diagnostics = [...query.diagnostics, ...selection.diagnostics];
   return controllerResult(
-    { ...state, interaction: selection.state, selectionTargets: selection.diagnostics.length === 0 ? targets : state.selectionTargets, lassoTransient: copyPoints(polygon), eraserTransient: undefined },
+    {
+      ...state,
+      interaction: selection.state,
+      selectionTargets: selection.diagnostics.length === 0 ? targets : state.selectionTargets,
+      lassoTransient: copyPoints(polygon),
+      eraserTransient: undefined,
+    },
     diagnostics
   );
 }
@@ -531,20 +597,30 @@ export function queryEditorControllerDrawingFrameEraser(
   frameRevision: number,
   samples: readonly DrawingPointV2[],
   radius: number,
-  options: EraserTargetQueryOptions & Readonly<{ coordinateSpace?: DrawingFrameQueryCoordinateSpace }> = {}
+  options: EraserTargetQueryOptions &
+    Readonly<{ coordinateSpace?: DrawingFrameQueryCoordinateSpace }> = {}
 ): EditorControllerResult {
   const conflict = activeConflict(state);
   if (conflict) return conflict;
   const query = frameMatchesDocument(frame, state.interaction.runtime.documentState.document)
     ? queryDrawingFrameEraserTargets(frame, samples, radius, {
-      frameRevision,
-      expectedRevision: state.interaction.runtime.documentState.revision,
-      coordinateSpace: options.coordinateSpace,
-      topmostOnly: options.topmostOnly,
-    })
-    : { targets: [], diagnostics: [{ type: 'frame-document-identity-mismatch' } satisfies EditorControllerDiagnostic] };
+        frameRevision,
+        expectedRevision: state.interaction.runtime.documentState.revision,
+        coordinateSpace: options.coordinateSpace,
+        topmostOnly: options.topmostOnly,
+      })
+    : {
+        targets: [],
+        diagnostics: [
+          { type: 'frame-document-identity-mismatch' } satisfies EditorControllerDiagnostic,
+        ],
+      };
   const targets = targetsForQuery(query.targets);
-  const selection = setEditorSelection(state.interaction, targets, state.interaction.selectionDescriptor);
+  const selection = setEditorSelection(
+    state.interaction,
+    targets,
+    state.interaction.selectionDescriptor
+  );
   const diagnostics = [...query.diagnostics, ...selection.diagnostics];
   return controllerResult(
     {
@@ -552,7 +628,11 @@ export function queryEditorControllerDrawingFrameEraser(
       interaction: selection.state,
       selectionTargets: selection.diagnostics.length === 0 ? targets : state.selectionTargets,
       lassoTransient: undefined,
-      eraserTransient: Object.freeze({ samples: copyPoints(samples), radius, topmostOnly: options.topmostOnly ?? false }),
+      eraserTransient: Object.freeze({
+        samples: copyPoints(samples),
+        radius,
+        topmostOnly: options.topmostOnly ?? false,
+      }),
     },
     diagnostics
   );
@@ -565,7 +645,8 @@ export function commitEditorControllerEraser(
 ): EditorControllerResult {
   const conflict = activeConflict(state);
   if (conflict) return conflict;
-  if (state.selectionTargets.length === 0) return controllerResult(state, [{ type: 'no-eraser-targets' }]);
+  if (state.selectionTargets.length === 0)
+    return controllerResult(state, [{ type: 'no-eraser-targets' }]);
   const committed = commitEditorInteractionCommand(state.interaction, {
     type: 'remove-strokes',
     expectedRevision,

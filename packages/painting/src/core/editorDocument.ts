@@ -81,7 +81,9 @@ function copyStroke(stroke: DrawingStrokeV2): DrawingStrokeV2 {
 function freezeStroke(stroke: DrawingStrokeV2): DrawingStrokeV2 {
   return Object.freeze({
     ...stroke,
-    points: Object.freeze(stroke.points.map((point) => Object.freeze(copyPoint(point)))) as DrawingPointV2[],
+    points: Object.freeze(
+      stroke.points.map((point) => Object.freeze(copyPoint(point)))
+    ) as DrawingPointV2[],
     ...(stroke.dashArray ? { dashArray: Object.freeze([...stroke.dashArray]) as number[] } : {}),
   }) as DrawingStrokeV2;
 }
@@ -107,7 +109,9 @@ function valuesEqual(left: unknown, right: unknown): boolean {
     return false;
   }
   if (Array.isArray(left) && Array.isArray(right)) {
-    return left.length === right.length && left.every((value, index) => valuesEqual(value, right[index]));
+    return (
+      left.length === right.length && left.every((value, index) => valuesEqual(value, right[index]))
+    );
   }
   const leftRecord = left as Record<string, unknown>;
   const rightRecord = right as Record<string, unknown>;
@@ -116,7 +120,9 @@ function valuesEqual(left: unknown, right: unknown): boolean {
   return (
     leftKeys.length === rightKeys.length &&
     leftKeys.every(
-      (key) => Object.prototype.hasOwnProperty.call(rightRecord, key) && valuesEqual(leftRecord[key], rightRecord[key])
+      (key) =>
+        Object.prototype.hasOwnProperty.call(rightRecord, key) &&
+        valuesEqual(leftRecord[key], rightRecord[key])
     )
   );
 }
@@ -142,7 +148,10 @@ function committedState(state: EditorDocumentState, document: DrawingValueV2): E
   return { document, revision: state.revision + 1 };
 }
 
-function noChange(state: EditorDocumentState, diagnostics: readonly EditorDocumentDiagnostic[] = []): ApplyEditorDocumentCommandResult {
+function noChange(
+  state: EditorDocumentState,
+  diagnostics: readonly EditorDocumentDiagnostic[] = []
+): ApplyEditorDocumentCommandResult {
   return { state, diagnostics };
 }
 
@@ -176,7 +185,10 @@ function applyReplacements(
 }
 
 /** 创建非持久编辑器状态，不复制 document，也不改变外部文档。 */
-export function createEditorDocumentState(document: DrawingValueV2, revision = 0): EditorDocumentState {
+export function createEditorDocumentState(
+  document: DrawingValueV2,
+  revision = 0
+): EditorDocumentState {
   return { document, revision };
 }
 
@@ -250,6 +262,9 @@ export function materializeEditorDocumentPreview(
 ): EditorDocumentPreview | null {
   const applied = applyEditorDocumentCommand(state, command);
   return applied.state.revision === state.revision + 1
-    ? Object.freeze({ document: freezeDocument(applied.state.document), diagnostics: Object.freeze([...applied.diagnostics]) })
+    ? Object.freeze({
+        document: freezeDocument(applied.state.document),
+        diagnostics: Object.freeze([...applied.diagnostics]),
+      })
     : null;
 }

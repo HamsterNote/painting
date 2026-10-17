@@ -180,9 +180,12 @@ function isCubicFlat(world: CubicTuple): boolean | null {
 function splitCubic(
   local: CubicTuple,
   world: CubicTuple
-):
-  | Readonly<{ leftLocal: CubicTuple; leftWorld: CubicTuple; rightLocal: CubicTuple; rightWorld: CubicTuple }>
-  | null {
+): Readonly<{
+  leftLocal: CubicTuple;
+  leftWorld: CubicTuple;
+  rightLocal: CubicTuple;
+  rightWorld: CubicTuple;
+}> | null {
   const lp01 = midpointPoint(local[0], local[1]);
   const lp12 = midpointPoint(local[1], local[2]);
   const lp23 = midpointPoint(local[2], local[3]);
@@ -331,7 +334,17 @@ function flattenEllipseInterval(
     return 'budget';
   }
   const mid = midpoint(t0, t1);
-  const left = flattenEllipseInterval(accumulator, center, rx, ry, transform, boundB, t0, mid, depth + 1);
+  const left = flattenEllipseInterval(
+    accumulator,
+    center,
+    rx,
+    ry,
+    transform,
+    boundB,
+    t0,
+    mid,
+    depth + 1
+  );
   if (left !== 'ok') {
     return left;
   }

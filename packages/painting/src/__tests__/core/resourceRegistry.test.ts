@@ -24,12 +24,19 @@ describe('core/resourceRegistry', () => {
       first,
       { resourceId: 'resource-2', src: 'memory://shared' },
       { resourceId: 'resource-3', src: 'memory://first' },
-    ].reduce((current, record) => registerImageResource(current, record).registry, createResourceRegistry());
+    ].reduce(
+      (current, record) => registerImageResource(current, record).registry,
+      createResourceRegistry()
+    );
 
-    expect(resolveImageResource(registry, { resourceId: 'resource-1', src: 'memory://shared' })).toEqual({
+    expect(
+      resolveImageResource(registry, { resourceId: 'resource-1', src: 'memory://shared' })
+    ).toEqual({
       resource: first,
     });
-    expect(resolveImageResource(registry, { resourceId: 'missing', src: 'memory://first' })).toEqual({
+    expect(
+      resolveImageResource(registry, { resourceId: 'missing', src: 'memory://first' })
+    ).toEqual({
       resource: first,
     });
     expect(resolveImageResource(registry, { src: 'memory://shared' })).toEqual({

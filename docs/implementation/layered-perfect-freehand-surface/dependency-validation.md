@@ -16,12 +16,12 @@
 
 ## 2. 命令与退出码（owner 实测）
 
-| # | 命令 | 退出码 | 日志 |
-|---|------|--------|------|
-| 1 | `pnpm install --frozen-lockfile` | **0** | `03-pnpm-install-frozen.log` |
-| 2 | `tsc --noEmit -p <probe>/tsconfig.json` | **0** | `07-type-probe-tsc.log` |
-| 3 | `node -e "require('perfect-freehand')..."` (CJS) | **0** | `08-runtime-cjs-esm.log` |
-| 4 | `node --input-type=module -e "import ..."` (ESM) | **0** | `08-runtime-cjs-esm.log` |
+| #   | 命令                                             | 退出码 | 日志                         |
+| --- | ------------------------------------------------ | ------ | ---------------------------- |
+| 1   | `pnpm install --frozen-lockfile`                 | **0**  | `03-pnpm-install-frozen.log` |
+| 2   | `tsc --noEmit -p <probe>/tsconfig.json`          | **0**  | `07-type-probe-tsc.log`      |
+| 3   | `node -e "require('perfect-freehand')..."` (CJS) | **0**  | `08-runtime-cjs-esm.log`     |
+| 4   | `node --input-type=module -e "import ..."` (ESM) | **0**  | `08-runtime-cjs-esm.log`     |
 
 `pnpm install --frozen-lockfile` 关键输出：`Lockfile is up to date, resolution step is skipped` / `Already up to date` / `Done in 1.4s`。唯一 warning 为忽略 `@shopify/react-native-skia` build script（非本次范围，不影响 PF）。
 
@@ -51,7 +51,11 @@ resolution/integrity：
 
 ```yaml
 perfect-freehand@1.2.3:
-  resolution: {integrity: sha512-bHZSfqDHGNlPpgH2yxXgPHlQSPpEbo+qg7li0M78J9vNAi2yjwLeA4x79BEQhX44lEWpCLSFCeRZwpw0niiXPA==, tarball: https://registry.npmjs.org/perfect-freehand/-/perfect-freehand-1.2.3.tgz}
+  resolution:
+    {
+      integrity: sha512-bHZSfqDHGNlPpgH2yxXgPHlQSPpEbo+qg7li0M78J9vNAi2yjwLeA4x79BEQhX44lEWpCLSFCeRZwpw0niiXPA==,
+      tarball: https://registry.npmjs.org/perfect-freehand/-/perfect-freehand-1.2.3.tgz,
+    }
 ```
 
 `specifier`、`version`、installed 版本三者一致，integrity 为 `1.2.3` 官方 tarball。

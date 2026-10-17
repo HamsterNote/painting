@@ -31,14 +31,14 @@
 
 判定用例：
 
-| 输入序列 | 期望派生压力 |
-| --- | --- |
-| `down0.7 → move0 → up0` | `0.7, 0, 0` |
-| `down0 → up0` | `0, 0` |
-| `仅 up0` | `0.5` |
-| `down0.3 → up0.9 → up0` | `0.3, 0.9, 0.3`（up0.9 不作 contact） |
-| `down undefined → move undefined → up0` | `0.5, 0.5, 0.5` |
-| `down1.5 → move-0.25 → up0` | `1, 0, 0`（raw 仍为 `1.5,-0.25,0`） |
+| 输入序列                                | 期望派生压力                          |
+| --------------------------------------- | ------------------------------------- |
+| `down0.7 → move0 → up0`                 | `0.7, 0, 0`                           |
+| `down0 → up0`                           | `0, 0`                                |
+| `仅 up0`                                | `0.5`                                 |
+| `down0.3 → up0.9 → up0`                 | `0.3, 0.9, 0.3`（up0.9 不作 contact） |
+| `down undefined → move undefined → up0` | `0.5, 0.5, 0.5`                       |
+| `down1.5 → move-0.25 → up0`             | `1, 0, 0`（raw 仍为 `1.5,-0.25,0`）   |
 
 ## 3. 修复 2（P0）：`ClosedPathTarget` 去掉 `beginPath`
 
@@ -54,10 +54,10 @@
 
 ## 4. 已覆盖用例（15 项）
 
-| 组 | 用例 |
-| --- | --- |
-| 修复 1 | `down0.7→move0→up0`＝`0.7,0,0`；`down0→up0`＝`0,0`；仅 `up0`＝`0.5`；非零 up 不作 contact；missing＝0.5 且越界 clamp 不写回；派生/raw 冻结且 raw 不变 |
-| 修复 2 | polygon→单一 M/L/Z；空→空、单点→`moveTo+closePath`；无 `beginPath` 的 recorder 回放一致；SVG `d` 与 recorder 序列一致；非有限顶点抛错 |
+| 组           | 用例                                                                                                                                                                                     |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 修复 1       | `down0.7→move0→up0`＝`0.7,0,0`；`down0→up0`＝`0,0`；仅 `up0`＝`0.5`；非零 up 不作 contact；missing＝0.5 且越界 clamp 不写回；派生/raw 冻结且 raw 不变                                    |
+| 修复 2       | polygon→单一 M/L/Z；空→空、单点→`moveTo+closePath`；无 `beginPath` 的 recorder 回放一致；SVG `d` 与 recorder 序列一致；非有限顶点抛错                                                    |
 | fixture 补证 | 单点/短笔/零位移几何有限且闭合；active/final 均可派生且 revision 区分 state；simulated/constant 下 raw 压力/time 变化不改变 outline；同 final 重复派生 commands 精确一致、SVG 与回放一致 |
 
 ## 5. 环境与执行结果

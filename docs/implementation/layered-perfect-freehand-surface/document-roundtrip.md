@@ -5,9 +5,9 @@
 
 ## 1. Hash 与验证
 
-| 对象 | sha256 | 规模 |
-|------|--------|------|
-| `model/documentReader.ts` | `d0697f862b2da8ccfe9c0fd38c47b734cfc202c7bad171ef5786982573e90a7c` | 当前落盘 |
+| 对象                                                | sha256                                                             | 规模     |
+| --------------------------------------------------- | ------------------------------------------------------------------ | -------- |
+| `model/documentReader.ts`                           | `d0697f862b2da8ccfe9c0fd38c47b734cfc202c7bad171ef5786982573e90a7c` | 当前落盘 |
 | `__tests__/core/layered-document-roundtrip.test.ts` | `4acff0f84f9c565cf5dec694e13d9c0cd1406b19a1cbba576a7944c78d7d1077` | 26 tests |
 
 - `core-node` focused：**26 tests PASS，EXIT_CODE=0**

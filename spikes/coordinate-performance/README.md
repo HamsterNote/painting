@@ -92,7 +92,7 @@ node -e "JSON.parse(require('fs').readFileSync('artifacts/research/coordinate-pe
   - 去重 **ID 集合**（`idSetMatch`）；
   - 按 `order` 的**序列**（`documentOrderMatch`）；
   - `ids.join(',')` **checksum**（`checksumMatch`）。
-  任一差异立即 `throw`。
+    任一差异立即 `throw`。
 - **update / remove**：对一个普通对象执行 update（先按旧 bbox 注销旧 cell/overflow 注册，
   再写入新 bbox 并重新注册）后重新校验；再执行 remove 后重新校验。
 - **返回结构**：`cellSize`、`maxCellsPerObject`、`initial` / `afterUpdate` / `afterRemove`

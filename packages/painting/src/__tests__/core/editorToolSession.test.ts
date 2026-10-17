@@ -102,7 +102,8 @@ describe('core/editorToolSession', () => {
 
   it('rejects incomplete and degenerate polygons without candidates', () => {
     const incomplete = finishEditorPolygon(
-      addEditorToolVertex(addEditorToolVertex(session('polygon'), point(0, 0)).session, point(1, 0)).session
+      addEditorToolVertex(addEditorToolVertex(session('polygon'), point(0, 0)).session, point(1, 0))
+        .session
     );
     let collinear = session('polygon');
     for (const candidate of [point(0, 0), point(2, 0), point(4, 0)]) {
@@ -130,8 +131,12 @@ describe('core/editorToolSession', () => {
   });
 
   it('hands text, image, eraser, and lasso to their dedicated future flows without creating strokes', () => {
-    expect(createEditorToolSession({ tool: 'text' }).diagnostics).toEqual([{ type: 'requires-text-session' }]);
-    expect(createEditorToolSession({ tool: 'image' }).diagnostics).toEqual([{ type: 'requires-resource-import' }]);
+    expect(createEditorToolSession({ tool: 'text' }).diagnostics).toEqual([
+      { type: 'requires-text-session' },
+    ]);
+    expect(createEditorToolSession({ tool: 'image' }).diagnostics).toEqual([
+      { type: 'requires-resource-import' },
+    ]);
     expect(createEditorToolSession({ tool: 'eraser' }).diagnostics).toEqual([
       { type: 'requires-query', tool: 'eraser' },
     ]);
@@ -144,7 +149,8 @@ describe('core/editorToolSession', () => {
     const input = point(1, 2, 0.5);
     const style = { dashArray: [1, 3] };
     const missingId = finishEditorToolPointer(
-      beginEditorToolPointer(createEditorToolSession({ tool: 'line', style }).session, input).session,
+      beginEditorToolPointer(createEditorToolSession({ tool: 'line', style }).session, input)
+        .session,
       point(8, 9)
     );
     const created = pointerStroke('pen');
@@ -159,7 +165,9 @@ describe('core/editorToolSession', () => {
 
   it('reports invalid world points and never throws or emits a candidate on cancellation', () => {
     const invalid = beginEditorToolPointer(session('line'), point(Number.NaN, 2));
-    const cancelled = cancelEditorToolSession(beginEditorToolPointer(session('line'), point(1, 2)).session);
+    const cancelled = cancelEditorToolSession(
+      beginEditorToolPointer(session('line'), point(1, 2)).session
+    );
 
     expect(invalid.diagnostics).toEqual([{ type: 'invalid-world-point' }]);
     expect(cancelled.stroke).toBeUndefined();
@@ -204,7 +212,11 @@ describe('core/editorToolSession', () => {
 
     expect(begun.points[0]).toEqual(point(1, 2, 0.4));
     expect(moved.points[1]).toEqual(point(5, 6, 0.6));
-    expect(finished.stroke?.points).toEqual([point(1, 2, 0.4), point(5, 6, 0.6), point(9, 10, 0.9)]);
+    expect(finished.stroke?.points).toEqual([
+      point(1, 2, 0.4),
+      point(5, 6, 0.6),
+      point(9, 10, 0.9),
+    ]);
     expect(finished.stroke?.points[2].pressure).toBe(0.9);
     expect(Object.isFrozen(moved.points[1])).toBe(true);
   });

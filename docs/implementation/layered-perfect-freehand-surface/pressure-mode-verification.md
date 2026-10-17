@@ -29,16 +29,16 @@
 
 ## 3. 已覆盖用例（6 项）
 
-| 用例 | 断言 |
-| --- | --- |
-| auto pen + available / unknown（恒 0.5） | `real` / `real` |
-| auto pen + unavailable | `simulated` |
-| auto mouse/touch + available / unknown（正压力） | 均 `simulated` |
-| auto native + available | `real` |
-| auto native + unavailable / unknown | `simulated` / `simulated` |
-| 显式 real/simulated/constant × 4 来源 × 3 能力 | 全 36 组合原样返回 |
-| 恒定 0.5 / 正压力 / 剧变 / 零压力 fixture | 同来源·能力下结果恒定（real 或 simulated） |
-| resolver 签名 | `resolvePressureMode.length === 3`，无压力入参 |
+| 用例                                             | 断言                                           |
+| ------------------------------------------------ | ---------------------------------------------- |
+| auto pen + available / unknown（恒 0.5）         | `real` / `real`                                |
+| auto pen + unavailable                           | `simulated`                                    |
+| auto mouse/touch + available / unknown（正压力） | 均 `simulated`                                 |
+| auto native + available                          | `real`                                         |
+| auto native + unavailable / unknown              | `simulated` / `simulated`                      |
+| 显式 real/simulated/constant × 4 来源 × 3 能力   | 全 36 组合原样返回                             |
+| 恒定 0.5 / 正压力 / 剧变 / 零压力 fixture        | 同来源·能力下结果恒定（real 或 simulated）     |
+| resolver 签名                                    | `resolvePressureMode.length === 3`，无压力入参 |
 
 ## 4. 环境
 

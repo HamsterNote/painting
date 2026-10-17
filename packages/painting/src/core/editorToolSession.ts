@@ -79,7 +79,11 @@ export type EditorToolSessionResult = Readonly<{
 }>;
 
 function isFinitePoint(point: DrawingPointV2): boolean {
-  return Number.isFinite(point.x) && Number.isFinite(point.y) && (point.pressure === undefined || Number.isFinite(point.pressure));
+  return (
+    Number.isFinite(point.x) &&
+    Number.isFinite(point.y) &&
+    (point.pressure === undefined || Number.isFinite(point.pressure))
+  );
 }
 
 function copyPoint(point: DrawingPointV2): DrawingPointV2 {
@@ -94,12 +98,18 @@ function copyPoints(points: readonly DrawingPointV2[]): readonly DrawingPointV2[
  * 只复制新追加的点，复用既有（会话已拥有的冻结）点引用，并冻结新的顶层数组。
  * 会话 points 永远由本模块创建为冻结副本，因此结构共享不会泄露调用方的可变对象。
  */
-function appendFrozenPoint(points: readonly DrawingPointV2[], point: DrawingPointV2): readonly DrawingPointV2[] {
+function appendFrozenPoint(
+  points: readonly DrawingPointV2[],
+  point: DrawingPointV2
+): readonly DrawingPointV2[] {
   return Object.freeze([...points, copyPoint(point)]);
 }
 
 /** 连续 shape 只保留首末两点：首点复用既有冻结引用，末点复制，数组重新冻结。 */
-function frozenEndpoints(points: readonly DrawingPointV2[], point: DrawingPointV2): readonly DrawingPointV2[] {
+function frozenEndpoints(
+  points: readonly DrawingPointV2[],
+  point: DrawingPointV2
+): readonly DrawingPointV2[] {
   return Object.freeze([points[0], copyPoint(point)]);
 }
 
@@ -122,8 +132,17 @@ function copyStyle(style: EditorToolStrokeStyle | undefined): EditorToolStrokeSt
 
 function createSession(options: EditorToolSessionOptions): EditorToolSession {
   const style = copyStyle(options.style);
-  const common = { style, ...(options.createId ? { createId: options.createId } : {}), points: Object.freeze([]) };
-  if (options.tool === 'pen' || options.tool === 'line' || options.tool === 'rect' || options.tool === 'ellipse') {
+  const common = {
+    style,
+    ...(options.createId ? { createId: options.createId } : {}),
+    points: Object.freeze([]),
+  };
+  if (
+    options.tool === 'pen' ||
+    options.tool === 'line' ||
+    options.tool === 'rect' ||
+    options.tool === 'ellipse'
+  ) {
     return Object.freeze({ kind: 'continuous', tool: options.tool, ...common, status: 'idle' });
   }
   if (options.tool === 'polygon' || options.tool === 'bezier') {
@@ -163,10 +182,19 @@ function hasNonCollinearVertex(points: readonly DrawingPointV2[]): boolean {
   }
   const first = points[0];
   const second = points.find((point) => !samePosition(point, first));
-  return second !== undefined && points.some((point) => (second.x - first.x) * (point.y - first.y) !== (second.y - first.y) * (point.x - first.x));
+  return (
+    second !== undefined &&
+    points.some(
+      (point) =>
+        (second.x - first.x) * (point.y - first.y) !== (second.y - first.y) * (point.x - first.x)
+    )
+  );
 }
 
-function appendUniquePoint(points: readonly DrawingPointV2[], point: DrawingPointV2): readonly DrawingPointV2[] {
+function appendUniquePoint(
+  points: readonly DrawingPointV2[],
+  point: DrawingPointV2
+): readonly DrawingPointV2[] {
   return points.length > 0 && samePosition(points[points.length - 1], point)
     ? points
     : appendFrozenPoint(points, point);
@@ -177,11 +205,19 @@ function appendUniquePoint(points: readonly DrawingPointV2[], point: DrawingPoin
  * （appendFrozenPoint / frozenEndpoints / frozenSinglePoint / session.points），
  * 因此这里不再重复深拷贝，避免每次 move 复制全部历史点。
  */
-function nextSession(session: EditorToolSession, points: readonly DrawingPointV2[], status: EditorToolSession['status']): EditorToolSession {
+function nextSession(
+  session: EditorToolSession,
+  points: readonly DrawingPointV2[],
+  status: EditorToolSession['status']
+): EditorToolSession {
   return Object.freeze({ ...session, points, status }) as EditorToolSession;
 }
 
-function createStroke(session: EditorToolSession, tool: DrawingStrokeToolV2, points: readonly DrawingPointV2[]): EditorToolSessionResult {
+function createStroke(
+  session: EditorToolSession,
+  tool: DrawingStrokeToolV2,
+  points: readonly DrawingPointV2[]
+): EditorToolSessionResult {
   const id = session.createId?.(tool);
   if (typeof id !== 'string' || id.length === 0) {
     return result(nextSession(session, points, 'finished'), [{ type: 'stable-id-required', tool }]);
@@ -197,7 +233,9 @@ function createStroke(session: EditorToolSession, tool: DrawingStrokeToolV2, poi
 }
 
 /** 创建纯工具会话。它只构造候选笔迹，绝不写 document/history。 */
-export function createEditorToolSession(options: EditorToolSessionOptions): EditorToolSessionResult {
+export function createEditorToolSession(
+  options: EditorToolSessionOptions
+): EditorToolSessionResult {
   const session = createSession(options);
   if (options.tool === 'text') {
     return result(session, [{ type: 'requires-text-session' }]);
@@ -212,7 +250,10 @@ export function createEditorToolSession(options: EditorToolSessionOptions): Edit
 }
 
 /** 连续工具的 world-DIP down；polygon/bezier 请调用 addEditorToolVertex。 */
-export function beginEditorToolPointer(session: EditorToolSession, point: DrawingPointV2): EditorToolSessionResult {
+export function beginEditorToolPointer(
+  session: EditorToolSession,
+  point: DrawingPointV2
+): EditorToolSessionResult {
   if (finalized(session)) {
     return result(session, [{ type: 'tool-session-finalized' }]);
   }
@@ -226,7 +267,10 @@ export function beginEditorToolPointer(session: EditorToolSession, point: Drawin
 }
 
 /** 连续工具的 world-DIP move；pen 去重相邻点，shape 始终保留稳定的首末点。 */
-export function moveEditorToolPointer(session: EditorToolSession, point: DrawingPointV2): EditorToolSessionResult {
+export function moveEditorToolPointer(
+  session: EditorToolSession,
+  point: DrawingPointV2
+): EditorToolSessionResult {
   if (finalized(session)) {
     return result(session, [{ type: 'tool-session-finalized' }]);
   }
@@ -236,14 +280,18 @@ export function moveEditorToolPointer(session: EditorToolSession, point: Drawing
   if (session.kind !== 'continuous' || session.status !== 'active') {
     return result(session, [{ type: 'tool-session-not-started' }]);
   }
-  const points = session.tool === 'pen'
-    ? appendUniquePoint(session.points, point)
-    : frozenEndpoints(session.points, point);
+  const points =
+    session.tool === 'pen'
+      ? appendUniquePoint(session.points, point)
+      : frozenEndpoints(session.points, point);
   return result(nextSession(session, points, 'active'));
 }
 
 /** 连续工具的 up。只有有效非退化几何会带回候选 stroke。 */
-export function finishEditorToolPointer(session: EditorToolSession, point: DrawingPointV2): EditorToolSessionResult {
+export function finishEditorToolPointer(
+  session: EditorToolSession,
+  point: DrawingPointV2
+): EditorToolSessionResult {
   if (finalized(session)) {
     return result(session, [{ type: 'tool-session-finalized' }]);
   }
@@ -253,20 +301,31 @@ export function finishEditorToolPointer(session: EditorToolSession, point: Drawi
   if (session.kind !== 'continuous' || session.status !== 'active') {
     return result(session, [{ type: 'tool-session-not-started' }]);
   }
-  const points = session.tool === 'pen'
-    ? appendUniquePoint(session.points, point)
-    : frozenEndpoints(session.points, point);
+  const points =
+    session.tool === 'pen'
+      ? appendUniquePoint(session.points, point)
+      : frozenEndpoints(session.points, point);
   if (!hasDistinctPair(points)) {
-    return result(nextSession(session, points, 'finished'), [{ type: 'degenerate-tool-geometry', tool: session.tool }]);
+    return result(nextSession(session, points, 'finished'), [
+      { type: 'degenerate-tool-geometry', tool: session.tool },
+    ]);
   }
-  if ((session.tool === 'rect' || session.tool === 'ellipse') && (points[0].x === points[1].x || points[0].y === points[1].y)) {
-    return result(nextSession(session, points, 'finished'), [{ type: 'degenerate-tool-geometry', tool: session.tool }]);
+  if (
+    (session.tool === 'rect' || session.tool === 'ellipse') &&
+    (points[0].x === points[1].x || points[0].y === points[1].y)
+  ) {
+    return result(nextSession(session, points, 'finished'), [
+      { type: 'degenerate-tool-geometry', tool: session.tool },
+    ]);
   }
   return createStroke(session, session.tool, points);
 }
 
 /** 为 polygon/bezier 显式添加一个 world-DIP 顶点/控制点；不会自动添加闭合重复点。 */
-export function addEditorToolVertex(session: EditorToolSession, point: DrawingPointV2): EditorToolSessionResult {
+export function addEditorToolVertex(
+  session: EditorToolSession,
+  point: DrawingPointV2
+): EditorToolSessionResult {
   if (finalized(session)) {
     return result(session, [{ type: 'tool-session-finalized' }]);
   }
@@ -291,10 +350,14 @@ export function finishEditorPolygon(session: EditorToolSession): EditorToolSessi
     return result(session, [{ type: 'tool-session-not-started' }]);
   }
   if (session.points.length < 3) {
-    return result(nextSession(session, session.points, 'finished'), [{ type: 'polygon-requires-three-vertices' }]);
+    return result(nextSession(session, session.points, 'finished'), [
+      { type: 'polygon-requires-three-vertices' },
+    ]);
   }
   if (!hasNonCollinearVertex(session.points)) {
-    return result(nextSession(session, session.points, 'finished'), [{ type: 'polygon-degenerate' }]);
+    return result(nextSession(session, session.points, 'finished'), [
+      { type: 'polygon-degenerate' },
+    ]);
   }
   return createStroke(session, 'polygon', session.points);
 }
@@ -308,12 +371,16 @@ export function finishEditorBezier(session: EditorToolSession): EditorToolSessio
     return result(session, [{ type: 'tool-session-not-started' }]);
   }
   if (session.points.length !== 4) {
-    return result(nextSession(session, session.points, 'finished'), [{ type: 'bezier-requires-four-controls', count: session.points.length }]);
+    return result(nextSession(session, session.points, 'finished'), [
+      { type: 'bezier-requires-four-controls', count: session.points.length },
+    ]);
   }
   return createStroke(session, 'bezier', session.points);
 }
 
 /** 取消任何未结束会话。取消从不产生候选 stroke。 */
 export function cancelEditorToolSession(session: EditorToolSession): EditorToolSessionResult {
-  return finalized(session) ? result(session, [{ type: 'tool-session-finalized' }]) : result(nextSession(session, session.points, 'cancelled'));
+  return finalized(session)
+    ? result(session, [{ type: 'tool-session-finalized' }])
+    : result(nextSession(session, session.points, 'cancelled'));
 }

@@ -6,12 +6,7 @@
  * 只验证常量时间、无副作用的仿射数学与安全 null 语义；不涉及渲染/像素/任务集成。
  */
 
-import {
-  applyAffine,
-  composeAffine,
-  invertAffine,
-  transformBounds,
-} from '../../geometry/affine';
+import { applyAffine, composeAffine, invertAffine, transformBounds } from '../../geometry/affine';
 import type { AffineTransform, Bounds, Point } from '../../model/document';
 
 const IDENTITY: AffineTransform = Object.freeze({ a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 });
@@ -61,7 +56,10 @@ describe('composeAffine', () => {
     const composed = composeAffine(translate, scale);
     expect(composed).not.toBeNull();
     const point: Point = { x: 1, y: 1 };
-    expectPointClose(applyAffine(composed!, point), applyAffine(translate, applyAffine(scale, point)!)!);
+    expectPointClose(
+      applyAffine(composed!, point),
+      applyAffine(translate, applyAffine(scale, point)!)!
+    );
   });
 
   it('compose 不可交换', () => {

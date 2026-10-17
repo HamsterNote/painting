@@ -10,10 +10,7 @@
  * 只用真实 model union + 真实 FreehandGeometryCache；不 mock DOM/renderer，不做像素。
  */
 
-import {
-  deriveLayeredWorldBounds,
-  type LayeredWorldBounds,
-} from '../../geometry/worldBounds';
+import { deriveLayeredWorldBounds, type LayeredWorldBounds } from '../../geometry/worldBounds';
 import { FreehandGeometryCache } from '../../geometry/freehandCache';
 import {
   IDENTITY_TRANSFORM,
@@ -95,7 +92,10 @@ function makeShape(
   };
 }
 
-function makeImage(transform: AffineTransform, localBounds: Bounds = { minX: -10, minY: -5, maxX: 10, maxY: 5 }): ImageObject {
+function makeImage(
+  transform: AffineTransform,
+  localBounds: Bounds = { minX: -10, minY: -5, maxX: 10, maxY: 5 }
+): ImageObject {
   return {
     kind: 'image',
     objectId: 'image-1',
@@ -107,7 +107,10 @@ function makeImage(transform: AffineTransform, localBounds: Bounds = { minX: -10
   };
 }
 
-function makeText(transform: AffineTransform, localBounds: Bounds = { minX: -10, minY: -5, maxX: 10, maxY: 5 }): TextObject {
+function makeText(
+  transform: AffineTransform,
+  localBounds: Bounds = { minX: -10, minY: -5, maxX: 10, maxY: 5 }
+): TextObject {
   return {
     kind: 'text',
     objectId: 'text-1',
@@ -134,7 +137,13 @@ function makeFreehand(overrides: Partial<FreehandObject> = {}): FreehandObject {
       { sequence: 1, x: 10, y: 10, pressure: 0.6, time: 16, phase: 'move', source: 'pen' },
       { sequence: 2, x: 20, y: 5, pressure: 0.4, time: 32, phase: 'up', source: 'pen' },
     ],
-    brushSnapshot: { color: '#123456', nominalSize: 8, opacity: 1, pressureMode: 'real', presetRevision: 1 },
+    brushSnapshot: {
+      color: '#123456',
+      nominalSize: 8,
+      opacity: 1,
+      pressureMode: 'real',
+      presetRevision: 1,
+    },
     resolvedPressureMode: 'real',
     samplesRevision: 1,
     brushRevision: 1,
@@ -142,7 +151,10 @@ function makeFreehand(overrides: Partial<FreehandObject> = {}): FreehandObject {
   };
 }
 
-function derive(object: DocumentObject, cache = new FreehandGeometryCache()): LayeredWorldBounds | null {
+function derive(
+  object: DocumentObject,
+  cache = new FreehandGeometryCache()
+): LayeredWorldBounds | null {
   return deriveLayeredWorldBounds(object, cache);
 }
 
@@ -154,7 +166,10 @@ describe('layeredWorldBounds: mixed union 与 shape 类型', () => {
   it('四种 mixed 类型（identity）均非 null', () => {
     const objects: readonly DocumentObject[] = [
       makeFreehand(),
-      makeShape('rect', [{ x: 0, y: 0 }, { x: 10, y: 10 }]),
+      makeShape('rect', [
+        { x: 0, y: 0 },
+        { x: 10, y: 10 },
+      ]),
       makeImage(IDENTITY_TRANSFORM),
       makeText(IDENTITY_TRANSFORM),
     ];
@@ -166,11 +181,49 @@ describe('layeredWorldBounds: mixed union 与 shape 类型', () => {
   it('五种 shape 类型均非 null（含 scale/rotate）', () => {
     const t = { ...rotation(Math.PI / 4), tx: 5, ty: 7 };
     const shapes: readonly ShapeObject[] = [
-      makeShape('line', [{ x: 0, y: 0 }, { x: 10, y: 0 }], t),
-      makeShape('rect', [{ x: 0, y: 0 }, { x: 10, y: 5 }], t),
-      makeShape('ellipse', [{ x: -10, y: -5 }, { x: 10, y: 5 }], t),
-      makeShape('polygon', [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 0, y: 10 }], t),
-      makeShape('bezier', [{ x: 0, y: 0 }, { x: 0, y: 100 }, { x: 100, y: 100 }, { x: 100, y: 0 }], t),
+      makeShape(
+        'line',
+        [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+        ],
+        t
+      ),
+      makeShape(
+        'rect',
+        [
+          { x: 0, y: 0 },
+          { x: 10, y: 5 },
+        ],
+        t
+      ),
+      makeShape(
+        'ellipse',
+        [
+          { x: -10, y: -5 },
+          { x: 10, y: 5 },
+        ],
+        t
+      ),
+      makeShape(
+        'polygon',
+        [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+          { x: 0, y: 10 },
+        ],
+        t
+      ),
+      makeShape(
+        'bezier',
+        [
+          { x: 0, y: 0 },
+          { x: 0, y: 100 },
+          { x: 100, y: 100 },
+          { x: 100, y: 0 },
+        ],
+        t
+      ),
     ];
     for (const shape of shapes) {
       expect(derive(shape)).not.toBeNull();
@@ -220,12 +273,21 @@ describe('layeredWorldBounds: image/text 变换', () => {
 describe('layeredWorldBounds: 非法 transform', () => {
   it('非有限 / 奇异 transform → null', () => {
     expect(derive(makeImage({ a: Number.NaN, b: 0, c: 0, d: 1, tx: 0, ty: 0 }))).toBeNull();
-    expect(derive(makeImage({ a: 1, b: 0, c: 0, d: 1, tx: Number.POSITIVE_INFINITY, ty: 0 }))).toBeNull();
+    expect(
+      derive(makeImage({ a: 1, b: 0, c: 0, d: 1, tx: Number.POSITIVE_INFINITY, ty: 0 }))
+    ).toBeNull();
     expect(derive(makeImage({ a: 0, b: 0, c: 0, d: 0, tx: 0, ty: 0 }))).toBeNull();
   });
 
   it('transform overflow（巨大线性项放大坐标）→ null', () => {
-    expect(derive(makeImage({ a: 1e308, b: 0, c: 0, d: 1, tx: 0, ty: 0 }, { minX: -10, minY: -5, maxX: 10, maxY: 5 }))).toBeNull();
+    expect(
+      derive(
+        makeImage(
+          { a: 1e308, b: 0, c: 0, d: 1, tx: 0, ty: 0 },
+          { minX: -10, minY: -5, maxX: 10, maxY: 5 }
+        )
+      )
+    ).toBeNull();
   });
 
   it('null / 非对象 → null', () => {
@@ -252,13 +314,23 @@ function denseBezierBounds(p0: Point, cp1: Point, cp2: Point, p3: Point, samples
 
 describe('layeredWorldBounds: bezier 旋转极值', () => {
   it('CP(0,100)(100,100) endpoints(0,0)(100,0) 旋转 45°：与 dense oracle 一致且紧致', () => {
-    const local = [{ x: 0, y: 0 }, { x: 0, y: 100 }, { x: 100, y: 100 }, { x: 100, y: 0 }] as const;
+    const local = [
+      { x: 0, y: 0 },
+      { x: 0, y: 100 },
+      { x: 100, y: 100 },
+      { x: 100, y: 0 },
+    ] as const;
     const t = { ...rotation(Math.PI / 4), tx: 20, ty: -30 };
     const shape = makeShape('bezier', local, t);
     const result = derive(shape)!;
 
     const transformed = local.map((p) => apply(t, p));
-    const oracle = denseBezierBounds(transformed[0], transformed[1], transformed[2], transformed[3]);
+    const oracle = denseBezierBounds(
+      transformed[0],
+      transformed[1],
+      transformed[2],
+      transformed[3]
+    );
     expectBoundsClose(result.worldBounds, oracle, 2);
     // 紧致：worldBounds 每条边都在 oracle 的 3e-3 邻域内（非宽松 local box）。
     expect(Math.abs(result.worldBounds.maxY - oracle.maxY)).toBeLessThan(3e-3);
@@ -281,13 +353,21 @@ describe('layeredWorldBounds: bezier 旋转极值', () => {
 // ---------------------------------------------------------------------------
 
 describe('layeredWorldBounds: ellipse', () => {
-  const local = [{ x: -10, y: -5 }, { x: 10, y: 5 }] as const;
+  const local = [
+    { x: -10, y: -5 },
+    { x: 10, y: 5 },
+  ] as const;
 
   it('rotate45：extent sqrt(62.5)（非 box 10.6066）', () => {
     const t = rotation(Math.PI / 4);
     const result = derive(makeShape('ellipse', local, t))!;
     const extent = Math.sqrt(62.5);
-    expectBoundsClose(result.worldBounds, { minX: -extent, minY: -extent, maxX: extent, maxY: extent });
+    expectBoundsClose(result.worldBounds, {
+      minX: -extent,
+      minY: -extent,
+      maxX: extent,
+      maxY: extent,
+    });
   });
 
   it('shear：解析 extent 公式', () => {
@@ -321,11 +401,38 @@ describe('layeredWorldBounds: ellipse', () => {
   });
 
   it('退化竖/横/点 ellipse 世界 bounds', () => {
-    const vertical = derive(makeShape('ellipse', [{ x: 0, y: -5 }, { x: 0, y: 5 }], IDENTITY_TRANSFORM))!;
+    const vertical = derive(
+      makeShape(
+        'ellipse',
+        [
+          { x: 0, y: -5 },
+          { x: 0, y: 5 },
+        ],
+        IDENTITY_TRANSFORM
+      )
+    )!;
     expectBoundsClose(vertical.worldBounds, { minX: 0, minY: -5, maxX: 0, maxY: 5 });
-    const horizontal = derive(makeShape('ellipse', [{ x: -10, y: 0 }, { x: 10, y: 0 }], IDENTITY_TRANSFORM))!;
+    const horizontal = derive(
+      makeShape(
+        'ellipse',
+        [
+          { x: -10, y: 0 },
+          { x: 10, y: 0 },
+        ],
+        IDENTITY_TRANSFORM
+      )
+    )!;
     expectBoundsClose(horizontal.worldBounds, { minX: -10, minY: 0, maxX: 10, maxY: 0 });
-    const point = derive(makeShape('ellipse', [{ x: 5, y: 5 }, { x: 5, y: 5 }], IDENTITY_TRANSFORM))!;
+    const point = derive(
+      makeShape(
+        'ellipse',
+        [
+          { x: 5, y: 5 },
+          { x: 5, y: 5 },
+        ],
+        IDENTITY_TRANSFORM
+      )
+    )!;
     expectBoundsClose(point.worldBounds, { minX: 5, minY: 5, maxX: 5, maxY: 5 });
   });
 });
@@ -337,14 +444,30 @@ describe('layeredWorldBounds: ellipse', () => {
 describe('layeredWorldBounds: line / polygon', () => {
   it('line：端点变换 exact', () => {
     const t = { ...rotation(Math.PI / 6), tx: 4, ty: 4 };
-    const shape = makeShape('line', [{ x: 0, y: 0 }, { x: 10, y: 0 }], t);
-    const expected = boundsOfPoints([{ x: 0, y: 0 }, { x: 10, y: 0 }].map((p) => apply(t, p)));
+    const shape = makeShape(
+      'line',
+      [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+      ],
+      t
+    );
+    const expected = boundsOfPoints(
+      [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+      ].map((p) => apply(t, p))
+    );
     expectBoundsClose(derive(shape)!.worldBounds, expected);
   });
 
   it('polygon：顶点变换 exact', () => {
     const t: AffineTransform = { a: 1, b: 0, c: 0.5, d: 2, tx: 1, ty: -1 };
-    const pts = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 0, y: 10 }];
+    const pts = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 0, y: 10 },
+    ];
     const expected = boundsOfPoints(pts.map((p) => apply(t, p)));
     expectBoundsClose(derive(makeShape('polygon', pts, t))!.worldBounds, expected);
   });
@@ -374,20 +497,50 @@ function expectedVisual(worldBounds: Bounds, t: AffineTransform, width: number):
 describe('layeredWorldBounds: visual 包络', () => {
   it('scale(2,1)：padding = width/2 * 2', () => {
     const t: AffineTransform = { a: 2, b: 0, c: 0, d: 1, tx: 0, ty: 0 };
-    const result = derive(makeShape('rect', [{ x: 0, y: 0 }, { x: 10, y: 5 }], t, { width: 4 }))!;
+    const result = derive(
+      makeShape(
+        'rect',
+        [
+          { x: 0, y: 0 },
+          { x: 10, y: 5 },
+        ],
+        t,
+        { width: 4 }
+      )
+    )!;
     expectBoundsClose(result.visualWorldBounds, expectedVisual(result.worldBounds, t, 4));
   });
 
   it('rotate 保持 width（σmax=1）', () => {
     const t = rotation(Math.PI / 3);
-    const result = derive(makeShape('rect', [{ x: 0, y: 0 }, { x: 10, y: 5 }], t, { width: 4 }))!;
+    const result = derive(
+      makeShape(
+        'rect',
+        [
+          { x: 0, y: 0 },
+          { x: 10, y: 5 },
+        ],
+        t,
+        { width: 4 }
+      )
+    )!;
     expectBoundsClose(result.visualWorldBounds, expectedVisual(result.worldBounds, t, 4));
   });
 
   it('shear 用独立公式（σmax=(1+√5)/2）', () => {
     const t: AffineTransform = { a: 1, b: 0, c: 1, d: 1, tx: 0, ty: 0 };
     expect(maxSingular(t)).toBeCloseTo((1 + Math.sqrt(5)) / 2, 9);
-    const result = derive(makeShape('rect', [{ x: 0, y: 0 }, { x: 10, y: 5 }], t, { width: 4 }))!;
+    const result = derive(
+      makeShape(
+        'rect',
+        [
+          { x: 0, y: 0 },
+          { x: 10, y: 5 },
+        ],
+        t,
+        { width: 4 }
+      )
+    )!;
     expectBoundsClose(result.visualWorldBounds, expectedVisual(result.worldBounds, t, 4));
   });
 });
@@ -444,7 +597,12 @@ describe('layeredWorldBounds: overflow 与冻结', () => {
   });
 
   it('结果与两个 bounds 深冻结', () => {
-    const result = derive(makeShape('rect', [{ x: 0, y: 0 }, { x: 10, y: 5 }]))!;
+    const result = derive(
+      makeShape('rect', [
+        { x: 0, y: 0 },
+        { x: 10, y: 5 },
+      ])
+    )!;
     expect(Object.isFrozen(result)).toBe(true);
     expect(Object.isFrozen(result.worldBounds)).toBe(true);
     expect(Object.isFrozen(result.visualWorldBounds)).toBe(true);
@@ -460,7 +618,17 @@ describe('layeredWorldBounds: 稳定包络与补充证据', () => {
   const hugeSwap = { a: 1e-100, b: 0, c: 0, d: 1e100, tx: 0, ty: 0 } as const;
 
   it('合法有限 scale(1e100,1e-100) det1：比值近似、finite、padding≈1e100', () => {
-    const result = derive(makeShape('line', [{ x: 0, y: 0 }, { x: 1, y: 1 }], huge, { width: 2 }))!;
+    const result = derive(
+      makeShape(
+        'line',
+        [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+        huge,
+        { width: 2 }
+      )
+    )!;
     expect(result).not.toBeNull();
     expect(Number.isFinite(result.worldBounds.maxX)).toBe(true);
     expect(result.worldBounds.maxX / 1e100).toBeCloseTo(1, 9);
@@ -471,7 +639,17 @@ describe('layeredWorldBounds: 稳定包络与补充证据', () => {
   });
 
   it('另一轴 scale(1e-100,1e100)：比值近似、padding≈1e100', () => {
-    const result = derive(makeShape('line', [{ x: 0, y: 0 }, { x: 1, y: 1 }], hugeSwap, { width: 2 }))!;
+    const result = derive(
+      makeShape(
+        'line',
+        [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+        hugeSwap,
+        { width: 2 }
+      )
+    )!;
     expect(result).not.toBeNull();
     expect(result.worldBounds.maxX / 1e-100).toBeCloseTo(1, 9);
     expect(result.worldBounds.maxY / 1e100).toBeCloseTo(1, 9);
@@ -481,18 +659,24 @@ describe('layeredWorldBounds: 稳定包络与补充证据', () => {
 
   it('大但 finite 参数下 stroke padding 真溢出（width 1e308）→ null', () => {
     expect(
-      derive(makeShape('line', [{ x: 0, y: 0 }, { x: 1, y: 1 }], huge, { width: 1e308 }))
+      derive(
+        makeShape(
+          'line',
+          [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+          huge,
+          { width: 1e308 }
+        )
+      )
     ).toBeNull();
   });
 
   it('freehand malformed samples（NaN）→ null', () => {
     const base = makeFreehand();
     const bad = makeFreehand({
-      samples: [
-        { ...base.samples[0], x: Number.NaN },
-        base.samples[1],
-        base.samples[2],
-      ],
+      samples: [{ ...base.samples[0], x: Number.NaN }, base.samples[1], base.samples[2]],
     });
     expect(derive(bad)).toBeNull();
   });
@@ -507,16 +691,20 @@ describe('layeredWorldBounds: 稳定包络与补充证据', () => {
   });
 
   it('invalid localBounds（无序/缺失）与 unknown kind → null', () => {
-    expect(derive(makeImage(IDENTITY_TRANSFORM, { minX: 10, minY: 0, maxX: 0, maxY: 10 }))).toBeNull();
     expect(
-      derive(makeImage(IDENTITY_TRANSFORM, null as unknown as Bounds))
+      derive(makeImage(IDENTITY_TRANSFORM, { minX: 10, minY: 0, maxX: 0, maxY: 10 }))
     ).toBeNull();
+    expect(derive(makeImage(IDENTITY_TRANSFORM, null as unknown as Bounds))).toBeNull();
     expect(derive({ kind: 'weird' } as unknown as DocumentObject)).toBeNull();
   });
 
   it('四种 kind 调用后 raw refs 与被调用文档不变、结果快照稳定', () => {
     const freehand = makeFreehand();
-    const shape = makeShape('polygon', [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 0, y: 10 }]);
+    const shape = makeShape('polygon', [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 0, y: 10 },
+    ]);
     const image = makeImage(IDENTITY_TRANSFORM);
     const text = makeText(IDENTITY_TRANSFORM);
     const cases: readonly DocumentObject[] = [freehand, shape, image, text];
@@ -550,15 +738,28 @@ describe('layeredWorldBounds: 稳定包络与补充证据', () => {
   });
 
   it('bezier dense oracle bounds + 代表性采样点含于 worldBounds（1e-9）', () => {
-    const local = [{ x: 0, y: 0 }, { x: 0, y: 100 }, { x: 100, y: 100 }, { x: 100, y: 0 }] as const;
+    const local = [
+      { x: 0, y: 0 },
+      { x: 0, y: 100 },
+      { x: 100, y: 100 },
+      { x: 100, y: 0 },
+    ] as const;
     const t = { ...rotation(Math.PI / 4), tx: 20, ty: -30 };
     const result = derive(makeShape('bezier', local, t))!;
     const transformed = local.map((p) => apply(t, p));
     for (const tt of [0.1, 0.25, 0.5, 0.75, 0.9]) {
       const mt = 1 - tt;
       const p = {
-        x: mt ** 3 * transformed[0].x + 3 * mt * mt * tt * transformed[1].x + 3 * mt * tt * tt * transformed[2].x + tt ** 3 * transformed[3].x,
-        y: mt ** 3 * transformed[0].y + 3 * mt * mt * tt * transformed[1].y + 3 * mt * tt * tt * transformed[2].y + tt ** 3 * transformed[3].y,
+        x:
+          mt ** 3 * transformed[0].x +
+          3 * mt * mt * tt * transformed[1].x +
+          3 * mt * tt * tt * transformed[2].x +
+          tt ** 3 * transformed[3].x,
+        y:
+          mt ** 3 * transformed[0].y +
+          3 * mt * mt * tt * transformed[1].y +
+          3 * mt * tt * tt * transformed[2].y +
+          tt ** 3 * transformed[3].y,
       };
       expect(p.x).toBeGreaterThanOrEqual(result.worldBounds.minX - 1e-9);
       expect(p.x).toBeLessThanOrEqual(result.worldBounds.maxX + 1e-9);
@@ -569,7 +770,14 @@ describe('layeredWorldBounds: 稳定包络与补充证据', () => {
 
   it('non-unit 平移 ellipse：center/extent 解析', () => {
     const t: AffineTransform = { a: 2, b: 0, c: 0, d: 3, tx: 7, ty: -4 };
-    const shape = makeShape('ellipse', [{ x: 90, y: 45 }, { x: 110, y: 55 }], t); // cx=100,cy=50,rx=10,ry=5
+    const shape = makeShape(
+      'ellipse',
+      [
+        { x: 90, y: 45 },
+        { x: 110, y: 55 },
+      ],
+      t
+    ); // cx=100,cy=50,rx=10,ry=5
     const result = derive(shape)!;
     expectBoundsClose(result.worldBounds, {
       minX: 2 * 100 + 7 - 2 * 10,

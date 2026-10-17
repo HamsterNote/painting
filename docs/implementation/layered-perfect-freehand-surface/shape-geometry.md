@@ -5,9 +5,9 @@
 
 ## 1. Hash 与验证
 
-| 对象 | sha256 | 规模 |
-|------|--------|------|
-| `geometry/shape.ts` | `23e5f6b02beba5fd005164bf6d4d453859cd053691aaa0cd865459a9b1822ac4` | 终态 |
+| 对象                                            | sha256                                                             | 规模              |
+| ----------------------------------------------- | ------------------------------------------------------------------ | ----------------- |
+| `geometry/shape.ts`                             | `23e5f6b02beba5fd005164bf6d4d453859cd053691aaa0cd865459a9b1822ac4` | 终态              |
 | `__tests__/core/layered-shape-geometry.test.ts` | `c1e1b327fd9c4afa5ec747b173b12ea769c5555a9bc0aed910100f2b62136244` | 513 行 / 38 tests |
 
 - `core-node` focused：**38 tests PASS，EXIT_CODE=0**

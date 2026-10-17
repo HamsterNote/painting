@@ -78,8 +78,12 @@ export function deriveSelectionOverlayModel(
   const minimumScreenExtent = options.minimumScreenExtent ?? handleSize;
   if (
     ![handleSize, hitSlop, rotateOffset, minimumScreenExtent].every(Number.isFinite) ||
-    handleSize <= 0 || hitSlop < 0 || rotateOffset < 0 || minimumScreenExtent <= 0
-  ) return null;
+    handleSize <= 0 ||
+    hitSlop < 0 ||
+    rotateOffset < 0 ||
+    minimumScreenExtent <= 0
+  )
+    return null;
 
   const minX = worldFrame.minX * viewport.scale + viewport.tx;
   const minY = worldFrame.minY * viewport.scale + viewport.ty;
@@ -130,7 +134,10 @@ export function deriveSelectionOverlayModel(
 }
 
 /** 按 rotate > 四角 uniform-scale > move body 的固定优先级返回命中；未命中即由宿主视为 paper。 */
-export function hitTestSelectionOverlay(model: SelectionOverlayModel, screen: Point): SelectionOverlayHit | null {
+export function hitTestSelectionOverlay(
+  model: SelectionOverlayModel,
+  screen: Point
+): SelectionOverlayHit | null {
   if (!Number.isFinite(screen.x) || !Number.isFinite(screen.y)) return null;
   const rotate = model.handles.find((handle) => handle.kind === 'rotate');
   if (rotate && inside(screen, rotate.center, rotate.hitSize)) {

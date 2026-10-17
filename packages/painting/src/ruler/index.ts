@@ -35,8 +35,4 @@ export {
 
 // ─── 纯刻度类型与函数 ────────────────────────────────────────────────────────
 export type { GenerateRulerTicksOptions, RulerTick, RulerTickKind } from './ticks';
-export {
-  DEFAULT_RULER_PIXELS_PER_INCH,
-  generateRulerTicks,
-  millimetersToPixels,
-} from './ticks';
+export { DEFAULT_RULER_PIXELS_PER_INCH, generateRulerTicks, millimetersToPixels } from './ticks';

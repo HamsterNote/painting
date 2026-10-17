@@ -35,7 +35,10 @@ type FixtureSample = Readonly<{
  * 构造一段保留真实压力序列的 fixture。
  * 压力值可能恒为 0.5、为正、为 0 或剧烈变化——这些都不应影响 begin 解析结果。
  */
-function makePressureFixture(source: InputSource, pressures: readonly number[]): readonly FixtureSample[] {
+function makePressureFixture(
+  source: InputSource,
+  pressures: readonly number[]
+): readonly FixtureSample[] {
   return pressures.map((pressure, index) => ({
     sequence: index,
     x: index * 2,
@@ -55,7 +58,11 @@ const ZERO = [0, 0, 0] as const;
 
 const ALL_SOURCES: readonly InputSource[] = ['mouse', 'touch', 'pen', 'native'];
 const ALL_CAPABILITIES: readonly PressureCapability[] = ['available', 'unavailable', 'unknown'];
-const ALL_EXPLICIT_MODES: readonly Exclude<PressureMode, 'auto'>[] = ['real', 'simulated', 'constant'];
+const ALL_EXPLICIT_MODES: readonly Exclude<PressureMode, 'auto'>[] = [
+  'real',
+  'simulated',
+  'constant',
+];
 
 describe('resolvePressureMode: auto 来源/能力路由（begin 解析）', () => {
   it('pen + available/unknown 恒 0.5 仍解析为 real；unavailable 解析为 simulated', () => {

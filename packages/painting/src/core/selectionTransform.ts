@@ -1,4 +1,9 @@
-import type { DrawingPointV2, DrawingStrokeToolV2, DrawingStrokeV2, DrawingValueV2 } from '../model/strokes';
+import type {
+  DrawingPointV2,
+  DrawingStrokeToolV2,
+  DrawingStrokeV2,
+  DrawingValueV2,
+} from '../model/strokes';
 import type { SelectionGestureIntent } from './gesture/session';
 
 /** 以索引、ID 与可选工具三元组定位文档中的单条笔迹，重复 ID 也不会歧义。 */
@@ -53,7 +58,11 @@ function pointAfterMove(point: DrawingPointV2, delta: Point): DrawingPointV2 | n
   return Number.isFinite(x) && Number.isFinite(y) ? { ...point, x, y } : null;
 }
 
-function pointAfterRotate(point: DrawingPointV2, pivot: Point, deltaRad: number): DrawingPointV2 | null {
+function pointAfterRotate(
+  point: DrawingPointV2,
+  pivot: Point,
+  deltaRad: number
+): DrawingPointV2 | null {
   const cosine = Math.cos(deltaRad);
   const sine = Math.sin(deltaRad);
   const offsetX = point.x - pivot.x;
@@ -63,7 +72,11 @@ function pointAfterRotate(point: DrawingPointV2, pivot: Point, deltaRad: number)
   return Number.isFinite(x) && Number.isFinite(y) ? { ...point, x, y } : null;
 }
 
-function pointAfterUniformScale(point: DrawingPointV2, anchor: Point, scale: number): DrawingPointV2 | null {
+function pointAfterUniformScale(
+  point: DrawingPointV2,
+  anchor: Point,
+  scale: number
+): DrawingPointV2 | null {
   const x = anchor.x + (point.x - anchor.x) * scale;
   const y = anchor.y + (point.y - anchor.y) * scale;
   return Number.isFinite(x) && Number.isFinite(y) ? { ...point, x, y } : null;
@@ -97,7 +110,11 @@ function isBoxBackedStroke(stroke: DrawingStrokeV2): boolean {
   );
 }
 
-function copyStroke(stroke: DrawingStrokeV2, points: DrawingPointV2[], rotationRad?: number): DrawingStrokeV2 {
+function copyStroke(
+  stroke: DrawingStrokeV2,
+  points: DrawingPointV2[],
+  rotationRad?: number
+): DrawingStrokeV2 {
   // points 与 dashArray 都是可变数组；新 document 不能与调用方输入共享这两个容器。
   return {
     ...stroke,
@@ -135,12 +152,16 @@ function rotateBoxBackedStroke(
     : null;
 }
 
-function transformStroke(stroke: DrawingStrokeV2, intent: SelectionGestureIntent): DrawingStrokeV2 | null {
+function transformStroke(
+  stroke: DrawingStrokeV2,
+  intent: SelectionGestureIntent
+): DrawingStrokeV2 | null {
   // 旧 resize 不能为单点 text/image 表达框尺寸，故继续拒绝并保留非均匀缩放防线；新的
   // scalar uniform-scale 至少可变换其中所有已持久化坐标，且不会隐式修改 fontSize 等样式。
   if (
     intent.kind === 'resize' &&
-    ((stroke.tool === 'text' || stroke.tool === 'image') && stroke.points.length < 2)
+    (stroke.tool === 'text' || stroke.tool === 'image') &&
+    stroke.points.length < 2
   ) {
     return null;
   }
@@ -182,7 +203,11 @@ function validateIntent(intent: SelectionGestureIntent): SelectionTransformDiagn
         ? { type: 'invalid-selection-scale', scale: intent.scale }
         : null;
   }
-  if (!isFinitePoint(intent.anchor) || !Number.isFinite(intent.scale.x) || !Number.isFinite(intent.scale.y)) {
+  if (
+    !isFinitePoint(intent.anchor) ||
+    !Number.isFinite(intent.scale.x) ||
+    !Number.isFinite(intent.scale.y)
+  ) {
     return { type: 'invalid-selection-intent' };
   }
   const scaleDifference = Math.abs(intent.scale.x - intent.scale.y);
@@ -202,7 +227,7 @@ function isIdentityIntent(intent: SelectionGestureIntent): boolean {
       ? intent.deltaRad === 0
       : intent.kind === 'uniform-scale'
         ? intent.scale === 1
-      : intent.scale.x === 1 && intent.scale.y === 1;
+        : intent.scale.x === 1 && intent.scale.y === 1;
 }
 
 /**
@@ -225,7 +250,10 @@ export function transformSelection(
   const seenIndexes = new Set<number>();
   for (const target of targets) {
     if (seenIndexes.has(target.index)) {
-      return { replacements: [], diagnostics: [{ type: 'duplicate-selection-target', index: target.index }] };
+      return {
+        replacements: [],
+        diagnostics: [{ type: 'duplicate-selection-target', index: target.index }],
+      };
     }
     seenIndexes.add(target.index);
     if (!targetMatches(document.strokes[target.index], target)) {

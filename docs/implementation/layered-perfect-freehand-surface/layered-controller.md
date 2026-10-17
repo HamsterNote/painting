@@ -6,10 +6,10 @@
 
 ## 1. Hash（当前终态）
 
-| 对象 | sha256 | git hash-object | 规模 |
-|------|--------|-----------------|------|
-| `core/layeredEditorController.ts` | `336f1610a6c2f2b32ac4a799576cc15b22233f16e916dc62bb6ff059a754d01c` | `e8575782b9841ada0ca5a2e945311ba8444c2bd8` | 1835 行 |
-| `__tests__/core/layered-editor-controller.test.ts` | `5fed07373b54c2f0bdd3a95792ccb6e2ce87ead93af89271cb424b915b4c8d79` | — | 1576 行 / 49 tests |
+| 对象                                               | sha256                                                             | git hash-object                            | 规模               |
+| -------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------ | ------------------ |
+| `core/layeredEditorController.ts`                  | `336f1610a6c2f2b32ac4a799576cc15b22233f16e916dc62bb6ff059a754d01c` | `e8575782b9841ada0ca5a2e945311ba8444c2bd8` | 1835 行            |
+| `__tests__/core/layered-editor-controller.test.ts` | `5fed07373b54c2f0bdd3a95792ccb6e2ce87ead93af89271cb424b915b4c8d79` | —                                          | 1576 行 / 49 tests |
 
 历史核对：38-PASS 时点 controller git hash 为 `fcbbaedd…`；其后经组合收尾及四项审查修复更新为 `e8575782…`（sha256 已收敛 `336f1610`），本轮已在当前 hash 复跑。主编排再次核对源码与测试 sha256 均匹配本表。
 

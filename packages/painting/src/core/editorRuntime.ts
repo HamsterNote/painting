@@ -61,7 +61,12 @@ function isStrokeLike(value: unknown): boolean {
 }
 
 function isDrawingDocumentLike(value: unknown): value is DrawingValueV2 {
-  return isRecord(value) && value.schemaVersion === 2 && Array.isArray(value.strokes) && value.strokes.every(isStrokeLike);
+  return (
+    isRecord(value) &&
+    value.schemaVersion === 2 &&
+    Array.isArray(value.strokes) &&
+    value.strokes.every(isStrokeLike)
+  );
 }
 
 function valuesEqual(left: unknown, right: unknown): boolean {
@@ -78,7 +83,9 @@ function valuesEqual(left: unknown, right: unknown): boolean {
     return false;
   }
   if (Array.isArray(left) && Array.isArray(right)) {
-    return left.length === right.length && left.every((value, index) => valuesEqual(value, right[index]));
+    return (
+      left.length === right.length && left.every((value, index) => valuesEqual(value, right[index]))
+    );
   }
   const leftRecord = left as Record<string, unknown>;
   const rightRecord = right as Record<string, unknown>;
@@ -87,7 +94,9 @@ function valuesEqual(left: unknown, right: unknown): boolean {
   return (
     leftKeys.length === rightKeys.length &&
     leftKeys.every(
-      (key) => Object.prototype.hasOwnProperty.call(rightRecord, key) && valuesEqual(leftRecord[key], rightRecord[key])
+      (key) =>
+        Object.prototype.hasOwnProperty.call(rightRecord, key) &&
+        valuesEqual(leftRecord[key], rightRecord[key])
     )
   );
 }
@@ -134,7 +143,9 @@ function isEditorDocumentCommand(value: unknown): value is EditorDocumentCommand
       Array.isArray(value.replacements) &&
       value.replacements.every(
         (replacement) =>
-          isRecord(replacement) && isTargetLike(replacement.target) && isStrokeLike(replacement.stroke)
+          isRecord(replacement) &&
+          isTargetLike(replacement.target) &&
+          isStrokeLike(replacement.stroke)
       )
     );
   }
@@ -192,7 +203,10 @@ function createAppendSnapshot(
   revision: number
 ): EditorDocumentState {
   const appended = commandDocument.strokes[commandDocument.strokes.length - 1];
-  const strokes = Object.freeze([...previous.document.strokes, copyStroke(appended)]) as DrawingStrokeV2[];
+  const strokes = Object.freeze([
+    ...previous.document.strokes,
+    copyStroke(appended),
+  ]) as DrawingStrokeV2[];
   const document = Object.freeze({ ...commandDocument, strokes }) as unknown as DrawingValueV2;
   return Object.freeze(createEditorDocumentState(document, revision));
 }
@@ -246,7 +260,11 @@ export function applyEditorRuntimeCommand(
   // 仍是整体深拷贝（见下方 commitEditorRuntimeDocument），故本条不改变终端落笔性能契约。
   const nextDocumentState =
     command.type === 'append-stroke'
-      ? createAppendSnapshot(state.documentState, commandResult.state.document, commandResult.state.revision)
+      ? createAppendSnapshot(
+          state.documentState,
+          commandResult.state.document,
+          commandResult.state.revision
+        )
       : createSnapshot(commandResult.state.document, commandResult.state.revision);
   return {
     state: createRuntimeState(nextDocumentState, [...state.undoStack, state.documentState], []),
@@ -268,7 +286,11 @@ export function commitEditorRuntimeDocument(
   expectedRevision: number,
   document: DrawingValueV2
 ): EditorRuntimeResult {
-  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || !isDrawingDocumentLike(document)) {
+  if (
+    !Number.isSafeInteger(expectedRevision) ||
+    expectedRevision < 0 ||
+    !isDrawingDocumentLike(document)
+  ) {
     return noChange(state, [{ type: 'invalid-editor-document' }]);
   }
   if (expectedRevision !== state.documentState.revision) {
@@ -311,11 +333,10 @@ export function undoEditorRuntime(state: EditorRuntimeState): EditorRuntimeResul
     return noChange(state, [{ type: 'cannot-undo' }]);
   }
   return {
-    state: createRuntimeState(
-      previous,
-      state.undoStack.slice(0, -1),
-      [...state.redoStack, state.documentState]
-    ),
+    state: createRuntimeState(previous, state.undoStack.slice(0, -1), [
+      ...state.redoStack,
+      state.documentState,
+    ]),
     diagnostics: [],
   };
 }
@@ -327,7 +348,11 @@ export function redoEditorRuntime(state: EditorRuntimeState): EditorRuntimeResul
     return noChange(state, [{ type: 'cannot-redo' }]);
   }
   return {
-    state: createRuntimeState(next, [...state.undoStack, state.documentState], state.redoStack.slice(0, -1)),
+    state: createRuntimeState(
+      next,
+      [...state.undoStack, state.documentState],
+      state.redoStack.slice(0, -1)
+    ),
     diagnostics: [],
   };
 }

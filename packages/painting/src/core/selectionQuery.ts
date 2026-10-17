@@ -8,7 +8,12 @@ import {
   type GeometryPoint,
 } from './geometry';
 import type { DrawingFrameFragment, FrameResourceBoxFragment } from './frameClipping';
-import { canonicalizeClosedRing, classifyClosedRing, hitTestNonzeroRings, type PolygonBooleanPolygon } from './polygonBoolean';
+import {
+  canonicalizeClosedRing,
+  classifyClosedRing,
+  hitTestNonzeroRings,
+  type PolygonBooleanPolygon,
+} from './polygonBoolean';
 import type { DrawingStrokeV2, DrawingValueV2 } from '../model/strokes';
 
 /** 以文档索引而非 ID 定位目标，因此重复 ID 不会产生歧义。 */
@@ -81,7 +86,10 @@ type DrawingFrameRenderableQueryEntry = Readonly<{
   program: Readonly<{
     strokes: readonly Readonly<{ points: readonly GeometryPoint[]; closed: boolean }>[];
     fills: readonly Readonly<{
-      polygons: readonly Readonly<{ outer: readonly GeometryPoint[]; holes: readonly (readonly GeometryPoint[])[] }>[];
+      polygons: readonly Readonly<{
+        outer: readonly GeometryPoint[];
+        holes: readonly (readonly GeometryPoint[])[];
+      }>[];
     }>[];
   }>;
 }>;
@@ -92,7 +100,14 @@ type CanonicalLasso = Readonly<{
 }>;
 
 const supportedStrokeTools: readonly DrawingStrokeV2['tool'][] = [
-  'pen', 'line', 'rect', 'ellipse', 'polygon', 'bezier', 'text', 'image',
+  'pen',
+  'line',
+  'rect',
+  'ellipse',
+  'polygon',
+  'bezier',
+  'text',
+  'image',
 ];
 
 function isFinitePoint(point: GeometryPoint | undefined): point is GeometryPoint {
@@ -121,21 +136,38 @@ function boundsForPoints(points: readonly GeometryPoint[]): GeometryBounds | nul
 }
 
 function boundsOverlap(first: GeometryBounds, second: GeometryBounds, padding = 0): boolean {
-  return first.minX <= second.maxX + padding && first.maxX + padding >= second.minX &&
-    first.minY <= second.maxY + padding && first.maxY + padding >= second.minY;
+  return (
+    first.minX <= second.maxX + padding &&
+    first.maxX + padding >= second.minX &&
+    first.minY <= second.maxY + padding &&
+    first.maxY + padding >= second.minY
+  );
 }
 
 function orientation(first: GeometryPoint, second: GeometryPoint, third: GeometryPoint): number {
   return (second.x - first.x) * (third.y - first.y) - (second.y - first.y) * (third.x - first.x);
 }
 
-function pointOnSegment(first: GeometryPoint, point: GeometryPoint, second: GeometryPoint): boolean {
-  return point.x >= Math.min(first.x, second.x) && point.x <= Math.max(first.x, second.x) &&
-    point.y >= Math.min(first.y, second.y) && point.y <= Math.max(first.y, second.y);
+function pointOnSegment(
+  first: GeometryPoint,
+  point: GeometryPoint,
+  second: GeometryPoint
+): boolean {
+  return (
+    point.x >= Math.min(first.x, second.x) &&
+    point.x <= Math.max(first.x, second.x) &&
+    point.y >= Math.min(first.y, second.y) &&
+    point.y <= Math.max(first.y, second.y)
+  );
 }
 
 /** 仅用于轮廓与套索边界的保守接触判断，布尔区域的规范化仍委托 polygonBoolean。 */
-function segmentsIntersect(first: GeometryPoint, second: GeometryPoint, third: GeometryPoint, fourth: GeometryPoint): boolean {
+function segmentsIntersect(
+  first: GeometryPoint,
+  second: GeometryPoint,
+  third: GeometryPoint,
+  fourth: GeometryPoint
+): boolean {
   const firstThird = orientation(first, second, third);
   const firstFourth = orientation(first, second, fourth);
   const thirdFirst = orientation(third, fourth, first);
@@ -144,20 +176,32 @@ function segmentsIntersect(first: GeometryPoint, second: GeometryPoint, third: G
   if (firstFourth === 0 && pointOnSegment(first, fourth, second)) return true;
   if (thirdFirst === 0 && pointOnSegment(third, first, fourth)) return true;
   if (thirdSecond === 0 && pointOnSegment(third, second, fourth)) return true;
-  return (firstThird > 0) !== (firstFourth > 0) && (thirdFirst > 0) !== (thirdSecond > 0);
+  return firstThird > 0 !== firstFourth > 0 && thirdFirst > 0 !== thirdSecond > 0;
 }
 
-function distanceSquaredToSegment(point: GeometryPoint, start: GeometryPoint, end: GeometryPoint): number {
+function distanceSquaredToSegment(
+  point: GeometryPoint,
+  start: GeometryPoint,
+  end: GeometryPoint
+): number {
   const x = end.x - start.x;
   const y = end.y - start.y;
   const lengthSquared = x * x + y * y;
   if (!Number.isFinite(lengthSquared)) return Infinity;
   if (lengthSquared === 0) return (point.x - start.x) ** 2 + (point.y - start.y) ** 2;
-  const progress = Math.max(0, Math.min(1, ((point.x - start.x) * x + (point.y - start.y) * y) / lengthSquared));
+  const progress = Math.max(
+    0,
+    Math.min(1, ((point.x - start.x) * x + (point.y - start.y) * y) / lengthSquared)
+  );
   return (point.x - (start.x + x * progress)) ** 2 + (point.y - (start.y + y * progress)) ** 2;
 }
 
-function segmentsDistanceSquared(first: GeometryPoint, second: GeometryPoint, third: GeometryPoint, fourth: GeometryPoint): number {
+function segmentsDistanceSquared(
+  first: GeometryPoint,
+  second: GeometryPoint,
+  third: GeometryPoint,
+  fourth: GeometryPoint
+): number {
   if (segmentsIntersect(first, second, third, fourth)) return 0;
   return Math.min(
     distanceSquaredToSegment(first, third, fourth),
@@ -167,7 +211,9 @@ function segmentsDistanceSquared(first: GeometryPoint, second: GeometryPoint, th
   );
 }
 
-function pointsInContour(contour: DrawingGeometryContour): readonly [GeometryPoint, GeometryPoint][] {
+function pointsInContour(
+  contour: DrawingGeometryContour
+): readonly [GeometryPoint, GeometryPoint][] {
   const segmentCount = contour.closed ? contour.points.length : contour.points.length - 1;
   const segments: [GeometryPoint, GeometryPoint][] = [];
   for (let index = 0; index < segmentCount; index += 1) {
@@ -177,17 +223,22 @@ function pointsInContour(contour: DrawingGeometryContour): readonly [GeometryPoi
 }
 
 function canonicalLasso(points: readonly GeometryPoint[]): CanonicalLasso | null {
-  if (points.length < 3 || !points.every(isFinitePoint) || classifyClosedRing(points) === null) return null;
+  if (points.length < 3 || !points.every(isFinitePoint) || classifyClosedRing(points) === null)
+    return null;
   const canonical = canonicalizeClosedRing(points);
   if (!canonical.ok || canonical.polygons.length === 0) return null;
-  const allPoints = canonical.polygons.flatMap((polygon) => [polygon.outer, ...polygon.holes]).flat();
+  const allPoints = canonical.polygons
+    .flatMap((polygon) => [polygon.outer, ...polygon.holes])
+    .flat();
   const bounds = boundsForPoints(allPoints);
   return bounds === null ? null : { polygons: canonical.polygons, bounds };
 }
 
 function lassoContainsPoint(lasso: CanonicalLasso, point: GeometryPoint): boolean {
   return lasso.polygons.some(
-    (polygon) => hitTestNonzeroRings([polygon.outer], point, 0) && !polygon.holes.some((hole) => hitTestNonzeroRings([hole], point, 0))
+    (polygon) =>
+      hitTestNonzeroRings([polygon.outer], point, 0) &&
+      !polygon.holes.some((hole) => hitTestNonzeroRings([hole], point, 0))
   );
 }
 
@@ -199,19 +250,33 @@ function contourIntersectsLasso(contour: DrawingGeometryContour, lasso: Canonica
       for (let index = 0; index < ring.length; index += 1) {
         const lassoStart = ring[index];
         const lassoEnd = ring[(index + 1) % ring.length];
-        if (contourSegments.some(([start, end]) => segmentsIntersect(start, end, lassoStart, lassoEnd))) return true;
+        if (
+          contourSegments.some(([start, end]) =>
+            segmentsIntersect(start, end, lassoStart, lassoEnd)
+          )
+        )
+          return true;
       }
       return false;
     });
   });
 }
 
-function contourMatchesLasso(contour: DrawingGeometryContour, descriptor: NonNullable<ReturnType<typeof describeDrawingStrokeGeometry>>, lasso: CanonicalLasso): boolean {
+function contourMatchesLasso(
+  contour: DrawingGeometryContour,
+  descriptor: NonNullable<ReturnType<typeof describeDrawingStrokeGeometry>>,
+  lasso: CanonicalLasso
+): boolean {
   if (contour.points.some((point) => lassoContainsPoint(lasso, point))) return true;
   if (contourIntersectsLasso(contour, lasso)) return true;
 
   // 闭合对象可能完整包住 lasso，边界与 lasso 都不会相交；此时以 lasso 外环点探测对象填充。
-  return contour.closed && lasso.polygons.some((polygon) => polygon.outer.some((point) => hitTestDrawingGeometry(descriptor, point, 0)));
+  return (
+    contour.closed &&
+    lasso.polygons.some((polygon) =>
+      polygon.outer.some((point) => hitTestDrawingGeometry(descriptor, point, 0))
+    )
+  );
 }
 
 /**
@@ -259,10 +324,13 @@ export function queryLassoStrokeTargets(
   return { targets, diagnostics };
 }
 
-function trackSegments(samples: readonly GeometryPoint[]): readonly [GeometryPoint, GeometryPoint][] {
+function trackSegments(
+  samples: readonly GeometryPoint[]
+): readonly [GeometryPoint, GeometryPoint][] {
   if (samples.length === 1) return [[samples[0], samples[0]]];
   const segments: [GeometryPoint, GeometryPoint][] = [];
-  for (let index = 1; index < samples.length; index += 1) segments.push([samples[index - 1], samples[index]]);
+  for (let index = 1; index < samples.length; index += 1)
+    segments.push([samples[index - 1], samples[index]]);
   return segments;
 }
 
@@ -273,36 +341,59 @@ function contourMatchesEraser(
   radius: number
 ): boolean {
   // 闭合填充的内部属于对象几何，端点落入内部时无需依赖轮廓距离。
-  if (contour.closed && samples.some((sample) => hitTestDrawingGeometry(descriptor, sample, 0))) return true;
+  if (contour.closed && samples.some((sample) => hitTestDrawingGeometry(descriptor, sample, 0)))
+    return true;
   const radiusSquared = radius * radius;
   return trackSegments(samples).some(([eraserStart, eraserEnd]) =>
     pointsInContour(contour).some(
-      ([strokeStart, strokeEnd]) => segmentsDistanceSquared(eraserStart, eraserEnd, strokeStart, strokeEnd) <= radiusSquared
+      ([strokeStart, strokeEnd]) =>
+        segmentsDistanceSquared(eraserStart, eraserEnd, strokeStart, strokeEnd) <= radiusSquared
     )
   );
 }
 
-function isFrameResourceBoxFragment(fragment: DrawingFrameFragment): fragment is FrameResourceBoxFragment {
+function isFrameResourceBoxFragment(
+  fragment: DrawingFrameFragment
+): fragment is FrameResourceBoxFragment {
   return fragment.kind === 'semantic-area' && 'resourceBox' in fragment;
 }
 
 function isInteractiveFrameEntry(entry: DrawingFrameRenderableQueryEntry): boolean {
   // renderableEntries 理论上已排除这些状态；再次显式收窄是查询 API 的安全边界。
-  return entry.status === 'unchanged' || entry.status === 'rebased' || entry.status === 'clipped' || entry.status === 'segmented';
+  return (
+    entry.status === 'unchanged' ||
+    entry.status === 'rebased' ||
+    entry.status === 'clipped' ||
+    entry.status === 'segmented'
+  );
 }
 
 function frameTarget(entry: DrawingFrameRenderableQueryEntry): DrawingFrameTarget {
-  return Object.freeze({ index: entry.source.key, id: entry.source.stroke.id, tool: entry.source.stroke.tool });
+  return Object.freeze({
+    index: entry.source.key,
+    id: entry.source.stroke.id,
+    tool: entry.source.stroke.tool,
+  });
 }
 
-function validFrameRevision(options: DrawingFrameTargetQueryOptions): SelectionQueryDiagnostic | null {
-  if (!Number.isSafeInteger(options.frameRevision) || options.frameRevision < 0 ||
-    !Number.isSafeInteger(options.expectedRevision) || options.expectedRevision < 0) {
+function validFrameRevision(
+  options: DrawingFrameTargetQueryOptions
+): SelectionQueryDiagnostic | null {
+  if (
+    !Number.isSafeInteger(options.frameRevision) ||
+    options.frameRevision < 0 ||
+    !Number.isSafeInteger(options.expectedRevision) ||
+    options.expectedRevision < 0
+  ) {
     return { type: 'invalid-frame-query-revision' };
   }
   return options.frameRevision === options.expectedRevision
     ? null
-    : { type: 'frame-revision-mismatch', frameRevision: options.frameRevision, expectedRevision: options.expectedRevision };
+    : {
+        type: 'frame-revision-mismatch',
+        frameRevision: options.frameRevision,
+        expectedRevision: options.expectedRevision,
+      };
 }
 
 function localFramePoints(
@@ -312,7 +403,10 @@ function localFramePoints(
 ): readonly GeometryPoint[] | null {
   if (!points.every(isFinitePoint)) return null;
   if (coordinateSpace === 'world') {
-    const local = points.map((point) => ({ x: point.x - frame.frameOrigin.x, y: point.y - frame.frameOrigin.y }));
+    const local = points.map((point) => ({
+      x: point.x - frame.frameOrigin.x,
+      y: point.y - frame.frameOrigin.y,
+    }));
     return local.every(isFinitePoint) ? local : null;
   }
   if (coordinateSpace !== 'screen') return null;
@@ -322,12 +416,19 @@ function localFramePoints(
   const local = points.map((point) => {
     const x = point.x - affine.tx;
     const y = point.y - affine.ty;
-    return { x: (affine.d * x - affine.c * y) / determinant, y: (-affine.b * x + affine.a * y) / determinant };
+    return {
+      x: (affine.d * x - affine.c * y) / determinant,
+      y: (-affine.b * x + affine.a * y) / determinant,
+    };
   });
   return local.every(isFinitePoint) ? local : null;
 }
 
-function localFrameRadius(frame: DrawingFrameRenderableQueryInput, radius: number, coordinateSpace: DrawingFrameQueryCoordinateSpace): number | null {
+function localFrameRadius(
+  frame: DrawingFrameRenderableQueryInput,
+  radius: number,
+  coordinateSpace: DrawingFrameQueryCoordinateSpace
+): number | null {
   if (!Number.isFinite(radius) || radius < 0) return null;
   if (coordinateSpace === 'world') return radius;
   if (coordinateSpace !== 'screen') return null;
@@ -338,80 +439,165 @@ function localFrameRadius(frame: DrawingFrameRenderableQueryInput, radius: numbe
 }
 
 function polygonContainsPoint(
-  polygon: Readonly<{ outer: readonly GeometryPoint[]; holes: readonly (readonly GeometryPoint[])[] }>,
+  polygon: Readonly<{
+    outer: readonly GeometryPoint[];
+    holes: readonly (readonly GeometryPoint[])[];
+  }>,
   point: GeometryPoint
 ): boolean {
-  return hitTestNonzeroRings([polygon.outer], point, 0) &&
-    !polygon.holes.some((hole) => hitTestNonzeroRings([hole], point, 0));
+  return (
+    hitTestNonzeroRings([polygon.outer], point, 0) &&
+    !polygon.holes.some((hole) => hitTestNonzeroRings([hole], point, 0))
+  );
 }
 
-function polygonSegments(points: readonly GeometryPoint[]): readonly [GeometryPoint, GeometryPoint][] {
+function polygonSegments(
+  points: readonly GeometryPoint[]
+): readonly [GeometryPoint, GeometryPoint][] {
   if (points.length === 0) return [];
   if (points.length === 1) return [[points[0], points[0]]];
-  return points.map((point, index) => [point, points[(index + 1) % points.length]] as [GeometryPoint, GeometryPoint]);
+  return points.map(
+    (point, index) => [point, points[(index + 1) % points.length]] as [GeometryPoint, GeometryPoint]
+  );
 }
 
-function pathMatchesFrameLasso(points: readonly GeometryPoint[], closed: boolean, lasso: CanonicalLasso): boolean {
+function pathMatchesFrameLasso(
+  points: readonly GeometryPoint[],
+  closed: boolean,
+  lasso: CanonicalLasso
+): boolean {
   if (points.some((point) => lassoContainsPoint(lasso, point))) return true;
   const segmentPoints = closed ? points : points.length === 1 ? points : points.slice(0, -1);
-  const segments = closed ? polygonSegments(points) : segmentPoints.map((point, index) => [point, points[index + 1]] as [GeometryPoint, GeometryPoint]);
+  const segments = closed
+    ? polygonSegments(points)
+    : segmentPoints.map(
+        (point, index) => [point, points[index + 1]] as [GeometryPoint, GeometryPoint]
+      );
   return lasso.polygons.some((polygon) => {
     const rings = [polygon.outer, ...polygon.holes];
-    return rings.some((ring) => polygonSegments(ring).some(([start, end]) =>
-      segments.some(([pathStart, pathEnd]) => segmentsIntersect(pathStart, pathEnd, start, end))
-    ));
+    return rings.some((ring) =>
+      polygonSegments(ring).some(([start, end]) =>
+        segments.some(([pathStart, pathEnd]) => segmentsIntersect(pathStart, pathEnd, start, end))
+      )
+    );
   });
 }
 
 function polygonMatchesFrameLasso(
-  polygon: Readonly<{ outer: readonly GeometryPoint[]; holes: readonly (readonly GeometryPoint[])[] }>,
+  polygon: Readonly<{
+    outer: readonly GeometryPoint[];
+    holes: readonly (readonly GeometryPoint[])[];
+  }>,
   lasso: CanonicalLasso
 ): boolean {
   if (polygon.outer.some((point) => lassoContainsPoint(lasso, point))) return true;
-  if (pathMatchesFrameLasso(polygon.outer, true, lasso) || polygon.holes.some((hole) => pathMatchesFrameLasso(hole, true, lasso))) return true;
-  return lasso.polygons.some((lassoPolygon) => lassoPolygon.outer.some((point) => polygonContainsPoint(polygon, point)));
+  if (
+    pathMatchesFrameLasso(polygon.outer, true, lasso) ||
+    polygon.holes.some((hole) => pathMatchesFrameLasso(hole, true, lasso))
+  )
+    return true;
+  return lasso.polygons.some((lassoPolygon) =>
+    lassoPolygon.outer.some((point) => polygonContainsPoint(polygon, point))
+  );
 }
 
-function frameEntryMatchesLasso(entry: DrawingFrameRenderableQueryEntry, lasso: CanonicalLasso): boolean {
-  if (entry.program.strokes.some((stroke) => pathMatchesFrameLasso(stroke.points, stroke.closed, lasso))) return true;
-  if (entry.program.fills.some((fill) => fill.polygons.some((polygon) => polygonMatchesFrameLasso(polygon, lasso)))) return true;
+function frameEntryMatchesLasso(
+  entry: DrawingFrameRenderableQueryEntry,
+  lasso: CanonicalLasso
+): boolean {
+  if (
+    entry.program.strokes.some((stroke) =>
+      pathMatchesFrameLasso(stroke.points, stroke.closed, lasso)
+    )
+  )
+    return true;
+  if (
+    entry.program.fills.some((fill) =>
+      fill.polygons.some((polygon) => polygonMatchesFrameLasso(polygon, lasso))
+    )
+  )
+    return true;
   return entry.fragments.some((fragment) => {
     if (!isFrameResourceBoxFragment(fragment)) return false;
-    if (fragment.resourceBox.tool === 'image') return polygonMatchesFrameLasso({ outer: fragment.points, holes: [] }, lasso);
+    if (fragment.resourceBox.tool === 'image')
+      return polygonMatchesFrameLasso({ outer: fragment.points, holes: [] }, lasso);
     const program = fragment.resourceBox.textProgram;
-    return program !== undefined && program.kind !== 'empty-text' &&
-      program.semanticRegions.some((region) => polygonMatchesFrameLasso({ outer: region.polygon, holes: [] }, lasso));
+    return (
+      program !== undefined &&
+      program.kind !== 'empty-text' &&
+      program.semanticRegions.some((region) =>
+        polygonMatchesFrameLasso({ outer: region.polygon, holes: [] }, lasso)
+      )
+    );
   });
 }
 
-function pathMatchesFrameEraser(points: readonly GeometryPoint[], closed: boolean, samples: readonly GeometryPoint[], radius: number): boolean {
-  const pathSegments = closed ? polygonSegments(points) : points.length === 1 ? [[points[0], points[0]] as [GeometryPoint, GeometryPoint]] :
-    points.slice(0, -1).map((point, index) => [point, points[index + 1]] as [GeometryPoint, GeometryPoint]);
+function pathMatchesFrameEraser(
+  points: readonly GeometryPoint[],
+  closed: boolean,
+  samples: readonly GeometryPoint[],
+  radius: number
+): boolean {
+  const pathSegments = closed
+    ? polygonSegments(points)
+    : points.length === 1
+      ? [[points[0], points[0]] as [GeometryPoint, GeometryPoint]]
+      : points
+          .slice(0, -1)
+          .map((point, index) => [point, points[index + 1]] as [GeometryPoint, GeometryPoint]);
   const radiusSquared = radius * radius;
   return trackSegments(samples).some(([eraserStart, eraserEnd]) =>
-    pathSegments.some(([pathStart, pathEnd]) => segmentsDistanceSquared(eraserStart, eraserEnd, pathStart, pathEnd) <= radiusSquared)
+    pathSegments.some(
+      ([pathStart, pathEnd]) =>
+        segmentsDistanceSquared(eraserStart, eraserEnd, pathStart, pathEnd) <= radiusSquared
+    )
   );
 }
 
 function polygonMatchesFrameEraser(
-  polygon: Readonly<{ outer: readonly GeometryPoint[]; holes: readonly (readonly GeometryPoint[])[] }>,
+  polygon: Readonly<{
+    outer: readonly GeometryPoint[];
+    holes: readonly (readonly GeometryPoint[])[];
+  }>,
   samples: readonly GeometryPoint[],
   radius: number
 ): boolean {
   if (samples.some((sample) => polygonContainsPoint(polygon, sample))) return true;
-  return pathMatchesFrameEraser(polygon.outer, true, samples, radius) ||
-    polygon.holes.some((hole) => pathMatchesFrameEraser(hole, true, samples, radius));
+  return (
+    pathMatchesFrameEraser(polygon.outer, true, samples, radius) ||
+    polygon.holes.some((hole) => pathMatchesFrameEraser(hole, true, samples, radius))
+  );
 }
 
-function frameEntryMatchesEraser(entry: DrawingFrameRenderableQueryEntry, samples: readonly GeometryPoint[], radius: number): boolean {
-  if (entry.program.strokes.some((stroke) => pathMatchesFrameEraser(stroke.points, stroke.closed, samples, radius))) return true;
-  if (entry.program.fills.some((fill) => fill.polygons.some((polygon) => polygonMatchesFrameEraser(polygon, samples, radius)))) return true;
+function frameEntryMatchesEraser(
+  entry: DrawingFrameRenderableQueryEntry,
+  samples: readonly GeometryPoint[],
+  radius: number
+): boolean {
+  if (
+    entry.program.strokes.some((stroke) =>
+      pathMatchesFrameEraser(stroke.points, stroke.closed, samples, radius)
+    )
+  )
+    return true;
+  if (
+    entry.program.fills.some((fill) =>
+      fill.polygons.some((polygon) => polygonMatchesFrameEraser(polygon, samples, radius))
+    )
+  )
+    return true;
   return entry.fragments.some((fragment) => {
     if (!isFrameResourceBoxFragment(fragment)) return false;
-    if (fragment.resourceBox.tool === 'image') return polygonMatchesFrameEraser({ outer: fragment.points, holes: [] }, samples, radius);
+    if (fragment.resourceBox.tool === 'image')
+      return polygonMatchesFrameEraser({ outer: fragment.points, holes: [] }, samples, radius);
     const program = fragment.resourceBox.textProgram;
-    return program !== undefined && program.kind !== 'empty-text' &&
-      program.semanticRegions.some((region) => polygonMatchesFrameEraser({ outer: region.polygon, holes: [] }, samples, radius));
+    return (
+      program !== undefined &&
+      program.kind !== 'empty-text' &&
+      program.semanticRegions.some((region) =>
+        polygonMatchesFrameEraser({ outer: region.polygon, holes: [] }, samples, radius)
+      )
+    );
   });
 }
 
@@ -426,7 +612,17 @@ export function queryDrawingFrameLassoTargets(
   const coordinateSpace = options.coordinateSpace ?? 'world';
   const localPolygon = localFramePoints(frame, polygon, coordinateSpace);
   if (localPolygon === null) {
-    return { targets: [], diagnostics: [{ type: coordinateSpace === 'world' || coordinateSpace === 'screen' ? 'invalid-lasso-polygon' : 'invalid-frame-query-coordinate-space' }] };
+    return {
+      targets: [],
+      diagnostics: [
+        {
+          type:
+            coordinateSpace === 'world' || coordinateSpace === 'screen'
+              ? 'invalid-lasso-polygon'
+              : 'invalid-frame-query-coordinate-space',
+        },
+      ],
+    };
   }
   const lasso = canonicalLasso(localPolygon);
   if (!lasso) return { targets: [], diagnostics: [{ type: 'invalid-lasso-polygon' }] };
@@ -450,11 +646,31 @@ export function queryDrawingFrameEraserTargets(
   const coordinateSpace = options.coordinateSpace ?? 'world';
   const localSamples = localFramePoints(frame, samples, coordinateSpace);
   if (localSamples === null || localSamples.length === 0) {
-    return { targets: [], diagnostics: [{ type: coordinateSpace === 'world' || coordinateSpace === 'screen' ? 'invalid-eraser-samples' : 'invalid-frame-query-coordinate-space' }] };
+    return {
+      targets: [],
+      diagnostics: [
+        {
+          type:
+            coordinateSpace === 'world' || coordinateSpace === 'screen'
+              ? 'invalid-eraser-samples'
+              : 'invalid-frame-query-coordinate-space',
+        },
+      ],
+    };
   }
   const localRadius = localFrameRadius(frame, radius, coordinateSpace);
   if (localRadius === null) {
-    return { targets: [], diagnostics: [{ type: coordinateSpace === 'world' || coordinateSpace === 'screen' ? 'invalid-eraser-radius' : 'invalid-frame-query-coordinate-space' }] };
+    return {
+      targets: [],
+      diagnostics: [
+        {
+          type:
+            coordinateSpace === 'world' || coordinateSpace === 'screen'
+              ? 'invalid-eraser-radius'
+              : 'invalid-frame-query-coordinate-space',
+        },
+      ],
+    };
   }
   const targets = frame.renderableEntries
     .filter(isInteractiveFrameEntry)

@@ -116,7 +116,8 @@ function hasNonCollinearPoint(points: readonly GeometryPoint[]): boolean {
   }
 
   return points.some(
-    (point) => (second.x - first.x) * (point.y - first.y) !== (second.y - first.y) * (point.x - first.x)
+    (point) =>
+      (second.x - first.x) * (point.y - first.y) !== (second.y - first.y) * (point.x - first.x)
   );
 }
 
@@ -157,13 +158,30 @@ function descriptorForBox(
 
   const horizontal = width / 2;
   const vertical = height / 2;
-  if (!isFiniteNumber(horizontal) || !isFiniteNumber(vertical) || horizontal <= 0 || vertical <= 0) {
+  if (
+    !isFiniteNumber(horizontal) ||
+    !isFiniteNumber(vertical) ||
+    horizontal <= 0 ||
+    vertical <= 0
+  ) {
     return null;
   }
 
   return kind === 'rect'
-    ? { kind, center: { x: centerX, y: centerY }, halfWidth: horizontal, halfHeight: vertical, rotationRad }
-    : { kind, center: { x: centerX, y: centerY }, radiusX: horizontal, radiusY: vertical, rotationRad };
+    ? {
+        kind,
+        center: { x: centerX, y: centerY },
+        halfWidth: horizontal,
+        halfHeight: vertical,
+        rotationRad,
+      }
+    : {
+        kind,
+        center: { x: centerX, y: centerY },
+        radiusX: horizontal,
+        radiusY: vertical,
+        rotationRad,
+      };
 }
 
 function fallbackBoxAnchor(points: readonly DrawingPointV2[]): GeometryPoint | null {
@@ -194,7 +212,9 @@ function descriptorForFallbackBox(
  * pen、line、polygon 与 bezier 保留其路径/控制点语义；矩形类工具以首末点组成的框为
  * 基础并绕框中心旋转。text/image 缺点或没有正尺寸时分别采用上方导出的稳定回退框。
  */
-export function describeDrawingStrokeGeometry(stroke: DrawingStrokeV2): DrawingGeometryDescriptor | null {
+export function describeDrawingStrokeGeometry(
+  stroke: DrawingStrokeV2
+): DrawingGeometryDescriptor | null {
   const { points } = stroke;
   if (!pointsAreFinite(points)) {
     return null;
@@ -226,7 +246,12 @@ export function describeDrawingStrokeGeometry(stroke: DrawingStrokeV2): DrawingG
     if (points.length !== 4) {
       return null;
     }
-    const controls = points.map(copyPoint) as [GeometryPoint, GeometryPoint, GeometryPoint, GeometryPoint];
+    const controls = points.map(copyPoint) as [
+      GeometryPoint,
+      GeometryPoint,
+      GeometryPoint,
+      GeometryPoint,
+    ];
     return samePoint(controls[0], controls[3]) && !hasNonCollinearPoint(controls)
       ? null
       : { kind: 'cubic-bezier', points: controls };
@@ -262,7 +287,11 @@ export function describeDrawingStrokeGeometry(stroke: DrawingStrokeV2): DrawingG
   return descriptorForBox('rect', copyPoint(first), copyPoint(last), rotationRad, null);
 }
 
-function rotate(point: GeometryPoint, center: GeometryPoint, rotationRad: number): GeometryPoint | null {
+function rotate(
+  point: GeometryPoint,
+  center: GeometryPoint,
+  rotationRad: number
+): GeometryPoint | null {
   const cosine = Math.cos(rotationRad);
   const sine = Math.sin(rotationRad);
   const x = center.x + point.x * cosine - point.y * sine;
@@ -271,7 +300,10 @@ function rotate(point: GeometryPoint, center: GeometryPoint, rotationRad: number
 }
 
 function boundsForPoints(points: readonly GeometryPoint[]): GeometryBounds | null {
-  if (points.length === 0 || !points.every((point) => isFiniteNumber(point.x) && isFiniteNumber(point.y))) {
+  if (
+    points.length === 0 ||
+    !points.every((point) => isFiniteNumber(point.x) && isFiniteNumber(point.y))
+  ) {
     return null;
   }
   const minX = Math.min(...points.map((point) => point.x));
@@ -327,14 +359,21 @@ export function getDrawingStrokeBounds(stroke: DrawingStrokeV2): GeometryBounds 
   return descriptor === null ? null : getDrawingGeometryBounds(descriptor);
 }
 
-function distanceSquaredToSegment(point: GeometryPoint, start: GeometryPoint, end: GeometryPoint): number {
+function distanceSquaredToSegment(
+  point: GeometryPoint,
+  start: GeometryPoint,
+  end: GeometryPoint
+): number {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const lengthSquared = dx * dx + dy * dy;
   if (!isFiniteNumber(lengthSquared) || lengthSquared <= 0) {
     return Infinity;
   }
-  const progress = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared));
+  const progress = Math.max(
+    0,
+    Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared)
+  );
   const distanceX = point.x - (start.x + dx * progress);
   const distanceY = point.y - (start.y + dy * progress);
   const result = distanceX * distanceX + distanceY * distanceY;
@@ -351,27 +390,50 @@ function distanceToChord(point: GeometryPoint, start: GeometryPoint, end: Geomet
   if (lengthSquared === 0) {
     return Math.hypot(point.x - start.x, point.y - start.y);
   }
-  const progress = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared));
-  const distance = Math.hypot(point.x - (start.x + dx * progress), point.y - (start.y + dy * progress));
+  const progress = Math.max(
+    0,
+    Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared)
+  );
+  const distance = Math.hypot(
+    point.x - (start.x + dx * progress),
+    point.y - (start.y + dy * progress)
+  );
   return isFiniteNumber(distance) ? distance : Infinity;
 }
 
-function cubicFlatness(points: readonly [GeometryPoint, GeometryPoint, GeometryPoint, GeometryPoint]): number {
+function cubicFlatness(
+  points: readonly [GeometryPoint, GeometryPoint, GeometryPoint, GeometryPoint]
+): number {
   // Bézier 曲线在四个控制点的凸包内；到线段的距离是凸函数，故两个内控制点到叶子弦
   // 的最大距离是整段曲线到该弦的保守上界，也适用于首末点重合的退化弦。
-  return Math.max(distanceToChord(points[1], points[0], points[3]), distanceToChord(points[2], points[0], points[3]));
+  return Math.max(
+    distanceToChord(points[1], points[0], points[3]),
+    distanceToChord(points[2], points[0], points[3])
+  );
 }
 
 function splitCubic(
   points: readonly [GeometryPoint, GeometryPoint, GeometryPoint, GeometryPoint]
-): readonly [readonly [GeometryPoint, GeometryPoint, GeometryPoint, GeometryPoint], readonly [GeometryPoint, GeometryPoint, GeometryPoint, GeometryPoint]] | null {
+):
+  | readonly [
+      readonly [GeometryPoint, GeometryPoint, GeometryPoint, GeometryPoint],
+      readonly [GeometryPoint, GeometryPoint, GeometryPoint, GeometryPoint],
+    ]
+  | null {
   const firstX = midpoint(points[0].x, points[1].x);
   const firstY = midpoint(points[0].y, points[1].y);
   const secondX = midpoint(points[1].x, points[2].x);
   const secondY = midpoint(points[1].y, points[2].y);
   const thirdX = midpoint(points[2].x, points[3].x);
   const thirdY = midpoint(points[2].y, points[3].y);
-  if (firstX === null || firstY === null || secondX === null || secondY === null || thirdX === null || thirdY === null) {
+  if (
+    firstX === null ||
+    firstY === null ||
+    secondX === null ||
+    secondY === null ||
+    thirdX === null ||
+    thirdY === null
+  ) {
     return null;
   }
   const firstControl = { x: firstX, y: firstY };
@@ -419,7 +481,10 @@ function appendCubicContour(
   // 显式 LIFO 栈避免递归深度依赖；每次分裂把左段后压，因而输出仍按 t 递增排列。
   while (pending.length > 0) {
     const piece = pending.pop()!;
-    if (piece.flatness <= requestedMaxDeviation || points.length - 1 + pending.length + 1 >= maxSegments) {
+    if (
+      piece.flatness <= requestedMaxDeviation ||
+      points.length - 1 + pending.length + 1 >= maxSegments
+    ) {
       capped ||= piece.flatness > requestedMaxDeviation;
       actualMaxDeviation = Math.max(actualMaxDeviation, piece.flatness);
       points.push(piece.points[3]);
@@ -434,7 +499,10 @@ function appendCubicContour(
     if (!isFiniteNumber(leftFlatness) || !isFiniteNumber(rightFlatness)) {
       return null;
     }
-    pending.push({ points: split[1], flatness: rightFlatness }, { points: split[0], flatness: leftFlatness });
+    pending.push(
+      { points: split[1], flatness: rightFlatness },
+      { points: split[0], flatness: leftFlatness }
+    );
   }
   return {
     points,
@@ -453,7 +521,11 @@ function ellipsePoint(
   rotationRad: number,
   angle: number
 ): GeometryPoint | null {
-  return rotate({ x: radiusX * Math.cos(angle), y: radiusY * Math.sin(angle) }, center, rotationRad);
+  return rotate(
+    { x: radiusX * Math.cos(angle), y: radiusY * Math.sin(angle) },
+    center,
+    rotationRad
+  );
 }
 
 function ellipseSegmentCount(radius: number, maxDeviation: number): number {
@@ -478,16 +550,29 @@ export function describeDrawingGeometryContour(
   const requestedMaxDeviation = options.maxDeviation ?? DEFAULT_DRAWING_CONTOUR_MAX_DEVIATION;
   const maxSegments = options.maxSegments ?? MAX_DRAWING_CONTOUR_SEGMENTS;
   if (
-    !isFiniteNumber(requestedMaxDeviation) || requestedMaxDeviation <= 0 ||
-    !Number.isInteger(maxSegments) || maxSegments < 4 || maxSegments > MAX_DRAWING_CONTOUR_SEGMENTS
+    !isFiniteNumber(requestedMaxDeviation) ||
+    requestedMaxDeviation <= 0 ||
+    !Number.isInteger(maxSegments) ||
+    maxSegments < 4 ||
+    maxSegments > MAX_DRAWING_CONTOUR_SEGMENTS
   ) {
     return null;
   }
   if (descriptor.kind === 'path') {
-    if (descriptor.points.length < 2 || !descriptor.points.every((point) => isFiniteNumber(point.x) && isFiniteNumber(point.y))) {
+    if (
+      descriptor.points.length < 2 ||
+      !descriptor.points.every((point) => isFiniteNumber(point.x) && isFiniteNumber(point.y))
+    ) {
       return null;
     }
-    return { points: descriptor.points, closed: descriptor.closed, maxDeviation: 0, requestedMaxDeviation, isWithinRequestedMaxDeviation: true, capped: false };
+    return {
+      points: descriptor.points,
+      closed: descriptor.closed,
+      maxDeviation: 0,
+      requestedMaxDeviation,
+      isWithinRequestedMaxDeviation: true,
+      capped: false,
+    };
   }
   if (descriptor.kind === 'cubic-bezier') {
     if (!descriptor.points.every((point) => isFiniteNumber(point.x) && isFiniteNumber(point.y))) {
@@ -497,9 +582,13 @@ export function describeDrawingGeometryContour(
   }
   if (descriptor.kind === 'rect') {
     if (
-      !isFiniteNumber(descriptor.center.x) || !isFiniteNumber(descriptor.center.y) ||
-      !isFiniteNumber(descriptor.halfWidth) || !isFiniteNumber(descriptor.halfHeight) ||
-      !isFiniteNumber(descriptor.rotationRad) || descriptor.halfWidth <= 0 || descriptor.halfHeight <= 0
+      !isFiniteNumber(descriptor.center.x) ||
+      !isFiniteNumber(descriptor.center.y) ||
+      !isFiniteNumber(descriptor.halfWidth) ||
+      !isFiniteNumber(descriptor.halfHeight) ||
+      !isFiniteNumber(descriptor.rotationRad) ||
+      descriptor.halfWidth <= 0 ||
+      descriptor.halfHeight <= 0
     ) {
       return null;
     }
@@ -510,16 +599,28 @@ export function describeDrawingGeometryContour(
       { x: -descriptor.halfWidth, y: descriptor.halfHeight },
     ].map((point) => rotate(point, descriptor.center, descriptor.rotationRad));
     return corners.every((point): point is GeometryPoint => point !== null)
-      ? { points: corners, closed: true, maxDeviation: 0, requestedMaxDeviation, isWithinRequestedMaxDeviation: true, capped: false }
+      ? {
+          points: corners,
+          closed: true,
+          maxDeviation: 0,
+          requestedMaxDeviation,
+          isWithinRequestedMaxDeviation: true,
+          capped: false,
+        }
       : null;
   }
 
   const radius = Math.max(descriptor.radiusX, descriptor.radiusY);
   if (
-    !isFiniteNumber(descriptor.center.x) || !isFiniteNumber(descriptor.center.y) ||
-    !isFiniteNumber(descriptor.radiusX) || !isFiniteNumber(descriptor.radiusY) ||
-    !isFiniteNumber(descriptor.rotationRad) || !isFiniteNumber(radius) ||
-    descriptor.radiusX <= 0 || descriptor.radiusY <= 0 || radius <= 0
+    !isFiniteNumber(descriptor.center.x) ||
+    !isFiniteNumber(descriptor.center.y) ||
+    !isFiniteNumber(descriptor.radiusX) ||
+    !isFiniteNumber(descriptor.radiusY) ||
+    !isFiniteNumber(descriptor.rotationRad) ||
+    !isFiniteNumber(radius) ||
+    descriptor.radiusX <= 0 ||
+    descriptor.radiusY <= 0 ||
+    radius <= 0
   ) {
     return null;
   }
@@ -531,7 +632,13 @@ export function describeDrawingGeometryContour(
   const actualMaxDeviation = radius * (1 - Math.cos(Math.PI / segmentCount));
   const points: GeometryPoint[] = [];
   for (let index = 0; index < segmentCount; index += 1) {
-    const point = ellipsePoint(descriptor.center, descriptor.radiusX, descriptor.radiusY, descriptor.rotationRad, (2 * Math.PI * index) / segmentCount);
+    const point = ellipsePoint(
+      descriptor.center,
+      descriptor.radiusX,
+      descriptor.radiusY,
+      descriptor.rotationRad,
+      (2 * Math.PI * index) / segmentCount
+    );
     if (point === null) {
       return null;
     }
@@ -557,7 +664,12 @@ export function hitTestDrawingGeometry(
   point: GeometryPoint,
   tolerance: number
 ): boolean {
-  if (!isFiniteNumber(point.x) || !isFiniteNumber(point.y) || !isFiniteNumber(tolerance) || tolerance < 0) {
+  if (
+    !isFiniteNumber(point.x) ||
+    !isFiniteNumber(point.y) ||
+    !isFiniteNumber(tolerance) ||
+    tolerance < 0
+  ) {
     return false;
   }
   const toleranceSquared = tolerance * tolerance;
@@ -572,7 +684,13 @@ export function hitTestDrawingGeometry(
 
   const segmentCount = contour.closed ? contour.points.length : contour.points.length - 1;
   for (let index = 0; index < segmentCount; index += 1) {
-    if (distanceSquaredToSegment(point, contour.points[index], contour.points[(index + 1) % contour.points.length]) <= toleranceSquared) {
+    if (
+      distanceSquaredToSegment(
+        point,
+        contour.points[index],
+        contour.points[(index + 1) % contour.points.length]
+      ) <= toleranceSquared
+    ) {
       return true;
     }
   }

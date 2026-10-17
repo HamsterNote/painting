@@ -215,8 +215,8 @@ function cubicValue(p0: number, p1: number, p2: number, p3: number, t: number): 
  * 绝不以“忽略根”的方式退化成错误的端点 bounds；不使用任意 epsilon；a===0 退化为线性。
  */
 function cubicExtremaTs(p0: number, p1: number, p2: number, p3: number): readonly number[] | null {
-  const a = (p1 - p0) - 2 * (p2 - p1) + (p3 - p2);
-  const b = 2 * ((p2 - p1) - (p1 - p0));
+  const a = p1 - p0 - 2 * (p2 - p1) + (p3 - p2);
+  const b = 2 * (p2 - p1 - (p1 - p0));
   const c = p1 - p0;
   if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c)) {
     return null;
@@ -336,9 +336,7 @@ function isCollinear(points: readonly Point[]): boolean | null {
 
 /** 深冻结命令数组与每条命令。 */
 function freezeCommands(commands: readonly ShapeCommand[]): readonly ShapeCommand[] {
-  return Object.freeze(
-    commands.map((command) => Object.freeze({ ...command })) as ShapeCommand[]
-  );
+  return Object.freeze(commands.map((command) => Object.freeze({ ...command })) as ShapeCommand[]);
 }
 
 /**

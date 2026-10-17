@@ -1,7 +1,11 @@
 import { normalizePointerInput } from '../normalizePointerInput';
 import { resolveTargetRole } from '../resolveTargetRole';
 
-function pointerEvent(type: string, target: EventTarget, overrides: Record<string, unknown> = {}): PointerEvent {
+function pointerEvent(
+  type: string,
+  target: EventTarget,
+  overrides: Record<string, unknown> = {}
+): PointerEvent {
   const event = new Event(type, { bubbles: true }) as PointerEvent;
   Object.defineProperties(event, {
     pointerId: { value: 7 },
@@ -26,13 +30,16 @@ describe('normalizePointerInput', () => {
   it('uses host content-box coordinates and emits all modifiers without mutating the event', () => {
     const host = document.createElement('div');
     const event = pointerEvent('pointerdown', host);
-    const before = { pointerType: event.pointerType, clientX: event.clientX, pressure: event.pressure };
+    const before = {
+      pointerType: event.pointerType,
+      clientX: event.clientX,
+      pressure: event.pressure,
+    };
     Object.defineProperties(host, {
       clientLeft: { value: 2 },
       clientTop: { value: 3 },
     });
-    host.getBoundingClientRect = () =>
-      ({ left: 10, top: 20 } as DOMRect);
+    host.getBoundingClientRect = () => ({ left: 10, top: 20 }) as DOMRect;
 
     expect(normalizePointerInput(event, { host })).toEqual({
       phase: 'down',
@@ -46,15 +53,21 @@ describe('normalizePointerInput', () => {
       buttons: 1,
       targetRole: 'paper',
     });
-    expect({ pointerType: event.pointerType, clientX: event.clientX, pressure: event.pressure }).toEqual(
-      before
-    );
+    expect({
+      pointerType: event.pointerType,
+      clientX: event.clientX,
+      pressure: event.pressure,
+    }).toEqual(before);
   });
 
   it('rejects unsupported pointer events and uses injected time only for invalid event timestamps', () => {
     const host = document.createElement('div');
 
-    expect(normalizePointerInput(pointerEvent('pointerdown', host, { pointerType: 'trackpad' }), { host })).toBeNull();
+    expect(
+      normalizePointerInput(pointerEvent('pointerdown', host, { pointerType: 'trackpad' }), {
+        host,
+      })
+    ).toBeNull();
     expect(normalizePointerInput(pointerEvent('wheel', host), { host })).toBeNull();
     expect(
       normalizePointerInput(pointerEvent('pointermove', host, { timeStamp: NaN }), {

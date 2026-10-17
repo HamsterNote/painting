@@ -9,10 +9,7 @@
  * - 证明缓存全部为派生数据、不写回 object、不进入文档序列化。
  */
 
-import {
-  buildFreehandGeometryCacheKey,
-  FreehandGeometryCache,
-} from '../../geometry/freehandCache';
+import { buildFreehandGeometryCacheKey, FreehandGeometryCache } from '../../geometry/freehandCache';
 import { FREEHAND_ALGORITHM_REVISION } from '../../geometry/freehand';
 import {
   IDENTITY_TRANSFORM,

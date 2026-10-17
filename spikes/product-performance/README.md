@@ -40,15 +40,15 @@ node -e "JSON.parse(require('node:fs').readFileSync('artifacts/research/product-
 
 ## 覆盖范围
 
-| 区块 | 场景 | 范围 |
-| --- | --- | --- |
-| B1 | comparable normal | 100k records、16 queries、4096 DIP world、800x600 query，复用 2.3 的输入形状；测当前 sparse 产品索引与线性扫描基线。 |
-| B2 | lifecycle + memory | 100k records 的 build、5k update、5k remove、16-query；含构建、更新、删除前后的 `process.memoryUsage()` 快照。 |
-| B3 | sparse normal | 50k records 分布于 1,000,000 DIP 世界的局部查询。 |
-| B3 | skew/dense | 90% 的 50k records 集中在 1024 DIP 区域。 |
-| B3 | huge/overflow | 30k normal + 250 个跨 1,000,000 DIP 的 huge bbox，超过 `maxCellsPerObject=64`。 |
-| B3 | cell-size sweep | 相同 sparse-normal 输入，扫描 64、128、256、512、1024 DIP cell。 |
-| B3 | large-query fallback | 30k sparse records、64,000x64,000 DIP query，覆盖约 62,500 个默认 cell，超过 `maxCellsPerQuery=4096`，触发产品全 records fallback。 |
+| 区块 | 场景                 | 范围                                                                                                                                |
+| ---- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| B1   | comparable normal    | 100k records、16 queries、4096 DIP world、800x600 query，复用 2.3 的输入形状；测当前 sparse 产品索引与线性扫描基线。                |
+| B2   | lifecycle + memory   | 100k records 的 build、5k update、5k remove、16-query；含构建、更新、删除前后的 `process.memoryUsage()` 快照。                      |
+| B3   | sparse normal        | 50k records 分布于 1,000,000 DIP 世界的局部查询。                                                                                   |
+| B3   | skew/dense           | 90% 的 50k records 集中在 1024 DIP 区域。                                                                                           |
+| B3   | huge/overflow        | 30k normal + 250 个跨 1,000,000 DIP 的 huge bbox，超过 `maxCellsPerObject=64`。                                                     |
+| B3   | cell-size sweep      | 相同 sparse-normal 输入，扫描 64、128、256、512、1024 DIP cell。                                                                    |
+| B3   | large-query fallback | 30k sparse records、64,000x64,000 DIP query，覆盖约 62,500 个默认 cell，超过 `maxCellsPerQuery=4096`，触发产品全 records fallback。 |
 
 ## 与阶段 2.3 的关系
 

@@ -113,7 +113,10 @@ export function resolveImageResource(
 }
 
 /** 删除指定 ID 的登记资源；不存在时保留原 registry 引用。 */
-export function removeImageResource(registry: ResourceRegistry, resourceId: string): ResourceRegistry {
+export function removeImageResource(
+  registry: ResourceRegistry,
+  resourceId: string
+): ResourceRegistry {
   const index = registry.records.findIndex((record) => record.resourceId === resourceId);
   if (index === -1) {
     return registry;

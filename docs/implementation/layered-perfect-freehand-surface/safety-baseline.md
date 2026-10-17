@@ -26,6 +26,7 @@
   - `packages/painting/src/types/virtual-paper.d.ts`
 
 原始记录（脚本可复核，均为备份时快照）:
+
 - `meta/status.porcelain.z`（`git status --porcelain=v1 -z` 原样）
 - `meta/status.porcelain.v1.txt`、`meta/status.full.txt`
 - `meta/diff.worktree.binary.patch`（tracked 工作区 diff，**含 binary**）
@@ -46,15 +47,15 @@
 
 指针文件: `/home/zhangxiao/.cache/opencode-tmp/opencode/backups/.latest-layered-perfect-freehand-surface`
 
-| 文件 | 内容 |
-|------|------|
-| `worktree.tar` | 工作区实际存在的全部 **tracked 源文件** + **全部非 ignored untracked 内容**，共 349 个成员、约 46.3 MB |
-| `worktree.sha256` | 349 个文件的 sha256 清单（`<hash>  ./相对路径`） |
-| `head.tar` | `git archive HEAD`，198 个 tracked 文件，用于恢复工作区中已删除（D）的文件 |
-| `meta/` | HEAD、status（-z/v1/full）、tracked/untracked/ignored/deleted 清单、binary diff、index entries |
-| `staging/`、`restore/` | 恢复校验用的解包目录 |
-| `staging.structure.txt`、`restore.structure.txt` | 类型+路径结构清单 |
-| `README.md` | 恢复说明 |
+| 文件                                             | 内容                                                                                                   |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `worktree.tar`                                   | 工作区实际存在的全部 **tracked 源文件** + **全部非 ignored untracked 内容**，共 349 个成员、约 46.3 MB |
+| `worktree.sha256`                                | 349 个文件的 sha256 清单（`<hash>  ./相对路径`）                                                       |
+| `head.tar`                                       | `git archive HEAD`，198 个 tracked 文件，用于恢复工作区中已删除（D）的文件                             |
+| `meta/`                                          | HEAD、status（-z/v1/full）、tracked/untracked/ignored/deleted 清单、binary diff、index entries         |
+| `staging/`、`restore/`                           | 恢复校验用的解包目录                                                                                   |
+| `staging.structure.txt`、`restore.structure.txt` | 类型+路径结构清单                                                                                      |
+| `README.md`                                      | 恢复说明                                                                                               |
 
 **明确排除（不备份）**: `node_modules/`、`.git/`、`.gitignore` 命中的 build 产物（`dist/`、`build/`、`lib/`）、`playwright-report/`、`test-results/`、`.expo/`、`coverage/` 及 101669 个 ignored 文件（清单见 `meta/ignored-files.txt`）。
 
@@ -62,13 +63,13 @@
 
 ### 1.3 备份验证结果
 
-| 校验 | 方法 | 结果 |
-|------|------|------|
-| tar 成员检查 | `tar -tf worktree.tar \| wc -l` | **349**（与 archive 输入一致） |
-| 实际恢复 | `tar -xf worktree.tar -C restore/` | 成功 |
-| 哈希核对 | `sha256sum -c worktree.sha256 --quiet`（在 restore/ 内） | **PASSED**（349/349） |
-| 结构核对 | `diff staging.structure.txt restore.structure.txt` | **PASSED**（349 文件 / 108 目录 / 0 软链） |
-| HEAD 归档可恢复被删文件 | `tar -tf head.tar` grep 4 个 D 文件 | 4/4 命中 |
+| 校验                    | 方法                                                     | 结果                                       |
+| ----------------------- | -------------------------------------------------------- | ------------------------------------------ |
+| tar 成员检查            | `tar -tf worktree.tar \| wc -l`                          | **349**（与 archive 输入一致）             |
+| 实际恢复                | `tar -xf worktree.tar -C restore/`                       | 成功                                       |
+| 哈希核对                | `sha256sum -c worktree.sha256 --quiet`（在 restore/ 内） | **PASSED**（349/349）                      |
+| 结构核对                | `diff staging.structure.txt restore.structure.txt`       | **PASSED**（349 文件 / 108 目录 / 0 软链） |
+| HEAD 归档可恢复被删文件 | `tar -tf head.tar` grep 4 个 D 文件                      | 4/4 命中                                   |
 
 ### 1.4 如何仅恢复特定文件（避免覆盖后续工作）
 
@@ -131,15 +132,15 @@ cp "$RESTORE/packages/painting/src/viewport.ts" "$REPO/packages/painting/src/vie
 
 依据 `jest.config.js`（projects: `legacy-web`、`core-node`、`native`、`skia-canvaskit`），分别用 `--selectProjects` 列出（剔除 jest `Running one project:` 头部行）:
 
-| project | 收集测试文件数 |
-|---------|----------------|
-| legacy-web | 31 |
-| core-node | 31 |
-| native | 2 |
-| skia-canvaskit | 1 |
-| **并集** | **65** |
-| 全局 `--listTests` | **65** |
-| 重复收集 | **0** |
+| project            | 收集测试文件数 |
+| ------------------ | -------------- |
+| legacy-web         | 31             |
+| core-node          | 31             |
+| native             | 2              |
+| skia-canvaskit     | 1              |
+| **并集**           | **65**         |
+| 全局 `--listTests` | **65**         |
+| 重复收集           | **0**          |
 
 四 project 并集与全局列表**完全一致**（65），无重复收集。
 详情: `baseline-logs/01-jest-listTests-all.txt`、`02-jest-listTests-<project>.clean.txt`、`14-jest-collection-analysis.txt`。
@@ -160,12 +161,12 @@ cp "$RESTORE/packages/painting/src/viewport.ts" "$REPO/packages/painting/src/vie
 
 ### 3.3 基线命令结果
 
-| # | 命令 | 退出码 | 结果 | 日志 |
-|---|------|--------|------|------|
-| 1 | `pnpm test` | **0** | 65 suites / 1067 tests 全部通过（4 projects，16.9s） | `10-pnpm-test.log` |
-| 2 | `pnpm run typecheck` | **0** | painting + painting-board + playground `tsc --noEmit` 通过 | `11-pnpm-typecheck.log` |
-| 3 | `pnpm run build` | **0** | lib build（bob）+ `expo export --platform web` 成功，输出 `dist` | `12-pnpm-build.log` |
-| 4 | `timeout 1800 pnpm run test:ui` | **1** | 144 passed / 4 failed，用时 4.5m，**未超时**（未触发 1800s 上限） | `13-pnpm-test-ui.log` |
+| #   | 命令                            | 退出码 | 结果                                                              | 日志                    |
+| --- | ------------------------------- | ------ | ----------------------------------------------------------------- | ----------------------- |
+| 1   | `pnpm test`                     | **0**  | 65 suites / 1067 tests 全部通过（4 projects，16.9s）              | `10-pnpm-test.log`      |
+| 2   | `pnpm run typecheck`            | **0**  | painting + painting-board + playground `tsc --noEmit` 通过        | `11-pnpm-typecheck.log` |
+| 3   | `pnpm run build`                | **0**  | lib build（bob）+ `expo export --platform web` 成功，输出 `dist`  | `12-pnpm-build.log`     |
+| 4   | `timeout 1800 pnpm run test:ui` | **1**  | 144 passed / 4 failed，用时 4.5m，**未超时**（未触发 1800s 上限） | `13-pnpm-test-ui.log`   |
 
 汇总: `baseline-logs/15-baseline-summary.txt`。
 

@@ -82,7 +82,9 @@ export function deriveSelectionFrame(
   if (targets.length === 0) return null;
   const indexes = new Set<number>();
   // prepared bounds 是渲染/查询权威，已含旋转 box/ellipse、cubic 控制点 hull 与保守描边/pressure 外扩。
-  const preparedByIndex = new Map(prepareDrawingDocument(document).entries.map((entry) => [entry.key, entry.bounds]));
+  const preparedByIndex = new Map(
+    prepareDrawingDocument(document).entries.map((entry) => [entry.key, entry.bounds])
+  );
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;

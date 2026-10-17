@@ -199,7 +199,7 @@ function validateStage(doc, grid, queryBank, label) {
         `[hash-grid ${label}] query#${q} linear/grid 不一致：` +
           `rect=${JSON.stringify(rect)} ` +
           `linear=[${idsChecksum(linearIds)}] grid=[${idsChecksum(gridIds)}] ` +
-          `idSetMatch=${setOk} documentOrderMatch=${orderOk} checksumMatch=${checksumOk}`,
+          `idSetMatch=${setOk} documentOrderMatch=${orderOk} checksumMatch=${checksumOk}`
       );
     }
     idSetMatch = idSetMatch && setOk;

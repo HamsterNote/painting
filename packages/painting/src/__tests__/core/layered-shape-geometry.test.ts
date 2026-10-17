@@ -79,7 +79,10 @@ function types(commands: readonly ShapeCommand[]): string[] {
 
 describe('layeredShapeGeometry: line / rect', () => {
   it('line canonical：2 点 → moveTo + lineTo', () => {
-    const geometry = derive('line', [{ x: 1, y: 2 }, { x: 10, y: 20 }]);
+    const geometry = derive('line', [
+      { x: 1, y: 2 },
+      { x: 10, y: 20 },
+    ]);
     expect(geometry).not.toBeNull();
     expect(geometry!.commands).toEqual([
       { type: 'moveTo', x: 1, y: 2 },
@@ -89,19 +92,36 @@ describe('layeredShapeGeometry: line / rect', () => {
   });
 
   it('line 退化点（相同 xy）仍有效', () => {
-    const geometry = derive('line', [{ x: 5, y: 5 }, { x: 5, y: 5 }]);
+    const geometry = derive('line', [
+      { x: 5, y: 5 },
+      { x: 5, y: 5 },
+    ]);
     expect(geometry).not.toBeNull();
     expect(types(geometry!.commands)).toEqual(['moveTo', 'lineTo']);
   });
 
   it('line 点数不为 2 / 非有限 → null', () => {
     expect(derive('line', [{ x: 0, y: 0 }])).toBeNull();
-    expect(derive('line', [{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 2 }])).toBeNull();
-    expect(derive('line', [{ x: 0, y: 0 }, { x: Number.NaN, y: 1 }])).toBeNull();
+    expect(
+      derive('line', [
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+        { x: 2, y: 2 },
+      ])
+    ).toBeNull();
+    expect(
+      derive('line', [
+        { x: 0, y: 0 },
+        { x: Number.NaN, y: 1 },
+      ])
+    ).toBeNull();
   });
 
   it('rect canonical：moveTo + 3 lineTo + closePath', () => {
-    const geometry = derive('rect', [{ x: 0, y: 0 }, { x: 10, y: 20 }]);
+    const geometry = derive('rect', [
+      { x: 0, y: 0 },
+      { x: 10, y: 20 },
+    ]);
     expect(geometry!.commands).toEqual([
       { type: 'moveTo', x: 0, y: 0 },
       { type: 'lineTo', x: 10, y: 0 },
@@ -112,7 +132,10 @@ describe('layeredShapeGeometry: line / rect', () => {
   });
 
   it('rect reverse（second 在 first 左上）仍按角点合法派生', () => {
-    const geometry = derive('rect', [{ x: 10, y: 20 }, { x: 0, y: 0 }]);
+    const geometry = derive('rect', [
+      { x: 10, y: 20 },
+      { x: 0, y: 0 },
+    ]);
     expect(geometry!.commands).toEqual([
       { type: 'moveTo', x: 10, y: 20 },
       { type: 'lineTo', x: 0, y: 20 },
@@ -124,9 +147,18 @@ describe('layeredShapeGeometry: line / rect', () => {
   });
 
   it('rect 零 area / 点数不为 2 → null 或退化有效', () => {
-    const zeroArea = derive('rect', [{ x: 3, y: 3 }, { x: 3, y: 3 }]);
+    const zeroArea = derive('rect', [
+      { x: 3, y: 3 },
+      { x: 3, y: 3 },
+    ]);
     expect(zeroArea).not.toBeNull();
-    expect(types(zeroArea!.commands)).toEqual(['moveTo', 'lineTo', 'lineTo', 'lineTo', 'closePath']);
+    expect(types(zeroArea!.commands)).toEqual([
+      'moveTo',
+      'lineTo',
+      'lineTo',
+      'lineTo',
+      'closePath',
+    ]);
     expect(derive('rect', [{ x: 0, y: 0 }])).toBeNull();
   });
 });
@@ -137,7 +169,11 @@ describe('layeredShapeGeometry: line / rect', () => {
 
 describe('layeredShapeGeometry: polygon', () => {
   it('非原点 polygon 有效：moveTo + lineTo... + closePath', () => {
-    const points = [{ x: 10, y: 10 }, { x: 20, y: 10 }, { x: 10, y: 20 }];
+    const points = [
+      { x: 10, y: 10 },
+      { x: 20, y: 10 },
+      { x: 10, y: 20 },
+    ];
     const geometry = derive('polygon', points);
     expect(geometry).not.toBeNull();
     expect(geometry!.commands).toEqual([
@@ -150,28 +186,52 @@ describe('layeredShapeGeometry: polygon', () => {
   });
 
   it('共线三点 → null（10,10 20,20 30,30）', () => {
-    expect(derive('polygon', [{ x: 10, y: 10 }, { x: 20, y: 20 }, { x: 30, y: 30 }])).toBeNull();
+    expect(
+      derive('polygon', [
+        { x: 10, y: 10 },
+        { x: 20, y: 20 },
+        { x: 30, y: 30 },
+      ])
+    ).toBeNull();
   });
 
   it('非共线三点有效（10,10 20,10 10,20）', () => {
-    const geometry = derive('polygon', [{ x: 10, y: 10 }, { x: 20, y: 10 }, { x: 10, y: 20 }]);
+    const geometry = derive('polygon', [
+      { x: 10, y: 10 },
+      { x: 20, y: 10 },
+      { x: 10, y: 20 },
+    ]);
     expect(geometry).not.toBeNull();
     expect(types(geometry!.commands)).toEqual(['moveTo', 'lineTo', 'lineTo', 'closePath']);
   });
 
   it('差值法共线判定：origin(10,10) dir(10,20) third(10,30) → null', () => {
-    expect(derive('polygon', [{ x: 10, y: 10 }, { x: 10, y: 20 }, { x: 10, y: 30 }])).toBeNull();
+    expect(
+      derive('polygon', [
+        { x: 10, y: 10 },
+        { x: 10, y: 20 },
+        { x: 10, y: 30 },
+      ])
+    ).toBeNull();
   });
 
   it('差值法非共线：origin(10,10) dir(10,20) third(20,30) → 有效', () => {
-    const geometry = derive('polygon', [{ x: 10, y: 10 }, { x: 10, y: 20 }, { x: 20, y: 30 }]);
+    const geometry = derive('polygon', [
+      { x: 10, y: 10 },
+      { x: 10, y: 20 },
+      { x: 20, y: 30 },
+    ]);
     expect(geometry).not.toBeNull();
     expect(types(geometry!.commands)).toEqual(['moveTo', 'lineTo', 'lineTo', 'closePath']);
   });
 
   it('巨坐标 cross 溢出 → reject（null）', () => {
     expect(
-      derive('polygon', [{ x: 0, y: 0 }, { x: 1e308, y: 0 }, { x: 0, y: 1e154 }])
+      derive('polygon', [
+        { x: 0, y: 0 },
+        { x: 1e308, y: 0 },
+        { x: 0, y: 1e154 },
+      ])
     ).toBeNull();
   });
 
@@ -183,7 +243,13 @@ describe('layeredShapeGeometry: polygon', () => {
       { x: 10, y: 20 },
     ]);
     expect(duplicateFirst).not.toBeNull();
-    expect(types(duplicateFirst!.commands)).toEqual(['moveTo', 'lineTo', 'lineTo', 'lineTo', 'closePath']);
+    expect(types(duplicateFirst!.commands)).toEqual([
+      'moveTo',
+      'lineTo',
+      'lineTo',
+      'lineTo',
+      'closePath',
+    ]);
 
     const duplicateMiddle = derive('polygon', [
       { x: 10, y: 10 },
@@ -206,7 +272,12 @@ describe('layeredShapeGeometry: polygon', () => {
   });
 
   it('少于 3 点 → null', () => {
-    expect(derive('polygon', [{ x: 0, y: 0 }, { x: 1, y: 0 }])).toBeNull();
+    expect(
+      derive('polygon', [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+      ])
+    ).toBeNull();
   });
 });
 
@@ -216,7 +287,10 @@ describe('layeredShapeGeometry: polygon', () => {
 
 describe('layeredShapeGeometry: ellipse', () => {
   it('canonical：moveTo(cx+rx,cy) + ellipse + closePath，bounds cx±rx/cy±ry', () => {
-    const geometry = derive('ellipse', [{ x: 0, y: 0 }, { x: 20, y: 10 }]);
+    const geometry = derive('ellipse', [
+      { x: 0, y: 0 },
+      { x: 20, y: 10 },
+    ]);
     expect(geometry!.commands).toEqual([
       { type: 'moveTo', x: 20, y: 5 },
       { type: 'ellipse', cx: 10, cy: 5, rx: 10, ry: 5 },
@@ -226,7 +300,10 @@ describe('layeredShapeGeometry: ellipse', () => {
   });
 
   it('rx === 0 → 竖线退化 (cx, cy+ry)/(cx, cy-ry)', () => {
-    const geometry = derive('ellipse', [{ x: 10, y: 0 }, { x: 10, y: 10 }]);
+    const geometry = derive('ellipse', [
+      { x: 10, y: 0 },
+      { x: 10, y: 10 },
+    ]);
     expect(geometry!.commands).toEqual([
       { type: 'moveTo', x: 10, y: 10 },
       { type: 'lineTo', x: 10, y: 0 },
@@ -235,14 +312,20 @@ describe('layeredShapeGeometry: ellipse', () => {
   });
 
   it('ry === 0 → 横线退化', () => {
-    const geometry = derive('ellipse', [{ x: 0, y: 0 }, { x: 20, y: 0 }]);
+    const geometry = derive('ellipse', [
+      { x: 0, y: 0 },
+      { x: 20, y: 0 },
+    ]);
     expect(types(geometry!.commands)).toEqual(['moveTo', 'lineTo', 'closePath']);
     expect(geometry!.commands[0]).toEqual({ type: 'moveTo', x: 20, y: 0 });
     expect(geometry!.commands[1]).toEqual({ type: 'lineTo', x: 0, y: 0 });
   });
 
   it('rx === 0 且 ry === 0 → 点退化', () => {
-    const geometry = derive('ellipse', [{ x: 5, y: 5 }, { x: 5, y: 5 }]);
+    const geometry = derive('ellipse', [
+      { x: 5, y: 5 },
+      { x: 5, y: 5 },
+    ]);
     expect(geometry!.commands).toEqual([
       { type: 'moveTo', x: 5, y: 5 },
       { type: 'lineTo', x: 5, y: 5 },
@@ -251,7 +334,12 @@ describe('layeredShapeGeometry: ellipse', () => {
   });
 
   it('角点溢出 → null', () => {
-    expect(derive('ellipse', [{ x: 1e308, y: 0 }, { x: -1e308, y: 0 }])).toBeNull();
+    expect(
+      derive('ellipse', [
+        { x: 1e308, y: 0 },
+        { x: -1e308, y: 0 },
+      ])
+    ).toBeNull();
     expect(derive('ellipse', [{ x: 0, y: 0 }])).toBeNull();
   });
 });
@@ -353,7 +441,13 @@ describe('layeredShapeGeometry: bezier', () => {
   });
 
   it('点数不为 4 → null', () => {
-    expect(derive('bezier', [{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 2 }])).toBeNull();
+    expect(
+      derive('bezier', [
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+        { x: 2, y: 2 },
+      ])
+    ).toBeNull();
   });
 });
 
@@ -362,7 +456,15 @@ describe('layeredShapeGeometry: bezier', () => {
 // ---------------------------------------------------------------------------
 
 describe('layeredShapeGeometry: style 与非法输入', () => {
-  const valid = (overrides: Partial<ShapeStyle>) => derive('rect', [{ x: 0, y: 0 }, { x: 10, y: 10 }], overrides);
+  const valid = (overrides: Partial<ShapeStyle>) =>
+    derive(
+      'rect',
+      [
+        { x: 0, y: 0 },
+        { x: 10, y: 10 },
+      ],
+      overrides
+    );
 
   it('非法 style（color/width/opacity/dash/fill）→ null', () => {
     expect(valid({ color: '' })).toBeNull();
@@ -377,15 +479,33 @@ describe('layeredShapeGeometry: style 与非法输入', () => {
 
   it('未知 shapeType / 非对象 / points 非有限 → null', () => {
     expect(
-      deriveShapeGeometry({ shapeType: 'weird', points: [], style: makeStyle() } as unknown as ShapeObject)
+      deriveShapeGeometry({
+        shapeType: 'weird',
+        points: [],
+        style: makeStyle(),
+      } as unknown as ShapeObject)
     ).toBeNull();
     expect(deriveShapeGeometry(null as unknown as ShapeObject)).toBeNull();
-    expect(derive('rect', [{ x: 0, y: 0 }, { x: Number.POSITIVE_INFINITY, y: 1 }])).toBeNull();
-    expect(derive('rect', [{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 2 }])).toBeNull();
+    expect(
+      derive('rect', [
+        { x: 0, y: 0 },
+        { x: Number.POSITIVE_INFINITY, y: 1 },
+      ])
+    ).toBeNull();
+    expect(
+      derive('rect', [
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+        { x: 2, y: 2 },
+      ])
+    ).toBeNull();
   });
 
   it('不改 caller 且深冻结（caller 变更不影响结果）', () => {
-    const points = [{ x: 0, y: 0 }, { x: 10, y: 10 }];
+    const points = [
+      { x: 0, y: 0 },
+      { x: 10, y: 10 },
+    ];
     const shape = makeShape('rect', points, { width: 4 });
     const geometry = deriveShapeGeometry(shape)!;
     const before = JSON.stringify(geometry);
@@ -402,12 +522,28 @@ describe('layeredShapeGeometry: style 与非法输入', () => {
   });
 
   it('visualLocalBounds = localBounds 外扩 width/2', () => {
-    const geometry = derive('rect', [{ x: 0, y: 0 }, { x: 10, y: 10 }], { width: 2 })!;
+    const geometry = derive(
+      'rect',
+      [
+        { x: 0, y: 0 },
+        { x: 10, y: 10 },
+      ],
+      { width: 2 }
+    )!;
     expect(geometry.visualLocalBounds).toEqual({ minX: -1, minY: -1, maxX: 11, maxY: 11 });
   });
 
   it('visual expand 溢出 → null（line 1.7e308 + width 1e308）', () => {
-    expect(derive('line', [{ x: 0, y: 0 }, { x: 1.7e308, y: 0 }], { width: 1e308 })).toBeNull();
+    expect(
+      derive(
+        'line',
+        [
+          { x: 0, y: 0 },
+          { x: 1.7e308, y: 0 },
+        ],
+        { width: 1e308 }
+      )
+    ).toBeNull();
   });
 });
 
@@ -422,18 +558,40 @@ describe('layeredShapeGeometry: SVG 与 replay', () => {
   };
 
   it('line/rect/polygon/bezier 输出准确 M/L/C（无自主平滑）', () => {
-    expect(svg('line', [{ x: 1, y: 2 }, { x: 10, y: 20 }])).toBe('M 1 2 L 10 20');
-    expect(svg('rect', [{ x: 0, y: 0 }, { x: 10, y: 20 }])).toBe('M 0 0 L 10 0 L 10 20 L 0 20 Z');
-    expect(svg('polygon', [{ x: 10, y: 10 }, { x: 20, y: 10 }, { x: 10, y: 20 }])).toBe(
-      'M 10 10 L 20 10 L 10 20 Z'
-    );
     expect(
-      svg('bezier', [{ x: 0, y: 0 }, { x: 0, y: 100 }, { x: 100, y: 100 }, { x: 100, y: 0 }])
+      svg('line', [
+        { x: 1, y: 2 },
+        { x: 10, y: 20 },
+      ])
+    ).toBe('M 1 2 L 10 20');
+    expect(
+      svg('rect', [
+        { x: 0, y: 0 },
+        { x: 10, y: 20 },
+      ])
+    ).toBe('M 0 0 L 10 0 L 10 20 L 0 20 Z');
+    expect(
+      svg('polygon', [
+        { x: 10, y: 10 },
+        { x: 20, y: 10 },
+        { x: 10, y: 20 },
+      ])
+    ).toBe('M 10 10 L 20 10 L 10 20 Z');
+    expect(
+      svg('bezier', [
+        { x: 0, y: 0 },
+        { x: 0, y: 100 },
+        { x: 100, y: 100 },
+        { x: 100, y: 0 },
+      ])
     ).toBe('M 0 0 C 0 100 100 100 100 0');
   });
 
   it('ellipse SVG：恰一个 M、两段 A sweep=1、一个 Z（不额外 M/Z）', () => {
-    const path = svg('ellipse', [{ x: 0, y: 0 }, { x: 20, y: 10 }]);
+    const path = svg('ellipse', [
+      { x: 0, y: 0 },
+      { x: 20, y: 10 },
+    ]);
     expect(path).toBe('M 20 5 A 10 5 0 1 1 0 5 A 10 5 0 1 1 20 5 Z');
     expect(path.match(/M/g) ?? []).toHaveLength(1);
     expect(path.match(/A/g) ?? []).toHaveLength(2);
@@ -443,7 +601,10 @@ describe('layeredShapeGeometry: SVG 与 replay', () => {
   });
 
   it('line/rect/polygon/bezier replay：与 commands 一对一、无 beginPath', () => {
-    const line = derive('line', [{ x: 1, y: 2 }, { x: 3, y: 4 }])!;
+    const line = derive('line', [
+      { x: 1, y: 2 },
+      { x: 3, y: 4 },
+    ])!;
     const { target, calls } = createRecorder();
     replayShapeCommands(target, line.commands);
     expect(calls).toEqual([
@@ -452,7 +613,10 @@ describe('layeredShapeGeometry: SVG 与 replay', () => {
     ]);
     expect(calls.some(([name]) => name === 'beginPath')).toBe(false);
 
-    const rect = derive('rect', [{ x: 0, y: 0 }, { x: 10, y: 20 }])!;
+    const rect = derive('rect', [
+      { x: 0, y: 0 },
+      { x: 10, y: 20 },
+    ])!;
     const rectRecorder = createRecorder();
     replayShapeCommands(rectRecorder.target, rect.commands);
     expect(rectRecorder.calls).toEqual([
@@ -463,7 +627,11 @@ describe('layeredShapeGeometry: SVG 与 replay', () => {
       ['closePath'],
     ]);
 
-    const polygon = derive('polygon', [{ x: 10, y: 10 }, { x: 20, y: 10 }, { x: 10, y: 20 }])!;
+    const polygon = derive('polygon', [
+      { x: 10, y: 10 },
+      { x: 20, y: 10 },
+      { x: 10, y: 20 },
+    ])!;
     const polygonRecorder = createRecorder();
     replayShapeCommands(polygonRecorder.target, polygon.commands);
     expect(polygonRecorder.calls).toEqual([
@@ -492,7 +660,10 @@ describe('layeredShapeGeometry: SVG 与 replay', () => {
   });
 
   it('ellipse replay：仅 ellipse(cx,cy,rx,ry,0,0,2π,false)，move/close 由周边命令负责', () => {
-    const geometry = derive('ellipse', [{ x: 0, y: 0 }, { x: 20, y: 10 }])!;
+    const geometry = derive('ellipse', [
+      { x: 0, y: 0 },
+      { x: 20, y: 10 },
+    ])!;
     const { target, calls } = createRecorder();
     replayShapeCommands(target, geometry.commands);
     expect(calls).toEqual([
@@ -509,5 +680,3 @@ describe('layeredShapeGeometry: SVG 与 replay', () => {
     expect(typeof fromPath2D).toBe('function');
   });
 });
-
-

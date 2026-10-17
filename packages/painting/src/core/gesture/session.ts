@@ -707,7 +707,11 @@ function uniformScaleIntent(
     (pointerVector.x * handleVector.x + pointerVector.y * handleVector.y) / lengthSquared;
   // 穿过 anchor 会引入反射；它不是本阶段支持的仿射变形，因而安全回到 identity。
   if (!Number.isFinite(rawScale) || rawScale < 0) {
-    return Object.freeze({ kind: 'uniform-scale', anchor: freezePoint(descriptor.anchor), scale: 1 });
+    return Object.freeze({
+      kind: 'uniform-scale',
+      anchor: freezePoint(descriptor.anchor),
+      scale: 1,
+    });
   }
   const minimumScreenExtent = descriptor.minimumScreenExtent ?? 1;
   // 若调用方提供的初始选框已经小于最小可缩屏幕尺寸，down 仍必须精确为 1，不能跳变。
@@ -739,7 +743,11 @@ function selectionIntent(
   if (descriptor.kind === 'uniform-scale') {
     // 明确保留 down 的 identity，而不依赖浮点减法后“恰好”再得到 1。
     if (current.x === start.x && current.y === start.y) {
-      return Object.freeze({ kind: 'uniform-scale', anchor: freezePoint(descriptor.anchor), scale: 1 });
+      return Object.freeze({
+        kind: 'uniform-scale',
+        anchor: freezePoint(descriptor.anchor),
+        scale: 1,
+      });
     }
     return uniformScaleIntent(descriptor, grabOffset, current);
   }
@@ -759,9 +767,9 @@ function selectionChanged(intent: SelectionGestureIntent): boolean {
     ? intent.delta.x !== 0 || intent.delta.y !== 0
     : intent.kind === 'uniform-scale'
       ? intent.scale !== 1
-    : intent.kind === 'resize'
-      ? intent.scale.x !== 1 || intent.scale.y !== 1
-      : intent.deltaRad !== 0;
+      : intent.kind === 'resize'
+        ? intent.scale.x !== 1 || intent.scale.y !== 1
+        : intent.deltaRad !== 0;
 }
 
 /**
@@ -1138,7 +1146,12 @@ export function reduceGestureSession(
     } else if (input.phase === 'move' && selection?.pointerId === input.pointerId) {
       selection = Object.freeze({
         ...selection,
-        intent: selectionIntent(selection.descriptor, selection.start, selection.grabOffset, input.screen),
+        intent: selectionIntent(
+          selection.descriptor,
+          selection.start,
+          selection.grabOffset,
+          input.screen
+        ),
       });
     } else if (
       (input.phase === 'up' || input.phase === 'cancel') &&
@@ -1146,14 +1159,19 @@ export function reduceGestureSession(
     ) {
       const finalIntent =
         input.phase === 'up'
-          ? selectionIntent(selection.descriptor, selection.start, selection.grabOffset, input.screen)
+          ? selectionIntent(
+              selection.descriptor,
+              selection.start,
+              selection.grabOffset,
+              input.screen
+            )
           : selection.intent;
-       if (input.phase === 'up' && selectionChanged(finalIntent)) {
-         effects = Object.freeze([
-           finalIntent.kind === 'uniform-scale'
-             ? { type: 'uniform-scale-commit', intent: finalIntent }
-             : { type: 'selection-commit', intent: finalIntent },
-         ]);
+      if (input.phase === 'up' && selectionChanged(finalIntent)) {
+        effects = Object.freeze([
+          finalIntent.kind === 'uniform-scale'
+            ? { type: 'uniform-scale-commit', intent: finalIntent }
+            : { type: 'selection-commit', intent: finalIntent },
+        ]);
       }
       selection = null;
       status = input.phase === 'cancel' ? 'cancelled' : 'completed';
