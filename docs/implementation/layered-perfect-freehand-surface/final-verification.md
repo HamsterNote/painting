@@ -51,4 +51,8 @@ podman run --rm --name ham40-webkit-check --network host \
 
 3.3 / 6.1 / 7.5 / 7.6 / 7.8 的设备验收保留未勾选，已明确移入 `manual-acceptance.md`：Safari/iOS WebView 混排、系统 IME/键盘/焦点、原生启动；真笔四模式、up=0、掌触、高刷新交接；目标设备长笔 CPU/内存/rAF/历史 reconcile 与 WebView 预算。静态导出不等于原生构建或设备运行，内部 ACK 不证明 physical paint，未来 native bridge 性能不在本期实现范围。
 
-CI 实际结果将在完成后补录，当前不能据此声明通过。
+## CI 实际结果
+
+`gh pr checks 24 --watch --interval 20` 在本轮前台收集完成，exit 0。`e9f4356d5d49d66b98d2e9412019e035c8870ef6` 的 [Test and Build](https://github.com/HamsterNote/painting/actions/runs/39053474621) 全部步骤成功，用时 7m8s：冻结安装、lint/typecheck、三工程 Jest（含 native 最小挂载）与纯工具、strict、Chromium、独立 WebKit、两包/Expo Web 构建、pack、无 Skia 产物检查、Android/iOS Expo DOM 静态导出。CodeQL 的 actions / javascript-typescript 分析及汇总三项也全部 PASS。
+
+补录此结果的后续提交仅修改证据文字与任务状态，会正常触发新 SHA 的 CI；上述通过结论严格对应 `e9f4356`，不把重跑中的新 SHA 描述为已通过。7.9/7.10 收尾后再次实跑全量 `pnpm test`：82 suites / 1065 tests PASS（11.814s）；`openspec validate layered-perfect-freehand-surface --strict` exit 0。当前 40/45 完成，五项设备部分均明确移入人工清单，原 checkbox 未勾选。
