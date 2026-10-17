@@ -1,1 +1,1 @@
-{"version":3,"names":["LayeredPaintingBoard","PaintingBoard","createEditor"],"sourceRoot":"../../src","sources":["index.tsx"],"mappings":";;AAAA,SACEA,oBAAoB,EACpBA,oBAAoB,IAAIC,aAAa,QAChC,gCAAgC;AAEvC,SAASC,YAAY,QAAQ,gCAAgC","ignoreList":[]}
+{"version":3,"names":["LayeredPaintingBoard","PaintingBoard","createEditor"],"sourceRoot":"../../src","sources":["index.tsx"],"mappings":";;AAAA,SACEA,oBAAoB,EACpBA,oBAAoB,IAAIC,aAAa,QAChC,gCAAgC;AAGvC,SAASC,YAAY,QAAQ,gCAAgC","ignoreList":[]}
