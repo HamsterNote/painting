@@ -1,9 +1,18 @@
-import type { DrawingSurfaceProps, DrawingSurfaceVirtualPaperOptions } from '../index';
+import {
+  createEditor,
+  type DrawingSurfaceProps,
+  type DrawingSurfaceVirtualPaperOptions,
+} from '../index';
 
-const omittedVirtualPaperProps: DrawingSurfaceProps = {};
-const enabledVirtualPaperProps: DrawingSurfaceProps = { virtualPaper: true };
-const disabledVirtualPaperProps: DrawingSurfaceProps = { virtualPaper: false };
-const disabledObjectVirtualPaperProps: DrawingSurfaceProps = { virtualPaper: { enabled: false } };
+const controller = createEditor();
+
+const omittedVirtualPaperProps: DrawingSurfaceProps = { controller };
+const enabledVirtualPaperProps: DrawingSurfaceProps = { controller, virtualPaper: true };
+const disabledVirtualPaperProps: DrawingSurfaceProps = { controller, virtualPaper: false };
+const disabledObjectVirtualPaperProps: DrawingSurfaceProps = {
+  controller,
+  virtualPaper: { enabled: false },
+};
 
 const publicVirtualPaperOptions: DrawingSurfaceVirtualPaperOptions = {
   enabled: true,
@@ -14,6 +23,7 @@ const publicVirtualPaperOptions: DrawingSurfaceVirtualPaperOptions = {
 };
 
 const configuredVirtualPaperProps: DrawingSurfaceProps = {
+  controller,
   virtualPaper: publicVirtualPaperOptions,
 };
 

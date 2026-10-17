@@ -1,4 +1,4 @@
-import { DrawingSurface as DrawingSurfaceFromIndex } from '@hamster-note/painting';
+import { DrawingSurface as DrawingSurfaceFromIndex } from '../components/DrawingSurface';
 import { act, render, screen } from '@testing-library/react';
 import { createRef, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';

@@ -1,12 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import {
-  createGestureSessionBridge,
-  createWebInputAdapter,
-  normalizePointerInput,
-  resolveTargetRole,
-} from '@hamster-note/painting/input/web';
+import { createFreehandWebAdapter } from '@hamster-note/painting/input/web';
 
 /**
  * `@hamster-note/painting/input/web` 是仅供 Web 编辑器模块（`*.web.*`）引用的有界子路径。
@@ -30,23 +25,18 @@ interface PackageJson {
 }
 
 function readPackageJson(): PackageJson {
-  return JSON.parse(
-    readFileSync(join(packageRoot, 'package.json'), 'utf8')
-  ) as PackageJson;
+  return JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) as PackageJson;
 }
 
 describe('@hamster-note/painting/input/web', () => {
   it('exports the bounded Web input adapter API without using the root barrel', () => {
-    expect(createGestureSessionBridge).toBeDefined();
-    expect(createWebInputAdapter).toBeDefined();
-    expect(normalizePointerInput).toBeDefined();
-    expect(resolveTargetRole).toBeDefined();
+    expect(createFreehandWebAdapter).toBeDefined();
   });
 
   it('解析条件与 ./skia 同构：react-native 指向真实 Web 源码，且任何条件都不为 null', () => {
     const { exports } = readPackageJson();
     const webExport = exports['./input/web'];
-    const skiaExport = exports['./skia'];
+    const skiaExport = exports['./layered'];
 
     expect(webExport).toBeDefined();
     expect(skiaExport).toBeDefined();

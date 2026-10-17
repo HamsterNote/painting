@@ -2,6 +2,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import ts from 'typescript';
 
 import {
   addStroke,
@@ -48,10 +49,12 @@ type CoreImportGraph = Readonly<{
   sourceFiles: readonly string[];
 }>;
 
-function collectCoreImportGraph(entryFiles: readonly string[]): CoreImportGraph {
+function collectCoreImportGraph(
+  entryFiles: readonly string[],
+  includeTypes = true
+): CoreImportGraph {
   const visited = new Set<string>();
   const externalSpecifiers: string[] = [];
-  const importPattern = /(?:\bfrom\s+|\bimport\s*)['"]([^'"]+)['"]/g;
 
   function visit(filePath: string): void {
     if (visited.has(filePath)) {
@@ -59,9 +62,31 @@ function collectCoreImportGraph(entryFiles: readonly string[]): CoreImportGraph 
     }
 
     visited.add(filePath);
-    const source = readFileSync(filePath, 'utf8');
-    for (const match of source.matchAll(importPattern)) {
-      const specifier = match[1];
+    const source = ts.createSourceFile(
+      filePath,
+      readFileSync(filePath, 'utf8'),
+      ts.ScriptTarget.Latest,
+      true
+    );
+    for (const statement of source.statements) {
+      if (!(ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement))) continue;
+      const module = statement.moduleSpecifier;
+      if (!module || !ts.isStringLiteral(module)) continue;
+      if (!includeTypes) {
+        if (ts.isImportDeclaration(statement)) {
+          const clause = statement.importClause;
+          if (clause?.isTypeOnly) continue;
+          const bindings = clause?.namedBindings;
+          if (
+            !clause?.name &&
+            bindings &&
+            ts.isNamedImports(bindings) &&
+            bindings.elements.every((entry) => entry.isTypeOnly)
+          )
+            continue;
+        } else if (statement.isTypeOnly) continue;
+      }
+      const specifier = module.text;
       if (specifier.startsWith('.')) {
         visit(resolveRelativeModule(filePath, specifier));
       } else {
@@ -201,9 +226,9 @@ describe('core/document', () => {
     expect(removeStroke(updated, 'first').strokes[0]).toMatchObject({ resourceId: 'resource-1' });
   });
 
-  it('keeps the complete core import graph independent from package and platform layers', () => {
+  it('keeps retained private math independent from package and platform layers', () => {
     // 完整闭包必须从 canonical core 入口出发，覆盖 index.ts 与全部纯模块。
-    const graph = collectCoreImportGraph(['index.ts']);
+    const graph = collectCoreImportGraph(['internal.ts']);
     const approvedRoots = [
       resolve(sourceRoot, 'core'),
       resolve(sourceRoot, 'model'),
@@ -251,6 +276,31 @@ describe('core/document', () => {
     expect(graph.sourceFiles).toContain(resolve(sourceRoot, 'viewport.ts'));
   });
 
+  it('keeps the public schema3 core headless with no legacy document or renderer fallback', () => {
+    const graph = collectCoreImportGraph(['index.ts'], false);
+    const approvedRoots = [
+      'core',
+      'model',
+      'geometry',
+      'ruler/geometry.ts',
+      'viewport.ts',
+      'virtualPaperOptions.ts',
+    ].map((entry) => resolve(sourceRoot, entry));
+    for (const file of graph.sourceFiles) {
+      expect(approvedRoots.some((root) => file === root || file.startsWith(`${root}/`))).toBe(true);
+      expect(file).not.toMatch(/\/(?:internal|editorController|strokes|strokeMigration)\.ts$/);
+      expect(file).not.toBe(resolve(sourceRoot, 'core/document.ts'));
+    }
+    expect(graph.externalSpecifiers).toEqual(
+      expect.arrayContaining(['perfect-freehand', 'polyclip-ts'])
+    );
+    expect(
+      graph.externalSpecifiers.filter((entry) => /^(?:react|expo|@shopify)/.test(entry))
+    ).toEqual([]);
+    expect(graph.sourceFiles).toContain(resolve(sourceRoot, 'core/layeredEditorController.ts'));
+    expect(graph.sourceFiles).toContain(resolve(sourceRoot, 'model/documentReader.ts'));
+  });
+
   it('keeps selection queries within the pure core/model/polygon closure', () => {
     const graph = collectCoreImportGraph(['selectionQuery.ts']);
     const approvedRoots = [resolve(sourceRoot, 'core'), resolve(sourceRoot, 'model')];
@@ -259,7 +309,9 @@ describe('core/document', () => {
 
     expect(graph.sourceFiles).not.toEqual([]);
     graph.sourceFiles.forEach((filePath) => {
-      expect(approvedRoots.some((root) => filePath === root || filePath.startsWith(`${root}/`))).toBe(true);
+      expect(
+        approvedRoots.some((root) => filePath === root || filePath.startsWith(`${root}/`))
+      ).toBe(true);
       expect(filePath).not.toBe(resolve(sourceRoot, 'utils.ts'));
     });
     graph.externalSpecifiers.forEach((specifier) => {

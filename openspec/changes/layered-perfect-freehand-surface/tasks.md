@@ -49,7 +49,7 @@
 
 - [ ] 6.1 建立 Web/iOS/Android 三个可替换 DrawingLayer 平台入口，第一期均委托 Web 实现，保留 Expo DOM/WebView 承载整个 Web 编辑器；通过平台解析/构建 smoke 和设备启动验证无本期 native ink 或逐点 RN props bridge。
 - [x] 6.2 写未来 native semantic adapter 契约与 mock 合约测试（批量 raw+commitId、pan/zoom intent、非笔轨迹、text focus/keyboard），不实现原生墨迹；验证 Web 唯一 viewport、无 native WebView transform 补偿、预测不持久化、mock ACK 不被称为真实 paint/桥性能验收。（本次：`layered-native-contract.test.ts` 3 tests PASS，纳入 `pnpm test` 85 suites / 1462 tests PASS；契约见 `native-semantic-contract.md`，命令见 `ham40-verification.md`。）
-- [ ] 6.3 将 playground/board 示例迁至唯一分层入口，移除确认的 legacy V1/V2 运行路由与自由笔虚线 fallback；通过 UI 导航/公开入口检查验证所有保留能力可用且未新增 PNG/SVG 导出。
+- [x] 6.3 将 playground/board 示例迁至唯一分层入口，移除确认的 legacy V1/V2 运行路由与自由笔虚线 fallback；通过 UI 导航/公开入口检查验证所有保留能力可用且未新增 PNG/SVG 导出。（2026-10-18：根入口与 `/core` 切换 schema3，移除六条旧 app 路由及其候选/资源/Skia 示例实现；board、根 App 和 `/` 均进入分层编辑器。`pnpm typecheck` exit 0；`pnpm test` 93 suites / 1502 tests PASS；`pnpm test:ui tests/ui/layered-editor.spec.ts tests/ui/playground.spec.ts --workers=1 --trace=off` Chromium 21/21 PASS；迁移后的 `canvas-runtime.spec.ts` Chromium 2/2 PASS。公开别名/无旧 API/headless 闭包均有回归，无新增导出功能。Skia 包级源与依赖继续由 6.4 完整退出。）
 - [ ] 6.4 按已审核清单移除 Skia rendering/exports/peer/dev/app 依赖、专用 fixtures/test/scripts/setup/CONTEXT/doc，混合配置仅局部清理并保留 Expo/native 测试；验证活动代码/依赖/构建资源无 Skia 引用，剩余规划中退休说明属于预期文本，删除前后无关 dirty 改动一致。
 - [ ] 6.5 在主编排再次核对未完成旧任务与备份后移除 `migrate-expo57-skia-surface` 未归档 change，不归档或标记完成；验证新 proposal 的 supersedes 记录保留、旧目录退出且无范围外文档误删。
 - [ ] 6.6 用 pnpm 更新并审核锁文件，移除仅为 Skia 引入且无其他使用方的依赖/资源；运行 `pnpm install --frozen-lockfile` 验证可复现，保留非 Skia Expo/工具链内容。

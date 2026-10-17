@@ -1,103 +1,14 @@
-// canonical 纯 V2 API 只从 @hamster-note/painting/core 导入。
-// 根入口是既有使用方的旧 API shim，不再 star 重导出 ./core，
-// 以免 core 与 legacy 的同名 utils 操作在根入口发生隐蔽语义遮蔽。
-//
-// 旧 V1 DrawingSurface/types 是兼容 shim，legacy renderer 的双形态分支留待后续 Skia 阶段处理。
-export type {
-  DrawingEraserCommitMode,
-  DrawingEraserTrajectoryOptions,
-  DrawingEventTarget,
-  DrawingEventTargetRef,
-  DrawingInputMethod,
-  DrawingPoint,
-  DrawingRulerOptions,
-  DrawingRulerState,
-  DrawingSelectionChange,
-  DrawingSelectionOverlay,
-  DrawingSnapOptions,
-  DrawingStroke,
-  DrawingSurfaceHandle,
-  DrawingSurfaceProps,
-  DrawingTool,
-  DrawingValue,
-} from './components/DrawingSurface';
-export { DrawingSurface } from './components/DrawingSurface';
-export type { MinimapOptions, MinimapProps } from './components/Minimap';
-export { Minimap } from './components/Minimap';
-export type {
-  PaintingBoardControllerBinding,
-  PaintingBoardProps,
-  PaintingBoardSelectionPopoverOptions,
-  PaintingBoardToolbarOptions,
-} from './components/PaintingBoard';
-export { PAINTING_BOARD_DEFAULT_TOOLS, PaintingBoard } from './components/PaintingBoard';
-export type {
-  PaintingControllerData,
-  PaintingControllerProps,
-  PaintingControllerSelection,
-} from './components/PaintingController';
-export { PaintingController } from './components/PaintingController';
-export type { PaintingColorOption } from './components/PaintingStrokeColorControl';
-export type { UseCanvasOptions, UseCanvasReturn } from './hooks/useCanvas';
-export { useCanvas } from './hooks/useCanvas';
-export type {
-  PaintingHistory,
-  PaintingHistoryControls,
-  PaintingHistoryValues,
-} from './hooks/usePaintingHistory';
-export { usePaintingHistory } from './hooks/usePaintingHistory';
-export { assertNever } from './model/assertNever';
-export { migrateStroke, normalizeDrawingValue } from './model/strokeMigration';
-export type {
-  BezierStrokeV2,
-  DrawingPointV2,
-  DrawingStrokeToolV2,
-  DrawingStrokeV2,
-  DrawingToolModeV2,
-  DrawingValueV2,
-  EllipseStrokeV2,
-  ImageStrokeV2,
-  LineStrokeV2,
-  PenStrokeV2,
-  PolygonStrokeV2,
-  RectStrokeV2,
-  TextStrokeV2,
-} from './model/strokes';
-export { DRAWING_STROKE_SCHEMA_VERSION } from './model/strokes';
-export type {
-  ResolvedStrokeStyle,
-  ResolveStrokeStyleOptions,
-  StrokeStyleFields,
-} from './render/resolveStrokeStyle';
-export { resolveStrokeStyle } from './render/resolveStrokeStyle';
-export type { RenderableStroke, StrokeRendererProps } from './render/StrokeRenderer';
-export { StrokeRenderer } from './render/StrokeRenderer';
-export type {
-  GenerateRulerTicksOptions,
-  RulerPoint,
-  RulerRect,
-  RulerTick,
-  RulerTickKind,
-} from './ruler';
+export * from './layered';
+export { LayeredDrawingSurface as DrawingSurface } from './layered/DrawingSurface';
+export type { LayeredDrawingSurfaceProps as DrawingSurfaceProps } from './layered/DrawingSurface';
+export { LayeredPaintingBoard as PaintingBoard } from './layered/PaintingBoard';
+export type { LayeredPaintingBoardProps as PaintingBoardProps } from './layered/PaintingBoard';
 export {
   DEFAULT_RULER_PIXELS_PER_INCH,
   generateRulerTicks,
   isInsideRuler,
   millimetersToPixels,
 } from './ruler';
-export type { DrawingStrokeSmoothingOptions } from './stroke-helpers';
-export type { LassoSelectionOptions } from './utils';
-export {
-  addStroke,
-  clearStrokes,
-  pick,
-  pickTextStrokeAtPoint,
-  removeStroke,
-  removeStrokes,
-  selectStrokesIntersectingLasso,
-  updateStroke,
-  updateStrokes,
-} from './utils';
 export type { DrawingViewport, ViewportPoint } from './viewport';
 export {
   canvasToScreen,
@@ -112,8 +23,4 @@ export {
   virtualPaperTransformToViewport,
 } from './viewport';
 export { isVirtualPaperEnabled } from './virtualPaperAdapter';
-export type {
-  DrawingSurfaceVirtualPaperInteraction,
-  DrawingSurfaceVirtualPaperOptions,
-} from './virtualPaperOptions';
 export { SAFE_DEFAULT_VIRTUAL_PAPER_INTERACTIONS } from './virtualPaperOptions';

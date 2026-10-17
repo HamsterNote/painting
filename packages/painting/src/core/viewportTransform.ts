@@ -1,5 +1,5 @@
 import { MAX_VIEWPORT_SCALE, MIN_VIEWPORT_SCALE, type DrawingViewport } from '../viewport';
-import type { Point } from './input';
+import type { Point } from '../model/document';
 
 /** 用户可进一步收紧、但绝不能放宽全局 [0.25, 8] 缩放边界的限制。 */
 export type ViewportScaleLimits = Readonly<{

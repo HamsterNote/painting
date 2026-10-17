@@ -1,4 +1,1 @@
-export * from './createGestureSessionBridge';
-export * from './normalizePointerInput';
-export * from './resolveTargetRole';
-export * from './webInputAdapter';
+export * from './freehandWebAdapter';

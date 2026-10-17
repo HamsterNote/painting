@@ -1,5 +1,13 @@
 # 分层入口的回归迁移
 
+## 公开入口切换
+
+根 `DrawingSurface` / `PaintingBoard` 是新分层组件的同一函数别名，必须传 controller；`/core` 只暴露 schema3 控制器、会话、查询与共享几何。新增 `layered-public-entry.test.tsx` 检查实际公开挂载、旧 API 不可见；原 core 边界测试保留私有 V2 数学闭包检查，新增 schema3 运行时闭包检查（TypeScript AST 排除 type-only imports）。旧纯函数/手势测试仍运行，不通过旧运行路由绕回旧文档。
+
+删除范围：app 的 `legacy`、`editor-candidate`、`resource-editing-fixture`、`canvas-runtime`、`skia-smoke`、`skia-drawing-fixture` 六条路由及其专用 `src` 实现、旧 ExternalPropsDemo。候选目录中未被 Jest 收集的八份 unit 文件是旧 frame/Skia/折线性能实验，不转记为通过；其中保留的输入/事务/正确性行为迁至已收集的分层 core、Canvas、文本、图片与浏览器回归，性能门转入人工设备预算。`canvas-runtime.spec.ts` 的正常/失败切换测试迁为默认分层运行、阻断 WASM 仍可绘制/undo/redo、零 CanvasKit 请求与零 pageerror；WASM retry/back 模式随对应运行时退役。
+
+实跑：`pnpm typecheck` exit 0；全量 `pnpm test` 93 suites / 1502 tests PASS（旧组件回归此批仍完整运行）；分层+playground Chromium 21/21 PASS；运行时迁移 Chromium 2/2 PASS。6.3 已完成，Skia 包源、依赖与旧组件物理退出留下一批。
+
 ## 组件回归搬迁（第三批）
 
 旧 DrawingSurface、Minimap、TextDrawingSurface 的保留语义通过真实分层组件重新执行：`layered-surface-regression.test.tsx` 覆盖 dot/raw/up=0、五类形状实时预览/取消、brush 快照、竞争掌触、冻结 viewport、五种生命周期取消和 mouse policy；`layered-minimap.test.tsx` 覆盖开关/混合对象、拖动唯一 viewport、极远/变换对象的有限投影；`layered-text-regression.test.tsx` 覆盖多语言既有文字修改、顺序/图片不变、无修改退出、清空删除、过期修订拒绝及混合文字/图片 move/resize/rotate 预览取消与可逆事务。迁移时修复了未修改文字也产生 history 的问题。

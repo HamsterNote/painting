@@ -6,6 +6,7 @@ export default defineConfig({
   outputDir: 'test-results/webkit',
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report/webkit' }]],
   testMatch: [
+    'canvas-runtime.spec.ts',
     'layered-editor.spec.ts',
     'resource-editing-fixture.spec.ts',
     'ruler-edge-inputs.spec.ts',

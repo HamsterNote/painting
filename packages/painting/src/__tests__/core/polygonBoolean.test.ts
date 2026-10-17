@@ -68,7 +68,7 @@ describe('core/polygonBoolean', () => {
     }));
     let clipped: { status: string; diagnostic?: { reason: string } } | undefined;
     jest.isolateModules(() => {
-      const core = require('../../core') as typeof import('../../core');
+      const core = require('../../core/internal') as typeof import('../../core/internal');
       const prepared = core.prepareDrawingDocument({
         schemaVersion: 2,
         strokes: [
