@@ -3,21 +3,11 @@
   "compilerOptions": {
     "strict": true,
     "paths": {
-      "@hamster-note/painting": [
-        "../../packages/painting/src/index.ts"
-      ],
-      "@hamster-note/painting-board": [
-        "../../packages/painting-board/src/index.tsx"
-      ]
+      "@hamster-note/painting": ["../../packages/painting/src/index.ts"],
+      "@hamster-note/painting/*": ["../../packages/painting/src/*"],
+      "@hamster-note/painting-board": ["../../packages/painting-board/src/index.tsx"]
     }
   },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    ".expo"
-  ]
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules", "dist", ".expo"]
 }

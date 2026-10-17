@@ -16,5 +16,7 @@ test('native route mounts the whole DOM editor with layout-only props', async ()
   const result = await render(<LayeredEditorRoute />);
   const host = result.getByTestId('expo-dom-editor-host');
   expect(host.props.dom).toEqual({ style: { flex: 1 } });
-  expect(Object.keys(host.props).filter((key) => !['testID', 'dom', 'children'].includes(key))).toEqual([]);
+  expect(
+    Object.keys(host.props).filter((key) => !['testID', 'dom', 'children'].includes(key))
+  ).toEqual([]);
 });
