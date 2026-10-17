@@ -9,7 +9,7 @@ import { useEditorSnapshot } from './useEditorSnapshot';
 
 export type RenderObserver = (scope: 'display' | 'object', objectId?: string) => void;
 
-const ObjectNode = memo(function ObjectNode({
+export const ObjectNode = memo(function ObjectNode({
   object,
   cache,
   onRender,
@@ -144,7 +144,7 @@ export function DisplayLayer({
       data-testid="layered-display"
       width="100%"
       height="100%"
-      style={{ position: 'absolute', inset: 0, overflow: 'visible' }}
+      style={{ position: 'absolute', inset: 0, overflow: 'visible', pointerEvents: 'none' }}
     >
       <g
         transform={`matrix(${viewport.scale} 0 0 ${viewport.scale} ${viewport.tx} ${viewport.ty})`}
@@ -164,6 +164,7 @@ export function DisplayLayer({
               data-object-id={object.objectId}
               transform={`matrix(${t.a} ${t.b} ${t.c} ${t.d} ${t.tx} ${t.ty})`}
               style={{
+                pointerEvents: 'auto',
                 visibility:
                   presentation.isHidden(object.objectId) ||
                   (preview.hiddenIds.includes(object.objectId) && !preview.objects.includes(object))

@@ -24,6 +24,7 @@ import type {
   BrushSnapshot,
   EditorDocument,
   FreehandObject,
+  FreehandRulerSnapshot,
   Point,
   ResolvedPressureMode,
 } from '../model/document';
@@ -91,6 +92,7 @@ type GeometryCacheEntry = Readonly<{
   versionKey: string;
   samples: readonly AcceptedSample[];
   brush: BrushSnapshot;
+  ruler?: FreehandRulerSnapshot;
   geometry: DerivedFreehandGeometry;
 }>;
 
@@ -110,14 +112,7 @@ type ObjectCacheSlot = {
 
 /** 数值相等的仿射比较；按值而非引用比较，使等价的新 transform 对象仍能复用呈现。 */
 function isSameTransform(a: AffineTransform, b: AffineTransform): boolean {
-  return (
-    a.a === b.a &&
-    a.b === b.b &&
-    a.c === b.c &&
-    a.d === b.d &&
-    a.tx === b.tx &&
-    a.ty === b.ty
-  );
+  return a.a === b.a && a.b === b.b && a.c === b.c && a.d === b.d && a.tx === b.tx && a.ty === b.ty;
 }
 
 /** 断言 transform 各分量有限且矩阵可逆（det != 0）。 */
@@ -270,7 +265,8 @@ export class FreehandGeometryCache {
       (entry) =>
         entry.versionKey === versionKey &&
         entry.samples === object.samples &&
-        entry.brush === object.brushSnapshot
+        entry.brush === object.brushSnapshot &&
+        entry.ruler === object.rulerSnapshot
     );
     if (hit !== undefined) {
       return hit.geometry;
@@ -283,6 +279,7 @@ export class FreehandGeometryCache {
         versionKey,
         samples: object.samples,
         brush: object.brushSnapshot,
+        ruler: object.rulerSnapshot,
         geometry,
       })
     );

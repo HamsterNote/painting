@@ -73,7 +73,11 @@ const DEFAULT_POLICY: WebFreehandPolicy = Object.freeze({
 const SAFE_CONTROL_SELECTOR =
   'button,input,textarea,select,a[href],[contenteditable],[data-interactive]';
 
-const PRESSURE_CAPABILITIES: readonly PressureCapability[] = ['available', 'unavailable', 'unknown'];
+const PRESSURE_CAPABILITIES: readonly PressureCapability[] = [
+  'available',
+  'unavailable',
+  'unknown',
+];
 
 /** screen 坐标原点：host 边界矩形左上 + border 偏移。 */
 type ScreenOrigin = Readonly<{
@@ -113,7 +117,14 @@ function toSample(
   sequence: number,
   event: PointerEvent,
   phase: 'down' | 'move' | 'up'
-): { sequence: number; x: number; y: number; pressure?: number; time: number; phase: 'down' | 'move' | 'up' } | null {
+): {
+  sequence: number;
+  x: number;
+  y: number;
+  pressure?: number;
+  time: number;
+  phase: 'down' | 'move' | 'up';
+} | null {
   if (
     !Number.isFinite(event.clientX) ||
     !Number.isFinite(event.clientY) ||
@@ -448,8 +459,11 @@ export function createFreehandWebAdapter(
     if (destroyed || destroyRequested || operating || owner) {
       return;
     }
-    // 只在实际 paper pointer plane（target===host）；overlay/ruler/selection 独立不启笔。
-    if (event.target !== host) {
+    // Ordered document nodes are also drawable; interactive overlays retain ownership.
+    if (
+      event.target !== host &&
+      !(event.target instanceof Element && event.target.closest('[data-object-id]'))
+    ) {
       return;
     }
     if (isSafeControlTarget(event.target)) {

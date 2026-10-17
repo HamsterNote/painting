@@ -9,6 +9,9 @@ import { TextEditor } from './TextEditor';
 import { SelectionOverlay } from './SelectionOverlay';
 import { useImageImport } from './useImageImport';
 import type { Point } from '../model/document';
+import { NavigationOverlay, VirtualPaper } from './NavigationOverlay';
+import { createNavigationWebAdapter } from './navigationWebAdapter';
+import type { DrawingSurfaceVirtualPaperOptions } from '../virtualPaperOptions';
 
 export type LayeredDrawingSurfaceProps = {
   controller: LayeredEditorController;
@@ -16,6 +19,7 @@ export type LayeredDrawingSurfaceProps = {
   style?: CSSProperties;
   onRender?: RenderObserver;
   historyReadyDelayMs?: number;
+  virtualPaper?: boolean | DrawingSurfaceVirtualPaperOptions;
 };
 
 let nextSurface = 0;
@@ -27,6 +31,7 @@ export function LayeredDrawingSurface({
   style,
   onRender,
   historyReadyDelayMs,
+  virtualPaper,
 }: LayeredDrawingSurfaceProps) {
   const host = useRef<HTMLDivElement>(null);
   const [presentation, setPresentation] = useState<PresentationCoordinator>();
@@ -39,14 +44,31 @@ export function LayeredDrawingSurface({
   const openImage = imageImport.openAt;
   const retry = useRef<(commitId: string) => void>(() => {});
   useEffect(() => {
+    if (virtualPaper === undefined) return;
+    const current = controller.getSnapshot('navigation').virtualPaper;
+    const patch = typeof virtualPaper === 'boolean' ? { enabled: virtualPaper } : virtualPaper;
+    controller.setNavigation({ virtualPaper: { ...current, ...patch } });
+  }, [controller, virtualPaper]);
+  useEffect(() => {
     const queue = new PresentationCoordinator(controller);
     setPresentation(queue);
     const surfaceId = ++nextSurface;
     let sequence = 0;
+    const navigation = createNavigationWebAdapter(
+      host.current!,
+      controller,
+      inputPolicy?.touch === 'draw'
+    );
+    const policy = {
+      mouse: 'draw',
+      pen: 'draw',
+      touch: 'none',
+      ...inputPolicy,
+    } as WebFreehandPolicy;
     const adapter = createFreehandWebAdapter({
       host: host.current!,
       controller,
-      policy: inputPolicy,
+      policy,
       createSessionId: () => `surface-${surfaceId}-session-${++sequence}`,
       createCommitId: () => `surface-${surfaceId}-commit-${sequence}`,
       onResult: (notice) => {
@@ -61,7 +83,7 @@ export function LayeredDrawingSurface({
     const semantic = createSemanticWebAdapter({
       host: host.current!,
       controller,
-      policy: inputPolicy,
+      policy,
       allocateId,
       beforeGesture: () => queue.confirmMounted(),
       onText: setTextPoint,
@@ -73,6 +95,7 @@ export function LayeredDrawingSurface({
       setFailure(result.ok ? undefined : { commitId, message: result.error.code });
     };
     return () => {
+      navigation.destroy();
       semantic.destroy();
       adapter.destroy();
       queue.destroy();
@@ -94,6 +117,7 @@ export function LayeredDrawingSurface({
     >
       {presentation ? (
         <>
+          <VirtualPaper controller={controller} />
           <DisplayLayer
             controller={controller}
             presentation={presentation}
@@ -102,6 +126,7 @@ export function LayeredDrawingSurface({
           />
           <DrawingLayer controller={controller} presentation={presentation} />
           <SelectionOverlay controller={controller} />
+          <NavigationOverlay controller={controller} />
         </>
       ) : null}
       {textPoint ? (

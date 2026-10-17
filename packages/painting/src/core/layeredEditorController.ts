@@ -15,6 +15,8 @@
  */
 
 import {
+  copyFreehandRuler,
+  type FreehandRulerSnapshot,
   IDENTITY_TRANSFORM,
   LAYERED_SCHEMA_VERSION,
   type AcceptedSample,
@@ -50,6 +52,10 @@ import {
 } from './freehandSession';
 import { applyViewportTransformIntent, type ViewportTransformIntent } from './viewportTransform';
 import { FreehandGeometryCache } from '../geometry/freehandCache';
+import {
+  SAFE_DEFAULT_VIRTUAL_PAPER_INTERACTIONS,
+  type DrawingSurfaceVirtualPaperInteraction,
+} from '../virtualPaperOptions';
 
 /** 活动工具：自由笔、形状、图片、文字与交互工具（选择/套索/橡皮/平移）。 */
 export type LayeredEditorTool =
@@ -148,7 +154,28 @@ export type LayeredEditorResult<T> =
 
 /** 订阅频道；除 interaction 外均按 state 返回稳定引用，适合 useSyncExternalStore。 */
 export type LayeredEditorChannel =
-  'document' | 'history' | 'tools' | 'selection' | 'viewport' | 'preview' | 'interaction';
+  | 'document'
+  | 'history'
+  | 'tools'
+  | 'selection'
+  | 'viewport'
+  | 'preview'
+  | 'interaction'
+  | 'navigation';
+
+export type LayeredNavigationSnapshot = Readonly<{
+  paper: boolean;
+  minimap: boolean;
+  ruler: Readonly<{ visible: boolean; center: Point; rotationRad: number; height: number }>;
+  rotationFeedback: Readonly<{ point: Point; rotationRad: number }> | null;
+  virtualPaper: Readonly<{
+    enabled: boolean;
+    initialPlacement: 'top-left' | 'center';
+    minScale: number;
+    maxScale: number;
+    enabledInteractions: readonly DrawingSurfaceVirtualPaperInteraction[];
+  }>;
+}>;
 
 /** history 频道快照。 */
 export type LayeredHistorySnapshot = Readonly<{
@@ -193,6 +220,7 @@ export type LayeredEditorSnapshotMap = Readonly<{
   selection: LayeredSelectionSnapshot;
   viewport: LayeredViewportSnapshot;
   preview: LayeredPreviewSnapshot;
+  navigation: LayeredNavigationSnapshot;
   interaction: LayeredInteractionSnapshot;
 }>;
 
@@ -221,6 +249,7 @@ export interface LayeredEditorController {
   setShapeSettings(settings: ShapeStyle): LayeredEditorResult<void>;
   setSelection(ids: readonly string[]): LayeredEditorResult<void>;
   setPreview(preview: LayeredPreviewSnapshot | null): LayeredEditorResult<void>;
+  setNavigation(patch: Partial<LayeredNavigationSnapshot>): LayeredEditorResult<void>;
   updateViewport(command: LayeredViewportCommand): LayeredEditorResult<LayeredViewportUpdateResult>;
   beginFreehand(input: LayeredBeginInput): LayeredEditorResult<void>;
   updateFreehand(input: FreehandSessionUpdate): LayeredEditorResult<void>;
@@ -507,6 +536,9 @@ function copySample(value: unknown): AcceptedSample | null {
 
 /** 白名单拷贝并冻结 freehand 对象；sequence 必须从 0 连续。 */
 function copyFreehandObject(value: Record<string, unknown>): FreehandObject | null {
+  const rulerSnapshot =
+    value.rulerSnapshot === undefined ? undefined : copyFreehandRuler(value.rulerSnapshot);
+  if (rulerSnapshot === null) return null;
   if (!isNonEmptyString(value.objectId)) {
     return null;
   }
@@ -571,6 +603,7 @@ function copyFreehandObject(value: Record<string, unknown>): FreehandObject | nu
     commitId: value.commitId,
     samples: Object.freeze(samples),
     brushSnapshot,
+    ...(rulerSnapshot ? { rulerSnapshot } : {}),
     resolvedPressureMode: value.resolvedPressureMode as ResolvedPressureMode,
     samplesRevision: value.samplesRevision,
     brushRevision: value.brushRevision,
@@ -796,6 +829,7 @@ function errResult<T>(
 
 /** canonical payload 输入：resolved mode + brush 五字段 + raw samples（不含 transport）。 */
 type CanonicalPayloadInput = Readonly<{
+  rulerSnapshot?: FreehandRulerSnapshot;
   resolvedPressureMode: ResolvedPressureMode;
   brushSnapshot: BrushSnapshot;
   samples: readonly AcceptedSample[];
@@ -812,6 +846,14 @@ function buildCanonicalPayload(input: CanonicalPayloadInput): string {
   return JSON.stringify([
     input.resolvedPressureMode,
     [brush.color, brush.nominalSize, brush.opacity, brush.pressureMode, brush.presetRevision],
+    input.rulerSnapshot
+      ? [
+          input.rulerSnapshot.center.x,
+          input.rulerSnapshot.center.y,
+          input.rulerSnapshot.height,
+          input.rulerSnapshot.rotationRad,
+        ]
+      : null,
     input.samples.map((sample) => [
       sample.sequence,
       sample.x,
@@ -870,6 +912,7 @@ function freezeFreehandObject(candidate: FreehandCandidate, objectId: string): F
     commitId: candidate.commitId,
     samples: candidate.samples,
     brushSnapshot: candidate.brushSnapshot,
+    ...(candidate.rulerSnapshot ? { rulerSnapshot: candidate.rulerSnapshot } : {}),
     resolvedPressureMode: candidate.resolvedPressureMode,
     samplesRevision: 1,
     brushRevision: 1,
@@ -1366,6 +1409,27 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
   private viewportSnapshot: LayeredViewportSnapshot;
   private toolsSnapshot: LayeredToolsSnapshot;
   private preview: LayeredPreviewSnapshot = EMPTY_PREVIEW;
+  private navigation: LayeredNavigationSnapshot = Object.freeze({
+    paper: false,
+    minimap: false,
+    rotationFeedback: null,
+    virtualPaper: Object.freeze({
+      enabled: true,
+      initialPlacement: 'top-left',
+      minScale: MIN_VIEWPORT_SCALE,
+      maxScale: MAX_VIEWPORT_SCALE,
+      enabledInteractions: Object.freeze([
+        ...SAFE_DEFAULT_VIRTUAL_PAPER_INTERACTIONS,
+        'touchTwoFingerPan',
+      ] as const),
+    }),
+    ruler: Object.freeze({
+      visible: false,
+      center: Object.freeze({ x: 320, y: 240 }),
+      rotationRad: 0,
+      height: 80,
+    }),
+  });
   private activeSession: FreehandSession | undefined;
   private readonly pending = new Map<string, PendingEntry>();
   private readonly subscribers = new Map<LayeredEditorChannel, Set<() => void>>();
@@ -1412,6 +1476,8 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
         return this.viewportSnapshot as LayeredEditorSnapshotMap[C];
       case 'preview':
         return this.preview as LayeredEditorSnapshotMap[C];
+      case 'navigation':
+        return this.navigation as LayeredEditorSnapshotMap[C];
       default:
         return this.buildInteractionSnapshot() as LayeredEditorSnapshotMap[C];
     }
@@ -1441,6 +1507,67 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
     return () => {
       set.delete(listener);
     };
+  }
+
+  setNavigation(patch: Partial<LayeredNavigationSnapshot>): LayeredEditorResult<void> {
+    if (this.locked || !patch || typeof patch !== 'object') return errResult('invalid-input');
+    const next = { ...this.navigation, ...patch };
+    const config = next.virtualPaper;
+    const interactions = [
+      'mouseWheelZoom',
+      'mouseDragPan',
+      'trackpadScrollPan',
+      'mouseWheelCtrlZoom',
+      'touchSingleFingerPan',
+      'touchTwoFingerPan',
+      'touchTwoFingerZoom',
+      'penPan',
+    ];
+    if (
+      !config ||
+      typeof config.enabled !== 'boolean' ||
+      !['top-left', 'center'].includes(config.initialPlacement) ||
+      !Number.isFinite(config.minScale) ||
+      !Number.isFinite(config.maxScale) ||
+      config.minScale < MIN_VIEWPORT_SCALE ||
+      config.maxScale > MAX_VIEWPORT_SCALE ||
+      config.minScale > config.maxScale ||
+      !Array.isArray(config.enabledInteractions) ||
+      config.enabledInteractions.some((interaction) => !interactions.includes(interaction))
+    )
+      return errResult('invalid-input');
+    const feedback = next.rotationFeedback;
+    if (
+      feedback !== null &&
+      (!isFinitePointLike(feedback?.point) || !Number.isFinite(feedback?.rotationRad))
+    )
+      return errResult('invalid-input');
+    const ruler = copyFreehandRuler(next.ruler);
+    if (
+      !ruler ||
+      typeof next.ruler.visible !== 'boolean' ||
+      typeof next.paper !== 'boolean' ||
+      typeof next.minimap !== 'boolean'
+    )
+      return errResult('invalid-input');
+    if (this.activeSession) return errResult('active-session-conflict');
+    this.navigation = Object.freeze({
+      paper: next.paper,
+      minimap: next.minimap,
+      ruler: Object.freeze({ ...ruler, visible: next.ruler.visible }),
+      virtualPaper: Object.freeze({
+        ...config,
+        enabledInteractions: Object.freeze([...config.enabledInteractions]),
+      }),
+      rotationFeedback: feedback
+        ? Object.freeze({
+            point: Object.freeze({ ...feedback.point }),
+            rotationRad: feedback.rotationRad,
+          })
+        : null,
+    });
+    this.emit(['navigation']);
+    return okResult(undefined);
   }
 
   setPreview(preview: LayeredPreviewSnapshot | null): LayeredEditorResult<void> {
@@ -1554,6 +1681,22 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
       commitId: input.commitId,
       pressureCapability: input.pressureCapability,
       brush: this.freehandSettings,
+      ...(this.navigation.ruler.visible
+        ? {
+            rulerSnapshot: {
+              center: {
+                x:
+                  (this.navigation.ruler.center.x - this.viewportSnapshot.viewport.tx) /
+                  this.viewportSnapshot.viewport.scale,
+                y:
+                  (this.navigation.ruler.center.y - this.viewportSnapshot.viewport.ty) /
+                  this.viewportSnapshot.viewport.scale,
+              },
+              height: this.navigation.ruler.height / this.viewportSnapshot.viewport.scale,
+              rotationRad: this.navigation.ruler.rotationRad,
+            },
+          }
+        : {}),
       viewportSnapshot: this.viewportSnapshot,
       batch: input.batch,
     };

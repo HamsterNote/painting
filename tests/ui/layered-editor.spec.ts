@@ -45,6 +45,18 @@ test('mixed SVG document order equals actual pixel order', async ({ page }, test
   expect(pixel(png, 230, 180)).toEqual([255, 0, 0]);
 });
 
+test('default route opens the layered editor and responds over LAN', async ({ page, request }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('layered-drawing')).toBeVisible();
+  const { networkInterfaces } = await import('node:os');
+  const address = Object.values(networkInterfaces())
+    .flat()
+    .find((entry) => entry && entry.family === 'IPv4' && !entry.internal)?.address;
+  expect(address).toBeTruthy();
+  const response = await request.get(`http://${address}:5266/`);
+  expect(response.ok()).toBe(true);
+});
+
 test('dot, pressure width and half-opacity delayed handoff remain visible', async ({
   page,
 }, testInfo) => {
@@ -165,4 +177,139 @@ test('image file import decodes into ordered SVG pixels and one undo transaction
   expect(
     await page.evaluate(() => window.__layeredEditor!.getSnapshot('document').objects)
   ).toEqual(saved);
+});
+
+test('real mouse paints over existing SVG ink; keyboard cancellation preserves text', async ({
+  page,
+}) => {
+  await openEditor(page, '&fixture=mixed');
+  const box = (await page.getByTestId('layered-surface').boundingBox())!;
+  await page.mouse.move(box.x + 230, box.y + 180);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 300, box.y + 180);
+  await page.mouse.up();
+  await expect(page.locator('[data-object-id]')).toHaveCount(6);
+  await page.getByRole('button', { name: '文字', exact: true }).click();
+  await pointer(page, 'down', 350, 300);
+  const input = page.getByLabel('文字内容');
+  await expect(input).toBeFocused();
+  await input.fill('取消');
+  await input.press('Escape');
+  await expect(input).toHaveCount(0);
+  await expect(page.locator('[data-object-id]')).toHaveCount(6);
+  await pointer(page, 'down', 350, 300);
+  await input.fill('键盘提交');
+  await input.press('Control+Enter');
+  await expect(input).toHaveCount(0);
+  await expect(page.locator('[data-object-id]')).toHaveCount(7);
+  await page.getByRole('button', { name: '撤销', exact: true }).click();
+  await expect(page.locator('[data-object-id]')).toHaveCount(6);
+});
+
+test('paper, ruler, touch pinch and minimap use the same viewport', async ({ page }) => {
+  await openEditor(page, '&fixture=mixed');
+  await page.getByLabel('虚拟纸张', { exact: true }).check();
+  await page.getByLabel('小地图', { exact: true }).check();
+  await page.getByLabel('尺子', { exact: true }).check();
+  await expect(page.getByTestId('layered-paper')).toBeVisible();
+  await expect(page.getByTestId('layered-ruler')).toBeVisible();
+  const surface = page.getByTestId('layered-surface');
+  const box = (await surface.boundingBox())!;
+  const touch = async (phase: string, id: number, x: number, y: number) =>
+    surface.dispatchEvent(`pointer${phase}`, {
+      pointerId: id,
+      pointerType: 'touch',
+      clientX: box.x + x,
+      clientY: box.y + y,
+      button: 0,
+    });
+  await touch('down', 1, 100, 100);
+  await touch('down', 2, 200, 100);
+  await touch('move', 2, 300, 100);
+  await touch('up', 2, 300, 100);
+  await touch('up', 1, 100, 100);
+  expect(
+    await page.evaluate(() => window.__layeredEditor!.getSnapshot('viewport').viewport)
+  ).toEqual({ scale: 2, tx: -100, ty: -100 });
+  await expect(page.getByTestId('layered-display').locator(':scope > g')).toHaveAttribute(
+    'transform',
+    'matrix(2 0 0 2 -100 -100)'
+  );
+  await expect(page.getByTestId('layered-paper').locator('g')).toHaveAttribute(
+    'transform',
+    'matrix(2 0 0 2 -100 -100)'
+  );
+  const before = await page.evaluate(() => window.__layeredEditor!.getSnapshot('viewport'));
+  const map = page.getByTestId('layered-minimap');
+  await map.click({ position: { x: 100, y: 70 } });
+  const after = await page.evaluate(() => window.__layeredEditor!.getSnapshot('viewport'));
+  expect(after.revision).toBeGreaterThan(before.revision);
+  expect(after.viewport.scale).toBe(2);
+  await expect(page.locator('[data-object-id]')).toHaveCount(5);
+});
+
+for (const [tool, kind] of [['直线', 'line'], ['矩形', 'rect'], ['椭圆', 'ellipse'], ['多边形', 'polygon'], ['贝塞尔', 'bezier']] as const) {
+  test(`${kind} has live preview, cancel and one undo transaction`, async ({ page }) => {
+    await openEditor(page);
+    await page.getByRole('button', { name: tool, exact: true }).click();
+    await pointer(page, 'down', 100, 100); await pointer(page, 'move', 200, 100); await pointer(page, 'move', 200, 200);
+    await expect(page.locator('[data-object-id="preview-shape"]')).toBeVisible();
+    await page.getByTestId('layered-surface').dispatchEvent('pointercancel', { pointerId: 41, pointerType: 'pen' });
+    await expect(page.locator('[data-object-id]')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '撤销', exact: true })).toBeDisabled();
+    await pointer(page, 'down', 100, 100); await pointer(page, 'move', 200, 100); await pointer(page, 'move', 200, 200); await pointer(page, 'up', 100, 200);
+    expect(await page.evaluate(() => window.__layeredEditor!.getSnapshot('document').objects.at(-1))).toMatchObject({ kind: 'shape', shapeType: kind });
+    await page.getByRole('button', { name: '撤销', exact: true }).click();
+    await expect(page.locator('[data-object-id]')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '撤销', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: '重做', exact: true }).click();
+    await expect(page.locator('[data-object-id]')).toHaveCount(1);
+  });
+}
+
+test('lasso, move, resize, rotate and fast erase retain raw data and reversible history', async ({ page }) => {
+  await openEditor(page, '&fixture=mixed');
+  const original = await page.evaluate(() => window.__layeredEditor!.getSnapshot('document').objects);
+  await page.getByRole('button', { name: '套索', exact: true }).click();
+  await pointer(page, 'down', 10, 80);
+  for (const [x, y] of [[300, 80], [300, 280], [10, 280], [10, 80]]) await pointer(page, 'move', x, y);
+  await pointer(page, 'up', 10, 80);
+  expect(await page.evaluate(() => window.__layeredEditor!.getSnapshot('selection').length)).toBe(5);
+  await page.getByRole('button', { name: '选择', exact: true }).click();
+  await pointer(page, 'down', 230, 180); await pointer(page, 'move', 250, 200); await pointer(page, 'up', 250, 200);
+  const transformed = await page.evaluate(() => window.__layeredEditor!.getSnapshot('document').objects);
+  expect(transformed[0].transform).not.toEqual(original[0].transform);
+  expect(transformed.filter((o) => o.kind === 'freehand').map((o) => o.samples)).toEqual(original.filter((o) => o.kind === 'freehand').map((o) => o.samples));
+  for (const operation of ['resize', 'rotate']) {
+    const handle = page.locator(`[data-selection-operation="${operation}"]`);
+    const box = (await handle.boundingBox())!;
+    const before = await page.evaluate(() => window.__layeredEditor!.getSnapshot('document').objects);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 30, box.y + box.height / 2 + 20); await page.mouse.up();
+    expect(await page.evaluate(() => window.__layeredEditor!.getSnapshot('document').objects)).not.toEqual(before);
+    await page.getByRole('button', { name: '撤销', exact: true }).click();
+    expect(await page.evaluate(() => window.__layeredEditor!.getSnapshot('document').objects)).toEqual(before);
+  }
+  await page.getByRole('button', { name: '橡皮擦', exact: true }).click();
+  await pointer(page, 'down', 10, 180); await pointer(page, 'move', 500, 180);
+  const beforeErase = await page.evaluate(() => window.__layeredEditor!.getSnapshot('document').objects);
+  expect(beforeErase).toHaveLength(5);
+  await pointer(page, 'up', 500, 180);
+  expect(await page.evaluate(() => window.__layeredEditor!.getSnapshot('document').objects.length)).toBeLessThan(5);
+  await page.getByRole('button', { name: '撤销', exact: true }).click();
+  expect(await page.evaluate(() => window.__layeredEditor!.getSnapshot('document').objects)).toEqual(beforeErase);
+});
+
+test('shape dash and freehand pressure settings are isolated', async ({ page }) => {
+  await openEditor(page);
+  await page.getByLabel('压力模式', { exact: true }).selectOption('real');
+  await page.getByRole('button', { name: '直线', exact: true }).click();
+  await page.getByLabel('形状线型', { exact: true }).selectOption('dash');
+  await page.getByRole('button', { name: '自由笔', exact: true }).click();
+  await expect(page.getByLabel('形状线型', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('压力模式', { exact: true })).toHaveValue('real');
+  await pointer(page, 'down', 100, 100); await pointer(page, 'move', 200, 100); await pointer(page, 'up', 220, 100, 0);
+  expect(await page.locator('[data-object-id] path').getAttribute('stroke-dasharray')).toBeNull();
+  await page.getByRole('button', { name: '直线', exact: true }).click();
+  await expect(page.getByLabel('形状线型', { exact: true })).toHaveValue('dash');
 });

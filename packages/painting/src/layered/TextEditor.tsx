@@ -119,7 +119,7 @@ export function TextEditor({
             x={bounds.minX}
             y={bounds.minY}
             width={bounds.maxX - bounds.minX + 4}
-            height={bounds.maxY - bounds.minY + 50}
+            height={bounds.maxY - bounds.minY + 90}
             style={{ overflow: 'visible', pointerEvents: 'auto' }}
           >
             <div data-interactive="true">
@@ -140,7 +140,16 @@ export function TextEditor({
                   resize: 'none',
                 }}
                 onChange={(event) => {
-                  editing.session.updateDraft({ content: event.target.value });
+                  const content = event.target.value;
+                  const height = Math.max(
+                    120,
+                    event.target.scrollHeight,
+                    content.split('\n').length * draft.fontSize * 1.25
+                  );
+                  editing.session.updateDraft({
+                    content,
+                    localBounds: { ...bounds, maxY: bounds.minY + height },
+                  });
                   refresh((n) => n + 1);
                 }}
                 onCompositionStart={() => editing.session.startComposition()}
@@ -162,6 +171,42 @@ export function TextEditor({
                     event.preventDefault();
                     finish();
                   }
+                }}
+              />
+              <label>
+                字号{' '}
+                <input
+                  aria-label="文字字号"
+                  type="number"
+                  min={8}
+                  max={200}
+                  value={draft.fontSize}
+                  style={{ width: 56 }}
+                  onChange={(event) => {
+                    const fontSize = event.target.valueAsNumber;
+                    if (!Number.isFinite(fontSize) || fontSize < 8 || fontSize > 200) return;
+                    editing.session.updateDraft({
+                      fontSize,
+                      localBounds: {
+                        ...bounds,
+                        maxY: Math.max(
+                          bounds.maxY,
+                          bounds.minY + draft.content.split('\n').length * fontSize * 1.25
+                        ),
+                      },
+                    });
+                    refresh((n) => n + 1);
+                  }}
+                />
+              </label>
+              <input
+                aria-label="文字颜色"
+                title="文字颜色"
+                type="color"
+                value={draft.color}
+                onChange={(event) => {
+                  editing.session.updateDraft({ color: event.target.value });
+                  refresh((n) => n + 1);
                 }}
               />
               <button type="button" onClick={finish}>

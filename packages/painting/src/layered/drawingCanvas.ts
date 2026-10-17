@@ -19,6 +19,7 @@ function asObject(candidate: FreehandCandidate | ActiveSnapshot): FreehandObject
     samplesRevision: candidate.samples.length,
     brushRevision: 1,
     brushSnapshot: candidate.brushSnapshot,
+    ...(candidate.rulerSnapshot ? { rulerSnapshot: candidate.rulerSnapshot } : {}),
     resolvedPressureMode: candidate.resolvedPressureMode,
     samples: candidate.samples,
   };

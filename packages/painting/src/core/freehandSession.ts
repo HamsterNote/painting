@@ -15,6 +15,8 @@
  */
 
 import {
+  copyFreehandRuler,
+  type FreehandRulerSnapshot,
   resolvePressureMode,
   type AcceptedSample,
   type BrushSnapshot,
@@ -53,6 +55,7 @@ export type BeginFreehandSessionInput = Readonly<{
   commitId: string;
   pressureCapability: PressureCapability;
   brush: BrushSnapshot;
+  rulerSnapshot?: FreehandRulerSnapshot;
   viewportSnapshot: Readonly<{ revision: number; viewport: DrawingViewport }>;
   batch: FreehandInputBatch;
 }>;
@@ -100,8 +103,7 @@ type FreehandSessionErrorCode =
 
 /** 统一 Result：成功携带值，失败只给可测 code，不抛异常。 */
 export type FreehandSessionResult<T> =
-  | Readonly<{ ok: true; value: T }>
-  | Readonly<{ ok: false; code: FreehandSessionErrorCode }>;
+  Readonly<{ ok: true; value: T }> | Readonly<{ ok: false; code: FreehandSessionErrorCode }>;
 
 /** 整笔冻结后的提交候选；source 由 begin owner 填入，pressure 缺失保持缺失。 */
 export type FreehandCandidate = Readonly<{
@@ -111,6 +113,7 @@ export type FreehandCandidate = Readonly<{
   source: InputSource;
   lockedViewportRevision: number;
   brushSnapshot: BrushSnapshot;
+  rulerSnapshot?: FreehandRulerSnapshot;
   resolvedPressureMode: 'real' | 'simulated' | 'constant';
   samples: readonly AcceptedSample[];
 }>;
@@ -124,6 +127,7 @@ export type FreehandSessionSnapshot =
       pointerId: string | number;
       source: InputSource;
       brushSnapshot: BrushSnapshot;
+      rulerSnapshot?: FreehandRulerSnapshot;
       resolvedPressureMode: 'real' | 'simulated' | 'constant';
       lockedViewport: DrawingViewport;
       lockedViewportRevision: number;
@@ -164,7 +168,11 @@ export interface FreehandSession {
 // ---------------------------------------------------------------------------
 
 const SOURCES: readonly InputSource[] = ['mouse', 'touch', 'pen', 'native'];
-const PRESSURE_CAPABILITIES: readonly PressureCapability[] = ['available', 'unavailable', 'unknown'];
+const PRESSURE_CAPABILITIES: readonly PressureCapability[] = [
+  'available',
+  'unavailable',
+  'unknown',
+];
 const PRESSURE_MODES: readonly PressureMode[] = ['auto', 'real', 'simulated', 'constant'];
 const SAMPLE_PHASES: readonly SamplePhase[] = ['down', 'move', 'up'];
 const COORDINATE_SPACES: readonly ('screen' | 'world')[] = ['screen', 'world'];
@@ -203,9 +211,7 @@ function isViewportLike(value: unknown): value is DrawingViewport {
   }
   const viewport = value as Record<string, unknown>;
   return (
-    isFiniteNumber(viewport.scale) &&
-    isFiniteNumber(viewport.tx) &&
-    isFiniteNumber(viewport.ty)
+    isFiniteNumber(viewport.scale) && isFiniteNumber(viewport.tx) && isFiniteNumber(viewport.ty)
   );
 }
 
@@ -231,7 +237,10 @@ function copyValidatedBrush(value: unknown): BrushSnapshot | null {
   if (!isFiniteNumber(brush.opacity) || brush.opacity < 0 || brush.opacity > 1) {
     return null;
   }
-  if (typeof brush.pressureMode !== 'string' || !PRESSURE_MODES.includes(brush.pressureMode as PressureMode)) {
+  if (
+    typeof brush.pressureMode !== 'string' ||
+    !PRESSURE_MODES.includes(brush.pressureMode as PressureMode)
+  ) {
     return null;
   }
   if (!isNonNegativeSafeInteger(brush.presetRevision)) {
@@ -320,13 +329,9 @@ function validateAndConvertSamples(
     const rawX = raw.x as number;
     const rawY = raw.y as number;
     const worldX =
-      coordinateSpace === 'screen'
-        ? (rawX - lockedViewport.tx) / lockedViewport.scale
-        : rawX;
+      coordinateSpace === 'screen' ? (rawX - lockedViewport.tx) / lockedViewport.scale : rawX;
     const worldY =
-      coordinateSpace === 'screen'
-        ? (rawY - lockedViewport.ty) / lockedViewport.scale
-        : rawY;
+      coordinateSpace === 'screen' ? (rawY - lockedViewport.ty) / lockedViewport.scale : rawY;
     if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) {
       return { ok: false, code: 'invalid-input' };
     }
@@ -356,6 +361,7 @@ function validateAndConvertSamples(
 
 /** 冻结会话锁定上下文；begin 后外部 brush/viewport 改变不影响整笔。 */
 type LockedContext = Readonly<{
+  rulerSnapshot?: FreehandRulerSnapshot;
   commitId: string;
   sessionId: string;
   pointerId: string | number;
@@ -379,6 +385,7 @@ function freezeCandidate(
     source: context.source,
     lockedViewportRevision: context.lockedViewportRevision,
     brushSnapshot: context.brushSnapshot,
+    ...(context.rulerSnapshot ? { rulerSnapshot: context.rulerSnapshot } : {}),
     resolvedPressureMode: context.resolvedPressureMode,
     samples: Object.freeze(samples.map((sample) => Object.freeze({ ...sample }))),
   });
@@ -416,6 +423,7 @@ function createCollectingSession(
       pointerId: context.pointerId,
       source: context.source,
       brushSnapshot: context.brushSnapshot,
+      ...(context.rulerSnapshot ? { rulerSnapshot: context.rulerSnapshot } : {}),
       resolvedPressureMode: context.resolvedPressureMode,
       lockedViewport: context.lockedViewport,
       lockedViewportRevision: context.lockedViewportRevision,
@@ -736,6 +744,9 @@ export function beginFreehandSession(
   if (!brushSnapshot) {
     return fail('invalid-input');
   }
+  const rulerSnapshot =
+    input.rulerSnapshot === undefined ? undefined : copyFreehandRuler(input.rulerSnapshot);
+  if (rulerSnapshot === null) return fail('invalid-input');
 
   // begin 必须 batchSequence 0；viewportRevision 必须等于 begin 快照 revision。
   if (batch.batchSequence !== 0) {
@@ -767,6 +778,7 @@ export function beginFreehandSession(
   );
 
   const context: LockedContext = Object.freeze({
+    ...(rulerSnapshot ? { rulerSnapshot } : {}),
     commitId: input.commitId,
     sessionId: batch.sessionId as string,
     pointerId: batch.pointerId as string | number,

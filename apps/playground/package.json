@@ -5,7 +5,7 @@
   "main": "expo-router/entry",
   "scripts": {
     "dev": "pnpm run dev:web",
-    "dev:web": "expo start --web --lan --port 5266",
+    "dev:web": "node scripts/start-web.mjs",
     "dev:android": "expo start --android",
     "dev:ios": "expo start --ios",
     "build": "expo export --platform web",

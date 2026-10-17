@@ -98,6 +98,31 @@ export type BrushSnapshot = Readonly<{
   presetRevision: number;
 }>;
 
+/** Physical ruler at begin, in object-local coordinates; raw samples stay unprojected. */
+export type FreehandRulerSnapshot = Readonly<{
+  center: Point;
+  height: number;
+  rotationRad: number;
+}>;
+
+export function copyFreehandRuler(value: unknown): FreehandRulerSnapshot | null {
+  if (!value || typeof value !== 'object') return null;
+  const ruler = value as FreehandRulerSnapshot;
+  if (
+    !Number.isFinite(ruler.center?.x) ||
+    !Number.isFinite(ruler.center?.y) ||
+    !Number.isFinite(ruler.height) ||
+    ruler.height <= 0 ||
+    !Number.isFinite(ruler.rotationRad)
+  )
+    return null;
+  return Object.freeze({
+    center: Object.freeze({ x: ruler.center.x, y: ruler.center.y }),
+    height: ruler.height,
+    rotationRad: ruler.rotationRad,
+  });
+}
+
 /** 所有文档对象共享的基字段：稳定 id、对象修订、局部几何到文档的变换及变换修订。 */
 type ObjectBase = {
   objectId: string;
@@ -118,6 +143,7 @@ export type FreehandObject = Readonly<
     commitId: string;
     samples: readonly AcceptedSample[];
     brushSnapshot: BrushSnapshot;
+    rulerSnapshot?: FreehandRulerSnapshot;
     resolvedPressureMode: ResolvedPressureMode;
     samplesRevision: number;
     brushRevision: number;

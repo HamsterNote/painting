@@ -12,6 +12,7 @@
  */
 
 import { getStroke, type StrokeOptions } from 'perfect-freehand';
+import { constrainPointToRulerEdge, createRulerEdgeConstraint } from '../ruler/geometry';
 
 import type {
   AcceptedSample,
@@ -112,7 +113,7 @@ function deriveRealPressureSamples(samples: readonly AcceptedSample[]): readonly
     const isRelease = sample.phase === 'up' && sample.pressure === 0;
     const basePressure =
       sample.pressure === undefined ? NEUTRAL_PRESSURE : clampPressure(sample.pressure);
-    const pressure = isRelease ? lastContactPressure ?? NEUTRAL_PRESSURE : basePressure;
+    const pressure = isRelease ? (lastContactPressure ?? NEUTRAL_PRESSURE) : basePressure;
 
     derived.push(Object.freeze({ x: sample.x, y: sample.y, pressure }));
 
@@ -209,7 +210,11 @@ function buildGeometryRevision(
 ): string {
   const { samplesRevision, brushRevision } = object;
   const presetRevision = object.brushSnapshot.presetRevision;
-  return `${FREEHAND_ALGORITHM_REVISION}:s${samplesRevision}:b${brushRevision}:p${presetRevision}:m${mode}:${state}`;
+  const ruler = object.rulerSnapshot;
+  const constraint = ruler
+    ? JSON.stringify([ruler.center.x, ruler.center.y, ruler.height, ruler.rotationRad])
+    : '';
+  return `${FREEHAND_ALGORITHM_REVISION}:s${samplesRevision}:b${brushRevision}:p${presetRevision}:m${mode}:${state}:r${constraint}`;
 }
 
 /**
@@ -237,7 +242,16 @@ export function deriveFreehandGeometry(
     });
   }
 
-  const pressureSamples = derivePressureSamples(object);
+  let pressureSamples = derivePressureSamples(object);
+  if (object.rulerSnapshot && pressureSamples.length) {
+    const ruler = { ...object.rulerSnapshot, length: 1 };
+    let constraint = createRulerEdgeConstraint(pressureSamples[0]!, ruler);
+    pressureSamples = pressureSamples.map((sample) => {
+      const result = constrainPointToRulerEdge(sample, constraint);
+      constraint = result.constraint;
+      return { ...sample, ...result.point };
+    });
+  }
   const options = buildStrokeOptions(
     object.resolvedPressureMode,
     state,

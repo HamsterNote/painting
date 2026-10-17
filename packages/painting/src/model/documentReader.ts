@@ -14,6 +14,7 @@
  */
 
 import {
+  copyFreehandRuler,
   LAYERED_SCHEMA_VERSION,
   type AcceptedSample,
   type AffineTransform,
@@ -43,8 +44,7 @@ export type DocumentReadError = Readonly<{
 
 /** reader 结果：成功携带冻结文档，失败携带错误原因。 */
 export type DocumentReadResult<T> =
-  | Readonly<{ ok: true; value: T }>
-  | Readonly<{ ok: false; error: DocumentReadError }>;
+  Readonly<{ ok: true; value: T }> | Readonly<{ ok: false; error: DocumentReadError }>;
 
 /** 枚举白名单表；与 model/document.ts 的联合类型保持一致。 */
 const SHAPE_TYPES: readonly ShapeType[] = ['line', 'rect', 'ellipse', 'polygon', 'bezier'];
@@ -234,8 +234,14 @@ function readSample(value: unknown, path: string): AcceptedSample {
 
 /** 白名单拷贝 freehand 对象；校验完整笔序列、单一 source 与 revision。 */
 function readFreehandObject(record: Record<string, unknown>, path: string): FreehandObject {
+  const rulerSnapshot =
+    record.rulerSnapshot === undefined ? undefined : copyFreehandRuler(record.rulerSnapshot);
+  if (rulerSnapshot === null) fail(`${path}.rulerSnapshot`);
   const objectId = readNonEmptyString(record.objectId, `${path}.objectId`);
-  const objectRevision = readNonNegativeSafeInteger(record.objectRevision, `${path}.objectRevision`);
+  const objectRevision = readNonNegativeSafeInteger(
+    record.objectRevision,
+    `${path}.objectRevision`
+  );
   const transform = readTransform(record.transform, `${path}.transform`);
   const transformRevision = readNonNegativeSafeInteger(
     record.transformRevision,
@@ -249,7 +255,10 @@ function readFreehandObject(record: Record<string, unknown>, path: string): Free
     `${path}.resolvedPressureMode`
   );
   // 显式 requested（非 auto）必须与已锁定的 resolved 相同；auto 已有 resolved 不重新推断。
-  if (brushSnapshot.pressureMode !== 'auto' && brushSnapshot.pressureMode !== resolvedPressureMode) {
+  if (
+    brushSnapshot.pressureMode !== 'auto' &&
+    brushSnapshot.pressureMode !== resolvedPressureMode
+  ) {
     fail(`${path}.resolvedPressureMode`);
   }
 
@@ -285,6 +294,7 @@ function readFreehandObject(record: Record<string, unknown>, path: string): Free
     commitId,
     samples,
     brushSnapshot,
+    ...(rulerSnapshot ? { rulerSnapshot } : {}),
     resolvedPressureMode,
     samplesRevision: readNonNegativeSafeInteger(record.samplesRevision, `${path}.samplesRevision`),
     brushRevision: readNonNegativeSafeInteger(record.brushRevision, `${path}.brushRevision`),
@@ -294,7 +304,10 @@ function readFreehandObject(record: Record<string, unknown>, path: string): Free
 /** 白名单拷贝 shape 对象；暂不约束 points 数量下限，只要求逐点有限。 */
 function readShapeObject(record: Record<string, unknown>, path: string): ShapeObject {
   const objectId = readNonEmptyString(record.objectId, `${path}.objectId`);
-  const objectRevision = readNonNegativeSafeInteger(record.objectRevision, `${path}.objectRevision`);
+  const objectRevision = readNonNegativeSafeInteger(
+    record.objectRevision,
+    `${path}.objectRevision`
+  );
   const transform = readTransform(record.transform, `${path}.transform`);
   const transformRevision = readNonNegativeSafeInteger(
     record.transformRevision,
@@ -321,7 +334,10 @@ function readShapeObject(record: Record<string, unknown>, path: string): ShapeOb
 /** 白名单拷贝 image 对象；resourceId 可选但存在时必须非空，按有无保真。 */
 function readImageObject(record: Record<string, unknown>, path: string): ImageObject {
   const objectId = readNonEmptyString(record.objectId, `${path}.objectId`);
-  const objectRevision = readNonNegativeSafeInteger(record.objectRevision, `${path}.objectRevision`);
+  const objectRevision = readNonNegativeSafeInteger(
+    record.objectRevision,
+    `${path}.objectRevision`
+  );
   const transform = readTransform(record.transform, `${path}.transform`);
   const transformRevision = readNonNegativeSafeInteger(
     record.transformRevision,
@@ -356,7 +372,10 @@ function readImageObject(record: Record<string, unknown>, path: string): ImageOb
 /** 白名单拷贝 text 对象；content 允许空串，fontSize 必须为正。 */
 function readTextObject(record: Record<string, unknown>, path: string): TextObject {
   const objectId = readNonEmptyString(record.objectId, `${path}.objectId`);
-  const objectRevision = readNonNegativeSafeInteger(record.objectRevision, `${path}.objectRevision`);
+  const objectRevision = readNonNegativeSafeInteger(
+    record.objectRevision,
+    `${path}.objectRevision`
+  );
   const transform = readTransform(record.transform, `${path}.transform`);
   const transformRevision = readNonNegativeSafeInteger(
     record.transformRevision,
@@ -401,7 +420,10 @@ function readDocument(value: unknown): EditorDocument {
   const record = readRecord(value, '$');
   // 只接受 schemaVersion 3，不做旧 schema fallback。
   if (record.schemaVersion !== LAYERED_SCHEMA_VERSION) fail('$.schemaVersion');
-  const documentRevision = readNonNegativeSafeInteger(record.documentRevision, '$.documentRevision');
+  const documentRevision = readNonNegativeSafeInteger(
+    record.documentRevision,
+    '$.documentRevision'
+  );
   const rawObjects = readArray(record.objects, '$.objects');
   const seenObjectIds = new Set<string>();
   const seenCommitIds = new Set<string>();

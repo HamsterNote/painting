@@ -159,12 +159,24 @@ export function createSemanticWebAdapter(options: {
   }
   function wheel(event: WheelEvent) {
     if (control(event.target)) return;
+    const config = controller.getSnapshot('navigation').virtualPaper;
+    const modified = event.ctrlKey || event.metaKey;
+    const zoom =
+      config.enabled &&
+      config.enabledInteractions.includes(modified ? 'mouseWheelCtrlZoom' : 'mouseWheelZoom');
+    const pan =
+      config.enabled && !modified && config.enabledInteractions.includes('trackpadScrollPan');
+    if (!zoom && !pan) return;
     event.preventDefault();
     const current = controller.getSnapshot('viewport');
     const rect = host.getBoundingClientRect();
     const anchor = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-    const ratio = event.ctrlKey || event.metaKey ? Math.exp(-event.deltaY * 0.002) : 1;
-    const scale = Math.max(0.25, Math.min(8, current.viewport.scale * ratio));
+    const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? host.clientHeight : 1;
+    const ratio = zoom ? Math.exp(-event.deltaY * unit * 0.002) : 1;
+    const scale = Math.max(
+      config.minScale,
+      Math.min(config.maxScale, current.viewport.scale * ratio)
+    );
     controller.updateViewport({
       type: 'replace',
       expectedRevision: current.revision,
@@ -177,8 +189,8 @@ export function createSemanticWebAdapter(options: {
             }
           : {
               ...current.viewport,
-              tx: current.viewport.tx - event.deltaX,
-              ty: current.viewport.ty - event.deltaY,
+              tx: current.viewport.tx - event.deltaX * unit,
+              ty: current.viewport.ty - event.deltaY * unit,
             },
     });
   }

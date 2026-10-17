@@ -35,6 +35,8 @@ const buttonStyle: CSSProperties = {
 export function Toolbar({ controller }: { controller: LayeredEditorController }) {
   const { activeTool, settings } = useEditorSnapshot(controller, 'tools');
   const history = useEditorSnapshot(controller, 'history');
+  const navigation = useEditorSnapshot(controller, 'navigation');
+  const { viewport, revision } = useEditorSnapshot(controller, 'viewport');
   const freehand = activeTool === 'freehand';
   const shape = ['line', 'rect', 'ellipse', 'polygon', 'bezier'].includes(activeTool);
   const style = freehand ? settings.freehand : settings.shape;
@@ -175,6 +177,54 @@ export function Toolbar({ controller }: { controller: LayeredEditorController })
           </select>
         </label>
       ) : null}
+      <label>
+        <input
+          type="checkbox"
+          checked={navigation.ruler.visible}
+          onChange={(event) =>
+            controller.setNavigation({
+              ruler: { ...navigation.ruler, visible: event.target.checked },
+            })
+          }
+        />
+        尺子
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={navigation.paper}
+          onChange={(event) => controller.setNavigation({ paper: event.target.checked })}
+        />
+        虚拟纸张
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={navigation.minimap}
+          onChange={(event) => controller.setNavigation({ minimap: event.target.checked })}
+        />
+        小地图
+      </label>
+      <label>
+        缩放{' '}
+        <input
+          aria-label="缩放"
+          type="number"
+          min={25}
+          max={800}
+          step={25}
+          value={Math.round(viewport.scale * 100)}
+          style={{ width: 60 }}
+          onChange={(event) =>
+            controller.updateViewport({
+              type: 'replace',
+              expectedRevision: revision,
+              viewport: { ...viewport, scale: event.target.valueAsNumber / 100 },
+            })
+          }
+        />
+        %
+      </label>
     </div>
   );
 }

@@ -42,8 +42,8 @@
 - [x] 5.2 实现统一对象 transform 的 selection/lasso/move/resize/rotate 与 transient preview；用混合对象、多选、缩放旋转后命中、撤销重做测试验证原始 samples 未改写且渲染/几何 bounds 一致。（本次：`pnpm test` 85 suites / 1462 tests PASS；`layered-tools.test.ts` 覆盖三类变换、lasso、多选、raw identity、变换后 query 与 undo/redo；见 `ham40-verification.md`。）
 - [x] 5.3 接入普通 SVG hover/click delegation 与 object id 解析，持续输入绕过 captured target 使用同一几何 query；通过 capture 后跨对象移动测试验证不会固定命中旧元素。（本次：`pnpm exec jest --runInBand --testPathPattern 'layered-(semantic-adapter|tools)'` 2 suites / 12 tests PASS，后续完整 Jest 85/1462 PASS；见 `ham40-verification.md`。）
 - [x] 5.4 实现 previous-current+radius 扫掠、bbox 候选/按需索引与整对象擦除（首期自由笔允许中心线加宽近似），结束合并 undo 事务、取消恢复；验证端点均在对象外的快速跨越、半径擦边、遮挡对象、变换对象和语义 overlay mock 不漏擦，不伪造 DOM dispatch 获取命中。（本次：同上专项 2 suites / 12 tests PASS；完整 `pnpm test` 85/1462 PASS，含 native semantic mock；见 `ham40-verification.md`。）
-- [ ] 5.5 接入 foreignObject HTML text 的真实 focus/input/keyboard/IME composition、完成/取消与工具路由；通过 composition 单元/UI 测试和后续设备观察验证文字编辑不被 Canvas 捕获遮挡、中间组合不提前提交、完成一次事务、取消不改内容，明确原生 overlay 不天然穿透。
-- [ ] 5.6 保留 ruler、virtual paper 与 minimap 接入，以既有 ruler/导航 fixture 和集成测试验证其能力、显示/命中对齐与唯一 viewport 意图路由，没有因分层而缩水或形成第二变换真源。
+- [x] 5.5 接入 foreignObject HTML text 的真实 focus/input/keyboard/IME composition、完成/取消与工具路由；通过 composition 单元/UI 测试验证文字编辑不被 Canvas 捕获遮挡、中间组合不提前提交、完成一次事务、取消不改内容，明确原生 overlay 不天然穿透。（本轮：`pnpm exec jest --runInBand --testPathPattern 'layered-navigation|layered-text-editor'` 2 suites / 5 tests PASS；`pnpm test:ui tests/ui/layered-editor.spec.ts --workers=1 --trace=off` Chromium 7/7 PASS，含真实 focus、composition、Escape 取消与 Ctrl+Enter 单事务。设备键盘/真实输入法观察另列 7.5 待人工验收，不以合成 composition 代替。）
+- [x] 5.6 保留 ruler、virtual paper 与 minimap 接入，以既有 ruler/导航 fixture 和集成测试验证其能力、显示/命中对齐与唯一 viewport 意图路由，没有因分层而缩水或形成第二变换真源。（本轮：`pnpm test` 88 suites / 1472 tests PASS，含原 ruler gesture、geometry/ticks、viewport 数学与新增导航选项/固定双指/掌触/raw ruler round-trip/cache；`pnpm test:ui tests/ui/layered-editor.spec.ts --workers=1 --trace=off` Chromium 15/15 PASS，覆盖纸张/SVG transform 一致与实际小地图点击；保留逐项映射见 `navigation-verification.md`。）
 
 ## 6. Three-platform Web Integration and Skia Retirement
 
@@ -53,7 +53,7 @@
 - [ ] 6.4 按已审核清单移除 Skia rendering/exports/peer/dev/app 依赖、专用 fixtures/test/scripts/setup/CONTEXT/doc，混合配置仅局部清理并保留 Expo/native 测试；验证活动代码/依赖/构建资源无 Skia 引用，剩余规划中退休说明属于预期文本，删除前后无关 dirty 改动一致。
 - [ ] 6.5 在主编排再次核对未完成旧任务与备份后移除 `migrate-expo57-skia-surface` 未归档 change，不归档或标记完成；验证新 proposal 的 supersedes 记录保留、旧目录退出且无范围外文档误删。
 - [ ] 6.6 用 pnpm 更新并审核锁文件，移除仅为 Skia 引入且无其他使用方的依赖/资源；运行 `pnpm install --frozen-lockfile` 验证可复现，保留非 Skia Expo/工具链内容。
-- [ ] 6.7 在保留 5266 测试端口的前提下对齐 Expo Web 启动参数 `expo start --web --lan --no-open`，不换无关构建基础设施；启动服务验证 LAN 可访问且不自动开浏览器、Playwright webServer 配置仍可使用。
+- [x] 6.7 在保留 5266 测试端口的前提下对齐 Expo Web 启动参数，不换无关构建基础设施；启动服务验证 LAN 可访问且不自动开浏览器、Playwright webServer 配置仍可使用。（Expo 57 不接受 `--no-open`，采用 CLI 官方支持的 `BROWSER=none` 等效方案，`scripts/start-web.mjs` 保留 `expo start --web --lan --port 5266`。本轮上述 Chromium 15/15 PASS，webServer 使用真实 `pnpm dev`，`default route ... responds over LAN` 实测本机非 loopback IPv4:5266 HTTP 200；无持久验证服务。此替代不覆盖设备可达性与防火墙外网路由。）
 
 ## 7. Integrated Verification and Delivery Evidence
 
