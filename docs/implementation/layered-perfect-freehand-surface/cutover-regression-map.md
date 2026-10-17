@@ -24,3 +24,15 @@
 - `pnpm test:ui tests/ui/playground.spec.ts tests/ui/ruler-test.spec.ts tests/ui/touch-drawing-arbitration.spec.ts tests/ui/painting-controller-color.spec.ts tests/ui/painting-controller-width.spec.ts tests/ui/interaction-feedback.spec.ts tests/ui/touch-ruler-feedback.spec.ts --workers=1 --trace=off`：Chromium 17/17 PASS。
 
 这不是全套 UI 或最终 cutover 验收。候选编辑器/Skia 专用回归、公开根入口与旧运行路由尚待核对；不据此勾选 6.3、7.1、7.2 或 7.9。
+
+## 第二批迁移
+
+`editor-candidate.spec.ts` 的保留行为已改为分层回归：单 Canvas 生命周期、文档/导航/history 隔离、多语言/换行 IME、既有文字再次打开/取消、选区预览取消与无位移 noop、删除选中文字后 undo/redo 不恢复失效选区、无 files/cancel/无效 MIME、真实解码 8193×1 图片拒绝。五类形状、选择变换、尺子、资源连续编辑等已由首批表格中的回归承接，不重复依赖旧候选路由。
+
+`editor-candidate-canvas2d-pen.spec.ts` 已迁成 DPR 1/2 的 raw append、历史零逐点 reconcile、取消和 Canvas/SVG 最终像素回归；只附宿主 rAF 观测，不沿用旧 100k 折线 append 的性能阈值。目标设备预算列入 `manual-acceptance.md`。
+
+明确退役的旧断言：CanvasKit/WASM 的加载/失败/重试/互斥 fallback；Skia frame/font tier/provider/descriptor 和 glyph registry 计数；diagStage 分段导入；旧折线 append/no-fullReplay/Skia frame budget。这些专用门不存在于新的架构中，不能保留为假失败，也不把其旧通过结果转记为分层通过。文字内容/真实 HTML 顺序、图片存活与撤销、文档事务和命中能力继续由分层 UI 与 schema3 单元测试覆盖。
+
+抢救批次复验并已推送：`pnpm test` 89 suites / 1472 tests PASS；`pnpm typecheck` exit 0；十份分层 Chromium 文件 38/38 PASS；原独立 WebKit 三文件 21/21 PASS。`13fa7e9` 为普通 fast-forward 推送，未推本地 WIP。
+
+第二批 `pnpm test:ui tests/ui/editor-candidate.spec.ts tests/ui/editor-candidate-canvas2d-pen.spec.ts --workers=1 --trace=off` Chromium 9/9 PASS。`pnpm exec playwright test --config=playwright.webkit.config.ts --workers=1 --trace=off` 在同一受支持容器/宿主服务上运行，十二份分层文件 WebKit 47/47 PASS。改动的三个测试/配置文件 ESLint exit 0，Prettier 通过。

@@ -71,6 +71,19 @@
 ## 本轮抢救与分批续做证据
 
 - 2026-10-18 首批 cutover：board 的公开组件与 playground App 调用方迁到分层入口；七份旧 UI 文件按保留行为迁移，补齐鼠标/双指缩放百分比浮层及过期 timer 归属。`pnpm exec jest --runInBand --testPathPattern 'layered-|painting-board/src/__tests__'` 24 suites / 343 tests PASS；七文件专项 `pnpm test:ui ... --workers=1 --trace=off` Chromium 17/17 PASS。完整命令和逐类迁移映射见 `cutover-regression-map.md`。尚未删除 Skia/旧目录，6.3 / 7.1 / 7.2 / 7.9 保持未完成。
+- `1bc78e7` 抢救复验：`pnpm test` 89 suites / 1472 tests PASS；`pnpm typecheck` exit 0；十份分层 UI 文件的 Chromium 38/38 PASS；`pnpm exec playwright test --config=playwright.webkit.config.ts --workers=1 --trace=off` 在 Ubuntu 24.04 Podman + 宿主 HTTP 200 服务运行，WebKit 21/21 PASS。已普通推送 `13fa7e9`（含生成的 board 声明同步），未推本地 WIP。
+
+## 待人工验收清单（明确移入，均未完成）
+
+第二批迁移验证：`pnpm test:ui tests/ui/editor-candidate.spec.ts tests/ui/editor-candidate-canvas2d-pen.spec.ts --workers=1 --trace=off` Chromium 9/9 PASS；独立 `pnpm exec playwright test --config=playwright.webkit.config.ts --workers=1 --trace=off` WebKit 47/47 PASS（十二份分层文件）。候选路由的保留行为已迁移，专用 Skia 诊断断言退出理由见 `cutover-regression-map.md`；实现目录尚未删除。
+
+以下五项的设备验收转入 `docs/implementation/layered-perfect-freehand-surface/manual-acceptance.md`，保留原 checkbox 未勾选；不能把自动化或静态导出冒充任务全部完成。最新交付约定允许这些明确人工项留待修勾验收，其余开发/退役/CI 任务仍须完成才能进入 In Review。
+
+- 3.3：有序 SVG/foreignObject 混排实现与 Chromium/WebKit 像素已通过；Safari/iOS WebView 的实际合成仍需真实设备观察。
+- 6.1：三平台 DrawingLayer 均委托 Web，native Jest 的整个 Expo DOM host 最小挂载已通过；Android/iOS 静态导出已有证据，但没有真机启动证据。
+- 7.5：真笔四压力模式、up=0、掌触、viewport 冻结、高刷新率交接，以及系统 IME/软键盘/焦点必须由真机/真笔执行，合成事件不具备证明力。
+- 7.6：目标设备长笔 PF/Canvas CPU、内存、rAF、历史 reconcile 与 WebView 交接预算尚未建立。宿主合成输入/rAF 附件只作开发观测，方法与待填测量字段见人工清单。
+- 7.8：独立 WebKit 自动化已实际通过，配置继续扩展迁移回归；Safari/iOS WebView 的系统输入法、焦点、键盘和 viewport 实测仍未完成。
 
 - 抢救：失败树保存为仅本地 `agent/ham40-wip-failed-run` / `97ccfac`，功能分支恢复 `d78159a` 后复验。`pnpm test` 88 suites / 1472 tests PASS；`pnpm typecheck` 首次发现 board 缺少 `/layered` 源码路径映射，修正后完整 exit 0；Chromium 分层 15/15 PASS。可用提交及修复已普通推送至原 PR 分支 `7e74637`，WIP 不推。详见 `rescue-verification.md`。
 - 3.3 / 7.8：新增真实鼠标覆盖已有 HTML 文字的 active/final 像素回归；独立 WebKit 配置修正 Chromium 专用参数继承。`pnpm exec playwright test --config=playwright.webkit.config.ts --workers=1 --trace=off` 在受支持的 Ubuntu 24.04 Podman 环境实际 WebKit 16/16 PASS；Chromium 同套件 16/16 PASS。宿主 Ubuntu 26 不受支持，用容器等效验证；不覆盖 Safari/iOS WebView 真机，因此这两项保持未完成。
