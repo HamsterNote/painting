@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createEditor, type LayeredEditorController } from '@hamster-note/painting/layered';
 import { LayeredPaintingBoard } from '@hamster-note/painting-board';
-import { mixedFixture } from './mixedFixture';
+import { mixedFixture, resourceFixture } from './mixedFixture';
 
 declare global {
   interface Window {
@@ -17,9 +17,20 @@ export default function LayeredEditorDom(_props: { dom?: import('expo/dom').DOMP
     () => new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search)
   );
   const [controller] = useState(() =>
-    createEditor(params.get('fixture') === 'mixed' ? mixedFixture() : undefined)
+    createEditor(
+      params.get('fixture') === 'mixed'
+        ? mixedFixture()
+        : params.get('fixture') === 'resources'
+          ? resourceFixture()
+          : undefined
+    )
   );
   const [renders] = useState(() => ({ display: 0, objects: 0 }));
+  const [inputPolicy] = useState(() =>
+    params.get('touchDraw') === '1'
+      ? { mouse: 'draw' as const, pen: 'draw' as const, touch: 'draw' as const }
+      : undefined
+  );
   const diagnostics = params.get('diagnostics') === '1';
   useEffect(() => {
     if (!diagnostics) return;
@@ -42,6 +53,7 @@ export default function LayeredEditorDom(_props: { dom?: import('expo/dom').DOMP
     >
       <LayeredPaintingBoard
         controller={controller}
+        inputPolicy={inputPolicy}
         historyReadyDelayMs={
           diagnostics ? Math.min(1000, Math.max(0, Number(params.get('handoffDelay')) || 0)) : 0
         }

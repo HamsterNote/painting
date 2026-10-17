@@ -71,3 +71,26 @@ export function mixedFixture(): EditorDocument {
   ];
   return { schemaVersion: 3, documentRevision: 0, objects };
 }
+
+export function resourceFixture(): EditorDocument {
+  const mixed = mixedFixture();
+  const text = mixed.objects.find((object) => object.kind === 'text')!;
+  const image = mixed.objects.find((object) => object.kind === 'image')!;
+  return {
+    ...mixed,
+    objects: [
+      {
+        ...text,
+        objectId: 'resource-text',
+        content: 'Edit Me 123',
+        fontSize: 24,
+        localBounds: { minX: 50, minY: 50, maxX: 290, maxY: 170 },
+      },
+      {
+        ...image,
+        objectId: 'resource-image',
+        localBounds: { minX: 350, minY: 50, maxX: 390, maxY: 90 },
+      },
+    ],
+  };
+}
