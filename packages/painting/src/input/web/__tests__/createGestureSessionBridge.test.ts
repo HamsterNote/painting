@@ -1,6 +1,6 @@
 /** @jest-environment node */
 
-import { createGestureSession, type NormalizedPointerInput } from '../../../core';
+import { createGestureSession, type NormalizedPointerInput } from '../../../core/internal';
 import { createGestureSessionBridge } from '../createGestureSessionBridge';
 
 const DOCUMENT = { schemaVersion: 2 as const, strokes: [] };

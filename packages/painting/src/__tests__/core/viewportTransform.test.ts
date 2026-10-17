@@ -8,7 +8,7 @@ import {
   resolveViewportScaleLimits,
   screenToCanvas,
   zoomViewportAt,
-} from '../../core';
+} from '../../core/internal';
 
 describe('core/viewportTransform', () => {
   it('在 focal zoom 和 pinch 后保持焦点对应的世界坐标不漂移', () => {
@@ -23,7 +23,10 @@ describe('core/viewportTransform', () => {
 
     expect(zoomed).not.toBeNull();
     // 仿射缩放会经过一次除法，IEEE-754 的最后一位舍入不应被误判为焦点漂移。
-    for (const point of [screenToCanvas(focal, zoomed!), screenToCanvas({ x: 130, y: 90 }, pinch!)]) {
+    for (const point of [
+      screenToCanvas(focal, zoomed!),
+      screenToCanvas({ x: 130, y: 90 }, pinch!),
+    ]) {
       expect(point.x).toBeCloseTo(worldAtFocal.x, 12);
       expect(point.y).toBeCloseTo(worldAtFocal.y, 12);
     }

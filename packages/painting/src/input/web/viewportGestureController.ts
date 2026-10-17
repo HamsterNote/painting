@@ -11,8 +11,8 @@ import {
   type TargetRole,
   type ViewportScaleLimits,
   type ViewportTransformIntent,
-} from '../core';
-import * as webInput from '../input/web/normalizePointerInput';
+} from '../../core/internal';
+import * as webInput from './normalizePointerInput';
 
 export type ViewportGestureRequest = Readonly<{
   phase: 'preview' | 'commit';
@@ -195,7 +195,11 @@ export function createViewportGestureController(
       interactionPolicy: options.interactionPolicy,
     });
     const transition = reduceGestureSession(session, input);
-    consumeTransition(transition.session, 'preview', input.device === 'touch' ? 'touch' : 'pointer');
+    consumeTransition(
+      transition.session,
+      'preview',
+      input.device === 'touch' ? 'touch' : 'pointer'
+    );
     return true;
   };
   const continueSession = (
@@ -219,7 +223,11 @@ export function createViewportGestureController(
       return;
     }
     const transition = reduceGestureSession(session, input);
-    consumeTransition(transition.session, requestPhase, input.device === 'touch' ? 'touch' : 'pointer');
+    consumeTransition(
+      transition.session,
+      requestPhase,
+      input.device === 'touch' ? 'touch' : 'pointer'
+    );
   };
   const handleDown = (event: PointerEvent) => {
     if (disposed || (event.pointerType !== 'touch' && event.button !== 0)) {
@@ -322,14 +330,20 @@ export function createViewportGestureController(
       isFinitePoint(focal) && isFinitePoint(currentFocal)
         ? createViewportTransformIntent(focal, currentFocal, ratio)
         : null;
-    const viewport = baseline && intent
-      ? applyViewportTransformIntent(baseline, intent, options.scaleLimits)
-      : null;
+    const viewport =
+      baseline && intent
+        ? applyViewportTransformIntent(baseline, intent, options.scaleLimits)
+        : null;
     if (!viewport || !intent) {
       return;
     }
     options.onViewportRequest({ phase: 'commit', source: 'wheel', intent, viewport });
-    options.onZoomFeedback?.({ source: 'wheel', point: currentFocal, focal, scale: viewport.scale });
+    options.onZoomFeedback?.({
+      source: 'wheel',
+      point: currentFocal,
+      focal,
+      scale: viewport.scale,
+    });
     consume(event);
   };
   const downListener: EventListener = (event) => {

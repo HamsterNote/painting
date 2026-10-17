@@ -2,7 +2,7 @@ import {
   createViewportGestureController,
   type ViewportGestureControllerOptions,
 } from '../viewportGestureController';
-import * as webInput from '../../input/web/normalizePointerInput';
+import * as webInput from '../normalizePointerInput';
 
 type PointerKind = 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel';
 
@@ -34,7 +34,14 @@ function pointer(
 }
 
 function wheel(clientX: number, clientY: number, deltaY: number, ctrlKey = false): WheelEvent {
-  return new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX, clientY, deltaY, ctrlKey });
+  return new WheelEvent('wheel', {
+    bubbles: true,
+    cancelable: true,
+    clientX,
+    clientY,
+    deltaY,
+    ctrlKey,
+  });
 }
 
 describe('legacy-compat/viewportGestureController', () => {
@@ -98,13 +105,20 @@ describe('legacy-compat/viewportGestureController', () => {
   it('pointer cancel、lost capture 与 blur 都取消而不提交', () => {
     const startPan = (id: number) => {
       host.dispatchEvent(pointer('pointerdown', { pointerId: id, pointerType: 'mouse' }));
-      document.dispatchEvent(pointer('pointermove', { pointerId: id, pointerType: 'mouse', clientX: 10 }));
+      document.dispatchEvent(
+        pointer('pointermove', { pointerId: id, pointerType: 'mouse', clientX: 10 })
+      );
     };
     controller.dispose();
-    controller = createViewportGestureController({ ...options, interactionPolicy: { mouseDragPan: true } });
+    controller = createViewportGestureController({
+      ...options,
+      interactionPolicy: { mouseDragPan: true },
+    });
 
     startPan(1);
-    document.dispatchEvent(pointer('pointercancel', { pointerId: 1, pointerType: 'mouse', clientX: 10 }));
+    document.dispatchEvent(
+      pointer('pointercancel', { pointerId: 1, pointerType: 'mouse', clientX: 10 })
+    );
     expect(requests.mock.calls.some(([request]) => request.phase === 'commit')).toBe(false);
     startPan(2);
     const lost = pointer('pointercancel', { pointerId: 2, pointerType: 'mouse', clientX: 10 });
@@ -148,12 +162,18 @@ describe('legacy-compat/viewportGestureController', () => {
       interactionPolicy: { mouseDragPan: false, penPan: true, drawCommitThreshold: 10 },
     });
     host.dispatchEvent(pointer('pointerdown', { pointerId: 31, pointerType: 'mouse' }));
-    document.dispatchEvent(pointer('pointermove', { pointerId: 31, pointerType: 'mouse', clientX: 30 }));
-    document.dispatchEvent(pointer('pointerup', { pointerId: 31, pointerType: 'mouse', clientX: 30 }));
+    document.dispatchEvent(
+      pointer('pointermove', { pointerId: 31, pointerType: 'mouse', clientX: 30 })
+    );
+    document.dispatchEvent(
+      pointer('pointerup', { pointerId: 31, pointerType: 'mouse', clientX: 30 })
+    );
     expect(requests).not.toHaveBeenCalled();
 
     host.dispatchEvent(pointer('pointerdown', { pointerId: 32, pointerType: 'pen' }));
-    document.dispatchEvent(pointer('pointermove', { pointerId: 32, pointerType: 'pen', clientX: 30 }));
+    document.dispatchEvent(
+      pointer('pointermove', { pointerId: 32, pointerType: 'pen', clientX: 30 })
+    );
     expect(requests).toHaveBeenLastCalledWith(
       expect.objectContaining({ source: 'pointer', viewport: { scale: 1, tx: 30, ty: 0 } })
     );
@@ -171,13 +191,23 @@ describe('legacy-compat/viewportGestureController', () => {
       },
     });
     host.dispatchEvent(pointer('pointerdown', { pointerId: 4, pointerType: 'mouse', clientX: 10 }));
-    document.dispatchEvent(pointer('pointermove', { pointerId: 4, pointerType: 'mouse', clientX: 20 }));
-    document.dispatchEvent(pointer('pointermove', { pointerId: 4, pointerType: 'mouse', clientX: 30 }));
-    document.dispatchEvent(pointer('pointerup', { pointerId: 4, pointerType: 'mouse', clientX: 40 }));
+    document.dispatchEvent(
+      pointer('pointermove', { pointerId: 4, pointerType: 'mouse', clientX: 20 })
+    );
+    document.dispatchEvent(
+      pointer('pointermove', { pointerId: 4, pointerType: 'mouse', clientX: 30 })
+    );
+    document.dispatchEvent(
+      pointer('pointerup', { pointerId: 4, pointerType: 'mouse', clientX: 40 })
+    );
 
     expect(reads).toBe(1);
     expect(requests).toHaveBeenLastCalledWith(
-      expect.objectContaining({ phase: 'commit', source: 'pointer', viewport: { scale: 1, tx: 30, ty: 0 } })
+      expect.objectContaining({
+        phase: 'commit',
+        source: 'pointer',
+        viewport: { scale: 1, tx: 30, ty: 0 },
+      })
     );
   });
 
@@ -189,18 +219,30 @@ describe('legacy-compat/viewportGestureController', () => {
       wheel: { requireCtrlOrMeta: true, getScaleRatio: () => 10 },
     });
     host.dispatchEvent(pointer('pointerdown', { pointerId: 5, pointerType: 'mouse' }));
-    document.dispatchEvent(pointer('pointermove', { pointerId: 5, pointerType: 'mouse', clientX: 10 }));
+    document.dispatchEvent(
+      pointer('pointermove', { pointerId: 5, pointerType: 'mouse', clientX: 10 })
+    );
     host.dispatchEvent(wheel(50, 40, -100));
     expect(requests).toHaveBeenLastCalledWith(
       expect.objectContaining({ source: 'pointer', viewport: { scale: 1, tx: 10, ty: 0 } })
     );
     host.dispatchEvent(wheel(50, 40, -100, true));
     expect(requests).toHaveBeenLastCalledWith(
-      expect.objectContaining({ phase: 'commit', source: 'wheel', viewport: { scale: 2, tx: -50, ty: -40 } })
+      expect.objectContaining({
+        phase: 'commit',
+        source: 'wheel',
+        viewport: { scale: 2, tx: -50, ty: -40 },
+      })
     );
-    document.dispatchEvent(pointer('pointerup', { pointerId: 5, pointerType: 'mouse', clientX: 20 }));
+    document.dispatchEvent(
+      pointer('pointerup', { pointerId: 5, pointerType: 'mouse', clientX: 20 })
+    );
     expect(requests).toHaveBeenLastCalledWith(
-      expect.objectContaining({ phase: 'commit', source: 'pointer', viewport: { scale: 1, tx: 20, ty: 0 } })
+      expect.objectContaining({
+        phase: 'commit',
+        source: 'pointer',
+        viewport: { scale: 1, tx: 20, ty: 0 },
+      })
     );
   });
 
@@ -232,10 +274,17 @@ describe('legacy-compat/viewportGestureController', () => {
   it('通过 canonical Web normalizer 发送锁定的 paper role 与 final up 样本', () => {
     const normalize = jest.spyOn(webInput, 'normalizePointerInput');
     controller.dispose();
-    controller = createViewportGestureController({ ...options, interactionPolicy: { mouseDragPan: true } });
+    controller = createViewportGestureController({
+      ...options,
+      interactionPolicy: { mouseDragPan: true },
+    });
     host.dispatchEvent(pointer('pointerdown', { pointerId: 61, pointerType: 'mouse' }));
-    document.dispatchEvent(pointer('pointermove', { pointerId: 61, pointerType: 'mouse', clientX: 10 }));
-    document.dispatchEvent(pointer('pointerup', { pointerId: 61, pointerType: 'mouse', clientX: 20 }));
+    document.dispatchEvent(
+      pointer('pointermove', { pointerId: 61, pointerType: 'mouse', clientX: 10 })
+    );
+    document.dispatchEvent(
+      pointer('pointerup', { pointerId: 61, pointerType: 'mouse', clientX: 20 })
+    );
 
     expect(normalize).toHaveBeenCalledWith(
       expect.anything(),

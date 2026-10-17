@@ -1,7 +1,11 @@
 import { createWebInputAdapter } from '../webInputAdapter';
-import type { NormalizedPointerInput } from '../../../core';
+import type { NormalizedPointerInput } from '../../../core/internal';
 
-function pointerEvent(type: string, pointerId: number, overrides: Record<string, unknown> = {}): PointerEvent {
+function pointerEvent(
+  type: string,
+  pointerId: number,
+  overrides: Record<string, unknown> = {}
+): PointerEvent {
   const event = new Event(type, { bubbles: true }) as PointerEvent;
   Object.defineProperties(event, {
     pointerId: { value: pointerId },

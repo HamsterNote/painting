@@ -1,7 +1,7 @@
 /** @jest-environment node */
 
-import { isNormalizedPointerInput } from '../../core';
-import type { NormalizedPointerInput } from '../../core';
+import { isNormalizedPointerInput } from '../../core/internal';
+import type { NormalizedPointerInput } from '../../core/internal';
 
 function input(overrides: Partial<NormalizedPointerInput> = {}): NormalizedPointerInput {
   return {

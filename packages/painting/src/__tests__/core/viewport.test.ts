@@ -9,8 +9,8 @@ import {
   clampScale,
   normalizeViewport,
   screenToCanvas,
-} from '../../core';
-import type { DrawingViewport, ViewportPoint } from '../../core';
+} from '../../core/internal';
+import type { DrawingViewport, ViewportPoint } from '../../core/internal';
 
 describe('core/viewport', () => {
   const expectPointClose = (actual: ViewportPoint, expected: ViewportPoint, precision = 3) => {

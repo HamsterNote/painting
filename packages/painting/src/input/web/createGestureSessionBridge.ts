@@ -4,7 +4,7 @@ import {
   type GestureSession,
   type GestureSessionEffect,
   type NormalizedPointerInput,
-} from '../../core';
+} from '../../core/internal';
 
 export type GestureSessionBridge = Readonly<{
   handleInput: (input: NormalizedPointerInput) => void;

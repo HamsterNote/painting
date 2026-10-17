@@ -10,7 +10,7 @@ import type {
   DrawingSurfaceHandle,
   DrawingTool,
   DrawingValue,
-} from '../components/DrawingSurface';
+} from '../model/geometryTypes';
 import { DrawingSurface } from '../components/DrawingSurface';
 import { PaintingBoard } from '../components/PaintingBoard';
 import type { PaintingControllerData } from '../components/PaintingController';
@@ -607,8 +607,7 @@ describe('DrawingSurface', () => {
     expect(onRulerChange).toHaveBeenCalled();
     expect(onChange).not.toHaveBeenCalled();
     const nextState = onRulerChange.mock.calls[onRulerChange.mock.calls.length - 1]?.[0] as
-      | DrawingRulerState
-      | undefined;
+      DrawingRulerState | undefined;
     expect(nextState).toEqual({ center: { x: 75, y: 68 } });
   });
 
@@ -684,8 +683,7 @@ describe('DrawingSurface', () => {
     );
 
     const nextState = onRulerChange.mock.calls[onRulerChange.mock.calls.length - 1]?.[0] as
-      | DrawingRulerState
-      | undefined;
+      DrawingRulerState | undefined;
     expect(nextState?.center.x).toBeCloseTo(100);
     expect(nextState?.center.y).toBeCloseTo(100);
     expect(nextState?.rotationRad).toBeCloseTo(Math.PI / 2);
@@ -739,8 +737,7 @@ describe('DrawingSurface', () => {
 
     // Then: 角度和逻辑原点都严格围绕可见 client-box 中心计算。
     const nextState = onRulerChange.mock.calls[onRulerChange.mock.calls.length - 1]?.[0] as
-      | DrawingRulerState
-      | undefined;
+      DrawingRulerState | undefined;
     expect(nextState?.rotationRad).toBeCloseTo(Math.PI / 6, 5);
     expect(nextState?.center.x).toBeCloseTo(143.30127, 5);
     expect(nextState?.center.y).toBeCloseTo(125, 5);
@@ -783,8 +780,7 @@ describe('DrawingSurface', () => {
 
     // Then: 对外提交的角度吸附到 45°，逻辑原点绕可见中线中心同步旋转。
     const nextState = onRulerChange.mock.calls[onRulerChange.mock.calls.length - 1]?.[0] as
-      | DrawingRulerState
-      | undefined;
+      DrawingRulerState | undefined;
     expect(nextState?.rotationRad).toBeCloseTo(Math.PI / 4);
     expect(nextState?.center.x).toBeCloseTo(135.36, 2);
     expect(nextState?.center.y).toBeCloseTo(135.36, 2);
@@ -1490,62 +1486,65 @@ describe('DrawingSurface', () => {
     it.each([
       ['pending', 4],
       ['committed', 30],
-    ] as const)('cancels a %s touch stroke when VirtualPaper configuration rebuilds listeners', (_, distance) => {
-      const onChange = jest.fn();
-      const value = { strokes: [] };
-      const { container, rerender } = render(
-        <DrawingSurface
-          testID="drawing-surface-host"
-          value={value}
-          onChange={onChange}
-          tool="pen"
-          strokeSmoothing={false}
-          virtualPaper={{
-            enabledInteractions: ['touchTwoFingerPan', 'touchTwoFingerZoom'],
-          }}
-        />
-      );
-      const host = screen.getByTestId('drawing-surface-host');
-      const wrapper = screen.getByTestId('virtual-paper-wrapper');
-      mockHostRect(host);
-      mockHostRect(wrapper);
+    ] as const)(
+      'cancels a %s touch stroke when VirtualPaper configuration rebuilds listeners',
+      (_, distance) => {
+        const onChange = jest.fn();
+        const value = { strokes: [] };
+        const { container, rerender } = render(
+          <DrawingSurface
+            testID="drawing-surface-host"
+            value={value}
+            onChange={onChange}
+            tool="pen"
+            strokeSmoothing={false}
+            virtualPaper={{
+              enabledInteractions: ['touchTwoFingerPan', 'touchTwoFingerZoom'],
+            }}
+          />
+        );
+        const host = screen.getByTestId('drawing-surface-host');
+        const wrapper = screen.getByTestId('virtual-paper-wrapper');
+        mockHostRect(host);
+        mockHostRect(wrapper);
 
-      // Given: 一根触点处于待决状态，或已经越过阈值形成活动笔画。
-      dispatchElementPointerEvent(
-        wrapper,
-        'pointerdown',
-        { point: { x: 40, y: 100 }, event: { pointerType: 'touch' } },
-        1
-      );
-      dispatchElementPointerEvent(
-        document,
-        'pointermove',
-        { point: { x: 40 + distance, y: 100 }, event: { pointerType: 'touch', button: -1 } },
-        1
-      );
+        // Given: 一根触点处于待决状态，或已经越过阈值形成活动笔画。
+        dispatchElementPointerEvent(
+          wrapper,
+          'pointerdown',
+          { point: { x: 40, y: 100 }, event: { pointerType: 'touch' } },
+          1
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointermove',
+          { point: { x: 40 + distance, y: 100 }, event: { pointerType: 'touch', button: -1 } },
+          1
+        );
 
-      // When: VirtualPaper 配置变化使绘制监听器 effect 重建。
-      rerender(
-        <DrawingSurface
-          testID="drawing-surface-host"
-          value={value}
-          onChange={onChange}
-          tool="pen"
-          strokeSmoothing={false}
-          virtualPaper={true}
-        />
-      );
-      dispatchElementPointerEvent(
-        document,
-        'pointerup',
-        { point: { x: 40 + distance, y: 100 }, event: { pointerType: 'touch' } },
-        1
-      );
+        // When: VirtualPaper 配置变化使绘制监听器 effect 重建。
+        rerender(
+          <DrawingSurface
+            testID="drawing-surface-host"
+            value={value}
+            onChange={onChange}
+            tool="pen"
+            strokeSmoothing={false}
+            virtualPaper={true}
+          />
+        );
+        dispatchElementPointerEvent(
+          document,
+          'pointerup',
+          { point: { x: 40 + distance, y: 100 }, event: { pointerType: 'touch' } },
+          1
+        );
 
-      // Then: 旧事务被取消，不保留预览，也不会由旧 pointerup 提交。
-      expect(container.querySelector('path')).toBeNull();
-      expect(onChange).not.toHaveBeenCalled();
-    });
+        // Then: 旧事务被取消，不保留预览，也不会由旧 pointerup 提交。
+        expect(container.querySelector('path')).toBeNull();
+        expect(onChange).not.toHaveBeenCalled();
+      }
+    );
 
     it.each(['mouse', 'pen', 'touch'] as const)(
       'projects %s samples onto the selected ruler edge after crossing it',
@@ -9360,8 +9359,7 @@ describe('eraserCursorAndTrajectory', () => {
 
       // Then: Mixin 同时提交中点平移和吸附后的 90° 旋转，提示跟随最新双指中点投影。
       const nextState = onRulerChange.mock.calls[onRulerChange.mock.calls.length - 1]?.[0] as
-        | DrawingRulerState
-        | undefined;
+        DrawingRulerState | undefined;
       expect(nextState?.center).toEqual({ x: 32, y: 60 });
       expect(nextState?.rotationRad).toBeCloseTo(Math.PI / 2);
       const rotatedFeedback = screen.getByTestId('drawing-ruler-angle-feedback');

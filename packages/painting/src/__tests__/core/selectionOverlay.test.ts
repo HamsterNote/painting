@@ -4,11 +4,25 @@ import {
   deriveSelectionFrame,
   deriveSelectionOverlayModel,
   hitTestSelectionOverlay,
-} from '../../core';
+} from '../../core/internal';
 import type { DrawingStrokeV2, DrawingValueV2 } from '../../model/strokes';
 
-function rectangle(id: string, startX: number, startY: number, endX: number, endY: number): DrawingStrokeV2 {
-  return { schemaVersion: 2, id, tool: 'rect', points: [{ x: startX, y: startY }, { x: endX, y: endY }] };
+function rectangle(
+  id: string,
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number
+): DrawingStrokeV2 {
+  return {
+    schemaVersion: 2,
+    id,
+    tool: 'rect',
+    points: [
+      { x: startX, y: startY },
+      { x: endX, y: endY },
+    ],
+  };
 }
 
 function target(index: number, stroke: DrawingStrokeV2) {
@@ -23,83 +37,194 @@ describe('core/selectionFrame and selectionOverlay', () => {
 
     expect(deriveSelectionFrame(document, [target(0, first), target(1, second)])).toEqual({
       // 默认 2 DIP stroke 需要纳入半宽，避免选框遗漏实际可见笔迹。
-      minX: -1, minY: -1, maxX: 31, maxY: 21, width: 32, height: 22,
+      minX: -1,
+      minY: -1,
+      maxX: 31,
+      maxY: 21,
+      width: 32,
+      height: 22,
     });
     expect(deriveSelectionFrame(document, [target(0, first), target(0, first)])).toBeNull();
-    expect(deriveSelectionFrame(document, [{ ...target(1, second), expectedId: 'stale' }])).toBeNull();
+    expect(
+      deriveSelectionFrame(document, [{ ...target(1, second), expectedId: 'stale' }])
+    ).toBeNull();
   });
 
   it('keeps degenerate paths interactive and uses conservative prepared visual bounds', () => {
     const horizontal: DrawingStrokeV2 = {
-      schemaVersion: 2, id: 'horizontal', tool: 'line', strokeWidth: 8,
-      points: [{ x: 0, y: 3 }, { x: 20, y: 3 }],
+      schemaVersion: 2,
+      id: 'horizontal',
+      tool: 'line',
+      strokeWidth: 8,
+      points: [
+        { x: 0, y: 3 },
+        { x: 20, y: 3 },
+      ],
     };
     const vertical: DrawingStrokeV2 = {
-      schemaVersion: 2, id: 'vertical', tool: 'line', strokeWidth: 6,
-      points: [{ x: 8, y: 0 }, { x: 8, y: 20 }],
+      schemaVersion: 2,
+      id: 'vertical',
+      tool: 'line',
+      strokeWidth: 6,
+      points: [
+        { x: 8, y: 0 },
+        { x: 8, y: 20 },
+      ],
     };
     const single: DrawingStrokeV2 = {
-      schemaVersion: 2, id: 'single', tool: 'pen', strokeWidth: 10,
+      schemaVersion: 2,
+      id: 'single',
+      tool: 'pen',
+      strokeWidth: 10,
       points: [{ x: 30, y: 40, pressure: 0.1 }],
     };
     const rotated: DrawingStrokeV2 = {
-      schemaVersion: 2, id: 'rotated', tool: 'rect', strokeWidth: 4, rotationRad: Math.PI / 2,
-      points: [{ x: 40, y: 0 }, { x: 60, y: 10 }],
+      schemaVersion: 2,
+      id: 'rotated',
+      tool: 'rect',
+      strokeWidth: 4,
+      rotationRad: Math.PI / 2,
+      points: [
+        { x: 40, y: 0 },
+        { x: 60, y: 10 },
+      ],
     };
     const pressure: DrawingStrokeV2 = {
-      schemaVersion: 2, id: 'pressure', tool: 'pen', strokeWidth: 12,
-      points: [{ x: 70, y: 5, pressure: 0.1 }, { x: 80, y: 5, pressure: 1 }],
+      schemaVersion: 2,
+      id: 'pressure',
+      tool: 'pen',
+      strokeWidth: 12,
+      points: [
+        { x: 70, y: 5, pressure: 0.1 },
+        { x: 80, y: 5, pressure: 1 },
+      ],
     };
-    const document: DrawingValueV2 = { schemaVersion: 2, strokes: [horizontal, vertical, single, rotated, pressure] };
+    const document: DrawingValueV2 = {
+      schemaVersion: 2,
+      strokes: [horizontal, vertical, single, rotated, pressure],
+    };
 
     expect(deriveSelectionFrame(document, [target(0, horizontal)])).toEqual({
-      minX: -4, minY: -1, maxX: 24, maxY: 7, width: 28, height: 8,
+      minX: -4,
+      minY: -1,
+      maxX: 24,
+      maxY: 7,
+      width: 28,
+      height: 8,
     });
     expect(deriveSelectionFrame(document, [target(1, vertical)])).toEqual({
-      minX: 5, minY: -3, maxX: 11, maxY: 23, width: 6, height: 26,
+      minX: 5,
+      minY: -3,
+      maxX: 11,
+      maxY: 23,
+      width: 6,
+      height: 26,
     });
     expect(deriveSelectionFrame(document, [target(2, single)])).toEqual({
-      minX: 25, minY: 35, maxX: 35, maxY: 45, width: 10, height: 10,
+      minX: 25,
+      minY: 35,
+      maxX: 35,
+      maxY: 45,
+      width: 10,
+      height: 10,
     });
     expect(deriveSelectionFrame(document, [target(3, rotated)])).toEqual({
-      minX: 43, minY: -7, maxX: 57, maxY: 17, width: 14, height: 24,
+      minX: 43,
+      minY: -7,
+      maxX: 57,
+      maxY: 17,
+      width: 14,
+      height: 24,
     });
     expect(deriveSelectionFrame(document, [target(4, pressure)])).toEqual({
-      minX: 64, minY: -1, maxX: 86, maxY: 11, width: 22, height: 12,
+      minX: 64,
+      minY: -1,
+      maxX: 86,
+      maxY: 11,
+      width: 22,
+      height: 12,
     });
   });
 
   it('uses prepared conservative bounds for rotated ellipse, text/image boxes, and cubic controls', () => {
     const ellipse: DrawingStrokeV2 = {
-      schemaVersion: 2, id: 'ellipse', tool: 'ellipse', rotationRad: Math.PI / 2,
-      points: [{ x: 0, y: 0 }, { x: 20, y: 10 }],
+      schemaVersion: 2,
+      id: 'ellipse',
+      tool: 'ellipse',
+      rotationRad: Math.PI / 2,
+      points: [
+        { x: 0, y: 0 },
+        { x: 20, y: 10 },
+      ],
     };
     const text: DrawingStrokeV2 = {
-      schemaVersion: 2, id: 'text', tool: 'text', text: 'x', fontSize: 16, rotationRad: Math.PI / 2,
-      points: [{ x: 30, y: 0 }, { x: 50, y: 10 }],
+      schemaVersion: 2,
+      id: 'text',
+      tool: 'text',
+      text: 'x',
+      fontSize: 16,
+      rotationRad: Math.PI / 2,
+      points: [
+        { x: 30, y: 0 },
+        { x: 50, y: 10 },
+      ],
     };
     const image: DrawingStrokeV2 = {
-      schemaVersion: 2, id: 'image', tool: 'image', src: 'memory://image', rotationRad: Math.PI / 2,
-      points: [{ x: 60, y: 0 }, { x: 80, y: 10 }],
+      schemaVersion: 2,
+      id: 'image',
+      tool: 'image',
+      src: 'memory://image',
+      rotationRad: Math.PI / 2,
+      points: [
+        { x: 60, y: 0 },
+        { x: 80, y: 10 },
+      ],
     };
     const cubic: DrawingStrokeV2 = {
-      schemaVersion: 2, id: 'cubic', tool: 'bezier',
-      points: [{ x: 90, y: 0 }, { x: 190, y: 50 }, { x: -10, y: -50 }, { x: 100, y: 0 }],
+      schemaVersion: 2,
+      id: 'cubic',
+      tool: 'bezier',
+      points: [
+        { x: 90, y: 0 },
+        { x: 190, y: 50 },
+        { x: -10, y: -50 },
+        { x: 100, y: 0 },
+      ],
     };
     const document: DrawingValueV2 = { schemaVersion: 2, strokes: [ellipse, text, image, cubic] };
 
     expect(deriveSelectionFrame(document, [target(0, ellipse)])).toEqual({
-      minX: 4, minY: -6, maxX: 16, maxY: 16, width: 12, height: 22,
+      minX: 4,
+      minY: -6,
+      maxX: 16,
+      maxY: 16,
+      width: 12,
+      height: 22,
     });
     expect(deriveSelectionFrame(document, [target(1, text)])).toEqual({
-      minX: 34, minY: -6, maxX: 46, maxY: 16, width: 12, height: 22,
+      minX: 34,
+      minY: -6,
+      maxX: 46,
+      maxY: 16,
+      width: 12,
+      height: 22,
     });
     expect(deriveSelectionFrame(document, [target(2, image)])).toEqual({
-      minX: 64, minY: -6, maxX: 76, maxY: 16, width: 12, height: 22,
+      minX: 64,
+      minY: -6,
+      maxX: 76,
+      maxY: 16,
+      width: 12,
+      height: 22,
     });
     // 使用 cubic 控制点 hull 而非仅端点，不依赖轮廓采样也能保证 AABB 安全。
     expect(deriveSelectionFrame(document, [target(3, cubic)])).toEqual({
-      minX: -11, minY: -51, maxX: 191, maxY: 51, width: 202, height: 102,
+      minX: -11,
+      minY: -51,
+      maxX: 191,
+      maxY: 51,
+      width: 202,
+      height: 102,
     });
   });
 
@@ -109,11 +234,17 @@ describe('core/selectionFrame and selectionOverlay', () => {
       const model = deriveSelectionOverlayModel(frame, { scale, tx: 30, ty: -10 });
       expect(model).not.toBeNull();
       expect(model?.handles.map((handle) => [handle.size, handle.hitSize])).toEqual([
-        [10, 22], [10, 22], [10, 22], [10, 22], [10, 22],
+        [10, 22],
+        [10, 22],
+        [10, 22],
+        [10, 22],
+        [10, 22],
       ]);
       expect(model?.frame).toEqual({
-        minX: 10 * scale + 30, minY: 20 * scale - 10,
-        maxX: 50 * scale + 30, maxY: 40 * scale - 10,
+        minX: 10 * scale + 30,
+        minY: 20 * scale - 10,
+        maxX: 50 * scale + 30,
+        maxY: 40 * scale - 10,
       });
     }
   });

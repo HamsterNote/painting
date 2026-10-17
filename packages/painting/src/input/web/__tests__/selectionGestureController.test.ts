@@ -1,5 +1,5 @@
 import { createSelectionGestureController } from '../selectionGestureController';
-import * as webInput from '../../input/web/normalizePointerInput';
+import * as webInput from '../normalizePointerInput';
 
 function pointer(
   type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel',
@@ -22,7 +22,7 @@ function pointer(
   return event as PointerEvent;
 }
 
-describe('legacy-compat/selectionGestureController', () => {
+describe('input/web/selectionGestureController', () => {
   let host: HTMLDivElement;
   let handle: HTMLDivElement;
   let preview: jest.Mock;

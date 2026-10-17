@@ -57,9 +57,9 @@ import {
 } from '../ruler/geometry';
 import { RulerTicks } from '../ruler/RulerTicks';
 import { createRulerGestureController } from '../input/web/rulerGestureController';
-import { createSelectionGestureController } from '../legacy-compat/selectionGestureController';
-import { createViewportGestureController } from '../legacy-compat/viewportGestureController';
-import type { SelectionGestureDescriptor, SelectionIntent, TargetRole } from '../core';
+import { createSelectionGestureController } from '../input/web/selectionGestureController';
+import { createViewportGestureController } from '../input/web/viewportGestureController';
+import type { SelectionGestureDescriptor, SelectionIntent, TargetRole } from '../core/internal';
 import { resizeStrokeInSelectionFrame } from '../selectionResize';
 import {
   isPointInsideSelectionFrame,
@@ -848,16 +848,13 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
       }
     }, []);
 
-    const handleViewportChange = useCallback(
-      (nextViewport: DrawingViewport) => {
-        if (!isViewportControlledRef.current) {
-          viewportRef.current = nextViewport;
-          setInternalViewport(nextViewport);
-        }
-        onViewportChangeRef.current?.(nextViewport);
-      },
-      []
-    );
+    const handleViewportChange = useCallback((nextViewport: DrawingViewport) => {
+      if (!isViewportControlledRef.current) {
+        viewportRef.current = nextViewport;
+        setInternalViewport(nextViewport);
+      }
+      onViewportChangeRef.current?.(nextViewport);
+    }, []);
 
     const internalRulerStateRef = useRef<DrawingRulerState>({
       center: { x: 0, y: 0 },
@@ -1079,7 +1076,6 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         controller.dispose();
       };
     }, [effectiveRulerHeight, eventTarget, isRulerEnabled]);
-
 
     const effectiveTool: DrawingTool = isDrawingToolSupported(tool) ? tool : 'pen';
     const isDrawingEnabled = tool === undefined || isDrawingToolSupported(tool);
@@ -1489,7 +1485,11 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
         },
         getTargetRole: (event, point): TargetRole => {
           const frame = host.querySelector('[data-testid="virtual-paper-wrapper"]');
-          if (!(frame instanceof Element) || !(event.target instanceof Node) || !frame.contains(event.target)) {
+          if (
+            !(frame instanceof Element) ||
+            !(event.target instanceof Node) ||
+            !frame.contains(event.target)
+          ) {
             return 'none';
           }
           const interaction = buildSurfacePointerInteractionInput(event);
@@ -1570,13 +1570,13 @@ export const DrawingSurface = forwardRef<DrawingSurfaceHandle, DrawingSurfacePro
           getScaleRatio: (event) =>
             event.ctrlKey ||
             event.metaKey ||
-            interactionSet.has('mouseWheelZoom') && !interactionSet.has('trackpadScrollPan')
+            (interactionSet.has('mouseWheelZoom') && !interactionSet.has('trackpadScrollPan'))
               ? Math.exp(-event.deltaY * 0.002)
               : 1,
           getCurrentFocal: (event, focal) =>
             event.ctrlKey ||
             event.metaKey ||
-            interactionSet.has('mouseWheelZoom') && !interactionSet.has('trackpadScrollPan')
+            (interactionSet.has('mouseWheelZoom') && !interactionSet.has('trackpadScrollPan'))
               ? focal
               : { x: focal.x - event.deltaX, y: focal.y - event.deltaY },
         },

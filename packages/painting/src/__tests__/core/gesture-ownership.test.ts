@@ -7,8 +7,8 @@ import {
   getPointerOwner,
   reducePointerOwnership,
   snapshotPointerOwnership,
-} from '../../core';
-import type { InputPhase, NormalizedPointerInput, TargetRole } from '../../core';
+} from '../../core/internal';
+import type { InputPhase, NormalizedPointerInput, TargetRole } from '../../core/internal';
 
 function input(
   pointerId: string | number,
@@ -28,7 +28,10 @@ function input(
 
 describe('core/gesture/ownership', () => {
   it('locks a pointer to its down target despite later cross-target moves', () => {
-    const down = reducePointerOwnership(createPointerOwnershipState(), input('paper-1', 'down', 'paper'));
+    const down = reducePointerOwnership(
+      createPointerOwnershipState(),
+      input('paper-1', 'down', 'paper')
+    );
     const moved = reducePointerOwnership(down, input('paper-1', 'move', 'ruler'));
 
     expect(getPointerOwner(moved, 'paper-1')).toBe('paper');
@@ -78,10 +81,10 @@ describe('core/gesture/ownership', () => {
   });
 
   it('cleans a known pointer on up or cancel while preserving other owners', () => {
-    const initial = [input('paper', 'down', 'paper'), input('selection', 'down', 'selection')].reduce(
-      reducePointerOwnership,
-      createPointerOwnershipState()
-    );
+    const initial = [
+      input('paper', 'down', 'paper'),
+      input('selection', 'down', 'selection'),
+    ].reduce(reducePointerOwnership, createPointerOwnershipState());
     const afterUp = reducePointerOwnership(initial, input('paper', 'up', 'ruler'));
     const afterCancel = reducePointerOwnership(afterUp, input('selection', 'cancel', 'paper'));
 
@@ -108,7 +111,14 @@ describe('core/gesture/ownership', () => {
     expect(Object.isFrozen(snapshot.active)).toBe(true);
     expect(Object.isFrozen(snapshot.active[0])).toBe(true);
     expect(snapshot.active).not.toBe(state.active);
-    expect(afterRelease.active.map(({ pointerId }) => pointerId)).toEqual(['ruler', 'paper-second']);
-    expect(snapshot.active.map(({ pointerId }) => pointerId)).toEqual(['paper-first', 'ruler', 'paper-second']);
+    expect(afterRelease.active.map(({ pointerId }) => pointerId)).toEqual([
+      'ruler',
+      'paper-second',
+    ]);
+    expect(snapshot.active.map(({ pointerId }) => pointerId)).toEqual([
+      'paper-first',
+      'ruler',
+      'paper-second',
+    ]);
   });
 });

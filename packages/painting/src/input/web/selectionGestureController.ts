@@ -3,9 +3,9 @@ import {
   reduceGestureSession,
   type SelectionGestureDescriptor,
   type SelectionIntent,
-} from '../core';
-import type { Point } from '../core/input';
-import * as webInput from '../input/web/normalizePointerInput';
+} from '../../core/internal';
+import type { Point } from '../../core/input';
+import * as webInput from './normalizePointerInput';
 
 export type SelectionGestureControllerOptions = Readonly<{
   host: HTMLElement;

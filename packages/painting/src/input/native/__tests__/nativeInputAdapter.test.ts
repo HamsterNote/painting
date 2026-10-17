@@ -2,7 +2,7 @@
 
 import { createNativeInputAdapter } from '../nativeInputAdapter';
 import type { NativeTouchEvent } from '../nativeInputAdapter';
-import type { NormalizedPointerInput } from '../../../core';
+import type { NormalizedPointerInput } from '../../../core/internal';
 
 function event(
   eventType: NativeTouchEvent['eventType'],
@@ -105,12 +105,46 @@ describe('createNativeInputAdapter', () => {
     );
 
     expect(received).toEqual([
-      expect.objectContaining({ phase: 'down', pointerId: 'a', targetRole: 'ruler', device: 'touch' }),
-      expect.objectContaining({ phase: 'down', pointerId: 'b', targetRole: 'paper', device: 'touch' }),
-      expect.objectContaining({ phase: 'move', pointerId: 'b', screen: { x: 20, y: 2 }, targetRole: 'paper', device: 'touch' }),
-      expect.objectContaining({ phase: 'move', pointerId: 'a', screen: { x: 10, y: 1 }, targetRole: 'ruler', device: 'touch' }),
-      expect.objectContaining({ phase: 'up', pointerId: 'a', screen: { x: 30, y: 1 }, targetRole: 'ruler', device: 'touch' }),
-      expect.objectContaining({ phase: 'up', pointerId: 'b', screen: { x: 40, y: 2 }, targetRole: 'paper', device: 'touch' }),
+      expect.objectContaining({
+        phase: 'down',
+        pointerId: 'a',
+        targetRole: 'ruler',
+        device: 'touch',
+      }),
+      expect.objectContaining({
+        phase: 'down',
+        pointerId: 'b',
+        targetRole: 'paper',
+        device: 'touch',
+      }),
+      expect.objectContaining({
+        phase: 'move',
+        pointerId: 'b',
+        screen: { x: 20, y: 2 },
+        targetRole: 'paper',
+        device: 'touch',
+      }),
+      expect.objectContaining({
+        phase: 'move',
+        pointerId: 'a',
+        screen: { x: 10, y: 1 },
+        targetRole: 'ruler',
+        device: 'touch',
+      }),
+      expect.objectContaining({
+        phase: 'up',
+        pointerId: 'a',
+        screen: { x: 30, y: 1 },
+        targetRole: 'ruler',
+        device: 'touch',
+      }),
+      expect.objectContaining({
+        phase: 'up',
+        pointerId: 'b',
+        screen: { x: 40, y: 2 },
+        targetRole: 'paper',
+        device: 'touch',
+      }),
     ]);
     expect(adapter.getActivePointerIds()).toEqual([]);
     adapter.destroy();
@@ -130,7 +164,12 @@ describe('createNativeInputAdapter', () => {
 
     expect(received).toEqual([
       expect.objectContaining({ phase: 'down', device: 'touch', targetRole: 'selection' }),
-      expect.objectContaining({ phase: 'up', device: 'touch', targetRole: 'selection', screen: { x: 4, y: 4 } }),
+      expect.objectContaining({
+        phase: 'up',
+        device: 'touch',
+        targetRole: 'selection',
+        screen: { x: 4, y: 4 },
+      }),
     ]);
     expect(adapter.getActivePointerIds()).toEqual([]);
     adapter.destroy();

@@ -1,5 +1,5 @@
-import { isNormalizedPointerInput } from '../../core';
-import type { NormalizedPointerInput, Point, TargetRole } from '../../core';
+import { isNormalizedPointerInput } from '../../core/internal';
+import type { NormalizedPointerInput, Point, TargetRole } from '../../core/internal';
 import { resolveTargetRole } from './resolveTargetRole';
 
 export type NormalizePointerInputOptions = Readonly<{
@@ -103,9 +103,7 @@ export function normalizePointerInput(
     ...(button === undefined ? {} : { button }),
     ...(buttons === undefined ? {} : { buttons }),
     targetRole: validRole(
-      options.targetRole === undefined
-        ? resolver(event.target, options.host)
-        : options.targetRole
+      options.targetRole === undefined ? resolver(event.target, options.host) : options.targetRole
     ),
   };
 

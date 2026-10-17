@@ -12,7 +12,7 @@ import {
   setEditorSelection,
   selectionIntentToWorld,
   undoEditorInteraction,
-} from '../../core';
+} from '../../core/internal';
 import type { DrawingStrokeV2, DrawingValueV2 } from '../../model/strokes';
 import type { NormalizedPointerInput } from '../../core/input';
 
@@ -63,7 +63,14 @@ describe('core/editorInteraction', () => {
     const redone = redoEditorInteraction(undone).state;
 
     expect(completed.runtime.documentState.document.strokes).toMatchObject([
-      { tool: 'pen', points: [{ x: 1, y: 2 }, { x: 4, y: 6 }, { x: 7, y: 8 }] },
+      {
+        tool: 'pen',
+        points: [
+          { x: 1, y: 2 },
+          { x: 4, y: 6 },
+          { x: 7, y: 8 },
+        ],
+      },
     ]);
     expect(completed.runtime.undoStack).toHaveLength(1);
     expect(completed.activeGesture).toBeUndefined();
@@ -135,13 +142,17 @@ describe('core/editorInteraction', () => {
       [target(0, first)],
       descriptor
     ).state;
-    const down = reduceEditorGesture(beginEditorGesture(configured).state, input('down', 'selection', 2, 0)).state;
+    const down = reduceEditorGesture(
+      beginEditorGesture(configured).state,
+      input('down', 'selection', 2, 0)
+    ).state;
     const moved = reduceEditorGesture(down, input('move', 'selection', 8, 3)).state;
     const completed = reduceEditorGesture(moved, input('up', 'selection', 8, 3)).state;
     const missingTargets = reduceEditorGesture(
       reduceEditorGesture(
         beginEditorGesture(
-          setEditorSelection(createEditorInteractionState(documentWith(first)), [], descriptor).state
+          setEditorSelection(createEditorInteractionState(documentWith(first)), [], descriptor)
+            .state
         ).state,
         input('down', 'selection', 2, 0)
       ).state,
@@ -155,13 +166,17 @@ describe('core/editorInteraction', () => {
     };
     const resize = reduceEditorGesture(
       reduceEditorGesture(
-        beginEditorGesture(setEditorSelection(configured, [target(0, first)], resizeDescriptor).state).state,
+        beginEditorGesture(
+          setEditorSelection(configured, [target(0, first)], resizeDescriptor).state
+        ).state,
         input('down', 'selection', 10, 10)
       ).state,
       input('up', 'selection', -10, -10)
     );
 
-    expect(completed.runtime.documentState.document.strokes[0].points).toEqual([{ x: 8, y: 3, pressure: 0.5 }]);
+    expect(completed.runtime.documentState.document.strokes[0].points).toEqual([
+      { x: 8, y: 3, pressure: 0.5 },
+    ]);
     expect(completed.runtime.undoStack).toHaveLength(1);
     expect(missingTargets.state.runtime.undoStack).toEqual([]);
     expect(missingTargets.diagnostics).toEqual([{ type: 'no-selection-targets' }]);
@@ -187,10 +202,9 @@ describe('core/editorInteraction', () => {
     };
     const completed = reduceEditorGesture(externallyAdvanced, input('up', 'paper', 10, 0));
 
-    expect(completed.state.runtime.documentState.document.strokes.map((stroke) => stroke.id)).toEqual([
-      'first',
-      'external',
-    ]);
+    expect(
+      completed.state.runtime.documentState.document.strokes.map((stroke) => stroke.id)
+    ).toEqual(['first', 'external']);
     expect(completed.state.runtime.undoStack).toHaveLength(1);
     expect(completed.diagnostics).toEqual([
       { type: 'stale-gesture-revision', expectedRevision: 0, actualRevision: 1 },
@@ -246,10 +260,8 @@ describe('core/editorInteraction', () => {
     targets[0] = { index: 0, expectedId: 'stale', expectedTool: 'pen' };
     descriptor.box.center.x = 99;
     const completed = reduceEditorGesture(
-      reduceEditorGesture(
-        beginEditorGesture(configured).state,
-        input('down', 'selection', 0, 0)
-      ).state,
+      reduceEditorGesture(beginEditorGesture(configured).state, input('down', 'selection', 0, 0))
+        .state,
       input('up', 'selection', 4, 0)
     ).state;
 
@@ -260,20 +272,50 @@ describe('core/editorInteraction', () => {
   });
 
   it.each([
-    [{ scale: 0.25, tx: 40, ty: -20 }, { x: 8, y: -4 }, { x: 32, y: -16 }],
-    [{ scale: 1, tx: 40, ty: -20 }, { x: 8, y: -4 }, { x: 8, y: -4 }],
-    [{ scale: 8, tx: 40, ty: -20 }, { x: 8, y: -4 }, { x: 1, y: -0.5 }],
-  ] as const)('maps selection screen move through frozen viewport %#', (viewport, screenDelta, worldDelta) => {
-    expect(selectionIntentToWorld({ kind: 'move', delta: screenDelta }, viewport)).toEqual({
-      kind: 'move', delta: worldDelta,
-    });
-    expect(selectionIntentToWorld({ kind: 'rotate', pivot: { x: 56, y: -12 }, deltaRad: 0.5 }, viewport)).toEqual({
-      kind: 'rotate', pivot: { x: 16 / viewport.scale, y: 8 / viewport.scale }, deltaRad: 0.5,
-    });
-    expect(selectionIntentToWorld({ kind: 'uniform-scale', anchor: { x: 56, y: -12 }, scale: 1.5 }, viewport)).toEqual({
-      kind: 'uniform-scale', anchor: { x: 16 / viewport.scale, y: 8 / viewport.scale }, scale: 1.5,
-    });
-  });
+    [
+      { scale: 0.25, tx: 40, ty: -20 },
+      { x: 8, y: -4 },
+      { x: 32, y: -16 },
+    ],
+    [
+      { scale: 1, tx: 40, ty: -20 },
+      { x: 8, y: -4 },
+      { x: 8, y: -4 },
+    ],
+    [
+      { scale: 8, tx: 40, ty: -20 },
+      { x: 8, y: -4 },
+      { x: 1, y: -0.5 },
+    ],
+  ] as const)(
+    'maps selection screen move through frozen viewport %#',
+    (viewport, screenDelta, worldDelta) => {
+      expect(selectionIntentToWorld({ kind: 'move', delta: screenDelta }, viewport)).toEqual({
+        kind: 'move',
+        delta: worldDelta,
+      });
+      expect(
+        selectionIntentToWorld(
+          { kind: 'rotate', pivot: { x: 56, y: -12 }, deltaRad: 0.5 },
+          viewport
+        )
+      ).toEqual({
+        kind: 'rotate',
+        pivot: { x: 16 / viewport.scale, y: 8 / viewport.scale },
+        deltaRad: 0.5,
+      });
+      expect(
+        selectionIntentToWorld(
+          { kind: 'uniform-scale', anchor: { x: 56, y: -12 }, scale: 1.5 },
+          viewport
+        )
+      ).toEqual({
+        kind: 'uniform-scale',
+        anchor: { x: 16 / viewport.scale, y: 8 / viewport.scale },
+        scale: 1.5,
+      });
+    }
+  );
 
   it('previews and commits scalar uniform-scale with identical replacements and one history entry', () => {
     const first = pen('first', 4);
@@ -289,16 +331,22 @@ describe('core/editorInteraction', () => {
       [target(0, first)],
       descriptor
     ).state;
-    const down = reduceEditorGesture(beginEditorGesture(configured).state, input('down', 'selection', 6, 2)).state;
+    const down = reduceEditorGesture(
+      beginEditorGesture(configured).state,
+      input('down', 'selection', 6, 2)
+    ).state;
     const preview = reduceEditorGesture(down, input('move', 'selection', 10, 6)).state;
     const committed = reduceEditorGesture(preview, input('up', 'selection', 10, 6)).state;
     const cancelled = reduceEditorGesture(
-      reduceEditorGesture(beginEditorGesture(configured).state, input('down', 'selection', 6, 2)).state,
+      reduceEditorGesture(beginEditorGesture(configured).state, input('down', 'selection', 6, 2))
+        .state,
       input('cancel', 'selection', 10, 6)
     ).state;
 
     expect(preview.selectionPreview?.intent).toEqual({
-      kind: 'uniform-scale', anchor: { x: -4, y: 2 }, scale: 2,
+      kind: 'uniform-scale',
+      anchor: { x: -4, y: 2 },
+      scale: 2,
     });
     expect(preview.selectionPreview?.document.strokes[0].points).toEqual([
       { x: 12, y: -2, pressure: 0.5 },
@@ -321,17 +369,26 @@ describe('core/editorInteraction', () => {
       descriptor
     ).state;
     const duplicatePreview = reduceEditorGesture(
-      reduceEditorGesture(beginEditorGesture(configured).state, input('down', 'selection', 2, 0)).state,
+      reduceEditorGesture(beginEditorGesture(configured).state, input('down', 'selection', 2, 0))
+        .state,
       input('move', 'selection', 8, 0)
     ).state;
     const started = reduceEditorGesture(
-      beginEditorGesture(setEditorSelection(createEditorInteractionState(documentWith(first)), [target(0, first)], descriptor).state).state,
+      beginEditorGesture(
+        setEditorSelection(
+          createEditorInteractionState(documentWith(first)),
+          [target(0, first)],
+          descriptor
+        ).state
+      ).state,
       input('down', 'selection', 2, 0)
     ).state;
     const stale = {
       ...started,
       runtime: applyEditorRuntimeCommand(started.runtime, {
-        type: 'append-stroke', expectedRevision: 0, stroke: pen('external', 20),
+        type: 'append-stroke',
+        expectedRevision: 0,
+        stroke: pen('external', 20),
       }).state,
     };
     const stalePreview = reduceEditorGesture(stale, input('move', 'selection', 8, 0)).state;
@@ -344,17 +401,24 @@ describe('core/editorInteraction', () => {
 
   it('clears selection after replace/remove/undo/redo but preserves valid targets after append', () => {
     const first = pen('first', 2);
-    const selected = setEditorSelection(createEditorInteractionState(documentWith(first)), [target(0, first)]).state;
+    const selected = setEditorSelection(createEditorInteractionState(documentWith(first)), [
+      target(0, first),
+    ]).state;
     const appended = commitEditorInteractionCommand(selected, {
-      type: 'append-stroke', expectedRevision: 0, stroke: pen('second', 10),
+      type: 'append-stroke',
+      expectedRevision: 0,
+      stroke: pen('second', 10),
     }).state;
     const replaced = commitEditorInteractionCommand(appended, {
-      type: 'replace-strokes', expectedRevision: 1,
+      type: 'replace-strokes',
+      expectedRevision: 1,
       replacements: [{ target: target(0, first), stroke: pen('first', 9) }],
     }).state;
     const selectedAgain = setEditorSelection(appended, [target(0, first)]).state;
     const removed = commitEditorInteractionCommand(selectedAgain, {
-      type: 'remove-strokes', expectedRevision: 1, targets: [target(0, first)],
+      type: 'remove-strokes',
+      expectedRevision: 1,
+      targets: [target(0, first)],
     }).state;
     const undone = undoEditorInteraction(selectedAgain).state;
     const redone = redoEditorInteraction(undone).state;
@@ -370,10 +434,10 @@ describe('core/editorInteraction', () => {
   it('preserves all duplicate-safe targets after its own multi-target transform commit', () => {
     const first = pen('duplicate', 2);
     const second = { ...pen('duplicate', 12), tool: 'line' as const };
-    const selected = setEditorSelection(
-      createEditorInteractionState(documentWith(first, second)),
-      [target(0, first), target(1, second)]
-    ).state;
+    const selected = setEditorSelection(createEditorInteractionState(documentWith(first, second)), [
+      target(0, first),
+      target(1, second),
+    ]).state;
     const committed = commitEditorInteractionCommand(selected, {
       type: 'apply-selection-transform',
       expectedRevision: 0,
@@ -383,7 +447,9 @@ describe('core/editorInteraction', () => {
 
     expect(committed.selectionTargets).toEqual([target(0, first), target(1, second)]);
     expect(committed.selectionDescriptor).toBeUndefined();
-    expect(committed.runtime.documentState.document.strokes.map((stroke) => stroke.points[0])).toEqual([
+    expect(
+      committed.runtime.documentState.document.strokes.map((stroke) => stroke.points[0])
+    ).toEqual([
       { x: 5, y: -1, pressure: 0.5 },
       { x: 15, y: -1, pressure: 0.5 },
     ]);
@@ -391,7 +457,9 @@ describe('core/editorInteraction', () => {
 
   it('clears selection for a successful complete text-session document commit', () => {
     const first = pen('first', 2);
-    const selected = setEditorSelection(createEditorInteractionState(documentWith(first)), [target(0, first)]).state;
+    const selected = setEditorSelection(createEditorInteractionState(documentWith(first)), [
+      target(0, first),
+    ]).state;
     const committed = commitEditorInteractionDocument(selected, 0, documentWith()).state;
 
     expect(committed.runtime.documentState.document.strokes).toEqual([]);

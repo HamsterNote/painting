@@ -1,4 +1,4 @@
-import type { NormalizedPointerInput } from '../../core';
+import type { NormalizedPointerInput } from '../../core/internal';
 import { normalizePointerInput } from './normalizePointerInput';
 import type { NormalizePointerInputOptions } from './normalizePointerInput';
 

@@ -37,7 +37,7 @@ import {
   type GestureSession,
   type GestureSessionStatus,
   type NormalizedPointerInput,
-} from '../../../../packages/painting/src/core/index';
+} from '../../../../packages/painting/src/core/internal';
 import {
   createNativeInputAdapter,
   type NativeInputAdapter,
@@ -137,13 +137,17 @@ export default function NativeAdapterSmokeSurface() {
       ...prev,
       status: session.status,
       events: [
-        { seq: ++eventSeqRef.current, text: `${input.phase}:${String(input.pointerId)}:${input.device}` },
+        {
+          seq: ++eventSeqRef.current,
+          text: `${input.phase}:${String(input.pointerId)}:${input.device}`,
+        },
         ...prev.events,
       ].slice(0, MAX_EVENTS),
       activeIds: adapterRef.current?.getActivePointerIds().join(', ') ?? '',
       commitCount: prev.commitCount + commitEffects.length,
       cancelCount: prev.cancelCount + (input.phase === 'cancel' ? 1 : 0),
-      lastEffect: effects.length > 0 ? effects.map((effect) => effect.type).join(', ') : prev.lastEffect,
+      lastEffect:
+        effects.length > 0 ? effects.map((effect) => effect.type).join(', ') : prev.lastEffect,
       strokeCount: session.document.strokes.length,
     }));
   }, []);
@@ -256,7 +260,8 @@ export default function NativeAdapterSmokeSurface() {
           <View style={styles.header}>
             <Text style={styles.title}>Native Input Adapter 冒烟</Text>
             <Text style={styles.subtitle}>
-              RNGH 触摸回调 → createNativeInputAdapter → 纯 GestureSession；观察 pointer 生命周期与提交/取消。
+              RNGH 触摸回调 → createNativeInputAdapter → 纯 GestureSession；观察 pointer
+              生命周期与提交/取消。
             </Text>
           </View>
 

@@ -1,11 +1,21 @@
-import type { DrawingPoint, DrawingStroke, DrawingStrokeStyle, DrawingTool, DrawingValue } from './components/DrawingSurface';
+import type {
+  DrawingPoint,
+  DrawingStroke,
+  DrawingStrokeStyle,
+  DrawingTool,
+  DrawingValue,
+} from './model/geometryTypes';
 
 export function generateStrokeId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
 export function createStroke(tool: DrawingTool, style?: DrawingStrokeStyle): DrawingStroke;
-export function createStroke(tool: DrawingTool, strokeColor?: string, strokeWidth?: number): DrawingStroke;
+export function createStroke(
+  tool: DrawingTool,
+  strokeColor?: string,
+  strokeWidth?: number
+): DrawingStroke;
 export function createStroke(
   tool: DrawingTool,
   styleOrStrokeColor: DrawingStrokeStyle | string = {},
@@ -151,18 +161,18 @@ export function interpolateCatmullRomPoint(
   const t2 = t * t;
   const t3 = t2 * t;
 
-  const curveX = 0.5 * (
-    (2 * p1.x) +
-    (-p0.x + p2.x) * t +
-    (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
-    (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3
-  );
-  const curveY = 0.5 * (
-    (2 * p1.y) +
-    (-p0.y + p2.y) * t +
-    (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
-    (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3
-  );
+  const curveX =
+    0.5 *
+    (2 * p1.x +
+      (-p0.x + p2.x) * t +
+      (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
+      (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
+  const curveY =
+    0.5 *
+    (2 * p1.y +
+      (-p0.y + p2.y) * t +
+      (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
+      (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3);
 
   const linearX = p1.x + (p2.x - p1.x) * t;
   const linearY = p1.y + (p2.y - p1.y) * t;

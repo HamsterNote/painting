@@ -3,7 +3,7 @@
  * 纯 TS 模块，不导入 Skia / RN，可被任何平台安全引用。
  * 所有坐标均为世界 DIP（f64），与视口无关。
  */
-import type { DrawingValueV2 } from '../../../../packages/painting/src/core/index';
+import type { DrawingValueV2 } from '../../../../packages/painting/src/core/internal';
 import type { SkiaOverlay } from '@hamster-note/painting/skia';
 import { FIXTURE_IMAGE_SRC } from './fixtureAssets';
 
@@ -716,19 +716,31 @@ export const FIXTURE_ROLE_OVERLAYS: readonly SkiaOverlay[] = [
 
 /** 阶段 6 追加条目的图例（document 下标即 prepared key/order） */
 export const FIXTURE_SPATIAL_ENTRY_LEGEND = [
-  { id: 'fixture-giant-cross-cell', label: '跨 cell 巨大矩形（凸，部分裁剪 = semantic fill + 仅真实边）' },
+  {
+    id: 'fixture-giant-cross-cell',
+    label: '跨 cell 巨大矩形（凸，部分裁剪 = semantic fill + 仅真实边）',
+  },
   { id: 'fixture-overlap-a', label: '重叠对 a（红，在下层）' },
   { id: 'fixture-overlap-b', label: '重叠对 b（蓝，在上层，hit probe 应命中它）' },
   { id: 'fixture-negative-rect', label: '负世界矩形（-900,-700 → -600,-500）' },
   { id: 'fixture-far-positive', label: '远正笔迹（约 50k/40k DIP，重基后局部坐标小）' },
   { id: 'fixture-ultra-far', label: '超远笔迹（约 2M/1.5M DIP，标准阈值不裁剪）' },
-  { id: 'fixture-segmented-dash-pen', label: '超长开放虚线锯齿（越出视口下缘 → segmented 多片段，安全可绘）' },
-  { id: 'fixture-convex-partial-fill', label: '凸填充矩形部分裁剪（semantic fill 不画人工裁剪边）' },
+  {
+    id: 'fixture-segmented-dash-pen',
+    label: '超长开放虚线锯齿（越出视口下缘 → segmented 多片段，安全可绘）',
+  },
+  {
+    id: 'fixture-convex-partial-fill',
+    label: '凸填充矩形部分裁剪（semantic fill 不画人工裁剪边）',
+  },
   { id: 'fixture-giga-positive', label: '1e9+0.125 安全对象（跳转后 origin≈1e9，局部坐标仍小）' },
   { id: 'fixture-giga-negative', label: '-(1e9+0.125) 负对称安全对象' },
   { id: 'fixture-clip-text', label: '旋转文本框（上缘被裁 → resourceBox+clip，已渲染且可命中）' },
   { id: 'fixture-clip-image', label: '旋转图片框（下缘被裁 → resourceBox+clip，已渲染且可命中）' },
-  { id: 'fixture-clip-ellipse', label: 'partial 椭圆（认证 contour → 安全 program；若真实诊断 unresolved 则不渲染、不命中）' },
+  {
+    id: 'fixture-clip-ellipse',
+    label: 'partial 椭圆（认证 contour → 安全 program；若真实诊断 unresolved 则不渲染、不命中）',
+  },
   { id: 'fixture-clip-pen', label: '同场景安全笔迹（对照组）' },
   {
     id: 'fixture-geometry-partial-cubic',
@@ -758,7 +770,8 @@ export const FIXTURE_SPATIAL_ENTRY_LEGEND = [
   {
     id: 'fixture-text-shaping-latin-combining',
     textShapingTestId: 'latin-combining',
-    label: 'Web CanvasKit 超大 partial Latin + combining mark（4,096 个完整字素真实 shaping，status=clipped）',
+    label:
+      'Web CanvasKit 超大 partial Latin + combining mark（4,096 个完整字素真实 shaping，status=clipped）',
   },
   {
     id: 'fixture-text-shaping-cjk',
@@ -778,7 +791,8 @@ export const FIXTURE_SPATIAL_ENTRY_LEGEND = [
   {
     id: 'fixture-text-shaping-over-budget-width',
     textShapingTestId: 'over-budget-width',
-    label: 'Web CanvasKit 原始 paragraph 宽 4,000,000 DIP（实际 layout 输入受 1,000,000 DIP 预算约束；仅 metrics 证明无新增换行后 ready）',
+    label:
+      'Web CanvasKit 原始 paragraph 宽 4,000,000 DIP（实际 layout 输入受 1,000,000 DIP 预算约束；仅 metrics 证明无新增换行后 ready）',
   },
 ] as const;
 
@@ -883,8 +897,16 @@ export function rebaseOverlaysToFrameOrigin(
 
 /** 角色图例：role 用作 testID 片段（skia-fixture-overlay-role-{role}），space 标明语义 */
 export const FIXTURE_OVERLAY_ROLE_LEGEND = [
-  { role: 'selection-box', space: 'world', label: '选框：world 虚线矩形（顶点随视口投影，线宽/虚线屏幕恒定）' },
-  { role: 'selection-handle', space: 'world', label: '手柄：选框四角 world 圆点（圆心随视口，半径屏幕恒定）' },
+  {
+    role: 'selection-box',
+    space: 'world',
+    label: '选框：world 虚线矩形（顶点随视口投影，线宽/虚线屏幕恒定）',
+  },
+  {
+    role: 'selection-handle',
+    space: 'world',
+    label: '手柄：选框四角 world 圆点（圆心随视口，半径屏幕恒定）',
+  },
   { role: 'lasso-preview', space: 'world', label: '套索预览：world 闭合虚线多边形' },
   { role: 'cursor', space: 'screen', label: '光标：screen 实心小圆（固定屏幕位置）' },
   { role: 'eraser', space: 'screen', label: '橡皮指示：screen 虚线大圆（固定屏幕位置）' },

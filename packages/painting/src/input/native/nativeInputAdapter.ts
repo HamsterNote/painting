@@ -1,5 +1,5 @@
-import { isNormalizedPointerInput } from '../../core';
-import type { InputDevice, NormalizedPointerInput, TargetRole } from '../../core';
+import { isNormalizedPointerInput } from '../../core/internal';
+import type { InputDevice, NormalizedPointerInput, TargetRole } from '../../core/internal';
 
 /** RNGH touch callback 中单个触点所需的最小、无运行时依赖的数据结构。 */
 export type NativeTouchSample = Readonly<{
@@ -33,7 +33,9 @@ export type NativeInputAdapter = Readonly<{
 export type CreateNativeInputAdapterOptions = Readonly<{
   onInput: (input: NormalizedPointerInput) => void;
   resolveTargetRole: (hostLocalPoint: Readonly<{ x: number; y: number }>) => TargetRole | unknown;
-  toHostLocal?: (viewLocalPoint: Readonly<{ x: number; y: number }>) => Readonly<{ x: number; y: number }>;
+  toHostLocal?: (
+    viewLocalPoint: Readonly<{ x: number; y: number }>
+  ) => Readonly<{ x: number; y: number }>;
   now?: () => number;
 }>;
 
@@ -102,7 +104,9 @@ function freezeInput(input: NormalizedPointerInput): NormalizedPointerInput {
  * 将 RNGH touch callbacks 翻译为 core 输入。该层不依赖 React、React Native、RNGH 或
  * Reanimated；外层需在 JS 上调用它，以便维持可测试、不可变的离散 pointer 生命周期。
  */
-export function createNativeInputAdapter(options: CreateNativeInputAdapterOptions): NativeInputAdapter {
+export function createNativeInputAdapter(
+  options: CreateNativeInputAdapterOptions
+): NativeInputAdapter {
   const active = new Map<NativeTouchSample['id'], NormalizedPointerInput>();
   const now = options.now ?? Date.now;
   const toHostLocal = options.toHostLocal ?? ((point) => point);
@@ -118,7 +122,10 @@ export function createNativeInputAdapter(options: CreateNativeInputAdapterOption
     return snapshot;
   };
 
-  const cancelActive = (pointerId: NativeTouchSample['id'], phase: Extract<NativePhase, 'up' | 'cancel'>) => {
+  const cancelActive = (
+    pointerId: NativeTouchSample['id'],
+    phase: Extract<NativePhase, 'up' | 'cancel'>
+  ) => {
     const last = active.get(pointerId);
     if (!last) {
       return;
@@ -174,7 +181,8 @@ export function createNativeInputAdapter(options: CreateNativeInputAdapterOption
           timestamp: now(),
           modifiers: { alt: false, ctrl: false, meta: false, shift: false },
           targetRole:
-            previous?.targetRole ?? validRole(options.resolveTargetRole({ x: screen.x, y: screen.y })),
+            previous?.targetRole ??
+            validRole(options.resolveTargetRole({ x: screen.x, y: screen.y })),
         };
         const snapshot = emit(input);
         if (!snapshot) {

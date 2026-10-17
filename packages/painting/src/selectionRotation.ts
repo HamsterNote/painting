@@ -1,4 +1,4 @@
-import type { DrawingPoint, DrawingStroke } from './components/DrawingSurface';
+import type { DrawingPoint, DrawingStroke } from './model/geometryTypes';
 import type { SelectionBox } from './utils';
 
 export type RotationCenter = Readonly<Pick<DrawingPoint, 'x' | 'y'>>;

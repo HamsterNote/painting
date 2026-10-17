@@ -8,7 +8,7 @@ import {
   type SpatialBounds,
   type SpatialIndexMatch,
   type SpatialQueryIndex,
-} from '../../core';
+} from '../../core/internal';
 
 const bounds = (minX: number, minY: number, maxX: number, maxY: number) => ({
   minX,
@@ -277,8 +277,18 @@ describe('core/spatialIndex', () => {
     let afterFirstAppend: SpatialQueryIndex<DrawingEntryLike> | null = null;
 
     for (const record of records) {
-      const value = Object.freeze({ key: record.key, stroke: Object.freeze({ id: record.strokeId }) });
-      incremental = appendSpatialQueryIndex(incremental, record.key, value, record.recordBounds, record.key, options);
+      const value = Object.freeze({
+        key: record.key,
+        stroke: Object.freeze({ id: record.strokeId }),
+      });
+      incremental = appendSpatialQueryIndex(
+        incremental,
+        record.key,
+        value,
+        record.recordBounds,
+        record.key,
+        options
+      );
       full.upsert(record.key, value, record.recordBounds, record.key);
       if (afterFirstAppend === null) afterFirstAppend = incremental;
     }
@@ -292,7 +302,12 @@ describe('core/spatialIndex', () => {
     for (const queryBounds of queryBank) {
       expect(checksum(incremental.query(queryBounds))).toBe(checksum(full.query(queryBounds)));
     }
-    for (const point of [{ x: 0, y: 0 }, { x: -10, y: 0 }, { x: 19.999, y: 10 }, { x: 10, y: 10 }]) {
+    for (const point of [
+      { x: 0, y: 0 },
+      { x: -10, y: 0 },
+      { x: 19.999, y: 10 },
+      { x: 10, y: 10 },
+    ]) {
       expect(incremental.queryPoint(point).map(({ key, order }) => `${key}:${order}`)).toEqual(
         full.queryPoint(point).map(({ key, order }) => `${key}:${order}`)
       );
@@ -305,7 +320,12 @@ describe('core/spatialIndex', () => {
 
   it('returns the previous index unchanged for invalid append bounds without advancing the chain', () => {
     const base = new SparseSpatialIndex<DrawingEntryLike>({ cellSize: 10 });
-    base.upsert(0, Object.freeze({ key: 0, stroke: Object.freeze({ id: 'kept' }) }), bounds(0, 0, 5, 5), 0);
+    base.upsert(
+      0,
+      Object.freeze({ key: 0, stroke: Object.freeze({ id: 'kept' }) }),
+      bounds(0, 0, 5, 5),
+      0
+    );
     const before = checksum(base.query(bounds(-10, -10, 10, 10)));
 
     const appended = appendSpatialQueryIndex(
@@ -323,9 +343,16 @@ describe('core/spatialIndex', () => {
   });
 
   it('flattens the delta chain at maxDeltaDepth while preserving identical results', () => {
-    const options = { cellSize: 10, maxCellsPerObject: 2, maxCellsPerQuery: 4, maxDeltaDepth: 2 } as const;
+    const options = {
+      cellSize: 10,
+      maxCellsPerObject: 2,
+      maxCellsPerQuery: 4,
+      maxDeltaDepth: 2,
+    } as const;
     const full = new SparseSpatialIndex<DrawingEntryLike>(options);
-    let incremental: SpatialQueryIndex<DrawingEntryLike> = new SparseSpatialIndex<DrawingEntryLike>(options);
+    let incremental: SpatialQueryIndex<DrawingEntryLike> = new SparseSpatialIndex<DrawingEntryLike>(
+      options
+    );
     const depths: number[] = [];
 
     for (let key = 0; key < 6; key += 1) {

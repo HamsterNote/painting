@@ -36,3 +36,13 @@
 抢救批次复验并已推送：`pnpm test` 89 suites / 1472 tests PASS；`pnpm typecheck` exit 0；十份分层 Chromium 文件 38/38 PASS；原独立 WebKit 三文件 21/21 PASS。`13fa7e9` 为普通 fast-forward 推送，未推本地 WIP。
 
 第二批 `pnpm test:ui tests/ui/editor-candidate.spec.ts tests/ui/editor-candidate-canvas2d-pen.spec.ts --workers=1 --trace=off` Chromium 9/9 PASS。`pnpm exec playwright test --config=playwright.webkit.config.ts --workers=1 --trace=off` 在同一受支持容器/宿主服务上运行，十二份分层文件 WebKit 47/47 PASS。改动的三个测试/配置文件 ESLint exit 0，Prettier 通过。
+
+## 解除旧组件的类型耦合
+
+`utils`、selectionResize/Rotation、image 数学和历史 helper 的输入类型移至私有 `model/geometryTypes.ts`，不再通过旧 DrawingSurface 组件导入。已审计的旧纯数学/手势测试改为引用私有 `core/internal.ts`，为公开 `/core` 切换 schema3 做准备；新入口没有引入 V1/V2 文档转换。私有模块不在 package exports 中。
+
+selection/viewport 手势控制器与全部原测试从 `legacy-compat` 完整搬到 `input/web`，旧 DrawingSurface 的临时内部调用方同步使用新位置。没有删减其测试。相关文件统一格式。
+
+- `pnpm typecheck` exit 0。
+- `pnpm exec jest --runInBand --testPathPattern 'GestureController|core/|utils|selectionRotation|usePaintingHistory'`：44 suites / 715 tests PASS。
+- 改路径后完整 `pnpm test`：89 suites / 1472 tests PASS（测试数未减少）；`pnpm lint` exit 0，仍为 0 errors / 36 warnings。

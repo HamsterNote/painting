@@ -1,4 +1,4 @@
-import type { TargetRole } from '../../core';
+import type { TargetRole } from '../../core/internal';
 
 const RULER_SELECTOR = '[data-testid="drawing-ruler"], [data-testid="drawing-ruler-background"]';
 const SELECTION_SELECTOR = [

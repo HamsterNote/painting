@@ -1,6 +1,6 @@
 /** @jest-environment node */
 
-import { createGestureSession, reduceGestureSession } from '../../core';
+import { createGestureSession, reduceGestureSession } from '../../core/internal';
 import type {
   CreateGestureSessionOptions,
   InputDevice,
@@ -9,7 +9,7 @@ import type {
   SelectionGestureDescriptor,
   TargetRole,
   GestureSessionTransition,
-} from '../../core';
+} from '../../core/internal';
 
 const EMPTY_DOCUMENT = { schemaVersion: 2 as const, strokes: [] };
 
@@ -37,10 +37,13 @@ function reduce(
   options: CreateGestureSessionOptions,
   ...inputs: readonly NormalizedPointerInput[]
 ): GestureSessionTransition {
-  return inputs.reduce<GestureSessionTransition>((transition, sample) => reduceGestureSession(transition.session, sample), {
-    session: createGestureSession(options),
-    effects: Object.freeze([]),
-  });
+  return inputs.reduce<GestureSessionTransition>(
+    (transition, sample) => reduceGestureSession(transition.session, sample),
+    {
+      session: createGestureSession(options),
+      effects: Object.freeze([]),
+    }
+  );
 }
 
 function selection(kind: SelectionGestureDescriptor['kind']): SelectionGestureDescriptor {
@@ -492,14 +495,20 @@ describe('core/gesture/session', () => {
 
     expect(atDown).toEqual({ kind: 'uniform-scale', anchor: { x: 0, y: 5 }, scale: 1 });
     expect(doubled.session.transient.uniformScaleSelection).toEqual({
-      kind: 'uniform-scale', anchor: { x: 0, y: 5 }, scale: 2,
+      kind: 'uniform-scale',
+      anchor: { x: 0, y: 5 },
+      scale: 2,
     });
     // min(width, height)=10，minimum extent=4，故 scalar 下限为 0.4。
     expect(minimum.session.transient.uniformScaleSelection).toEqual({
-      kind: 'uniform-scale', anchor: { x: 0, y: 5 }, scale: 0.4,
+      kind: 'uniform-scale',
+      anchor: { x: 0, y: 5 },
+      scale: 0.4,
     });
     expect(reflected.session.transient.uniformScaleSelection).toEqual({
-      kind: 'uniform-scale', anchor: { x: 0, y: 5 }, scale: 1,
+      kind: 'uniform-scale',
+      anchor: { x: 0, y: 5 },
+      scale: 1,
     });
     expect(completed.effects).toEqual([
       { type: 'uniform-scale-commit', intent: doubled.session.transient.uniformScaleSelection },
@@ -528,8 +537,14 @@ describe('core/gesture/session', () => {
     });
 
     for (const session of [invalidCorner, invalidValue]) {
-      const down = reduceGestureSession(session, input('invalid', 'down', 'selection', 20, 15, 'mouse'));
-      const up = reduceGestureSession(down.session, input('invalid', 'up', 'selection', 40, 25, 'mouse'));
+      const down = reduceGestureSession(
+        session,
+        input('invalid', 'down', 'selection', 20, 15, 'mouse')
+      );
+      const up = reduceGestureSession(
+        down.session,
+        input('invalid', 'up', 'selection', 40, 25, 'mouse')
+      );
       expect(up.effects).toEqual([]);
       expect(up.session.transient.uniformScaleSelection).toBeUndefined();
     }

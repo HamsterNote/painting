@@ -1,4 +1,4 @@
-import type { DrawingPoint, DrawingStroke, DrawingValue } from './components/DrawingSurface';
+import type { DrawingPoint, DrawingStroke, DrawingValue } from './model/geometryTypes';
 import type { DrawingStrokeV2 } from './model/strokes';
 import { rotatePointAroundCenter } from './selectionRotation';
 
@@ -566,11 +566,7 @@ function buildStrokeSelectionGeometry(
 
   if (tool === 'ellipse' && points.length >= 2) {
     const samples = rotateShapeGeometry(
-      sampleEllipseFromBoundingBox(
-        points[0],
-        points[points.length - 1],
-        options.ellipseSegments
-      ),
+      sampleEllipseFromBoundingBox(points[0], points[points.length - 1], options.ellipseSegments),
       stroke
     );
     return {
@@ -722,7 +718,11 @@ function pointInClosedShape(point: DrawingPoint, stroke: PickableStroke): boolea
   }
 
   if (tool === 'rect' || tool === 'text' || tool === 'image') {
-    return pointInRect(localPointForRotatedShape(point, stroke), points[0], points[points.length - 1]);
+    return pointInRect(
+      localPointForRotatedShape(point, stroke),
+      points[0],
+      points[points.length - 1]
+    );
   }
 
   if (tool === 'ellipse') {
