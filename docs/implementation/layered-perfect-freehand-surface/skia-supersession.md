@@ -17,3 +17,13 @@
 
 本次执行 `pnpm install --frozen-lockfile`：exit 0，锁文件未改变；安装 1160 packages。
 设备观察和 CI 运行结果不能由本地单测代替。
+
+## 退役复核（2026-10-18）
+
+再次从已推提交读取旧 tasks，未完成恰为表中八项。9.2/11.1 由调用方、测试迁移与运行时退役承接；10.2/10.3 采用当前分层功能与默认入口验收；11.3/11.4/12.1 分别由当前文档、CI 和证据移交承接。10.1 的旧 Skia/100k 固定预算明确不做，改按 7.6 测量真实设备的 PF/Canvas 成本，没有转记旧通过结果。
+
+`git diff --exit-code c57de0a -- openspec/changes/migrate-expo57-skia-surface` 在开始删除前 exit 0，确认 33 文件由已推 Git 历史完整保存。失败树 WIP 曾删除该目录，不把 WIP 的当前树当作备份。当前退出全部 33 文件，没有归档或把旧 38/46 改成完成。
+
+实跑 `openspec list --json` 仅列出 `layered-perfect-freehand-surface`；`openspec validate layered-perfect-freehand-surface --strict` exit 0。当前 proposal 的 supersedes、规范和历史说明仍有意提及旧名称；活动脚本已不读取旧目录，独立数学 spike 输出到 `artifacts/research/`。因此没有可执行路径或活动 change 断链。
+
+`73431a4` 退役批的完整 Chromium 49/49、独立 WebKit 49/49 已实跑通过；设备观察仍未执行，见人工清单。6.4 的源码、包清单、锁文件与产物检查已在 `retirement-verification.md` 记录，不重复实现。
