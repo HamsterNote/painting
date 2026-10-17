@@ -16,7 +16,7 @@ concurrency:
 jobs:
   pr-checks:
     name: Test and Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,7 +29,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22.13
+          node-version: 24.15.0
           cache: pnpm
 
       - name: Install dependencies
@@ -48,19 +48,27 @@ jobs:
       - name: Run unit tests
         run: |
           pnpm test
+          node --test scripts/perf/*.test.mjs
 
-      - name: Install Playwright Chromium
+      - name: Validate active OpenSpec change
+        run: pnpm dlx @fission-ai/openspec@1.13.1 validate layered-perfect-freehand-surface --strict
+
+      - name: Install Playwright Chromium and WebKit
         id: install-playwright
         run: |
-          pnpm exec playwright install --with-deps chromium
+          pnpm exec playwright install --with-deps chromium webkit
 
       - name: Run Playwright UI tests
         id: run-playwright-ui-tests
         run: |
           pnpm test:ui
 
+      - name: Run independent WebKit regressions
+        id: run-playwright-webkit
+        run: pnpm test:webkit
+
       - name: Upload Playwright report
-        if: ${{ always() && (steps.install-playwright.conclusion == 'failure' || steps.run-playwright-ui-tests.conclusion == 'failure') }}
+        if: ${{ always() && (steps.install-playwright.conclusion == 'failure' || steps.run-playwright-ui-tests.conclusion == 'failure' || steps.run-playwright-webkit.conclusion == 'failure') }}
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
@@ -68,7 +76,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload Playwright test results
-        if: ${{ always() && (steps.install-playwright.conclusion == 'failure' || steps.run-playwright-ui-tests.conclusion == 'failure') }}
+        if: ${{ always() && (steps.install-playwright.conclusion == 'failure' || steps.run-playwright-ui-tests.conclusion == 'failure' || steps.run-playwright-webkit.conclusion == 'failure') }}
         uses: actions/upload-artifact@v4
         with:
           name: test-results
@@ -82,3 +90,13 @@ jobs:
       - name: Verify npm pack (dry-run)
         run: |
           pnpm pack:dry
+
+      - name: Verify layered exports and retired runtime absence
+        run: pnpm verify:layered
+
+      # Static exports resolve the Expo DOM host; real device acceptance is separate.
+      - name: Export Android Expo DOM application
+        run: pnpm --filter @hamster-note/painting-playground build:android
+
+      - name: Export iOS Expo DOM application
+        run: pnpm --filter @hamster-note/painting-playground exec expo export --platform ios
