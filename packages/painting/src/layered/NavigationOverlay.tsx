@@ -4,6 +4,7 @@ import { FreehandGeometryCache } from '../geometry/freehandCache';
 import { deriveLayeredWorldBounds } from '../geometry/worldBounds';
 import { getInfiniteRulerLayout } from '../ruler/geometry';
 import { RulerTicks } from '../ruler/RulerTicks';
+import { clampScale, type DrawingViewport } from '../viewport';
 import { ObjectNode } from './DisplayLayer';
 import { useEditorSnapshot } from './useEditorSnapshot';
 
@@ -20,10 +21,11 @@ export function NavigationOverlay({ controller }: { controller: LayeredEditorCon
       const rect = root.current!.getBoundingClientRect();
       setSize({ width: rect.width, height: rect.height });
     };
-    const observer = new ResizeObserver(measure);
-    observer.observe(root.current!);
+    const observer =
+      typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
+    observer?.observe(root.current!);
     measure();
-    return () => observer.disconnect();
+    return () => observer?.disconnect();
   }, []);
   useLayoutEffect(() => {
     if (!navigation.virtualPaper.enabled || size.width <= 1) {
@@ -88,6 +90,10 @@ export function NavigationOverlay({ controller }: { controller: LayeredEditorCon
         origin: { x: number; y: number };
         offsetX: number;
         offsetY: number;
+        mode: 'pan' | 'resize';
+        start: { x: number; y: number };
+        viewport: DrawingViewport;
+        center: { x: number; y: number };
       }
     | undefined
   >(undefined);
@@ -98,15 +104,33 @@ export function NavigationOverlay({ controller }: { controller: LayeredEditorCon
     const x = state.origin.x + (event.clientX - rect.left - state.offsetX) / state.scale;
     const y = state.origin.y + (event.clientY - rect.top - state.offsetY) / state.scale;
     const latest = controller.getSnapshot('viewport');
+    let next = {
+      ...state.viewport,
+      tx: state.viewport.tx - (x - state.start.x) * state.viewport.scale,
+      ty: state.viewport.ty - (y - state.start.y) * state.viewport.scale,
+    };
+    if (state.mode === 'resize') {
+      const startDistance = Math.hypot(
+        state.start.x - state.center.x,
+        state.start.y - state.center.y
+      );
+      const distance = Math.hypot(x - state.center.x, y - state.center.y);
+      if (startDistance < 1 || distance < 1) return;
+      const scale = clampScale((state.viewport.scale * startDistance) / distance);
+      next = {
+        scale,
+        tx: size.width / 2 - state.center.x * scale,
+        ty: size.height / 2 - state.center.y * scale,
+      };
+    }
     controller.updateViewport({
       type: 'replace',
       expectedRevision: latest.revision,
-      viewport: {
-        ...latest.viewport,
-        tx: size.width / 2 - x * latest.viewport.scale,
-        ty: size.height / 2 - y * latest.viewport.scale,
-      },
+      viewport: next,
     });
+  }
+  function finishNavigation(event: React.PointerEvent<SVGSVGElement>) {
+    if (drag.current?.id === event.pointerId) drag.current = undefined;
   }
   return (
     <div ref={root} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
@@ -193,31 +217,59 @@ export function NavigationOverlay({ controller }: { controller: LayeredEditorCon
           onPointerDown={(event) => {
             if (
               event.button !== 0 ||
+              drag.current ||
               controller.getSnapshot('interaction').activeFreehand?.status === 'collecting'
             )
               return;
             // Snapshot map projection: moving the viewport cannot change a live drag's coordinate basis.
+            const rect = event.currentTarget.getBoundingClientRect();
+            const offsetX = (176 - mapWidth * mapScale) / 2;
+            const offsetY = (126 - mapHeight * mapScale) / 2;
+            const start = {
+              x: mapOrigin.x + (event.clientX - rect.left - offsetX) / mapScale,
+              y: mapOrigin.y + (event.clientY - rect.top - offsetY) / mapScale,
+            };
+            const target = event.target instanceof Element ? event.target : null;
+            const onIndicator = target?.closest('[data-minimap-indicator], [data-minimap-edge]');
+            const mode =
+              event.pointerType === 'mouse' && target?.closest('[data-minimap-edge]')
+                ? 'resize'
+                : 'pan';
+            let startViewport = controller.getSnapshot('viewport').viewport;
+            if (!onIndicator) {
+              const latest = controller.getSnapshot('viewport');
+              controller.updateViewport({
+                type: 'replace',
+                expectedRevision: latest.revision,
+                viewport: {
+                  ...latest.viewport,
+                  tx: size.width / 2 - start.x * latest.viewport.scale,
+                  ty: size.height / 2 - start.y * latest.viewport.scale,
+                },
+              });
+              startViewport = controller.getSnapshot('viewport').viewport;
+            }
             drag.current = {
               id: event.pointerId,
               scale: mapScale,
               origin: mapOrigin,
-              offsetX: (176 - mapWidth * mapScale) / 2,
-              offsetY: (126 - mapHeight * mapScale) / 2,
+              offsetX,
+              offsetY,
+              mode,
+              start,
+              viewport: startViewport,
+              center: {
+                x: (size.width / 2 - startViewport.tx) / startViewport.scale,
+                y: (size.height / 2 - startViewport.ty) / startViewport.scale,
+              },
             };
             event.currentTarget.setPointerCapture(event.pointerId);
-            navigate(event);
             event.preventDefault();
           }}
           onPointerMove={navigate}
-          onPointerUp={() => {
-            drag.current = undefined;
-          }}
-          onPointerCancel={() => {
-            drag.current = undefined;
-          }}
-          onLostPointerCapture={() => {
-            drag.current = undefined;
-          }}
+          onPointerUp={finishNavigation}
+          onPointerCancel={finishNavigation}
+          onLostPointerCapture={finishNavigation}
         >
           <g
             transform={`translate(${(176 - mapWidth * mapScale) / 2} ${(126 - mapHeight * mapScale) / 2}) scale(${mapScale}) translate(${-mapOrigin.x} ${-mapOrigin.y})`}
@@ -237,12 +289,44 @@ export function NavigationOverlay({ controller }: { controller: LayeredEditorCon
             })}
             <rect
               data-testid="minimap-viewport"
+              data-minimap-indicator="true"
+              pointerEvents="auto"
               {...visible}
               fill="#2563eb"
               fillOpacity={0.12}
               stroke="#2563eb"
               strokeWidth={1 / mapScale}
             />
+            {[
+              ['top', 0.5, 0],
+              ['bottom', 0.5, 1],
+              ['left', 0, 0.5],
+              ['right', 1, 0.5],
+              ['corner-tl', 0, 0],
+              ['corner-tr', 1, 0],
+              ['corner-bl', 0, 1],
+              ['corner-br', 1, 1],
+            ].map(([edge, x, y]) => (
+              <rect
+                key={edge}
+                data-minimap-edge={edge}
+                x={visible.x + Number(x) * visible.width - 4 / mapScale}
+                y={visible.y + Number(y) * visible.height - 4 / mapScale}
+                width={8 / mapScale}
+                height={8 / mapScale}
+                fill="#2563eb"
+                fillOpacity={0.5}
+                pointerEvents="auto"
+                style={{
+                  cursor:
+                    edge === 'left' || edge === 'right'
+                      ? 'ew-resize'
+                      : edge === 'top' || edge === 'bottom'
+                        ? 'ns-resize'
+                        : 'nwse-resize',
+                }}
+              />
+            ))}
           </g>
         </svg>
       ) : null}

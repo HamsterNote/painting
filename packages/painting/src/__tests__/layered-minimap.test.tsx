@@ -79,3 +79,43 @@ test('transformed off-paper geometry and a far viewport produce finite map proje
   expect(map.querySelector('path')).toBeTruthy();
   expect(map.querySelectorAll('rect').length).toBeGreaterThan(0);
 });
+
+test.each(['mouse', 'touch', 'pen'])(
+  'minimap handle retains %s resize or pan semantics and pointer ownership',
+  (source) => {
+    const controller = makeLayeredController();
+    controller.setNavigation({ minimap: true });
+    render(<NavigationOverlay controller={controller} />);
+    const map = screen.getByTestId('layered-minimap');
+    Object.assign(map, { setPointerCapture: jest.fn() });
+    const handle = map.querySelector('[data-minimap-edge="corner-br"]')!;
+    const before = controller.getSnapshot('viewport').viewport;
+    pointer(handle, 'down', 110, 65, source);
+    pointer(map, 'down', 0, 0, 'touch', 2);
+    pointer(map, 'up', 0, 0, 'touch', 2);
+    pointer(map, 'move', 105, 60, source);
+    const after = controller.getSnapshot('viewport').viewport;
+    expect(after.scale > before.scale).toBe(source === 'mouse');
+    expect(after.scale === before.scale).toBe(source !== 'mouse');
+    expect(after.tx).not.toBe(before.tx);
+    expect((400 - after.tx) / after.scale === (400 - before.tx) / before.scale).toBe(
+      source === 'mouse'
+    );
+    pointer(map, 'cancel', 105, 60, source);
+    const ended = controller.getSnapshot('viewport');
+    pointer(map, 'move', 90, 40, source);
+    expect(controller.getSnapshot('viewport')).toBe(ended);
+    expect(controller.getSnapshot('history').canUndo).toBe(false);
+  }
+);
+
+test('surface navigation mounts without ResizeObserver', () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'ResizeObserver');
+  Reflect.deleteProperty(globalThis, 'ResizeObserver');
+  try {
+    const { container } = render(<NavigationOverlay controller={makeLayeredController()} />);
+    expect(container.firstElementChild).toBeTruthy();
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, 'ResizeObserver', descriptor);
+  }
+});

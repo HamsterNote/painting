@@ -45,6 +45,8 @@
 
 ## 解除旧组件的类型耦合
 
+退役前逐项对照原 Minimap 测试，恢复鼠标八个边缘/角落缩放手柄、以中心为锚点缩放、pen/touch 手柄只平移、单 pointer ownership 与取消；NavigationOverlay 支持缺少 ResizeObserver 的宿主。`pnpm exec jest --runInBand --testPathPattern layered-minimap` 7/7 PASS；`pnpm typecheck` exit 0；分层 Chromium 16/16 PASS。新地图拟合同时包含可见 viewport，因此极远 viewport 的指示框可达；schema3 reader 拒绝无效几何，不再沿用 V1 运行时过滤点的入口。
+
 `utils`、selectionResize/Rotation、image 数学和历史 helper 的输入类型移至私有 `model/geometryTypes.ts`，不再通过旧 DrawingSurface 组件导入。已审计的旧纯数学/手势测试改为引用私有 `core/internal.ts`，为公开 `/core` 切换 schema3 做准备；新入口没有引入 V1/V2 文档转换。私有模块不在 package exports 中。
 
 selection/viewport 手势控制器与全部原测试从 `legacy-compat` 完整搬到 `input/web`，旧 DrawingSurface 的临时内部调用方同步使用新位置。没有删减其测试。相关文件统一格式。
