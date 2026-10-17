@@ -1,3 +1,4 @@
+export { LayeredPaintingBoard } from '@hamster-note/painting/layered';
 import { type DrawingSurfaceHandle, type DrawingSurfaceProps, type DrawingSurfaceVirtualPaperOptions } from '@hamster-note/painting';
 /** ref 句柄与 DrawingSurface 完全一致 */
 export type PaintingBoardHandle = DrawingSurfaceHandle;

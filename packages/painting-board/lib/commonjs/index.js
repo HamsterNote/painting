@@ -3,8 +3,16 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.PaintingBoard = exports.DEFAULT_VIRTUAL_PAPER_OPTIONS = void 0;
+exports.DEFAULT_VIRTUAL_PAPER_OPTIONS = void 0;
+Object.defineProperty(exports, "LayeredPaintingBoard", {
+  enumerable: true,
+  get: function () {
+    return _layered.LayeredPaintingBoard;
+  }
+});
+exports.PaintingBoard = void 0;
 var _react = require("react");
+var _layered = require("@hamster-note/painting/layered");
 var _reactNative = require("react-native");
 var _painting = require("@hamster-note/painting");
 var _jsxRuntime = require("react/jsx-runtime");

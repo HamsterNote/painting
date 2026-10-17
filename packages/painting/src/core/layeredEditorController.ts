@@ -48,10 +48,7 @@ import {
   type FreehandSessionSnapshot,
   type FreehandSessionUpdate,
 } from './freehandSession';
-import {
-  applyViewportTransformIntent,
-  type ViewportTransformIntent,
-} from './viewportTransform';
+import { applyViewportTransformIntent, type ViewportTransformIntent } from './viewportTransform';
 import { FreehandGeometryCache } from '../geometry/freehandCache';
 
 /** 活动工具：自由笔、形状、图片、文字与交互工具（选择/套索/橡皮/平移）。 */
@@ -144,16 +141,14 @@ export type LayeredSessionErrorCode = Extract<
 /** 统一 Result：成功携带值，失败给可测 code；会话失败另带 sessionCode。 */
 export type LayeredEditorResult<T> =
   | Readonly<{ ok: true; value: T }>
-  | Readonly<{ ok: false; error: Readonly<{ code: LayeredEditorErrorCode; sessionCode?: LayeredSessionErrorCode }> }>;
+  | Readonly<{
+      ok: false;
+      error: Readonly<{ code: LayeredEditorErrorCode; sessionCode?: LayeredSessionErrorCode }>;
+    }>;
 
 /** 订阅频道；除 interaction 外均按 state 返回稳定引用，适合 useSyncExternalStore。 */
 export type LayeredEditorChannel =
-  | 'document'
-  | 'history'
-  | 'tools'
-  | 'selection'
-  | 'viewport'
-  | 'interaction';
+  'document' | 'history' | 'tools' | 'selection' | 'viewport' | 'preview' | 'interaction';
 
 /** history 频道快照。 */
 export type LayeredHistorySnapshot = Readonly<{
@@ -169,6 +164,17 @@ export type LayeredToolsSnapshot = Readonly<{
 
 /** selection 频道快照：文档内存在的对象 id（只读）。 */
 export type LayeredSelectionSnapshot = readonly string[];
+
+export type LayeredPreviewSnapshot = Readonly<{
+  objects: readonly DocumentObject[];
+  hiddenIds: readonly string[];
+  path: readonly Point[];
+}>;
+const EMPTY_PREVIEW: LayeredPreviewSnapshot = Object.freeze({
+  objects: Object.freeze([]),
+  hiddenIds: Object.freeze([]),
+  path: Object.freeze([]),
+});
 
 /**
  * interaction 频道快照：当前 collecting 会话快照与等待提交的候选。
@@ -186,6 +192,7 @@ export type LayeredEditorSnapshotMap = Readonly<{
   tools: LayeredToolsSnapshot;
   selection: LayeredSelectionSnapshot;
   viewport: LayeredViewportSnapshot;
+  preview: LayeredPreviewSnapshot;
   interaction: LayeredInteractionSnapshot;
 }>;
 
@@ -213,16 +220,27 @@ export interface LayeredEditorController {
   setFreehandSettings(settings: BrushSnapshot): LayeredEditorResult<void>;
   setShapeSettings(settings: ShapeStyle): LayeredEditorResult<void>;
   setSelection(ids: readonly string[]): LayeredEditorResult<void>;
+  setPreview(preview: LayeredPreviewSnapshot | null): LayeredEditorResult<void>;
   updateViewport(command: LayeredViewportCommand): LayeredEditorResult<LayeredViewportUpdateResult>;
   beginFreehand(input: LayeredBeginInput): LayeredEditorResult<void>;
   updateFreehand(input: FreehandSessionUpdate): LayeredEditorResult<void>;
   endFreehand(input: FreehandSessionEnd): LayeredEditorResult<FreehandCandidate>;
   cancelFreehand(input: FreehandSessionCancel): LayeredEditorResult<void>;
   commitFreehand(commitId: string): LayeredEditorResult<LayeredCommitReceipt>;
+  editObjects(edit: LayeredObjectEdit): LayeredEditorResult<EditorDocument>;
   undo(): LayeredEditorResult<EditorDocument>;
   redo(): LayeredEditorResult<EditorDocument>;
-  getPresentationIdentity(commitId: string): LayeredEditorResult<LayeredPresentationIdentity | null>;
+  getPresentationIdentity(
+    commitId: string
+  ): LayeredEditorResult<LayeredPresentationIdentity | null>;
 }
+
+/** One reversible object edit. Freehand creation remains exclusive to raw commit. */
+export type LayeredObjectEdit = Readonly<{
+  expectedDocumentRevision: number;
+  upsert?: readonly DocumentObject[];
+  removeIds?: readonly string[];
+}>;
 
 /**
  * factory 选项：初始文档、viewport 快照、活动工具、设置、可选 selection、
@@ -432,10 +450,18 @@ function copyViewport(value: unknown): DrawingViewport | null {
     return null;
   }
   const viewport = value as Record<string, unknown>;
-  if (!isFiniteNumber(viewport.scale) || !isFiniteNumber(viewport.tx) || !isFiniteNumber(viewport.ty)) {
+  if (
+    !isFiniteNumber(viewport.scale) ||
+    !isFiniteNumber(viewport.tx) ||
+    !isFiniteNumber(viewport.ty)
+  ) {
     return null;
   }
-  if (viewport.scale <= 0 || viewport.scale < MIN_VIEWPORT_SCALE || viewport.scale > MAX_VIEWPORT_SCALE) {
+  if (
+    viewport.scale <= 0 ||
+    viewport.scale < MIN_VIEWPORT_SCALE ||
+    viewport.scale > MAX_VIEWPORT_SCALE
+  ) {
     return null;
   }
   return Object.freeze({ scale: viewport.scale, tx: viewport.tx, ty: viewport.ty });
@@ -799,7 +825,10 @@ function buildCanonicalPayload(input: CanonicalPayloadInput): string {
 }
 
 /** payload 对比 helper：判断两个候选/对象是否产生同一 canonical 字符串。 */
-function hasSameCanonicalPayload(left: CanonicalPayloadInput, right: CanonicalPayloadInput): boolean {
+function hasSameCanonicalPayload(
+  left: CanonicalPayloadInput,
+  right: CanonicalPayloadInput
+): boolean {
   return buildCanonicalPayload(left) === buildCanonicalPayload(right);
 }
 
@@ -821,10 +850,13 @@ interface DocumentKernel {
   getDocument(): EditorDocument;
   getHistory(): LayeredHistorySnapshot;
   commitCandidate(candidate: FreehandCandidate): LayeredEditorResult<LayeredCommitReceipt>;
+  editObjects(edit: LayeredObjectEdit): LayeredEditorResult<EditorDocument>;
   getExistingReceipt(commitId: string): LayeredEditorResult<LayeredCommitReceipt>;
   undo(): LayeredEditorResult<EditorDocument>;
   redo(): LayeredEditorResult<EditorDocument>;
-  getPresentationIdentity(commitId: string): LayeredEditorResult<LayeredPresentationIdentity | null>;
+  getPresentationIdentity(
+    commitId: string
+  ): LayeredEditorResult<LayeredPresentationIdentity | null>;
 }
 
 /** 由 candidate 冻结新 freehand 对象：四 revision 固定 1、identity transform、raw/brush 沿用冻结快照。 */
@@ -968,7 +1000,9 @@ function createDocumentKernel(
    *   准备 final 几何 → 一次切换 document + 单个 history entry + registry/allocatedIds。
    * 任一步失败都返回 Result 且不改变 document/history/registry。
    */
-  function commitCandidate(candidate: FreehandCandidate): LayeredEditorResult<LayeredCommitReceipt> {
+  function commitCandidate(
+    candidate: FreehandCandidate
+  ): LayeredEditorResult<LayeredCommitReceipt> {
     if (!candidate || typeof candidate !== 'object' || !isNonEmptyString(candidate.commitId)) {
       return errResult('invalid-input');
     }
@@ -1126,10 +1160,89 @@ function createDocumentKernel(
     );
   }
 
+  function editObjects(edit: LayeredObjectEdit): LayeredEditorResult<EditorDocument> {
+    if (
+      !edit ||
+      typeof edit !== 'object' ||
+      edit.expectedDocumentRevision !== document.documentRevision ||
+      (edit.upsert !== undefined && !Array.isArray(edit.upsert)) ||
+      (edit.removeIds !== undefined &&
+        (!Array.isArray(edit.removeIds) || edit.removeIds.some((id) => !isNonEmptyString(id))))
+    )
+      return errResult('invalid-input');
+    const revision = bumpRevision();
+    if (revision === null) return errResult('revision-exhausted');
+    const remove = new Set(edit.removeIds ?? []);
+    const updates = new Map<string, DocumentObject>();
+    for (const id of remove) {
+      if (!document.objects.some((object) => object.objectId === id))
+        return errResult('invalid-input');
+    }
+    for (const input of edit.upsert ?? []) {
+      const copy = copyDocumentObject(input);
+      if (!copy || updates.has(copy.objectId) || remove.has(copy.objectId))
+        return errResult('invalid-input');
+      const old = document.objects.find((object) => object.objectId === copy.objectId);
+      if (!old && (allocatedIds.has(copy.objectId) || copy.kind === 'freehand'))
+        return errResult('object-id-conflict');
+      if (old && (old.kind !== copy.kind || copy.objectRevision <= old.objectRevision))
+        return errResult('invalid-input');
+      if (
+        old &&
+        !sameTransform(old.transform, copy.transform) &&
+        copy.transformRevision <= old.transformRevision
+      ) {
+        return errResult('invalid-input');
+      }
+      if (copy.kind === 'freehand') {
+        if (
+          !old ||
+          old.kind !== 'freehand' ||
+          copy.commitId !== old.commitId ||
+          !hasSameCanonicalPayload(copy, old)
+        )
+          return errResult('commit-id-conflict');
+        // Transform edits retain accepted input identity and the local outline cache.
+        updates.set(
+          copy.objectId,
+          Object.freeze({
+            ...old,
+            transform: copy.transform,
+            transformRevision: copy.transformRevision,
+            objectRevision: copy.objectRevision,
+          })
+        );
+      } else updates.set(copy.objectId, copy);
+    }
+    if (!remove.size && !updates.size) return okResult(document);
+    const beforeObjects = document.objects;
+    const after = beforeObjects
+      .filter((object) => !remove.has(object.objectId))
+      .map((object) => {
+        const replacement = updates.get(object.objectId);
+        updates.delete(object.objectId);
+        return replacement ?? object;
+      });
+    for (const object of updates.values()) after.push(object);
+    const afterObjects = Object.freeze(after);
+    document = Object.freeze({
+      schemaVersion: LAYERED_SCHEMA_VERSION,
+      documentRevision: revision,
+      objects: afterObjects,
+    });
+    undoStack.push(Object.freeze({ beforeObjects, afterObjects }));
+    redoStack.length = 0;
+    for (const object of after) allocatedIds.add(object.objectId);
+    refreshHistory();
+    syncCacheBestEffort();
+    return okResult(document);
+  }
+
   return {
     getDocument: () => document,
     getHistory: () => historySnapshot,
     commitCandidate,
+    editObjects,
     getExistingReceipt,
     undo,
     redo,
@@ -1157,6 +1270,17 @@ function sameViewport(left: DrawingViewport, right: DrawingViewport): boolean {
   return left.scale === right.scale && left.tx === right.tx && left.ty === right.ty;
 }
 
+function sameTransform(left: AffineTransform, right: AffineTransform): boolean {
+  return (
+    left.a === right.a &&
+    left.b === right.b &&
+    left.c === right.c &&
+    left.d === right.d &&
+    left.tx === right.tx &&
+    left.ty === right.ty
+  );
+}
+
 function sameBrush(left: BrushSnapshot, right: BrushSnapshot): boolean {
   return (
     left.color === right.color &&
@@ -1167,7 +1291,10 @@ function sameBrush(left: BrushSnapshot, right: BrushSnapshot): boolean {
   );
 }
 
-function sameDash(left: readonly number[] | undefined, right: readonly number[] | undefined): boolean {
+function sameDash(
+  left: readonly number[] | undefined,
+  right: readonly number[] | undefined
+): boolean {
   if (left === undefined || right === undefined) {
     return left === right;
   }
@@ -1238,6 +1365,7 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
   private selection: readonly string[];
   private viewportSnapshot: LayeredViewportSnapshot;
   private toolsSnapshot: LayeredToolsSnapshot;
+  private preview: LayeredPreviewSnapshot = EMPTY_PREVIEW;
   private activeSession: FreehandSession | undefined;
   private readonly pending = new Map<string, PendingEntry>();
   private readonly subscribers = new Map<LayeredEditorChannel, Set<() => void>>();
@@ -1282,6 +1410,8 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
         return this.selection as LayeredEditorSnapshotMap[C];
       case 'viewport':
         return this.viewportSnapshot as LayeredEditorSnapshotMap[C];
+      case 'preview':
+        return this.preview as LayeredEditorSnapshotMap[C];
       default:
         return this.buildInteractionSnapshot() as LayeredEditorSnapshotMap[C];
     }
@@ -1313,8 +1443,41 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
     };
   }
 
+  setPreview(preview: LayeredPreviewSnapshot | null): LayeredEditorResult<void> {
+    if (this.locked) return errResult('internal-invariant');
+    if (preview === null) this.preview = EMPTY_PREVIEW;
+    else {
+      if (
+        !preview ||
+        typeof preview !== 'object' ||
+        !Array.isArray(preview.objects) ||
+        !Array.isArray(preview.path) ||
+        !Array.isArray(preview.hiddenIds)
+      )
+        return errResult('invalid-input');
+      const objects = preview.objects.map(copyDocumentObject);
+      if (
+        objects.some((object) => !object) ||
+        preview.path.some((point) => !copyPoint(point)) ||
+        preview.hiddenIds.some((id) => !this.documentHasObject(id))
+      )
+        return errResult('invalid-input');
+      this.preview = Object.freeze({
+        objects: Object.freeze(objects as DocumentObject[]),
+        hiddenIds: Object.freeze([...preview.hiddenIds]),
+        path: Object.freeze(preview.path.map((point) => Object.freeze({ x: point.x, y: point.y }))),
+      });
+    }
+    this.emit(['preview']);
+    return okResult(undefined);
+  }
+
   /** 顺序发出频道通知；listener 抛错被隔离，不影响已完成事务。 */
   private emit(channels: readonly LayeredEditorChannel[]): void {
+    if (channels.includes('document') && this.preview !== EMPTY_PREVIEW) {
+      this.preview = EMPTY_PREVIEW;
+      channels = [...channels, 'preview'];
+    }
     for (const channel of channels) {
       const set = this.subscribers.get(channel);
       if (!set) {
@@ -1500,6 +1663,10 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
       }
     }
     this.activeTool = tool;
+    if (this.preview !== EMPTY_PREVIEW) {
+      this.preview = EMPTY_PREVIEW;
+      notifications.push('preview');
+    }
     this.toolsSnapshot = this.buildToolsSnapshot();
     notifications.push('tools');
     return { result: okResult(undefined), notifications };
@@ -1705,6 +1872,20 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
     return outcome.result;
   }
 
+  editObjects(edit: LayeredObjectEdit): LayeredEditorResult<EditorDocument> {
+    const outcome = this.runExclusive<EditorDocument>(() => {
+      if (this.activeSession)
+        return { result: errResult('active-session-conflict'), notifications: [] };
+      const result = this.kernel.editObjects(edit);
+      if (!result.ok) return { result, notifications: [] };
+      const notifications: LayeredEditorChannel[] = ['document', 'history'];
+      if (this.reconcileSelection()) notifications.push('selection');
+      return { result, notifications };
+    });
+    this.emit(outcome.notifications);
+    return outcome.result;
+  }
+
   private undoInternal(): MutationOutcome<EditorDocument> {
     const result = this.kernel.undo();
     if (!result.ok) {
@@ -1832,4 +2013,3 @@ export function createLayeredEditorController(
     })
   );
 }
-

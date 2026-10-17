@@ -26,6 +26,20 @@
         "default": "./lib/commonjs/index.js"
       }
     },
+    "./layered": {
+      "react-native": {
+        "types": "./lib/typescript/module/layered/index.d.ts",
+        "default": "./src/layered/index.ts"
+      },
+      "import": {
+        "types": "./lib/typescript/module/layered/index.d.ts",
+        "default": "./lib/module/layered/index.js"
+      },
+      "require": {
+        "types": "./lib/typescript/commonjs/layered/index.d.ts",
+        "default": "./lib/commonjs/layered/index.js"
+      }
+    },
     "./core": {
       "react-native": {
         "types": "./lib/typescript/module/core/index.d.ts",

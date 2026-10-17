@@ -10,6 +10,7 @@
  * 所有 DrawingSurface 的 props / ref handle 均原样透传。
  */
 import { forwardRef } from 'react';
+export { LayeredPaintingBoard } from '@hamster-note/painting/layered';
 import { StyleSheet, View } from 'react-native';
 import {
   DrawingSurface,
