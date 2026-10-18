@@ -1,6 +1,6 @@
 # Mobile Input Mode Switch 验收记录
 
-2026-10-18，基线 `9f4ece3`，分支 `feat/mobile-input-mode-switch`。本 change 保留活动状态，未同步主 specs、未归档、未创建 PR；仅由 Playwright 管理临时测试服务，未启动常驻 Dev Server。
+2026-10-18，基线 `9f4ece3`，分支 `feat/mobile-input-mode-switch`。本文保留 apply 阶段的逐项实跑记录；当时未同步主 specs、未归档、未创建 PR。后续 iPad 修复见 [ipados-input-fix.md](./ipados-input-fix.md)，真机验收与归档后验证见 [archive-verification.md](./archive-verification.md)。
 
 ## 契约与实现对应
 
@@ -73,4 +73,4 @@ README 已记录三档、会话 latch、初始化优先级、旧 inputPolicy 的
 
 ## 限制与交接
 
-未运行真实手写笔、真实掌触、iOS/Android 启动或 Safari 真机验证；Chromium 合成 PointerEvent 不代表设备手感或硬件掌触识别能力。没有更改六条冻结口径，无需产品重新拍板。主 specs、归档、PR 和后续正式交付仍等待修勾验证与小队流程。
+本节描述 apply 阶段的边界：当时未运行真实手写笔、真实掌触、iOS/Android 启动或 Safari 真机验证。后续修勾已在 iPadOS 18 / Edge 用手指与手写笔复验通过，见归档验收记录；不能把该结论扩展为 Safari 专项、硬件掌触、压力品质或原生壳验证。Chromium 合成 PointerEvent 不代表设备手感或硬件掌触识别能力。六条冻结口径未改。

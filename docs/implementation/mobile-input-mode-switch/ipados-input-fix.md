@@ -99,7 +99,7 @@ podman run --rm --name ham44-webkit-check --network host \
 
 ## 设备复验
 
-修复针对用户实际轨迹的拒绝条件，尚未在用户的实体 iPad 上运行新 SHA。
-待小助手更新并重启 `ham44-dev` / 5278 后，用同台 iPad 重试三档的单指、双指、笔、
-中途第二指取消、掌触冻结、自动 latch 和强制覆盖；需要时截图诊断文字或导出 trace。
-未开 PR、未归档、未同步主 specs、未 rebase/force-push、未修改 main。
+上述自动化记录交付时尚未完成实体 iPad 复验。其后小助手将 `ham44-dev` / 5278 更新至
+`5f49556`，修勾于 2026-10-18 在同台 iPad（iPadOS 18 / Edge）用手指与手写笔复验通过，
+并回复“验证成功”。服务由小助手停止。该反馈不等于真笔压力档位、掌触专项或性能预算验收。
+归档后验证与剩余边界见 [archive-verification.md](./archive-verification.md)。

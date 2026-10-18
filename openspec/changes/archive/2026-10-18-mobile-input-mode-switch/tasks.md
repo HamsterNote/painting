@@ -55,3 +55,13 @@
   - 实跑上述 5 文件 Chromium 命令：PASS，49 tests（1.1m）。首次全量暴露并修复 tools 设置变化误取消活动笔；旧 mouse policy 断言按已批准 BREAKING 契约重写；文字用例补齐实际 up，保留全部取消/提交/撤销断言。快速笔、DPR 1/2 长笔与像素、压力、取消、捕获、尺子回归均通过。
 - [x] 5.2 在项目文档记录三档、会话 latch、初始化优先级、旧 inputPolicy 兼容语义和本机存储降级；记录上述实际命令结果及未做真机验证的限制。验收：交付记录可逐条对应本 change 的 5 条 requirement，`openspec validate mobile-input-mode-switch --strict --no-interactive` 通过；不在 apply 提前同步主 specs 或归档。
   - README 与 docs/implementation/mobile-input-mode-switch/validation.md 已逐条对应 5 条 requirement 并记录命令/结果与真机限制。实跑 openspec validate mobile-input-mode-switch --strict --no-interactive：valid；openspec validate --strict --all --no-interactive：6 passed / 0 failed。git diff --exit-code 9f4ece3 -- openspec/specs openspec/changes/archive：退出 0。
+
+## 归档验收证据（2026-10-18）
+
+以上 19/19 是实现任务与任务命令的完成记录，不代表所有硬件品质已验证。
+修勾在 iPad（iPadOS 18 / Edge）使用手指与手写笔复验 `5f49556` 后回复“验证成功”
+（HAM-44 评论 `01a14dc1-3084-7acc-897e-93fc0618f462`）。小助手独立实跑三份新模式 spec：
+36 passed / 0 failed，包含原始 iPad 负 pointerId 与 CDP 真实 touch/pen 路径。
+完整命令、归档后全量结果及未验证范围记录在
+`docs/implementation/mobile-input-mode-switch/archive-verification.md`。
+真笔压力档位与掌触专项、iOS/Android 原生壳、长笔性能/内存/刷新率预算仍未验证。
