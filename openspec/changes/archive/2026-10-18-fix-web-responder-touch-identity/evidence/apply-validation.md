@@ -1,6 +1,6 @@
 # HAM-50 Apply 验证与补丁维护
 
-基线：main `8a702a9`，工作分支 `agent/agent/c282011b35fe`。完整提案与原始 evidence 来自任务附件，保留在本 change 中；change 不归档。iPad Safari / Expo WebView 真机项尚待复验，tasks 4.1、4.2 不勾选。
+基线：main `8a702a9`，工作分支 `agent/agent/c282011b35fe`。完整提案与原始 evidence 来自任务附件，保留在本 change 中。以下为 apply 时的自动化记录；2026-10-18 修勾已在 iPad 浏览器复验通过，服务 SHA `9834cec`，验收依据与 WebView 条件不适用说明见 `device-acceptance.md`，随后按指令归档。
 
 ## 失败回归
 
@@ -74,7 +74,7 @@ Jest 首轮有一次既有原生冒烟测试首次挂载超过 5000 ms（1154 �
 
 `build-verification.json` 保存实际导出 bundle 的文件名、SHA-256 和归一化/回收模块片段，确认 frozen 重装后修复仍进入产物：`entry-2718230c4ff9847a116df0a2846bc20a.js`，SHA-256 `d1a9a6148da7403d2e3b11575ac3288feba00db7235dc7b28b370d78f74857c0`。浏览器自动化使用开发构建验证真实错误通道；静态导出只用于构建产物核验，未以 production 模式通过提示验收。
 
-Playwright 管理的临时服务已随测试退出，5266 无监听。本轮没有启动常驻服务、创建 PR 或归档 change。
+Playwright 管理的临时服务已随测试退出，5266 无监听。上述 apply 轮没有启动常驻服务、创建 PR 或归档 change；后续收口状态见 `device-acceptance.md`。
 
 ## 真机交接与移除条件
 

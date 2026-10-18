@@ -1,6 +1,6 @@
 # HAM-50 取证与验收
 
-Apply 的修复、正式前后回归、命令结果及补丁维护条件见 `apply-validation.md`。本页以下保留 propose 阶段原始取证记录；iPad Safari / Expo WebView 真机复验仍待完成。
+Apply 的修复、正式前后回归、命令结果及补丁维护条件见 `apply-validation.md`。2026-10-18 修勾已在服务 SHA `9834cec` 的 iPad 浏览器普通/诊断入口完成四路径复验，文字确认与 WebView 条件不适用依据见 `device-acceptance.md`。本页以下保留 propose 阶段原始取证记录及复验路径。
 
 ## 基线与方法
 
@@ -46,7 +46,7 @@ Metro 终端解析出的实际加载栈为 `react-native-web/dist/modules/useRes
 
 后续复跑需自行启动临时服务（本轮服务已在取证后停止）：在仓库根执行 `env EXPO_UNSTABLE_HEADLESS=1 EXPO_NO_DEPENDENCY_VALIDATION=0 EXPO_NO_NEW_ARCH_COMPAT_CHECK=0 pnpm dev`，再执行 `node openspec/changes/fix-web-responder-touch-identity/evidence/probe.mjs`；普通入口加 `--no-diagnostics`。复跑后停止服务。
 
-## iPad 验收路径（待 apply 后由修勾复验）
+## iPad 验收路径（复验结果见 device-acceptance.md）
 
 每条在普通入口及诊断入口各做 20 轮，记录 iPadOS、Safari/宿主版本和模式。手工不能指定 identifier，连续多轮有助覆盖设备自然编号；必要时由 Safari Web Inspector 临时采集 touch identifier 与原始 pointerId，不在产品中常驻采集。
 

@@ -18,6 +18,6 @@
 
 ## 4. iPad 复验与交接
 
-- [ ] 4.1 修勾在 iPad Safari 的 `/layered-editor` 与 `/layered-editor?diagnostics=1&traceGestures=1` 按 evidence/README.md 四条路径复验，各重复 20 轮，包含正反抬指顺序；记录系统/浏览器版本、模式、截图和诊断导出，所有路径无目标提示，绘制、导航与历史符合预期。
-- [ ] 4.2 如原现场是 Expo 宿主/WebView，在同宿主重复上述路径；记录原始 touch identifier 与 pointerId 的区别，明确真机已验证或仍待验，不以 Chromium iPad UA 冒充真机通过。
+- [x] 4.1 修勾于 2026-10-18 在 iPad 浏览器按 evidence/README.md 四条路径复验通过，普通 `/layered-editor` 与 `?diagnostics=1` 均覆盖，服务锁定 `9834cec`。依据为修勾文字“验证完毕”及小助手的验收确认；没有附真机截图或诊断导出，也未单独上报本轮版本、逐轮计数或 traceGestures 参数，不将这些资料记为已取得。详见 evidence/device-acceptance.md。
+- [ ] 4.2 如原现场是 Expo 宿主/WebView，在同宿主重复上述路径；记录原始 touch identifier 与 pointerId 的区别，明确真机已验证或仍待验，不以 Chromium iPad UA 冒充真机通过。**本现场条件不适用**：已复核 HAM-44 原始真机附件的 `environment.userAgent` 含 `EdgiOS/153.0.4234.46`，与仓库 iPad Edge 浏览器记录一致，并非 Expo 宿主/WebView；未执行 WebView 复验，保留未勾选。依据见 evidence/device-acceptance.md。
 - [x] 4.3 整理补丁维护/升级移除条件、before/after 证据和自动化/真机结果，执行 `openspec validate fix-web-responder-touch-identity --strict --no-interactive` 通过后提交验收；未完成真机项保持未勾选。
