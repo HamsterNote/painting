@@ -1,13 +1,17 @@
 import { createLayeredEditorController } from '../core/layeredEditorController';
 import type { EditorDocument } from '../model/document';
+import type { LayeredInputMode } from '../core/layeredInputMode';
+import { readInputModePreference } from './inputModePreference';
 
 let nextEditor = 0;
 export function createEditor(
-  document: EditorDocument = { schemaVersion: 3, documentRevision: 0, objects: [] }
+  document: EditorDocument = { schemaVersion: 3, documentRevision: 0, objects: [] },
+  options: { inputMode?: LayeredInputMode } = {}
 ) {
   const editorId = ++nextEditor;
   let sequence = 0;
   const result = createLayeredEditorController({
+    inputMode: options.inputMode ?? readInputModePreference(),
     document,
     activeTool: 'freehand',
     viewport: { revision: 0, viewport: { scale: 1, tx: 0, ty: 0 } },

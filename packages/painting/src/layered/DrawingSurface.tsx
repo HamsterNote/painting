@@ -13,6 +13,8 @@ import { NavigationOverlay, VirtualPaper } from './NavigationOverlay';
 import { createNavigationWebAdapter } from './navigationWebAdapter';
 import type { DrawingSurfaceVirtualPaperOptions } from '../virtualPaperOptions';
 import { observeGestureEvents, type GestureTraceObserver } from '../input/web/gestureTrace';
+import { useInputInitialization } from './useInputInitialization';
+import { useEditorSnapshot } from './useEditorSnapshot';
 
 export type LayeredDrawingSurfaceProps = {
   controller: LayeredEditorController;
@@ -36,6 +38,8 @@ export function LayeredDrawingSurface({
   virtualPaper,
   onGestureTrace,
 }: LayeredDrawingSurfaceProps) {
+  const inputReady = useInputInitialization(controller, inputPolicy, true);
+  const input = useEditorSnapshot(controller, 'input');
   const host = useRef<HTMLDivElement>(null);
   const [presentation, setPresentation] = useState<PresentationCoordinator>();
   const [failure, setFailure] = useState<{ commitId: string; message: string }>();
@@ -53,6 +57,7 @@ export function LayeredDrawingSurface({
     controller.setNavigation({ virtualPaper: { ...current, ...patch } });
   }, [controller, virtualPaper]);
   useEffect(() => {
+    if (!inputReady) return;
     const stopTrace = onGestureTrace
       ? observeGestureEvents(host.current!, onGestureTrace)
       : undefined;
@@ -110,11 +115,13 @@ export function LayeredDrawingSurface({
       queue.destroy();
       stopTrace?.();
     };
-  }, [controller, inputPolicy, allocateId, openImage, onGestureTrace]);
+  }, [controller, inputReady, inputPolicy, allocateId, openImage, onGestureTrace]);
   return (
     <div
       ref={host}
       data-testid="layered-surface"
+      data-input-ready={inputReady}
+      data-input-mode={input.mode}
       style={{
         position: 'relative',
         flex: 1,
@@ -123,6 +130,7 @@ export function LayeredDrawingSurface({
         background: '#fff',
         touchAction: 'none',
         ...style,
+        pointerEvents: inputReady ? style?.pointerEvents : 'none',
       }}
     >
       {presentation ? (

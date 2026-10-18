@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import type { LayeredEditorController, LayeredEditorTool } from '../core/layeredEditorController';
 import type { PressureMode } from '../model/document';
 import { useEditorSnapshot } from './useEditorSnapshot';
+import { useInputInitialization } from './useInputInitialization';
 
 const TOOLS: readonly [LayeredEditorTool, string, IconName][] = [
   ['freehand', '自由笔', 'pen'],
@@ -33,6 +34,8 @@ const buttonStyle: CSSProperties = {
 
 /** Only the tools/history channels are observed; raw input never renders the toolbar. */
 export function Toolbar({ controller }: { controller: LayeredEditorController }) {
+  const inputReady = useInputInitialization(controller);
+  const input = useEditorSnapshot(controller, 'input');
   const { activeTool, settings } = useEditorSnapshot(controller, 'tools');
   const history = useEditorSnapshot(controller, 'history');
   const navigation = useEditorSnapshot(controller, 'navigation');
@@ -52,10 +55,12 @@ export function Toolbar({ controller }: { controller: LayeredEditorController })
       controller.setShapeSettings({ ...settings.shape, ...patch });
     }
   };
+  if (!inputReady) return null;
   return (
     <div
       role="toolbar"
       aria-label="绘图工具"
+      data-input-mode={input.mode}
       data-interactive="true"
       style={{
         display: 'flex',

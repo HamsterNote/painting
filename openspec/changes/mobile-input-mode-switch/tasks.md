@@ -4,9 +4,12 @@
 
 ## 1. 编辑器模式与偏好初始化
 
-- [ ] 1.1 给分层 controller 增加独立 input 快照、三档 setter、penSeen 和派生 touch 策略；会话定义为 controller 实例，不写文档/undo；新建 `packages/painting/src/__tests__/core/layered-input-mode.test.ts` 验证默认值、强制覆盖、切回 auto 保留 latch、工具切换不重置、controller 重建重置。验收：`pnpm exec jest --runInBand --selectProjects core-node --runTestsByPath packages/painting/src/__tests__/core/layered-input-mode.test.ts`。
-- [ ] 1.2 新增 Web `inputModePreference.ts` 并在 createEditor 初始化同步恢复；覆盖读/解析/写异常、非法值、无浏览器、首帧已恢复及只写用户档位；新增 `packages/painting/src/__tests__/input-mode-preference.test.ts`。验收：`pnpm exec jest --runInBand --selectProjects legacy-web --runTestsByPath packages/painting/src/__tests__/input-mode-preference.test.ts`，断言异常时当前实例仍可切档，penSeen 从不进入存储。
-- [ ] 1.3 完成初始 mode > 已存档位 > 旧 inputPolicy 提示 > auto 的优先级与 SSR 交互挂载门；在 `packages/painting/src/__tests__/layered-input-initialization.test.tsx` 验证 Toolbar 和 Surface 首个可交互状态一致、直接 core 宿主的初始化方式、旧提示不持续覆盖菜单。验收：`pnpm exec jest --runInBand --selectProjects legacy-web --runTestsByPath packages/painting/src/__tests__/layered-input-initialization.test.tsx`。
+- [x] 1.1 给分层 controller 增加独立 input 快照、三档 setter、penSeen 和派生 touch 策略；会话定义为 controller 实例，不写文档/undo；新建 `packages/painting/src/__tests__/core/layered-input-mode.test.ts` 验证默认值、强制覆盖、切回 auto 保留 latch、工具切换不重置、controller 重建重置。验收：`pnpm exec jest --runInBand --selectProjects core-node --runTestsByPath packages/painting/src/__tests__/core/layered-input-mode.test.ts`。
+  - 实跑上述验收命令：PASS，1 suite / 2 tests（2026-10-18）。
+- [x] 1.2 新增 Web `inputModePreference.ts` 并在 createEditor 初始化同步恢复；覆盖读/解析/写异常、非法值、无浏览器、首帧已恢复及只写用户档位；新增 `packages/painting/src/__tests__/input-mode-preference.test.ts`。验收：`pnpm exec jest --runInBand --selectProjects legacy-web --runTestsByPath packages/painting/src/__tests__/input-mode-preference.test.ts`，断言异常时当前实例仍可切档，penSeen 从不进入存储。
+  - 实跑上述验收命令：PASS，1 suite / 6 tests（2026-10-18）。
+- [x] 1.3 完成初始 mode > 已存档位 > 旧 inputPolicy 提示 > auto 的优先级与 SSR 交互挂载门；在 `packages/painting/src/__tests__/layered-input-initialization.test.tsx` 验证 Toolbar 和 Surface 首个可交互状态一致、直接 core 宿主的初始化方式、旧提示不持续覆盖菜单。验收：`pnpm exec jest --runInBand --selectProjects legacy-web --runTestsByPath packages/painting/src/__tests__/layered-input-initialization.test.tsx`。
+  - 实跑上述验收命令：PASS，1 suite / 6 tests。SSR 测试使用 node renderer，Canvas 呈现单独 mock；输入初始化与 adapters 为真实实现。
 
 ## 2. 纯仲裁和有序路由
 
