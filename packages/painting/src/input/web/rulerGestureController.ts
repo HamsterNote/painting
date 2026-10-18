@@ -29,7 +29,7 @@ export type RulerGestureControllerOptions = Readonly<{
 }>;
 
 export type RulerGestureController = Readonly<{
-  cancel: () => void;
+  cancel: (options?: { releaseContacts?: boolean }) => void;
   dispose: () => void;
 }>;
 
@@ -170,15 +170,19 @@ export function createRulerGestureController(
   };
   const owns = (pointerId: number): boolean =>
     mouse?.pointerId === pointerId || touchIds.includes(pointerId);
-  const cancel = () => {
-    if (!session) {
-      finish();
-      return;
+  const cancel = ({ releaseContacts = false } = {}) => {
+    if (releaseContacts) suppressedIds.clear();
+    else {
+      for (const id of touchIds) suppressedIds.add(id);
+      if (mouse) suppressedIds.add(mouse.pointerId);
     }
-    // 外部 controlled state 改变时没有可靠的位置样本；cancel 只清理而不提交。
     finish();
   };
   const handleDown = (event: PointerEvent) => {
+    if (suppressedIds.has(event.pointerId)) {
+      stopRulerEvent(event, options.onTrace);
+      return;
+    }
     if (disposed || !options.hitTest(event)) {
       return;
     }
@@ -297,7 +301,8 @@ export function createRulerGestureController(
     stopRulerEvent(event, options.onTrace);
   };
   const handleEnd = (event: PointerEvent) => {
-    if (suppressedIds.delete(event.pointerId)) {
+    if (suppressedIds.has(event.pointerId)) {
+      if (event.type !== 'lostpointercapture') suppressedIds.delete(event.pointerId);
       release(event.pointerId);
       stopRulerEvent(event, options.onTrace);
       return;

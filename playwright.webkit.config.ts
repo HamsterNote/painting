@@ -15,6 +15,8 @@ export default defineConfig({
     'playground.spec.ts',
     'ruler-test.spec.ts',
     'touch-drawing-arbitration.spec.ts',
+    'mobile-input-mode.spec.ts',
+    'input-device-diagnostics.spec.ts',
     'painting-controller-color.spec.ts',
     'painting-controller-width.spec.ts',
     'interaction-feedback.spec.ts',

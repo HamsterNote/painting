@@ -5,6 +5,7 @@ import { FreehandGeometryCache } from '../geometry/freehandCache';
 import { readLayeredDocument, serializeLayeredDocument } from '../model/documentReader';
 import { deriveFreehandGeometry } from '../geometry/freehand';
 import { createSemanticWebAdapter } from '../layered/semanticWebAdapter';
+import { createLayeredInputArbiter } from '../input/web/layeredInputArbiter';
 
 function pointer(
   target: EventTarget,
@@ -55,6 +56,55 @@ test('ruler and paper touches retain independent concurrent ownership', () => {
   adapter.destroy();
   host.remove();
 });
+
+test.each(['mode', 'blur', 'hidden'] as const)(
+  'composed ruler %s cancels old contacts and accepts a fresh pair without old up',
+  (interruption) => {
+    const controller = makeLayeredController();
+    controller.setNavigation({
+      ruler: { visible: true, center: { x: 200, y: 200 }, rotationRad: 0, height: 80 },
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    const navigation = createNavigationWebAdapter(host, controller, false, undefined, {
+      listen: false,
+    });
+    const arbiter = createLayeredInputArbiter({
+      host,
+      controller,
+      navigation,
+      targetRole: navigation.targetRole,
+      tool: { dispatch: jest.fn(), cancel: () => true },
+    });
+    const viewport = controller.getSnapshot('viewport');
+    pointer(host, 'down', -1, 150, 200);
+    pointer(host, 'down', -2, 250, 200);
+    if (interruption === 'mode') controller.setInputMode('finger');
+    else if (interruption === 'blur') window.dispatchEvent(new Event('blur'));
+    else {
+      const visibility = jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+      visibility.mockRestore();
+    }
+    pointer(document, 'move', -1, 150, 280);
+    pointer(document, 'move', -2, 250, 280);
+    expect(controller.getSnapshot('navigation').ruler.center).toEqual({ x: 200, y: 200 });
+    expect(controller.getSnapshot('navigation').rotationFeedback).toBeNull();
+    // Fresh contacts are usable even when the OS never delivers the old pair's up.
+    pointer(host, 'down', -3, 150, 200);
+    pointer(host, 'down', -4, 250, 200);
+    pointer(document, 'move', -3, 150, 240);
+    pointer(document, 'move', -4, 250, 240);
+    expect(controller.getSnapshot('navigation').ruler.center).toEqual({ x: 200, y: 240 });
+    pointer(document, 'up', -3, 150, 240);
+    pointer(document, 'up', -4, 250, 240);
+    expect(controller.getSnapshot('viewport')).toBe(viewport);
+    expect(controller.getSnapshot('history').canUndo).toBe(false);
+    arbiter.destroy();
+    navigation.destroy();
+    host.remove();
+  }
+);
 
 test('mouse ruler rotation uses the visible segment midpoint instead of its logical origin', () => {
   const controller = makeLayeredController();
@@ -270,3 +320,58 @@ test('virtual paper options independently gate mouse/pen/touch/wheel navigation 
   navigation.destroy();
   host.remove();
 });
+
+test.each(['mouse', 'pen'])(
+  'composed %s writing freezes viewport, drains palms and retains pair limits',
+  (source) => {
+    const controller = makeLayeredController();
+    controller.setNavigation({
+      virtualPaper: {
+        ...controller.getSnapshot('navigation').virtualPaper,
+        enabled: false,
+        maxScale: 1.5,
+      },
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    let sequence = 0;
+    let arbiter: ReturnType<typeof createLayeredInputArbiter>;
+    const navigation = createNavigationWebAdapter(host, controller, false, undefined, {
+      listen: false,
+      canNavigate: () => !arbiter?.isWriting(),
+    });
+    const ink = createFreehandWebAdapter({
+      host,
+      controller,
+      listen: false,
+      createSessionId: () => `s${++sequence}`,
+      createCommitId: () => `c${sequence}`,
+    });
+    arbiter = createLayeredInputArbiter({ host, controller, tool: ink, navigation });
+    const before = controller.getSnapshot('viewport');
+    pointer(host, 'down', 9, 20, 20, source);
+    pointer(host, 'down', 1, 100, 100);
+    pointer(host, 'down', 2, 200, 100);
+    pointer(window, 'move', 2, 400, 200);
+    pointer(window, 'up', 9, 50, 50, source);
+    pointer(window, 'move', 1, 40, 40);
+    expect(controller.getSnapshot('viewport')).toBe(before);
+    expect(controller.getSnapshot('document').objects).toHaveLength(1);
+    pointer(window, 'up', 1, 40, 40);
+    pointer(window, 'up', 2, 400, 200);
+    pointer(host, 'down', 3, 100, 100);
+    pointer(host, 'down', 4, 200, 100);
+    pointer(window, 'move', 4, 400, 100);
+    expect(controller.getSnapshot('viewport').viewport.scale).toBe(1.5);
+    const pair = controller.getSnapshot('viewport');
+    pointer(host, 'down', 5, 500, 500);
+    pointer(window, 'up', 3, 100, 100);
+    pointer(window, 'move', 4, 600, 500);
+    pointer(window, 'move', 5, 700, 500);
+    expect(controller.getSnapshot('viewport')).toBe(pair);
+    arbiter.destroy();
+    ink.destroy();
+    navigation.destroy();
+    host.remove();
+  }
+);

@@ -50,6 +50,7 @@ export type CreateFreehandWebAdapterOptions = Readonly<{
   createSessionId: () => string;
   createCommitId: () => string;
   policy?: WebFreehandPolicy;
+  listen?: boolean;
   pressureCapabilityForSource?: (
     source: WebFreehandSource,
     event: PointerEvent
@@ -61,6 +62,8 @@ export type CreateFreehandWebAdapterOptions = Readonly<{
 /** 适配器接口。 */
 export interface FreehandWebAdapter {
   destroy(): void;
+  dispatch(event: PointerEvent): void;
+  cancel(): boolean;
   getActivePointerIds(): readonly number[];
   retryCommit(commitId: string): LayeredEditorResult<LayeredCommitReceipt>;
 }
@@ -954,15 +957,29 @@ export function createFreehandWebAdapter(
     finalizeDestroy();
   }
 
-  host.addEventListener('pointerdown', handlePointerDown);
-  host.addEventListener('lostpointercapture', handleLostPointerCapture);
-  view?.addEventListener('pointermove', handlePointerMove, true);
-  // Finish the accepted owner before descendant navigation/capture handlers run.
-  view?.addEventListener('pointerup', handlePointerUp, true);
-  view?.addEventListener('pointercancel', handleWindowPointerCancel, true);
-  view?.addEventListener('blur', handleBackground);
-  view?.addEventListener('pagehide', handleBackground);
-  doc?.addEventListener('visibilitychange', handleVisibilityChange);
+  if (options.listen !== false) {
+    host.addEventListener('pointerdown', handlePointerDown);
+    host.addEventListener('lostpointercapture', handleLostPointerCapture);
+    view?.addEventListener('pointermove', handlePointerMove, true);
+    // Finish the accepted owner before descendant navigation/capture handlers run.
+    view?.addEventListener('pointerup', handlePointerUp, true);
+    view?.addEventListener('pointercancel', handleWindowPointerCancel, true);
+    view?.addEventListener('blur', handleBackground);
+    view?.addEventListener('pagehide', handleBackground);
+    doc?.addEventListener('visibilitychange', handleVisibilityChange);
+  }
 
-  return Object.freeze({ destroy, getActivePointerIds, retryCommit });
+  function dispatch(event: PointerEvent): void {
+    if (event.type === 'pointerdown') handlePointerDown(event);
+    else if (event.type === 'pointermove') handlePointerMove(event);
+    else if (event.type === 'pointerup') handlePointerUp(event);
+    else if (event.type === 'pointercancel') handleWindowPointerCancel(event);
+  }
+
+  function cancel(): boolean {
+    requestCancel('pointercancel');
+    return !owner && controller.getSnapshot('interaction').activeFreehand?.status !== 'collecting';
+  }
+
+  return Object.freeze({ destroy, dispatch, cancel, getActivePointerIds, retryCommit });
 }

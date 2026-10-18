@@ -107,7 +107,7 @@ test.each(['cancel', 'blur', 'pagehide', 'unmount', 'tool'] as const)(
   }
 );
 
-test('mouse policy can disable drawing without globally forcing pen-only behavior', () => {
+test('legacy policy only initializes touch mode; mouse and pen follow the tool without hidden restrictions', () => {
   const controller = makeLayeredController();
   const surface = render(
     <LayeredDrawingSurface
@@ -116,18 +116,27 @@ test('mouse policy can disable drawing without globally forcing pen-only behavio
     />
   );
   const host = screen.getByTestId('layered-surface');
+  expect(controller.getSnapshot('input').mode).toBe('pen');
   pointer(host, 'down', 20, 20, 'mouse');
   pointer(window, 'up', 120, 20, 'mouse');
-  expect(controller.getSnapshot('document').objects).toHaveLength(0);
+  expect(controller.getSnapshot('document').objects).toHaveLength(1);
+  act(() => {
+    controller.setInputMode('finger');
+  });
   surface.rerender(
     <LayeredDrawingSurface
       controller={controller}
-      inputPolicy={{ mouse: 'draw', pen: 'draw', touch: 'none' }}
+      inputPolicy={{ mouse: 'none', pen: 'none', touch: 'none' }}
     />
   );
+  expect(controller.getSnapshot('input').mode).toBe('finger');
   pointer(host, 'down', 20, 20, 'mouse');
   pointer(window, 'up', 120, 20, 'mouse');
   expect(controller.getSnapshot('document').objects[0]).toMatchObject({
     resolvedPressureMode: 'simulated',
   });
+  pointer(host, 'down', 20, 60, 'pen');
+  pointer(window, 'up', 120, 60, 'pen');
+  expect(controller.getSnapshot('document').objects).toHaveLength(3);
+  expect(controller.getSnapshot('input').effectiveTouch).toBe('draw');
 });

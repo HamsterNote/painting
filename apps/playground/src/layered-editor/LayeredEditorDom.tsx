@@ -6,6 +6,7 @@ import { LayeredPaintingBoard } from '@hamster-note/painting-board';
 import { mixedFixture, resourceFixture } from './mixedFixture';
 import { createGestureTrace, type GestureTrace } from './gestureTrace';
 import { GestureTracePanel } from './GestureTracePanel';
+import { InputDeviceDiagnostics } from './InputDeviceDiagnostics';
 
 declare global {
   interface Window {
@@ -19,21 +20,18 @@ export default function LayeredEditorDom(_props: { dom?: import('expo/dom').DOMP
   const [params] = useState(
     () => new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search)
   );
-  const [controller] = useState(() =>
-    createEditor(
+  const [controller] = useState(() => {
+    const editor = createEditor(
       params.get('fixture') === 'mixed'
         ? mixedFixture()
         : params.get('fixture') === 'resources'
           ? resourceFixture()
           : undefined
-    )
-  );
+    );
+    if (params.get('touchDraw') === '1') editor.initializeInputMode('finger');
+    return editor;
+  });
   const [renders] = useState(() => ({ display: 0, objects: 0 }));
-  const [inputPolicy] = useState(() =>
-    params.get('touchDraw') === '1'
-      ? { mouse: 'draw' as const, pen: 'draw' as const, touch: 'draw' as const }
-      : undefined
-  );
   const diagnostics = params.get('diagnostics') === '1';
   const [trace] = useState(() =>
     diagnostics && params.get('traceGestures') === '1' ? createGestureTrace(controller) : undefined
@@ -61,7 +59,6 @@ export default function LayeredEditorDom(_props: { dom?: import('expo/dom').DOMP
     >
       <LayeredPaintingBoard
         controller={controller}
-        inputPolicy={inputPolicy}
         onGestureTrace={trace?.record}
         historyReadyDelayMs={
           diagnostics ? Math.min(1000, Math.max(0, Number(params.get('handoffDelay')) || 0)) : 0
@@ -75,6 +72,7 @@ export default function LayeredEditorDom(_props: { dom?: import('expo/dom').DOMP
             : undefined
         }
       />
+      {diagnostics ? <InputDeviceDiagnostics /> : null}
       {trace ? <GestureTracePanel trace={trace} /> : null}
     </div>
   );

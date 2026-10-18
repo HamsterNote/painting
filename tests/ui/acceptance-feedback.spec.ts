@@ -229,14 +229,43 @@ for (const width of [1280, 390]) {
       const viewport = await page.evaluate(() => window.__layeredEditor!.getSnapshot('viewport'));
       expect(viewport.viewport).toEqual({ ...before, tx });
       // Verify input uses this same transform; CSS-only centering would fail.
+      await surface.evaluate((host: HTMLElement) => {
+        host.addEventListener(
+          'pointerdown',
+          (event) => {
+            const rect = host.getBoundingClientRect();
+            host.dataset.testDown = JSON.stringify({
+              x: event.clientX,
+              y: event.clientY,
+              left: rect.left,
+              top: rect.top,
+              clientLeft: host.clientLeft,
+              clientTop: host.clientTop,
+            });
+          },
+          { once: true, capture: true }
+        );
+      });
       await page.mouse.move(box.x + box.width / 2, box.y + 180);
       await page.mouse.down();
       await page.mouse.move(box.x + box.width / 2 + 40, box.y + 200);
       await page.mouse.up();
       const object = (await history(page))[0];
       if (object.kind !== 'freehand') throw new Error('missing ink');
-      expect(object.samples[0].x).toBeCloseTo((box.width / 2 - tx) / before.scale);
-      expect(object.samples[0].y).toBeCloseTo((180 - before.ty) / before.scale);
+      const received: {
+        x: number;
+        y: number;
+        left: number;
+        top: number;
+        clientLeft: number;
+        clientTop: number;
+      } = JSON.parse((await surface.getAttribute('data-test-down'))!);
+      expect(object.samples[0].x).toBeCloseTo(
+        (received.x - received.left - received.clientLeft - tx) / before.scale
+      );
+      expect(object.samples[0].y).toBeCloseTo(
+        (received.y - received.top - received.clientTop - before.ty) / before.scale
+      );
       await expect(page.getByTestId('layered-display').locator('[data-object-id]')).toHaveCSS(
         'visibility',
         'visible'
@@ -257,3 +286,42 @@ for (const width of [1280, 390]) {
     });
   }
 }
+
+test('synthetic fractional coordinates retain the exact content-box to world transform', async ({
+  page,
+}) => {
+  await openEditor(page);
+  await page.evaluate(() => {
+    const editor = window.__layeredEditor!;
+    editor.updateViewport({
+      type: 'replace',
+      expectedRevision: editor.getSnapshot('viewport').revision,
+      viewport: { scale: 2, tx: 10.25, ty: -5.75 },
+    });
+    const host = document.querySelector<HTMLElement>('[data-testid="layered-surface"]')!;
+    host.style.transform = 'translate(0.5px, 0.5px)';
+    host.style.border = '1px solid transparent';
+    const rect = host.getBoundingClientRect();
+    for (const type of ['pointerdown', 'pointermove', 'pointerup']) {
+      host.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          pointerId: -765894345,
+          pointerType: 'pen',
+          clientX: rect.left + host.clientLeft + 37.125,
+          clientY: rect.top + host.clientTop + 42.875,
+          button: 0,
+          buttons: type === 'pointerup' ? 0 : 1,
+          pressure: type === 'pointerup' ? 0 : 0.5,
+        })
+      );
+    }
+  });
+  const objects = await history(page);
+  expect(objects).toHaveLength(1);
+  const ink = objects[0];
+  if (ink.kind !== 'freehand') throw new Error('missing ink');
+  expect(ink.samples[0].x).toBe((37.125 - 10.25) / 2);
+  expect(ink.samples[0].y).toBe((42.875 + 5.75) / 2);
+});

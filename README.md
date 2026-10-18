@@ -39,6 +39,26 @@ export function Board() {
 
 贝塞尔先按下拖动松手确定直线两端，再点击两次确定两个控制点；多边形逐次点击顶点，最后双击闭合。完成前只有临时预览，Escape 或切换工具可取消，完成后仅形成一次撤销事务。关闭虚拟纸张时，主画布和小地图都使用纯白背景。
 
+## 输入模式
+
+工具栏“输入模式”提供三档，鼠标始终跟随当前工具，三档均保留双指缩放/移动：
+
+| 档位             | 单指                                                 | 手写笔                       |
+| ---------------- | ---------------------------------------------------- | ---------------------------- |
+| 自动（首次默认） | 首次有效画布 pen down 前使用当前工具，检测后拖动画布 | 使用当前工具                 |
+| 强制手指绘制     | 使用当前工具                                         | 使用当前工具，不改变手指策略 |
+| 强制手写笔绘制   | 拖动画布                                             | 使用当前工具                 |
+
+自动检测只在 controller 实例内锁定，没有抬笔超时；失焦、后台、换工具和 Surface 重挂载不清除。强制手指立即覆盖 latch，切回自动仍使用本会话 latch；新建 controller 才重置检测。手指事务中加入第二个纸面触点会先取消未提交笔迹/工具预览，再导航，不增加对象或 undo；实际笔书写时冻结视口，掌触直到排空都不重放。切档也会取消未提交事务，旧触点不能复活。
+
+初始化优先级为 `createEditor(document, { inputMode })` / core factory 的显式 `inputMode` > 有效已存档位 > 旧 `inputPolicy.touch` 提示 > `auto`。只把菜单选择的档位以 JSON 字符串写入本机键 `hamster-note.painting.input-mode.v1`，不保存 `penSeen`，不进入文档或 undo。读取、解析、写入或访问存储失败时，本实例仍以内存状态工作，不承诺失败写入后跨新会话保存。
+
+Web factory 同步恢复；SSR 的 Surface 和 Toolbar 在客户端初始化完成前不开放交互。直接 core 宿主可在 factory options 指定 `inputMode`，或在首次交互挂载前调用一次 `controller.initializeInputMode(mode)`；core 不访问浏览器存储。宿主自行提供偏好时应在挂载前完成恢复。
+
+**BREAKING：组合入口 `inputPolicy`** 的 `touch: draw/none` 只作为一次性 `finger/pen` 初始化提示，后续 prop 变化不会覆盖菜单。组合入口忽略旧 mouse/pen 来源限制，不能形成隐藏第四档；需要静态来源过滤的宿主使用独立 freehand/semantic adapter 的 `policy`。示例旧 `touchDraw=1` 仅作低优先级 finger 初始化兼容，正常使用直接选菜单。
+
+逐任务命令、结果与规格对应关系见 `docs/implementation/mobile-input-mode-switch/validation.md`。Chromium 合成输入不能证明真实设备的笔与掌触质量。
+
 ## 平台边界
 
 Web 使用 SVG + Canvas。Web/iOS/Android 三个平台 DrawingLayer 入口第一期均委托 Web；Expo native 应用通过 Expo DOM/WebView 承载整个编辑器，参考 `apps/playground/src/layered-editor/LayeredEditorDom.tsx` 和 `apps/playground/src/App.tsx`。宿主项目需要 Expo DOM 配置，不能把含 DOM 的 board 直接当作原生 View 使用。本期没有 native ink，也没有逐点 RN props bridge；未来 native adapter 只定义了语义契约，mock ACK 不证明跨桥或 physical paint 同步。

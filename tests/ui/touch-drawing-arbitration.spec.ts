@@ -6,7 +6,7 @@ import {
   openLayeredEditor,
 } from './layered-helpers';
 
-test('default touch navigates with fixed pair, rejected third contact cannot take over', async ({
+test('default auto cancels its first touch for a fixed pair; third contact cannot take over', async ({
   page,
 }) => {
   await openLayeredEditor(page);
@@ -27,11 +27,16 @@ test('default touch navigates with fixed pair, rejected third contact cannot tak
   expect((await layeredState(page)).document.objects).toHaveLength(1);
 });
 
-test('touch drawing policy commits a stroke, rejecting late second contact without a viewport jump', async ({
+test('forced finger commits normally, then cancels partial ink before second-finger navigation', async ({
   page,
 }) => {
-  await openLayeredEditor(page, '&touchDraw=1');
+  await openLayeredEditor(page);
+  await page.getByLabel('输入模式').selectOption('finger');
+  await pointer(page, 'down', { x: 100, y: 80 }, { source: 'touch', id: 1 });
+  await pointer(page, 'move', { x: 180, y: 80 }, { source: 'touch', id: 1 });
+  await pointer(page, 'up', { x: 220, y: 80 }, { source: 'touch', id: 1 });
   const before = await layeredState(page);
+  expect(before.document.objects).toHaveLength(1);
   await pointer(page, 'down', { x: 100, y: 100 }, { source: 'touch', id: 1 });
   await pointer(page, 'move', { x: 180, y: 100 }, { source: 'touch', id: 1 });
   await pointer(page, 'down', { x: 300, y: 300 }, { source: 'touch', id: 2 });
@@ -39,7 +44,9 @@ test('touch drawing policy commits a stroke, rejecting late second contact witho
   await pointer(page, 'up', { x: 400, y: 300 }, { source: 'touch', id: 2 });
   await pointer(page, 'up', { x: 220, y: 100 }, { source: 'touch', id: 1 });
   const after = await layeredState(page);
-  expect(after.viewport).toEqual(before.viewport);
+  expect(after.viewport.viewport.scale).toBeGreaterThan(before.viewport.viewport.scale);
+  expect(after.document).toEqual(before.document);
+  expect(after.history).toEqual(before.history);
   expect(after.document.objects).toHaveLength(1);
   expect(after.document.objects[0]).toMatchObject({
     kind: 'freehand',
@@ -50,15 +57,36 @@ test('touch drawing policy commits a stroke, rejecting late second contact witho
 test('touch cancellation and page blur recover input without committing partial ink', async ({
   page,
 }) => {
-  await openLayeredEditor(page, '&touchDraw=1');
+  await openLayeredEditor(page);
+  await page.getByLabel('输入模式').selectOption('finger');
   await pointer(page, 'down', { x: 100, y: 100 }, { source: 'touch' });
   await pointer(page, 'move', { x: 200, y: 100 }, { source: 'touch' });
   await pointer(page, 'cancel', { x: 200, y: 100 }, { source: 'touch' });
   expect((await layeredState(page)).history.canUndo).toBe(false);
-  await pointer(page, 'down', { x: 100, y: 100 });
+  await pointer(page, 'down', { x: 100, y: 100 }, { source: 'mouse', id: 1 });
   await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-  await pointer(page, 'up', { x: 200, y: 100 });
   expect((await layeredState(page)).document.objects).toHaveLength(0);
-  await drawLayeredStroke(page);
+  // The mouse reuses its ID; its old up was lost outside the window.
+  for (const phase of ['down', 'move', 'up'] as const) {
+    await pointer(
+      page,
+      phase,
+      { x: phase === 'down' ? 100 : 220, y: 120 },
+      { source: 'mouse', id: 1 }
+    );
+  }
   expect((await layeredState(page)).document.objects).toHaveLength(1);
+  await pointer(page, 'down', { x: 100, y: 160 }, { source: 'touch', id: 20 });
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  for (const id of [21, 22, 23]) {
+    for (const phase of ['down', 'move', 'up'] as const) {
+      await pointer(
+        page,
+        phase,
+        { x: phase === 'down' ? 100 : 220, y: 160 },
+        { source: 'touch', id }
+      );
+    }
+    expect((await layeredState(page)).document.objects).toHaveLength(id - 19);
+  }
 });

@@ -269,6 +269,65 @@ describe('freehandSession: brush 快照', () => {
 // ---------------------------------------------------------------------------
 
 describe('freehandSession: envelope identity 校验', () => {
+  it.each([NaN, Infinity, -Infinity, 0.5, Number.MIN_SAFE_INTEGER - 1])(
+    'rejects non-integer or unsafe pointer identity %s',
+    (pointerId) => {
+      expect(beginFreehandSession(makeBegin({ batch: makeBatch({ pointerId }) }))).toEqual({
+        ok: false,
+        code: 'invalid-input',
+      });
+    }
+  );
+  it.each(
+    [-765894345, -765894343, -2147483648].flatMap((pointerId) =>
+      (['pen', 'touch'] as const).map((source) => ({ pointerId, source }))
+    )
+  )(
+    '$source signed pointer $pointerId preserves identity through update/end/cancel',
+    ({ pointerId, source }) => {
+      const batch = (overrides: Partial<FreehandInputBatch> = {}) =>
+        makeBatch({ pointerId, source, ...overrides });
+      const session = startSession({ batch: batch() });
+      expect(
+        session.update({
+          type: 'update',
+          batch: batch({
+            pointerId: -pointerId,
+            batchSequence: 1,
+            samples: [makeSample(2, 'move')],
+          }),
+        })
+      ).toEqual({ ok: false, code: 'identity-mismatch' });
+      expect(
+        session.update({
+          type: 'update',
+          batch: batch({ batchSequence: 1, samples: [makeSample(2, 'move')] }),
+        }).ok
+      ).toBe(true);
+      const ended = session.end({
+        type: 'end',
+        batch: batch({ batchSequence: 2, samples: [makeSample(3, 'up')] }),
+      });
+      expect(ended.ok).toBe(true);
+      expect(session.getSnapshot()).toMatchObject({
+        status: 'awaiting-commit',
+        candidate: { pointerId },
+      });
+      const cancelled = startSession({ batch: batch() });
+      expect(
+        cancelled.cancel({
+          type: 'cancel',
+          sessionId: 'sess-1',
+          pointerId,
+          source,
+          batchSequence: 1,
+          reason: 'pointercancel',
+        }).ok
+      ).toBe(true);
+      expect(cancelled.getSnapshot()).toMatchObject({ status: 'canceled', pointerId });
+    }
+  );
+
   it('update owner/session/pointer/source mismatch → identity-mismatch，state 不变', () => {
     const session = startSession();
     const before = session.getSnapshot();

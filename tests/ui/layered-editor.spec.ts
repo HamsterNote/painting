@@ -224,6 +224,7 @@ test('real mouse paints over existing SVG ink; keyboard cancellation preserves t
   await expect(page.locator('[data-object-id]')).toHaveCount(6);
   await page.getByRole('button', { name: '文字', exact: true }).click();
   await pointer(page, 'down', 350, 300);
+  await pointer(page, 'up', 350, 300, 0);
   const input = page.getByLabel('文字内容');
   await expect(input).toBeFocused();
   await input.fill('取消');
@@ -231,6 +232,7 @@ test('real mouse paints over existing SVG ink; keyboard cancellation preserves t
   await expect(input).toHaveCount(0);
   await expect(page.locator('[data-object-id]')).toHaveCount(6);
   await pointer(page, 'down', 350, 300);
+  await pointer(page, 'up', 350, 300, 0);
   await input.fill('键盘提交');
   await input.press('Control+Enter');
   await expect(input).toHaveCount(0);

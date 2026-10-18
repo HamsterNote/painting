@@ -11,6 +11,7 @@ test('public root mounts the controller based board and surface aliases', () => 
   const board = render(<painting.PaintingBoard controller={controller} />);
   expect(screen.getByTestId('layered-surface')).toBeTruthy();
   expect(screen.getByRole('toolbar')).toBeTruthy();
+  expect(screen.getByLabelText('输入模式')).toHaveProperty('value', 'auto');
   board.unmount();
   render(<painting.DrawingSurface controller={controller} />);
   expect(screen.getByTestId('layered-surface')).toBeTruthy();

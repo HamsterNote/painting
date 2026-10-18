@@ -31,6 +31,7 @@ test('mixed Unicode and newline composition commits once and is editable verbati
   const content = 'Latin 中文 العربية 😀\n第二行';
   await page.getByRole('button', { name: '文字', exact: true }).click();
   await pointer(page, 'down', { x: 100, y: 100 });
+  await pointer(page, 'up', { x: 100, y: 100 });
   const input = page.getByLabel('文字内容');
   await input.dispatchEvent('compositionstart');
   await input.fill(content);
@@ -42,6 +43,7 @@ test('mixed Unicode and newline composition commits once and is editable verbati
   await expect(page.locator('[data-object-id] foreignObject')).toHaveText(content);
   const before = (await layeredState(page)).document;
   await pointer(page, 'down', { x: 110, y: 110 });
+  await pointer(page, 'up', { x: 110, y: 110 });
   await expect(input).toHaveValue(content);
   await input.press('Escape');
   expect((await layeredState(page)).document).toEqual(before);
@@ -104,6 +106,7 @@ test('empty and cancelled file selection and invalid MIME never mutate the docum
   const chooser = page.waitForEvent('filechooser');
   await pointer(page, 'down', { x: 100, y: 100 });
   await (await chooser).setFiles([]);
+  await pointer(page, 'up', { x: 100, y: 100 });
   const input = page.getByLabel('导入图片文件');
   await input.dispatchEvent('cancel');
   expect((await layeredState(page)).document.objects).toHaveLength(0);
@@ -112,6 +115,7 @@ test('empty and cancelled file selection and invalid MIME never mutate the docum
   await (
     await invalid
   ).setFiles({ name: 'bad.txt', mimeType: 'text/plain', buffer: Buffer.from('invalid') });
+  await pointer(page, 'up', { x: 100, y: 100 });
   await expect(page.getByRole('alert')).toContainText('仅支持');
   expect((await layeredState(page)).history.canUndo).toBe(false);
 });

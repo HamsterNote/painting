@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+} from 'react';
 import type { LayeredEditorController } from '../core/layeredEditorController';
 import { createFreehandWebAdapter, type WebFreehandPolicy } from '../input/web/freehandWebAdapter';
 import { DisplayLayer, type RenderObserver } from './DisplayLayer';
@@ -13,6 +20,8 @@ import { NavigationOverlay, VirtualPaper } from './NavigationOverlay';
 import { createNavigationWebAdapter } from './navigationWebAdapter';
 import type { DrawingSurfaceVirtualPaperOptions } from '../virtualPaperOptions';
 import { observeGestureEvents, type GestureTraceObserver } from '../input/web/gestureTrace';
+import { useInputInitialization } from './useInputInitialization';
+import { createLayeredInputArbiter } from '../input/web/layeredInputArbiter';
 
 export type LayeredDrawingSurfaceProps = {
   controller: LayeredEditorController;
@@ -36,6 +45,13 @@ export function LayeredDrawingSurface({
   virtualPaper,
   onGestureTrace,
 }: LayeredDrawingSurfaceProps) {
+  const inputReady = useInputInitialization(controller, inputPolicy, true);
+  const subscribeInput = useCallback(
+    (listener: () => void) => controller.subscribe('input', listener),
+    [controller]
+  );
+  const getInputMode = useCallback(() => controller.getSnapshot('input').mode, [controller]);
+  const inputMode = useSyncExternalStore(subscribeInput, getInputMode, getInputMode);
   const host = useRef<HTMLDivElement>(null);
   const [presentation, setPresentation] = useState<PresentationCoordinator>();
   const [failure, setFailure] = useState<{ commitId: string; message: string }>();
@@ -53,6 +69,7 @@ export function LayeredDrawingSurface({
     controller.setNavigation({ virtualPaper: { ...current, ...patch } });
   }, [controller, virtualPaper]);
   useEffect(() => {
+    if (!inputReady) return;
     const stopTrace = onGestureTrace
       ? observeGestureEvents(host.current!, onGestureTrace)
       : undefined;
@@ -60,22 +77,19 @@ export function LayeredDrawingSurface({
     setPresentation(queue);
     const surfaceId = ++nextSurface;
     let sequence = 0;
+    let arbiter: ReturnType<typeof createLayeredInputArbiter> | undefined;
+    const canNavigate = () => !arbiter?.isWriting();
     const navigation = createNavigationWebAdapter(
       host.current!,
       controller,
-      inputPolicy?.touch === 'draw',
-      onGestureTrace
+      false,
+      onGestureTrace,
+      { listen: false, canNavigate }
     );
-    const policy = {
-      mouse: 'draw',
-      pen: 'draw',
-      touch: 'none',
-      ...inputPolicy,
-    } as WebFreehandPolicy;
     const adapter = createFreehandWebAdapter({
       host: host.current!,
       controller,
-      policy,
+      listen: false,
       onTrace: onGestureTrace,
       createSessionId: () => `surface-${surfaceId}-session-${++sequence}`,
       createCommitId: () => `surface-${surfaceId}-commit-${sequence}`,
@@ -91,7 +105,8 @@ export function LayeredDrawingSurface({
     const semantic = createSemanticWebAdapter({
       host: host.current!,
       controller,
-      policy,
+      listen: false,
+      canNavigate,
       allocateId,
       beforeGesture: () => queue.confirmMounted(),
       onText: setTextPoint,
@@ -99,22 +114,47 @@ export function LayeredDrawingSurface({
       onError: (error) => setToolError(String(error)),
       onTrace: onGestureTrace,
     });
+    arbiter = createLayeredInputArbiter({
+      host: host.current!,
+      controller,
+      tool: {
+        dispatch(event) {
+          (controller.getSnapshot('tools').activeTool === 'freehand' ? adapter : semantic).dispatch(
+            event
+          );
+        },
+        cancel() {
+          const ink = adapter.cancel();
+          const tool = semantic.cancel();
+          return ink && tool;
+        },
+      },
+      navigation,
+      targetRole: navigation.targetRole,
+      onDiagnostic: setToolError,
+    });
+    const surface = host.current!;
+    surface.dataset.inputArbiter = 'ready';
     retry.current = (commitId) => {
       const result = adapter.retryCommit(commitId);
       setFailure(result.ok ? undefined : { commitId, message: result.error.code });
     };
     return () => {
+      delete surface.dataset.inputArbiter;
+      arbiter?.destroy();
       navigation.destroy();
       semantic.destroy();
       adapter.destroy();
       queue.destroy();
       stopTrace?.();
     };
-  }, [controller, inputPolicy, allocateId, openImage, onGestureTrace]);
+  }, [controller, inputReady, allocateId, openImage, onGestureTrace]);
   return (
     <div
       ref={host}
       data-testid="layered-surface"
+      data-input-ready={inputReady}
+      data-input-mode={inputMode}
       style={{
         position: 'relative',
         flex: 1,
@@ -123,6 +163,7 @@ export function LayeredDrawingSurface({
         background: '#fff',
         touchAction: 'none',
         ...style,
+        pointerEvents: inputReady ? style?.pointerEvents : 'none',
       }}
     >
       {presentation ? (

@@ -21,6 +21,7 @@ async function openFixture(page: Page) {
 
 async function editText(page: Page, expected: string) {
   await dispatchLayeredPointer(page, 'down', { x: 70, y: 70 });
+  await dispatchLayeredPointer(page, 'up', { x: 70, y: 70 });
   const editor = page.getByLabel('文字内容', { exact: true });
   await expect(editor).toBeFocused();
   await expect(editor).toHaveValue(expected);

@@ -2,7 +2,7 @@ import { createRulerGestureController } from '../rulerGestureController';
 import * as webInput from '../normalizePointerInput';
 
 function pointer(
-  type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel',
+  type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel' | 'lostpointercapture',
   overrides: Partial<{
     pointerId: number;
     pointerType: 'mouse' | 'touch' | 'pen';
@@ -69,6 +69,30 @@ describe('input/web/rulerGestureController', () => {
   afterEach(() => {
     controller.dispose();
     host.remove();
+  });
+
+  it('policy cancellation isolates old mouse through capture loss until up; lifecycle releases its ID', () => {
+    const mouse = {
+      pointerType: 'mouse' as const,
+      pointerId: 8,
+      clientX: 50,
+      clientY: 50,
+      ctrlKey: true,
+    };
+    host.dispatchEvent(pointer('pointerdown', mouse));
+    controller.cancel();
+    host.dispatchEvent(pointer('lostpointercapture', mouse));
+    host.dispatchEvent(pointer('pointerdown', mouse));
+    document.dispatchEvent(pointer('pointermove', { ...mouse, clientX: 70, clientY: 70 }));
+    expect(onState).not.toHaveBeenCalled();
+    document.dispatchEvent(pointer('pointerup', mouse));
+    host.dispatchEvent(pointer('pointerdown', mouse));
+    document.dispatchEvent(pointer('pointermove', { ...mouse, clientX: 70, clientY: 70 }));
+    expect(state.center).toEqual({ x: 70, y: 60 });
+    controller.cancel({ releaseContacts: true });
+    host.dispatchEvent(pointer('pointerdown', mouse));
+    document.dispatchEvent(pointer('pointermove', { ...mouse, clientX: 70, clientY: 70 }));
+    expect(state.center).toEqual({ x: 90, y: 80 });
   });
 
   it('仅接管修饰键 primary mouse，Ctrl 平移保持 grab offset，Alt 绕 pivot 吸附', () => {

@@ -53,6 +53,12 @@ import {
 import { applyViewportTransformIntent, type ViewportTransformIntent } from './viewportTransform';
 import { FreehandGeometryCache } from '../geometry/freehandCache';
 import {
+  createLayeredInputSnapshot,
+  isLayeredInputMode,
+  type LayeredInputMode,
+  type LayeredInputSnapshot,
+} from './layeredInputMode';
+import {
   SAFE_DEFAULT_VIRTUAL_PAPER_INTERACTIONS,
   type DrawingSurfaceVirtualPaperInteraction,
 } from '../virtualPaperOptions';
@@ -154,6 +160,7 @@ export type LayeredEditorResult<T> =
 
 /** 订阅频道；除 interaction 外均按 state 返回稳定引用，适合 useSyncExternalStore。 */
 export type LayeredEditorChannel =
+  | 'input'
   | 'document'
   | 'history'
   | 'tools'
@@ -215,6 +222,7 @@ export type LayeredInteractionSnapshot = Readonly<{
 
 /** 频道 → 快照类型映射，供泛型 `getSnapshot` 精确返回。 */
 export type LayeredEditorSnapshotMap = Readonly<{
+  input: LayeredInputSnapshot;
   document: EditorDocument;
   history: LayeredHistorySnapshot;
   tools: LayeredToolsSnapshot;
@@ -246,6 +254,9 @@ export interface LayeredEditorController {
   getSnapshot<C extends LayeredEditorChannel>(channel: C): LayeredEditorSnapshotMap[C];
   subscribe(channel: LayeredEditorChannel, listener: () => void): () => void;
   setTool(tool: LayeredEditorTool): LayeredEditorResult<void>;
+  setInputMode(mode: LayeredInputMode): LayeredEditorResult<void>;
+  initializeInputMode(mode: LayeredInputMode): LayeredEditorResult<void>;
+  recordPenDown(): void;
   setFreehandSettings(settings: BrushSnapshot): LayeredEditorResult<void>;
   setShapeSettings(settings: ShapeStyle): LayeredEditorResult<void>;
   setSelection(ids: readonly string[]): LayeredEditorResult<void>;
@@ -277,6 +288,7 @@ export type LayeredObjectEdit = Readonly<{
  * 提交时分配 objectId 的注入函数，以及可选几何缓存。
  */
 export type LayeredEditorControllerOptions = Readonly<{
+  inputMode?: LayeredInputMode;
   document: EditorDocument;
   viewport: LayeredViewportSnapshot;
   activeTool: LayeredEditorTool;
@@ -1402,6 +1414,8 @@ function isFiniteIntent(value: unknown): value is ViewportTransformIntent {
 
 /** 私有控制器实现；只经 factory 创建。 */
 class LayeredEditorControllerImpl implements LayeredEditorController {
+  private input: LayeredInputSnapshot;
+  private inputInitialized: boolean;
   private readonly kernel: DocumentKernel;
   private activeTool: LayeredEditorTool;
   private freehandSettings: BrushSnapshot;
@@ -1438,6 +1452,7 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
   private locked = false;
 
   constructor(params: {
+    inputMode?: LayeredInputMode;
     kernel: DocumentKernel;
     activeTool: LayeredEditorTool;
     freehandSettings: BrushSnapshot;
@@ -1445,6 +1460,8 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
     selection: readonly string[];
     viewportSnapshot: LayeredViewportSnapshot;
   }) {
+    this.input = createLayeredInputSnapshot(params.inputMode ?? 'auto');
+    this.inputInitialized = params.inputMode !== undefined;
     this.kernel = params.kernel;
     this.activeTool = params.activeTool;
     this.freehandSettings = params.freehandSettings;
@@ -1466,6 +1483,8 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
 
   getSnapshot<C extends LayeredEditorChannel>(channel: C): LayeredEditorSnapshotMap[C] {
     switch (channel) {
+      case 'input':
+        return this.input as LayeredEditorSnapshotMap[C];
       case 'document':
         return this.kernel.getDocument() as LayeredEditorSnapshotMap[C];
       case 'history':
@@ -1483,6 +1502,26 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
       default:
         return this.buildInteractionSnapshot() as LayeredEditorSnapshotMap[C];
     }
+  }
+
+  setInputMode(mode: LayeredInputMode): LayeredEditorResult<void> {
+    if (!isLayeredInputMode(mode)) return errResult('invalid-input');
+    this.inputInitialized = true;
+    if (mode !== this.input.mode) {
+      this.input = createLayeredInputSnapshot(mode, this.input.penSeen);
+      this.emit(['input']);
+    }
+    return okResult(undefined);
+  }
+
+  initializeInputMode(mode: LayeredInputMode): LayeredEditorResult<void> {
+    return this.inputInitialized ? okResult(undefined) : this.setInputMode(mode);
+  }
+
+  recordPenDown(): void {
+    if (this.input.penSeen) return;
+    this.input = createLayeredInputSnapshot(this.input.mode, true);
+    this.emit(['input']);
   }
 
   /** interaction 按需构造：active session 快照 + 冻结 pending candidates（不每点 copy）。 */
@@ -2108,6 +2147,9 @@ export function createLayeredEditorController(
   if (!isTool(options.activeTool)) {
     return errResult('invalid-input');
   }
+  if (options.inputMode !== undefined && !isLayeredInputMode(options.inputMode)) {
+    return errResult('invalid-input');
+  }
   const freehandSettings = copyBrush(options.settings?.freehand);
   if (!freehandSettings) {
     return errResult('invalid-input');
@@ -2159,6 +2201,7 @@ export function createLayeredEditorController(
 
   return okResult(
     new LayeredEditorControllerImpl({
+      inputMode: options.inputMode,
       kernel,
       activeTool: options.activeTool,
       freehandSettings,
