@@ -1,9 +1,22 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 import {
   dispatchLayeredPointer as pointer,
   layeredState,
   openLayeredEditor,
 } from './layered-helpers';
+
+async function expectUserSelect(locator: Locator, value: 'text' | 'none') {
+  await expect
+    .poll(() =>
+      locator.evaluate((node) => {
+        const style = getComputedStyle(node);
+        return (
+          style.getPropertyValue('user-select') || style.getPropertyValue('-webkit-user-select')
+        );
+      })
+    )
+    .toBe(value);
+}
 
 test('wheel feedback shows actual zoom above the pointer, clears, and never writes history', async ({
   page,
@@ -68,9 +81,9 @@ test('native selection stays outside non-editing paper and inside editing contro
   await openLayeredEditor(page, '&fixture=mixed');
   const surface = page.getByTestId('layered-surface');
   const displayed = page.locator('[data-object-id="middle-text"] foreignObject div');
-  await expect(surface).toHaveCSS('user-select', 'none');
+  await expectUserSelect(surface, 'none');
   await expect(surface).toHaveCSS('touch-action', 'none');
-  await expect(displayed).toHaveCSS('user-select', 'none');
+  await expectUserSelect(displayed, 'none');
   const callout = await surface.evaluate((node) => ({
     supported: CSS.supports('-webkit-touch-callout', 'none'),
     value: getComputedStyle(node).getPropertyValue('-webkit-touch-callout'),
@@ -111,9 +124,9 @@ test('native selection stays outside non-editing paper and inside editing contro
   await pointer(page, 'down', { x: 350, y: 300 });
   await pointer(page, 'up', { x: 350, y: 300 });
   const input = page.getByLabel('文字内容');
-  await expect(input).toHaveCSS('user-select', 'text');
+  await expectUserSelect(input, 'text');
   const size = page.getByLabel('文字字号');
-  await expect(size).toHaveCSS('user-select', 'text');
+  await expectUserSelect(size, 'text');
   await size.focus();
   await expect(size).toBeFocused();
   await input.fill('original replacement');
@@ -265,5 +278,5 @@ test('composition commit and cancel preserve editing and return to protected dra
   await pointer(page, 'move', { x: 220, y: 110 });
   await pointer(page, 'up', { x: 240, y: 110 });
   expect((await layeredState(page)).document.objects).toHaveLength(2);
-  await expect(page.getByTestId('layered-surface')).toHaveCSS('user-select', 'none');
+  await expectUserSelect(page.getByTestId('layered-surface'), 'none');
 });

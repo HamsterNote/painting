@@ -8,13 +8,13 @@
 ## 2. 局部防护与编辑例外
 
 - [x] 2.1 在 DrawingSurface 非编辑区域增加标准/WebKit 禁选与 touch callout 样式，保留 touchAction；按 foreignObject 需要覆盖 DisplayLayer 显示态文字，并在 TextEditor 的 textarea/文本输入区域恢复原生选择和菜单。用 `tests/ui/interaction-feedback.spec.ts` 新增场景验证计算样式、消费者 style 合并、显示文字与输入框边界、画布外选词及控件焦点。
-- [ ] 2.2 用浏览器默认输入核验样式是否足够；仅在样式未覆盖的可复现路径上，在 semanticWebAdapter 增加局部可取消 dblclick/selectstart 防护，跳过安全控件并继续多边形完成逻辑。通过 `layered-semantic-adapter.test.ts` 或相应浏览器用例验证业务双击、不可取消事件、编辑例外及卸载清理；若样式足够，记录不新增事件拦截的实测依据。禁止全局清选区或修改未被调用的 interactionOwnership helper 来宣称修复。
+- [x] 2.2 用浏览器默认输入核验样式是否足够；仅在样式未覆盖的可复现路径上，在 semanticWebAdapter 增加局部可取消 dblclick/selectstart 防护，跳过安全控件并继续多边形完成逻辑。通过 `layered-semantic-adapter.test.ts` 或相应浏览器用例验证业务双击、不可取消事件、编辑例外及卸载清理；若样式足够，记录不新增事件拦截的实测依据。禁止全局清选区或修改未被调用的 interactionOwnership helper 来宣称修复。
 
 ## 3. 自动化与兼容性验证
 
 - [x] 3.1 在已被两份 Playwright 配置收集的 `tests/ui/interaction-feedback.spec.ts` 扩展空白/含文字画布的快速连续笔输入回归，验证对象与历史一笔一次、撤销重做、不误开编辑器；同时覆盖原生文字选择替换、完成/取消、组合输入会话与返回绘制，注明合成 IME/笔事件不等于真机行为。
-- [ ] 3.2 执行 `pnpm exec playwright test tests/ui/interaction-feedback.spec.ts tests/ui/mobile-input-mode.spec.ts tests/ui/layered-editor.spec.ts --project=chromium --workers=1`，再使用 `--config=playwright.webkit.config.ts --project=webkit` 执行相同文件；保存报告，核验画布外选择、多边形闭合和三档输入/笔指混合回归。WebKit 桌面或 iPad UA 不作为真机验收通过。
-- [ ] 3.3 执行 `pnpm typecheck`、`pnpm lint`、`pnpm test` 和 `pnpm build:all`，记录实际结果；使用 `openspec validate fix-ipad-pencil-text-selection --strict --no-interactive` 验证产物，检查 diff 没有 HAM-50 文件或无关代码修改。
+- [x] 3.2 执行 `pnpm exec playwright test tests/ui/interaction-feedback.spec.ts tests/ui/mobile-input-mode.spec.ts tests/ui/layered-editor.spec.ts --project=chromium --workers=1`，再使用 `--config=playwright.webkit.config.ts --project=webkit` 执行相同文件；保存报告，核验画布外选择、多边形闭合和三档输入/笔指混合回归。WebKit 桌面或 iPad UA 不作为真机验收通过。
+- [x] 3.3 执行 `pnpm typecheck`、`pnpm lint`、`pnpm test` 和 `pnpm build:all`，记录实际结果；使用 `openspec validate fix-ipad-pencil-text-selection --strict --no-interactive` 验证产物，检查 diff 没有 HAM-50 文件或无关代码修改。
 
 ## 4. iPad Safari + 实体笔真机验收（必过）
 
