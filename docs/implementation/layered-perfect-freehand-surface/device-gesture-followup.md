@@ -44,10 +44,27 @@ JSON 包含设备/浏览器环境、当前 viewport、工具/导航设置、最�
 - 捕获修复后同命令：Chromium 5/5 PASS。
 - `pnpm exec jest --runInBand --testPathPattern 'freehandWebAdapter|layered-navigation|rulerGestureController'`：3 suites / 81 tests PASS。
 
-后续完整验证结果在本文件继续记录。任务 8.1 要等原设备证据；不将这次路径修复当作原问题已验收。
+任务 8.1 要等原设备证据；不将这次路径修复当作原问题已验收。
 
 ## 纸张初始横向居中
 
 默认新增 `top-center`，纸张首次显示且布局宽度可用时写入 controller viewport 的 tx；保持 ty 与 scale。显式 `top-left`、完整 `center` 仍可使用。初始化按 controller/placement 记一次，隐藏/重显、窗口 resize 和后续手动导航不重置。1280 宽、zoom=1 的左边距为 243 px；纸张比屏幕宽时允许负边距，仍保持几何中心一致。
 
 回归覆盖宽度 1280 / 390、zoom=1 / 非单位缩放、已有纵向平移、输入 screen→world 转换、主 SVG/纸张 matrix 与小地图 indicator 一致、隐藏重显和 resize 后导航不被覆盖。纸张单测在修复前 3 failed / 2 passed，修复后完整 `pnpm test` 为 82 suites / 1070 tests PASS（追加测试时曾误嵌套两个 test，修正后全量复跑通过）。纸张与分层入口 Chromium 专项 27/27 PASS。
+
+## 最终实跑结果
+
+运行实现为 `96dd2e1`（捕获修复/诊断）、`dba660b`（纸张定位）、`d18cbb3`（桌面诊断补充），全部普通 fast-forward 推送到 `feat/use-perfect-freehand`。
+
+- `pnpm install --frozen-lockfile`：exit 0，无依赖/锁文件修改。
+- `pnpm test`：82 suites / 1070 tests PASS，web/core-node/native 均执行。
+- `pnpm typecheck`：exit 0。新增诊断最初使用的 Array.at 不在库的目标 lib 中，pointerrawupdate 在 DOM 声明中也为普通 Event；分别改为下标读取和已知指针事件监听器后完整复跑通过，未降低编译检查。
+- `pnpm lint`：exit 0，0 errors / 32 既有 warnings。
+- `pnpm test:ui --workers=1 --trace=off`：最终 Chromium 65/65 PASS（1.7m），包含新增桌面诊断字段、非法 coalesced 原因、rawupdate 不重复采样和无 Clipboard API 的导出回退。以上类型错误也曾使准备构件失败；修复后重新启动并跑完本次全量，不将启动失败当测试通过。
+- `node node_modules/@playwright/test/cli.js test --config=playwright.webkit.config.ts --workers=1 --trace=off`：Ubuntu 24.04 Podman `localhost/ham40-webkit:noble` 内独立 WebKit 63 PASS / 2 skipped（1.8m）；跳过的仅两个 Chromium CDP touch 实验，其余旧 56 例、纸张 4 例与诊断 3 例均通过。容器使用 host 网络，同路径 checkout、Node 24.15.0 和 Playwright 缓存挂载；宿主临时 Expo 服务在检查结束后由前台 runner 收掉。
+- `pnpm build` → `pnpm pack:dry` → `pnpm verify:layered` 串行：均 exit 0；两个包、公开 exports 与 Expo Web 构建通过，产物无退役 Skia runtime。未发布包。
+- 所有本轮受影响源码/测试/配置/spec/文档的 Prettier check、`git diff --check` 与 `openspec validate layered-perfect-freehand-surface --strict`：PASS。
+
+最终 change 为 46/52。8.5/8.6/8.7 已完成；8.1 明确重新打开，等待原 macOS Edge 鼠标 trace；原 3.3/6.1/7.5/7.6/7.8 五项人工验收完全保留。本轮未重跑 Android/iOS 静态导出，也没有用 Linux WebKit 冒充 Safari 或 macOS Edge 真机。
+
+`tmux kill-session -t ham40-dev` 已在首次 UI 前执行。检查结束确认 5266 无监听；本轮未另起持久验证服务，验证方需从最新 head 重启后交原设备复现。推送触发 CI，本轮未等待或声称新 SHA 的 CI 已通过。
