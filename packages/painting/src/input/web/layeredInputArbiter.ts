@@ -54,7 +54,6 @@ export function createLayeredInputArbiter(options: {
     if (source !== 'mouse' && source !== 'touch' && source !== 'pen') return;
     if (
       !Number.isSafeInteger(event.pointerId) ||
-      event.pointerId < 0 ||
       !Number.isFinite(event.clientX) ||
       !Number.isFinite(event.clientY) ||
       !Number.isFinite(event.timeStamp) ||

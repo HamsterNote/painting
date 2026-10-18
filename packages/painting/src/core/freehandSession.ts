@@ -199,9 +199,9 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-/** pointer identity：字符串非空，或数值安全整数（DOM pointerId 语义）。 */
+/** DOM pointerId is a signed identity; iPadOS can issue negative values. */
 function isPointerId(value: unknown): value is string | number {
-  return isNonEmptyString(value) || isNonNegativeSafeInteger(value);
+  return isNonEmptyString(value) || (typeof value === 'number' && Number.isSafeInteger(value));
 }
 
 /** viewport 结构：三个分量均为有限数。 */

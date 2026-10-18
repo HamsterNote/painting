@@ -76,6 +76,42 @@ test('failed cancellation cannot begin navigation or route the second finger', (
   ]);
 });
 
+test.each(['pen', 'touch'] as const)(
+  'signed %s identity routes its own lifecycle only',
+  (source) => {
+    const h = harness();
+    const id = source === 'pen' ? -765894345 : -765894343;
+    const down = h.dispatch(pointer(id, 'down', source));
+    expect(down).toEqual([
+      ...(source === 'pen' ? [{ type: 'detect-pen' }] : []),
+      { type: 'route', target: 'tool', input: pointer(id, 'down', source) },
+    ]);
+    expect(h.dispatch(pointer(-id, 'move', source))).toEqual([]);
+    for (const phase of ['move', 'up'] as const) {
+      expect(h.dispatch(pointer(id, phase, source))).toEqual([
+        { type: 'route', target: 'tool', input: pointer(id, phase, source) },
+      ]);
+    }
+    expect(h.state().ownership.active).toEqual([]);
+  }
+);
+
+test('negative touch IDs cancel the single owner before forming the original pair', () => {
+  const h = harness();
+  const first = -765894343;
+  const second = -765894342;
+  h.dispatch(pointer(first));
+  h.dispatch(pointer(first, 'move'));
+  expect(h.dispatch(pointer(second))).toEqual([{ type: 'cancel', target: 'tool' }]);
+  expect(h.ack(true)).toEqual([
+    { type: 'begin-navigation', pointers: [pointer(first, 'move'), pointer(second)] },
+  ]);
+  expect(h.state().gesture?.ids).toEqual([first, second]);
+  expect(h.dispatch(pointer(second, 'move'))).toEqual([
+    { type: 'route', target: 'navigation', input: pointer(second, 'move') },
+  ]);
+});
+
 test('first pen down preempts touch only after cancel ACK; late touch up cannot commit', () => {
   const h = harness();
   h.dispatch(pointer(1));

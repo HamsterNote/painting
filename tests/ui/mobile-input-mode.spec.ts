@@ -6,6 +6,53 @@ import {
 } from './layered-helpers';
 const key = 'hamster-note.painting.input-mode.v1';
 
+for (const mode of ['auto', 'finger', 'pen']) {
+  test(`signed-pointer-identity: ${mode} accepts iPad pen and touch IDs without changing ownership`, async ({
+    page,
+  }) => {
+    await openLayeredEditor(page);
+    await page.getByLabel('输入模式').selectOption(mode);
+    const initial = await layeredState(page);
+    // Exact signed IDs observed in the iPadOS 18 / Edge device trace.
+    await stroke(page, 'touch', -765894343);
+    const touched = await layeredState(page);
+    expect(touched.document.objects).toHaveLength(mode === 'pen' ? 0 : 1);
+    if (mode === 'pen') expect(touched.viewport).not.toEqual(initial.viewport);
+    else expect(touched.viewport).toEqual(initial.viewport);
+    await pointer(page, 'down', { x: 100, y: 120 }, { source: 'touch', id: -765894342 });
+    await pointer(page, 'move', { x: 180, y: 140 }, { source: 'touch', id: -765894342 });
+    if (mode !== 'pen') await expect.poll(() => activePixels(page)).toBeGreaterThan(0);
+    await pointer(page, 'down', { x: 280, y: 140 }, { source: 'touch', id: -765894341 });
+    await expect.poll(() => activePixels(page)).toBe(0);
+    const pairStart = await layeredState(page);
+    await pointer(page, 'move', { x: 380, y: 180 }, { source: 'touch', id: -765894341 });
+    await pointer(page, 'up', { x: 180, y: 140 }, { source: 'touch', id: -765894342 });
+    await pointer(page, 'up', { x: 380, y: 180 }, { source: 'touch', id: -765894341 });
+    const paired = await layeredState(page);
+    expect(paired.viewport.viewport.scale).toBeGreaterThan(pairStart.viewport.viewport.scale);
+    expect(paired.document).toEqual(touched.document);
+    expect(paired.history).toEqual(touched.history);
+    await stroke(page, 'pen', -765894345, 180);
+    const penned = await layeredState(page);
+    expect(penned.document.objects).toHaveLength(touched.document.objects.length + 1);
+    expect(penned.input.penSeen).toBe(true);
+    expect(penned.viewport).toEqual(paired.viewport);
+    await stroke(page, 'touch', -765894340);
+    const after = await layeredState(page);
+    expect(after.document.objects).toHaveLength(
+      penned.document.objects.length + (mode === 'finger' ? 1 : 0)
+    );
+    if (mode === 'finger') expect(after.viewport).toEqual(penned.viewport);
+    else expect(after.viewport).not.toEqual(penned.viewport);
+    await page.getByRole('button', { name: '矩形', exact: true }).click();
+    await stroke(page, 'pen', -765894344);
+    expect((await layeredState(page)).document.objects).toHaveLength(
+      after.document.objects.length + 1
+    );
+    expect((await layeredState(page)).document.objects.at(-1)?.kind).toBe('shape');
+  });
+}
+
 declare global {
   interface Window {
     __inputFirstFrame?: { surface: string | null; menu: string };
@@ -337,15 +384,13 @@ for (const mode of ['auto', 'finger', 'pen']) {
       button.dataset.testid = 'in-surface-control';
       host.append(button);
     });
-    await page
-      .getByTestId('in-surface-control')
-      .dispatchEvent('pointerdown', {
-        pointerId: 2,
-        pointerType: 'touch',
-        clientX: 400,
-        clientY: 400,
-        button: 0,
-      });
+    await page.getByTestId('in-surface-control').dispatchEvent('pointerdown', {
+      pointerId: 2,
+      pointerType: 'touch',
+      clientX: 400,
+      clientY: 400,
+      button: 0,
+    });
     const center = initial.navigation.ruler.center;
     await pointer(page, 'down', { x: center.x - 50, y: center.y }, { source: 'touch', id: 3 });
     await pointer(page, 'move', { x: center.x + 50, y: center.y + 10 }, { source: 'touch', id: 3 });

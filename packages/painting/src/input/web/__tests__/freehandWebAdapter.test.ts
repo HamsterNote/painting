@@ -31,6 +31,7 @@ import {
 } from '../../../model/document';
 import type { DrawingViewport } from '../../../viewport';
 import { createLayeredInputArbiter } from '../layeredInputArbiter';
+import { createNavigationWebAdapter } from '../../../layered/navigationWebAdapter';
 
 // ---------------------------------------------------------------------------
 // PointerEvent / DOM shims
@@ -284,6 +285,53 @@ const noticesOf = (h: Harness, phase: FreehandWebAdapterNotice['phase']) =>
   h.notices.filter((notice) => notice.phase === phase);
 
 const lastNotice = (h: Harness) => h.notices[h.notices.length - 1];
+
+test.each(['pen', 'touch'] as const)(
+  'arbiter accepts signed %s IDs for ink and cancels before real pair navigation',
+  (source) => {
+    const h = setup({ listen: false });
+    let arbiter: ReturnType<typeof createLayeredInputArbiter> | undefined;
+    const navigation = createNavigationWebAdapter(h.host, h.controller, false, undefined, {
+      listen: false,
+      canNavigate: () => !arbiter?.isWriting(),
+    });
+    arbiter = createLayeredInputArbiter({
+      host: h.host,
+      controller: h.controller,
+      tool: h.adapter,
+      navigation,
+    });
+    liveAdapters.push(arbiter, navigation);
+    const viewport = h.controller.getSnapshot('viewport');
+    drawStroke(h, { pointerId: source === 'pen' ? -765894345 : -765894343, pointerType: source }, [
+      { clientX: 40, clientY: 30 },
+    ]);
+    const objects = h.controller.getSnapshot('document').objects;
+    expect(objects).toHaveLength(1);
+    expect(objects[0]).toMatchObject({
+      kind: 'freehand',
+      samples: expect.arrayContaining([expect.objectContaining({ source })]),
+    });
+    expect(h.controller.getSnapshot('viewport')).toEqual(viewport);
+    expect(h.controller.getSnapshot('input').penSeen).toBe(source === 'pen');
+    h.controller.setInputMode('finger');
+    const first = { pointerId: -765894342, pointerType: 'touch', clientX: 40, clientY: 40 };
+    const second = { pointerId: -765894341, pointerType: 'touch', clientX: 100, clientY: 40 };
+    fireHost(h.host, pointer('pointerdown', first));
+    fireWindow(pointer('pointermove', { ...first, clientX: 50 }));
+    fireHost(h.host, pointer('pointerdown', second));
+    expect(h.controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
+    fireWindow(pointer('pointermove', { ...second, clientX: 160 }));
+    fireWindow(pointer('pointerup', { ...first, buttons: 0 }));
+    fireWindow(pointer('pointerup', { ...second, buttons: 0 }));
+    expect(h.controller.getSnapshot('viewport').viewport.scale).toBeGreaterThan(
+      viewport.viewport.scale
+    );
+    expect(h.controller.getSnapshot('document').objects).toEqual(objects);
+    expect(noticesOf(h, 'cancel')).toHaveLength(1);
+    expect(noticesOf(h, 'commit')).toHaveLength(1);
+  }
+);
 
 test('composed input preserves first pen down and ignores late up after explicit cancel', () => {
   const h = setup({ listen: false });

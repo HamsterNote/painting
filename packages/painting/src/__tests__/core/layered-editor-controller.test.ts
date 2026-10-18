@@ -196,6 +196,43 @@ function commitIds(controller: LayeredEditorController): readonly string[] {
     .map((object) => object.commitId);
 }
 
+test.each(['pen', 'touch'] as const)(
+  'signed %s pointer commits raw samples and one reversible history entry',
+  (source) => {
+    const controller = createController();
+    const pointerId = source === 'pen' ? -765894345 : -765894343;
+    const base = beginInput(`signed-${source}`);
+    const begin = { ...base, batch: { ...base.batch, pointerId, source } };
+    unwrap(controller.beginFreehand(begin));
+    unwrap(
+      controller.updateFreehand({
+        type: 'update',
+        batch: batchLike(begin, 1, [sampleInput(2, 'move')]),
+      })
+    );
+    const candidate = unwrap(
+      controller.endFreehand({ type: 'end', batch: batchLike(begin, 2, [sampleInput(3, 'up')]) })
+    );
+    expect(candidate).toMatchObject({ pointerId, source });
+    expect(controller.getSnapshot('document').objects).toHaveLength(0);
+    unwrap(controller.commitFreehand(begin.commitId));
+    const objects = controller.getSnapshot('document').objects;
+    expect(objects).toHaveLength(1);
+    expect(objects[0]).toMatchObject({ kind: 'freehand', samples: candidate.samples });
+    expect(candidate.samples.map((sample) => sample.source)).toEqual([
+      source,
+      source,
+      source,
+      source,
+    ]);
+    unwrap(controller.undo());
+    expect(controller.getSnapshot('document').objects).toHaveLength(0);
+    expect(controller.getSnapshot('history').canUndo).toBe(false);
+    unwrap(controller.redo());
+    expect(controller.getSnapshot('document').objects).toEqual(objects);
+  }
+);
+
 /** 订阅计数读取器。 */
 function track(
   controller: LayeredEditorController,
