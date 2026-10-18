@@ -65,3 +65,17 @@
 
 - **WHEN** 用户在真实分层入口分别快速和慢速绘制 pen 笔迹并松手，包括跨已有对象的快速轨迹
 - **THEN** 每笔按接受的 raw 与最终几何进入可见历史，undo/redo 每次只移除/恢复对应的一笔，viewport 不被竞争导航移动
+
+#### Scenario: Capture loss does not terminate a live owner
+
+- **WHEN** 活动指针的 capture 被释放或交到其他节点，但同一 window 仍收到该 owner 的 move/up，包括表面外控件阻止冒泡
+- **THEN** 窗口捕获阶段接收其真实样本并一次提交，lostpointercapture 本身不当作 pointercancel；真正 cancel/后台/卸载仍丢弃未提交笔
+
+### Requirement: Device gesture diagnostics are bounded and exportable
+
+示例 SHALL 仅在 `diagnostics=1&traceGestures=1` 时记录最近 2048 条手势事件和累计计数。记录 SHALL 包含事件时间、pointer id/source、owner/session/commit 归属、批次样本数、拒绝与取消原因、提交结果及历史呈现交接；保留 trusted 标志以区分合成输入。诊断 MUST NOT 保存文档文字/图片内容或逐点更新 React 状态。用户 SHALL 能在原设备查看、复制或下载 JSON，包括无 Clipboard API 的 HTTP LAN 环境。
+
+#### Scenario: A device trace distinguishes cancellation from lost presentation
+
+- **WHEN** 用户开启诊断复现快速丢笔并导出记录
+- **THEN** JSON 保留有序的最近事件、溢出数量与累计计数，能区分 pointercancel、丢失 owner、无效批次、提交失败和已提交未交接；未开启时没有诊断面板或记录器

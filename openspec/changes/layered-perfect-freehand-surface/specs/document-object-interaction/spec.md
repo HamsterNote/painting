@@ -92,3 +92,12 @@ Web 普通 hover/click SHALL 支持从实际 DOM 目标定位对象；pointer ca
 
 - **WHEN** 用户通过真实工具栏开启、再关闭虚拟纸张
 - **THEN** 主画布和小地图同步显示/移除纸张，关闭后小地图空白区域为纯白，文档对象与历史不变
+
+### Requirement: Virtual paper starts horizontally centered
+
+虚拟纸张首次显示时 SHALL 默认横向居中，使用唯一 controller viewport 的 `tx = (可绘制宽度 - 纸张世界宽度 × scale) / 2`，保持原 ty 和 scale。主图、活动层、历史层、小地图 viewport SHALL 同步使用此变换，不另加 CSS 平移。此初始化 SHALL 每个挂载的 controller/placement 只成功应用一次，后续 resize、平移缩放与纸张隐藏/重显不覆盖用户位置。显式 top-left 与完整 center 配置 SHALL 保留。
+
+#### Scenario: Zoom and narrow surfaces use the same initial placement
+
+- **WHEN** 用户在不同宽度和 zoom 下首次开启纸张
+- **THEN** 两侧间距相等（纸宽超过屏幕时允许负间距），ty 不变，小地图指示区域的 x 等于 `-tx / scale`，后续调整 viewport 不重新居中

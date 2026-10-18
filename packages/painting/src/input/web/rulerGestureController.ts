@@ -6,6 +6,7 @@ import {
 } from '../../core/gesture/session';
 import type { Point } from '../../core/input';
 import * as webInput from './normalizePointerInput';
+import { traceGesture, type GestureTraceObserver } from './gestureTrace';
 
 type RulerDomState = Readonly<{
   center: Point;
@@ -21,6 +22,7 @@ export type RulerGestureControllerOptions = Readonly<{
   toLocalPoint: (event: PointerEvent) => Point;
   onState: (state: GestureRulerState) => void;
   onActiveChange: (active: boolean) => void;
+  onTrace?: GestureTraceObserver;
   onRotationFeedback: (
     feedback: Readonly<{ rotationRad: number; point: Point; state: GestureRulerState }> | null
   ) => void;
@@ -43,7 +45,15 @@ function isFinitePoint(point: Point): boolean {
   return Number.isFinite(point.x) && Number.isFinite(point.y);
 }
 
-function stopRulerEvent(event: Event): void {
+function stopRulerEvent(event: Event, onTrace?: GestureTraceObserver): void {
+  if (onTrace && isPointerEvent(event))
+    traceGesture(onTrace, {
+      scope: 'navigation',
+      action: event.type,
+      reason: 'ruler',
+      pointerId: event.pointerId,
+      source: event.pointerType,
+    });
   if (event.cancelable) {
     event.preventDefault();
   }
@@ -208,7 +218,7 @@ export function createRulerGestureController(
       if (rotate) {
         options.onRotationFeedback({ rotationRad: state.rotationRad, point: pivot, state });
       }
-      stopRulerEvent(event);
+      stopRulerEvent(event, options.onTrace);
       return;
     }
     if (event.pointerType !== 'touch' || mouse) {
@@ -216,7 +226,7 @@ export function createRulerGestureController(
     }
     if (touchIds.length >= 2) {
       suppressedIds.add(event.pointerId);
-      stopRulerEvent(event);
+      stopRulerEvent(event, options.onTrace);
       return;
     }
     if (!session) {
@@ -243,11 +253,11 @@ export function createRulerGestureController(
         });
       }
     }
-    stopRulerEvent(event);
+    stopRulerEvent(event, options.onTrace);
   };
   const handleMove = (event: PointerEvent) => {
     if (suppressedIds.has(event.pointerId)) {
-      stopRulerEvent(event);
+      stopRulerEvent(event, options.onTrace);
       return;
     }
     if (!owns(event.pointerId)) {
@@ -260,7 +270,7 @@ export function createRulerGestureController(
     if (mouse?.pointerId === event.pointerId && mouse.mode === 'rotate') {
       if (Math.hypot(point.x - mouse.pivot.x, point.y - mouse.pivot.y) < 8) {
         mouse = { ...mouse, pendingRotation: true };
-        stopRulerEvent(event);
+        stopRulerEvent(event, options.onTrace);
         return;
       }
       if (mouse.pendingRotation) {
@@ -284,12 +294,12 @@ export function createRulerGestureController(
         consume(event, 'move', point);
       }
     }
-    stopRulerEvent(event);
+    stopRulerEvent(event, options.onTrace);
   };
   const handleEnd = (event: PointerEvent) => {
     if (suppressedIds.delete(event.pointerId)) {
       release(event.pointerId);
-      stopRulerEvent(event);
+      stopRulerEvent(event, options.onTrace);
       return;
     }
     if (!owns(event.pointerId)) {
@@ -309,7 +319,7 @@ export function createRulerGestureController(
         consume(event, cancelled ? 'cancel' : 'up', finalPoint);
       }
     }
-    stopRulerEvent(event);
+    stopRulerEvent(event, options.onTrace);
     finish();
   };
 

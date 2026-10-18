@@ -7,6 +7,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report/webkit' }]],
   testMatch: [
     'acceptance-feedback.spec.ts',
+    'gesture-diagnostics.spec.ts',
     'canvas-runtime.spec.ts',
     'layered-editor.spec.ts',
     'resource-editing-fixture.spec.ts',

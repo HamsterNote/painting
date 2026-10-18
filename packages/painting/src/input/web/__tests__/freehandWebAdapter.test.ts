@@ -800,25 +800,22 @@ describe('freehandWebAdapter: 取消与收尾', () => {
     expect(h.controller.getSnapshot('history').canUndo).toBe(false);
   });
 
-  it('lostpointercapture（host 事件）取消：即时断言 owner/cancel/no history', () => {
+  it('host capture loss keeps the owner until a matching up or true cancellation', () => {
     const h = setup();
     startCollecting(h);
-    expect(h.controller.getSnapshot('interaction').activeFreehand).toBeDefined();
-    h.host.dispatchEvent(
-      pointer('lostpointercapture', {
-        pointerId: 1,
-        pointerType: 'pen',
-        isPrimary: true,
-        buttons: 0,
-      })
-    );
-    expect(h.controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
+    h.host.dispatchEvent(pointer('lostpointercapture', { pointerId: 1, pointerType: 'pen' }));
+    expect(h.adapter.getActivePointerIds()).toEqual([1]);
+    expect(noticesOf(h, 'cancel')).toHaveLength(0);
+    fireWindow(pointer('pointerup', { pointerId: 1, pointerType: 'pen', buttons: 0, pressure: 0 }));
+    expect(h.controller.getSnapshot('document').objects).toHaveLength(1);
     expect(h.adapter.getActivePointerIds()).toEqual([]);
-    const cancel = noticesOf(h, 'cancel');
-    expect(cancel).toHaveLength(1);
-    expect(cancel[0].result.ok).toBe(true);
-    expect(h.controller.getSnapshot('document').objects).toHaveLength(0);
-    expect(h.controller.getSnapshot('history').canUndo).toBe(false);
+    startCollecting(h);
+    h.host.dispatchEvent(pointer('lostpointercapture', { pointerId: 1, pointerType: 'pen' }));
+    fireWindow(pointer('pointercancel', { pointerId: 1, pointerType: 'pen' }));
+    fireWindow(pointer('pointerup', { pointerId: 1, pointerType: 'pen', buttons: 0, pressure: 0 }));
+    expect(h.controller.getSnapshot('document').objects).toHaveLength(1);
+    expect(noticesOf(h, 'cancel')).toHaveLength(1);
+    expect(h.adapter.getActivePointerIds()).toEqual([]);
   });
 
   it('visibilityState hidden 即时取消；visible 不取消；blur/pagehide 各取消', () => {

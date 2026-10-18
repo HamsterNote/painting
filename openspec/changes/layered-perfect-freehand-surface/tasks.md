@@ -70,10 +70,14 @@
 
 ## 8. Acceptance Regression Fixes
 
-- [x] 8.1 修复快速自由笔松手消失：任何速度的有效 pen up 均提交最终几何到历史，owner 的终止不被导航/尺子/捕获交接抢走；在真实分层入口用快/慢两档 pen 检查历史条目、最终可见性和 undo/redo，并记录实跑结果。（`pnpm test:ui tests/ui/acceptance-feedback.spec.ts --workers=1 --trace=off` 7/7 PASS，含快/慢两例；`pnpm test` 82/1065 PASS；修复子节点捕获转交误取消，真笔速度问题仍需原设备复验，边界见 `acceptance-feedback.md`。）
+- [ ] 8.1 修复快速自由笔松手消失：任何速度的有效 pen up 均提交最终几何到历史，owner 的终止不被导航/尺子/捕获交接抢走；在真实分层入口用快/慢两档 pen 检查历史条目、最终可见性和 undo/redo，并记录实跑结果。（`pnpm test:ui tests/ui/acceptance-feedback.spec.ts --workers=1 --trace=off` 7/7 PASS，含快/慢两例；`pnpm test` 82/1065 PASS；修复子节点捕获转交误取消，用户已复验仍失败，重新打开；必须补原设备 trace 后才能确认根因及修复，旧合成用例通过不足以完成此项，边界见 `acceptance-feedback.md`。）
 - [x] 8.2 恢复贝塞尔三阶段交互：按下拖动松手确定直线两端，随后两次点击分别确定两个控制点；中间仅预览，最后形成一个事务，取消不写历史；补真实入口手势序列回归并记录实跑结果。（`pnpm test:ui tests/ui/acceptance-feedback.spec.ts --workers=1 --trace=off` 7/7 PASS，含精确端点/控制点、单次 undo/redo 与取消；`pnpm test` 82/1065 PASS；见 `acceptance-feedback.md`。）
 - [x] 8.3 恢复多边形逐点交互：每次点击追加一个顶点并连线，移动仅预览、双击闭合且不重复终点；完成前不写历史、完成后一次 undo/redo；补真实入口回归并记录实跑结果。（`pnpm test:ui tests/ui/acceptance-feedback.spec.ts --workers=1 --trace=off` 7/7 PASS，含拖动采样排除、带偏移双击、精确顶点/闭合 path 与取消；`pnpm test` 82/1065 PASS；见 `acceptance-feedback.md`。）
 - [x] 8.4 修复小地图背景：虚拟纸张关闭时纯白背景且不绘制纸张矩形，开启时与主画布一致；通过真实入口切换工具栏并断言渲染树/像素，记录实跑结果。五项设备人工验收保持不动。（`pnpm test:ui tests/ui/acceptance-feedback.spec.ts --workers=1 --trace=off` 7/7 PASS，实际 toolbar 切换后主纸张/地图纸张均退出、背景 CSS 纯白；`pnpm typecheck` / `pnpm lint` exit 0，lint 0 errors / 32 warnings；见 `acceptance-feedback.md`。）
+
+- [x] 8.5 增加设备可导出的手势诊断：仅 `?diagnostics=1&traceGestures=1` 开启，保留最近 2048 条有序记录及累计计数，包含 pointer identity、owner、coalesced 批次、拒绝/取消原因、commit 与呈现交接；在 HTTP LAN 上也能查看/复制/下载，不逐点触发 React render，补实际入口回归。（Chromium 诊断专项 5/5 PASS；相关 Jest 3 suites / 81 tests PASS；修复前 capture release 回归历史数为 0，修复后为 1。证据与设备限制见 `device-gesture-followup.md`。）
+- [ ] 8.6 虚拟纸张首次显示时默认横向居中，按纸宽与当前 zoom 计算唯一 viewport 的 tx，纵向位置不动；后续平移缩放、resize 和显示开关不重复初始化，保留显式 top-left/center 选项，补非单位 zoom、窄屏、主图与小地图坐标回归。
+- [x] 8.7 区分捕获交接与真正取消：捕获释放后仍由同一 owner 的 window capture move/up 收尾，越界与子节点阻止冒泡不丢样本；pointercancel/失焦/卸载保持不提交，用浏览器真实捕获事件和 touch pan 正反对照留下 trace 证据。（Chromium 诊断专项 5/5 PASS；相关 Jest 3 suites / 81 tests PASS；修复前 capture release 回归历史数为 0，修复后为 1。证据与设备限制见 `device-gesture-followup.md`。）
 
 ## 本轮抢救与分批续做证据
 

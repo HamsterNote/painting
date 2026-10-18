@@ -4,11 +4,14 @@ import { useEffect, useState } from 'react';
 import { createEditor, type LayeredEditorController } from '@hamster-note/painting/layered';
 import { LayeredPaintingBoard } from '@hamster-note/painting-board';
 import { mixedFixture, resourceFixture } from './mixedFixture';
+import { createGestureTrace, type GestureTrace } from './gestureTrace';
+import { GestureTracePanel } from './GestureTracePanel';
 
 declare global {
   interface Window {
     __layeredEditor?: LayeredEditorController;
     __layeredRenders?: { display: number; objects: number };
+    __layeredGestureTrace?: GestureTrace;
   }
 }
 
@@ -32,15 +35,20 @@ export default function LayeredEditorDom(_props: { dom?: import('expo/dom').DOMP
       : undefined
   );
   const diagnostics = params.get('diagnostics') === '1';
+  const [trace] = useState(() =>
+    diagnostics && params.get('traceGestures') === '1' ? createGestureTrace(controller) : undefined
+  );
   useEffect(() => {
     if (!diagnostics) return;
     window.__layeredEditor = controller;
     window.__layeredRenders = renders;
+    window.__layeredGestureTrace = trace;
     return () => {
       delete window.__layeredEditor;
       delete window.__layeredRenders;
+      delete window.__layeredGestureTrace;
     };
-  }, [controller, diagnostics, renders]);
+  }, [controller, diagnostics, renders, trace]);
   return (
     <div
       style={{
@@ -54,6 +62,7 @@ export default function LayeredEditorDom(_props: { dom?: import('expo/dom').DOMP
       <LayeredPaintingBoard
         controller={controller}
         inputPolicy={inputPolicy}
+        onGestureTrace={trace?.record}
         historyReadyDelayMs={
           diagnostics ? Math.min(1000, Math.max(0, Number(params.get('handoffDelay')) || 0)) : 0
         }
@@ -66,6 +75,7 @@ export default function LayeredEditorDom(_props: { dom?: import('expo/dom').DOMP
             : undefined
         }
       />
+      {trace ? <GestureTracePanel trace={trace} /> : null}
     </div>
   );
 }

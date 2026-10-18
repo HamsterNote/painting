@@ -12,6 +12,7 @@ import type { Point } from '../model/document';
 import { NavigationOverlay, VirtualPaper } from './NavigationOverlay';
 import { createNavigationWebAdapter } from './navigationWebAdapter';
 import type { DrawingSurfaceVirtualPaperOptions } from '../virtualPaperOptions';
+import { observeGestureEvents, type GestureTraceObserver } from '../input/web/gestureTrace';
 
 export type LayeredDrawingSurfaceProps = {
   controller: LayeredEditorController;
@@ -20,6 +21,7 @@ export type LayeredDrawingSurfaceProps = {
   onRender?: RenderObserver;
   historyReadyDelayMs?: number;
   virtualPaper?: boolean | DrawingSurfaceVirtualPaperOptions;
+  onGestureTrace?: GestureTraceObserver;
 };
 
 let nextSurface = 0;
@@ -32,6 +34,7 @@ export function LayeredDrawingSurface({
   onRender,
   historyReadyDelayMs,
   virtualPaper,
+  onGestureTrace,
 }: LayeredDrawingSurfaceProps) {
   const host = useRef<HTMLDivElement>(null);
   const [presentation, setPresentation] = useState<PresentationCoordinator>();
@@ -50,14 +53,18 @@ export function LayeredDrawingSurface({
     controller.setNavigation({ virtualPaper: { ...current, ...patch } });
   }, [controller, virtualPaper]);
   useEffect(() => {
-    const queue = new PresentationCoordinator(controller);
+    const stopTrace = onGestureTrace
+      ? observeGestureEvents(host.current!, onGestureTrace)
+      : undefined;
+    const queue = new PresentationCoordinator(controller, onGestureTrace);
     setPresentation(queue);
     const surfaceId = ++nextSurface;
     let sequence = 0;
     const navigation = createNavigationWebAdapter(
       host.current!,
       controller,
-      inputPolicy?.touch === 'draw'
+      inputPolicy?.touch === 'draw',
+      onGestureTrace
     );
     const policy = {
       mouse: 'draw',
@@ -69,6 +76,7 @@ export function LayeredDrawingSurface({
       host: host.current!,
       controller,
       policy,
+      onTrace: onGestureTrace,
       createSessionId: () => `surface-${surfaceId}-session-${++sequence}`,
       createCommitId: () => `surface-${surfaceId}-commit-${sequence}`,
       onResult: (notice) => {
@@ -89,6 +97,7 @@ export function LayeredDrawingSurface({
       onText: setTextPoint,
       onImage: openImage,
       onError: (error) => setToolError(String(error)),
+      onTrace: onGestureTrace,
     });
     retry.current = (commitId) => {
       const result = adapter.retryCommit(commitId);
@@ -99,8 +108,9 @@ export function LayeredDrawingSurface({
       semantic.destroy();
       adapter.destroy();
       queue.destroy();
+      stopTrace?.();
     };
-  }, [controller, inputPolicy, allocateId, openImage]);
+  }, [controller, inputPolicy, allocateId, openImage, onGestureTrace]);
   return (
     <div
       ref={host}

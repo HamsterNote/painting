@@ -3,6 +3,7 @@ import type {
   LayeredPresentationIdentity,
 } from '../core/layeredEditorController';
 import type { DocumentObject, FreehandObject } from '../model/document';
+import { traceGesture, type GestureTraceObserver } from '../input/web/gestureTrace';
 
 export interface HistoryPresentationNode {
   setVisible(visible: boolean): void;
@@ -35,7 +36,10 @@ export class PresentationCoordinator {
   private repaint: () => void = () => {};
   private readonly unsubscribe: () => void;
 
-  constructor(private readonly controller: LayeredEditorController) {
+  constructor(
+    private readonly controller: LayeredEditorController,
+    private readonly onTrace?: GestureTraceObserver
+  ) {
     this.objects = controller.getSnapshot('document').objects;
     this.unsubscribe = controller.subscribe('document', () => this.syncDocument());
   }
@@ -59,6 +63,12 @@ export class PresentationCoordinator {
         if (!result.ok) throw new Error(`Cannot prepare presentation: ${result.error.code}`);
         if (result.value) {
           this.pending.set(object.objectId, { object, identity: result.value, ready: false });
+          if (this.onTrace)
+            traceGesture(this.onTrace, {
+              scope: 'presentation',
+              action: 'pending',
+              ...result.value,
+            });
         }
       }
     }
@@ -122,6 +132,12 @@ export class PresentationCoordinator {
       if (!pending) continue;
       if (!pending.ready) break;
       this.pending.delete(object.objectId);
+      if (this.onTrace)
+        traceGesture(this.onTrace, {
+          scope: 'presentation',
+          action: 'visible',
+          ...pending.identity,
+        });
     }
     // Both operations run synchronously in one JS task before yielding to paint.
     this.updateVisibility();

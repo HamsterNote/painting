@@ -11,12 +11,14 @@ import {
 import { applyViewportTransformIntent } from '../core/viewportTransform';
 import type { Point } from '../model/document';
 import { createZoomFeedback } from './zoomFeedback';
+import { traceGesture, type GestureTraceObserver } from '../input/web/gestureTrace';
 
 /** Touch navigation owns a fixed pair; ignored contacts never become a deferred gesture. */
 export function createNavigationWebAdapter(
   host: HTMLElement,
   controller: LayeredEditorController,
-  touchDraw = false
+  touchDraw = false,
+  onTrace?: GestureTraceObserver
 ) {
   const view = host.ownerDocument.defaultView!;
   const zoomFeedback = createZoomFeedback(controller, view);
@@ -51,6 +53,14 @@ export function createNavigationWebAdapter(
       : undefined;
   };
   const consume = (event: PointerEvent) => {
+    if (onTrace)
+      traceGesture(onTrace, {
+        scope: 'navigation',
+        action: event.type,
+        reason: suppressed.has(event.pointerId) ? 'suppressed' : 'owned',
+        pointerId: event.pointerId,
+        source: event.pointerType,
+      });
     event.preventDefault();
     event.stopPropagation();
   };
@@ -207,6 +217,7 @@ export function createNavigationWebAdapter(
   }
   const ruler = createRulerGestureController({
     host,
+    onTrace,
     listenerTarget: host,
     getRulerState: () => {
       const state = controller.getSnapshot('navigation').ruler;
@@ -232,7 +243,14 @@ export function createNavigationWebAdapter(
       controller.setNavigation({
         ruler: { ...controller.getSnapshot('navigation').ruler, ...state },
       }),
-    onActiveChange: () => {},
+    onActiveChange: (active) => {
+      if (onTrace)
+        traceGesture(onTrace, {
+          scope: 'navigation',
+          action: 'ruler',
+          reason: active ? 'owned' : 'released',
+        });
+    },
     onRotationFeedback: (feedback) =>
       controller.setNavigation({
         rotationFeedback: feedback

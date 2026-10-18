@@ -3,6 +3,7 @@ import { createLayeredToolSession, type SelectionOperation } from '../core/layer
 import type { Point } from '../model/document';
 import type { WebFreehandPolicy } from '../input/web/freehandWebAdapter';
 import { createZoomFeedback } from './zoomFeedback';
+import { traceGesture, type GestureTraceObserver } from '../input/web/gestureTrace';
 
 /** Object identity is for ordinary hover/click only; captured trajectories use geometry. */
 export function resolveObjectId(target: EventTarget | null): string | null {
@@ -20,6 +21,7 @@ export function createSemanticWebAdapter(options: {
   onImage?: (point: Point) => void;
   onError: (error: unknown) => void;
   beforeGesture?: () => void;
+  onTrace?: GestureTraceObserver;
 }) {
   const { host, controller } = options;
   const view = host.ownerDocument.defaultView!;
@@ -86,6 +88,15 @@ export function createSemanticWebAdapter(options: {
       )
         return;
       owner = { id: event.pointerId, source: event.pointerType, start: point, pan: tool === 'pan' };
+      if (options.onTrace)
+        traceGesture(options.onTrace, {
+          scope: 'semantic',
+          action: 'begin',
+          reason: 'owned',
+          pointerId: owner.id,
+          source: owner.source,
+          tool,
+        });
       try {
         host.setPointerCapture(event.pointerId);
       } catch {
@@ -135,6 +146,13 @@ export function createSemanticWebAdapter(options: {
   }
   function release() {
     const current = owner;
+    if (current && options.onTrace)
+      traceGesture(options.onTrace, {
+        scope: 'semantic',
+        action: 'release',
+        pointerId: current.id,
+        source: current.source,
+      });
     owner = undefined;
     if (current)
       try {

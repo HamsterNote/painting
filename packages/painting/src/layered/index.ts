@@ -20,3 +20,5 @@ export type {
 export type * from '../model/document';
 export { IDENTITY_TRANSFORM, LAYERED_SCHEMA_VERSION, resolvePressureMode } from '../model/document';
 export { readLayeredDocument, serializeLayeredDocument } from '../model/documentReader';
+
+export type { GestureTraceEntry, GestureTraceObserver } from '../input/web/gestureTrace';

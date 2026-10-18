@@ -27,6 +27,7 @@ import type {
   FreehandSessionUpdate,
 } from '../../core/freehandSession';
 import type { PressureCapability } from '../../model/document';
+import { traceGesture, type GestureTraceObserver, type GestureTraceEntry } from './gestureTrace';
 
 /** 本 adapter 支持的指针来源；未知来源一律拒绝。 */
 export type WebFreehandSource = 'mouse' | 'touch' | 'pen';
@@ -54,6 +55,7 @@ export type CreateFreehandWebAdapterOptions = Readonly<{
     event: PointerEvent
   ) => PressureCapability;
   onResult?: (notice: FreehandWebAdapterNotice) => void;
+  onTrace?: GestureTraceObserver;
 }>;
 
 /** 适配器接口。 */
@@ -233,6 +235,29 @@ export function createFreehandWebAdapter(
   let settlingCallbacks = false;
   let lastActiveTool: LayeredEditorTool = controller.getSnapshot('tools').activeTool;
 
+  function trace(
+    action: string,
+    reason?: string,
+    event?: PointerEvent,
+    details: Partial<GestureTraceEntry> = {}
+  ) {
+    if (!options.onTrace) return;
+    traceGesture(options.onTrace, {
+      scope: 'freehand',
+      action,
+      reason,
+      pointerId: event?.pointerId,
+      source: event?.pointerType,
+      ownerPointerId: owner?.pointerId,
+      sessionId: owner?.sessionId,
+      commitId: owner?.commitId,
+      batchSequence: owner?.nextBatchSequence,
+      viewportRevision: owner?.viewportRevision,
+      tool: controller.getSnapshot('tools').activeTool,
+      ...details,
+    });
+  }
+
   /** callback barrier 触发的有界 drain：处理 callback 内 deferred 的 destroy/background。 */
   function settleDeferredFromCallbacks(): void {
     if (settlingCallbacks) {
@@ -286,6 +311,25 @@ export function createFreehandWebAdapter(
     commitId: string,
     result: LayeredEditorResult<void | FreehandCandidate | LayeredCommitReceipt>
   ): void {
+    trace(
+      phase,
+      result.ok ? 'accepted' : `${result.error.code}:${result.error.sessionCode ?? ''}`,
+      undefined,
+      {
+        sessionId,
+        commitId,
+        ok: result.ok,
+        ...(result.ok && result.value && 'samples' in result.value
+          ? { sampleCount: result.value.samples.length }
+          : {}),
+        ...(result.ok && result.value && 'objectId' in result.value
+          ? {
+              objectId: result.value.objectId,
+              documentRevision: result.value.documentRevision,
+            }
+          : {}),
+      }
+    );
     const notice: FreehandWebAdapterNotice = Object.freeze({ phase, sessionId, commitId, result });
     if (queuedNotices) {
       queuedNotices.push(notice);
@@ -428,6 +472,7 @@ export function createFreehandWebAdapter(
 
   /** 请求取消；operation 期间 deferred（destroy/unmount 优先）。 */
   function requestCancel(reason: LocalCancelReason): void {
+    trace('cancel-request', reason);
     if (operating) {
       if (reason === 'unmount' || deferredCancel === undefined) {
         deferredCancel = reason;
@@ -449,14 +494,17 @@ export function createFreehandWebAdapter(
     }
     lastActiveTool = snapshot.activeTool;
     if (snapshot.activeTool !== 'freehand') {
+      trace('discard', 'tool-change');
       clearOwnerAndRelease();
       deferredCancel = undefined;
     }
   }
 
   function handlePointerDown(event: PointerEvent): void {
+    trace('pointerdown', 'received', event);
     // 新数据门：destroy 请求 / 已有 owner / operation 中一律忽略。
     if (destroyed || destroyRequested || operating || owner) {
+      trace('ignore', owner ? 'owned' : 'unavailable', event);
       return;
     }
     // Ordered document nodes are also drawable; interactive overlays retain ownership.
@@ -464,17 +512,21 @@ export function createFreehandWebAdapter(
       event.target !== host &&
       !(event.target instanceof Element && event.target.closest('[data-object-id]'))
     ) {
+      trace('ignore', 'target', event);
       return;
     }
     if (isSafeControlTarget(event.target)) {
+      trace('ignore', 'control', event);
       return; // 安全控件仍 exclude。
     }
     // activeTool 必须在任何 ID/capability callback 之前检查。
     if (controller.getSnapshot('tools').activeTool !== 'freehand') {
+      trace('ignore', 'tool', event);
       return;
     }
     const source = resolveSource(event);
     if (!source || policy[source] !== 'draw') {
+      trace('ignore', 'source-policy', event);
       return;
     }
     if (source === 'mouse' && event.button !== 0) {
@@ -530,6 +582,7 @@ export function createFreehandWebAdapter(
     const origin = readOrigin();
     const downSample = toSample(origin, 0, event, 'down');
     if (!downSample) {
+      trace('reject', 'invalid-down-sample', event);
       return; // invalid xy/time/pressure 整 batch 拒绝，不计数。
     }
 
@@ -573,7 +626,7 @@ export function createFreehandWebAdapter(
       try {
         host.setPointerCapture?.(event.pointerId);
       } catch {
-        // 忽略 capture 失败。
+        trace('capture', 'failed-window-fallback', event);
       }
     }
     const stillOwned = result.ok && owner === provisional;
@@ -587,6 +640,7 @@ export function createFreehandWebAdapter(
   }
 
   function handlePointerMove(event: PointerEvent): void {
+    if (owner) trace('pointermove', 'received', event);
     if (destroyed || destroyRequested || operating) {
       return;
     }
@@ -595,12 +649,14 @@ export function createFreehandWebAdapter(
       return;
     }
     if (resolveSource(event) !== current.source) {
+      trace('ignore', 'source-mismatch', event);
       return; // source 锁定，不能被其它来源接管。
     }
 
     // 每 batch 读取一次 origin；coalesced 共享，不逐 entry layout read。
     const origin = readOrigin();
     const moveEvents = collectMoveEvents(event);
+    trace('batch', 'move-samples', event, { sampleCount: moveEvents.length });
     const samples: NonNullable<ReturnType<typeof toSample>>[] = [];
     let expectedSequence = current.nextSampleSequence;
     for (const moveEvent of moveEvents) {
@@ -610,10 +666,12 @@ export function createFreehandWebAdapter(
         moveEvent.pointerId !== current.pointerId ||
         resolveSource(moveEvent) !== current.source
       ) {
+        trace('reject', 'coalesced-identity-mismatch', event);
         return;
       }
       const sample = toSample(origin, expectedSequence, moveEvent, 'move');
       if (!sample) {
+        trace('reject', 'invalid-move-sample', event);
         return; // 整 batch 拒绝，不计数。
       }
       samples.push(sample);
@@ -654,6 +712,7 @@ export function createFreehandWebAdapter(
   }
 
   function handlePointerUp(event: PointerEvent): void {
+    trace('pointerup', 'received', event);
     if (destroyed || destroyRequested || operating) {
       return;
     }
@@ -668,6 +727,7 @@ export function createFreehandWebAdapter(
     const origin = readOrigin();
     const upSample = toSample(origin, current.nextSampleSequence, event, 'up');
     if (!upSample) {
+      trace('reject', 'invalid-up-sample', event);
       return; // invalid up 不丢 owner/计数，可重试或 cancel。
     }
 
@@ -718,10 +778,14 @@ export function createFreehandWebAdapter(
     if (!current || event.pointerId !== current.pointerId) {
       return;
     }
-    requestCancel('pointercancel'); // 终止不是 raw：仅校验 id。
+    // Capture routes events; it is not the stroke's lifetime. A live pointer can
+    // lose/transfer capture and still end normally outside the host. Window
+    // capture listeners retain the owner until up, cancel, blur or unmount.
+    trace('lostpointercapture', 'retained-window-owner', event);
   }
 
   function handleWindowPointerCancel(event: PointerEvent): void {
+    trace('pointercancel', 'received', event);
     if (destroyed) {
       return;
     }
@@ -779,7 +843,7 @@ export function createFreehandWebAdapter(
     teardownDone = true;
     host.removeEventListener('pointerdown', handlePointerDown);
     host.removeEventListener('lostpointercapture', handleLostPointerCapture);
-    view?.removeEventListener('pointermove', handlePointerMove);
+    view?.removeEventListener('pointermove', handlePointerMove, true);
     view?.removeEventListener('pointerup', handlePointerUp, true);
     view?.removeEventListener('pointercancel', handleWindowPointerCancel, true);
     view?.removeEventListener('blur', handleBackground);
@@ -862,6 +926,7 @@ export function createFreehandWebAdapter(
     if (destroyed || finalizingDestroy) {
       return;
     }
+    trace('discard', 'unmount');
     destroyRequested = true;
     if (operating) {
       deferredCancel = 'unmount';
@@ -872,7 +937,7 @@ export function createFreehandWebAdapter(
 
   host.addEventListener('pointerdown', handlePointerDown);
   host.addEventListener('lostpointercapture', handleLostPointerCapture);
-  view?.addEventListener('pointermove', handlePointerMove);
+  view?.addEventListener('pointermove', handlePointerMove, true);
   // Finish the accepted owner before descendant navigation/capture handlers run.
   view?.addEventListener('pointerup', handlePointerUp, true);
   view?.addEventListener('pointercancel', handleWindowPointerCancel, true);
