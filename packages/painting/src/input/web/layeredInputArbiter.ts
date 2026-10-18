@@ -27,6 +27,7 @@ export function createLayeredInputArbiter(options: {
   let state = createLayeredInputArbitration();
   let destroyed = false;
   let mode = controller.getSnapshot('input').mode;
+  let activeTool = controller.getSnapshot('tools').activeTool;
 
   function execute(intents: readonly LayeredInputIntent[]) {
     for (const intent of intents) {
@@ -122,7 +123,13 @@ export function createLayeredInputArbiter(options: {
       reset();
     }
   });
-  const stopTools = controller.subscribe('tools', reset);
+  const stopTools = controller.subscribe('tools', () => {
+    const next = controller.getSnapshot('tools').activeTool;
+    if (next !== activeTool) {
+      activeTool = next;
+      reset();
+    }
+  });
   host.addEventListener('pointerdown', pointer);
   view.addEventListener('pointermove', pointer, true);
   view.addEventListener('pointerup', pointer, true);

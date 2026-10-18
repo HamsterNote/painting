@@ -1,4 +1,6 @@
 import { makeLayeredController } from '../fixtures/layered';
+import { createEditor } from '../../layered/createEditor';
+import { writeInputModePreference } from '../../layered/inputModePreference';
 
 test('mode and latch belong to one controller, independently of tool, document and history', () => {
   const editor = makeLayeredController();
@@ -41,4 +43,17 @@ test('forced pen does not require detection and invalid mode is rejected', () =>
   });
   expect(editor.setInputMode('invalid' as 'auto').ok).toBe(false);
   expect(editor.getSnapshot('input').mode).toBe('pen');
+});
+
+test('Web factory and preference writes work in a Node host without a browser', () => {
+  expect(typeof window).toBe('undefined');
+  const editor = createEditor();
+  expect(editor.getSnapshot('input')).toEqual({
+    mode: 'auto',
+    penSeen: false,
+    effectiveTouch: 'draw',
+  });
+  editor.setInputMode('finger');
+  expect(() => writeInputModePreference('finger')).not.toThrow();
+  expect(editor.getSnapshot('input').mode).toBe('finger');
 });
