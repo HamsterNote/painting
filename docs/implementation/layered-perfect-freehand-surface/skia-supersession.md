@@ -2,7 +2,7 @@
 
 起点：PR #24 `a4b3c54`，本次 checkout 初始 tracked/untracked 工作树为空。
 `migrate-expo57-skia-surface` 的 38/46 是历史状态，不作为新实现验收证据。
-旧目录在新入口能力及删除条件满足前保留，不继续实施或勾选其任务。
+旧目录曾在新入口能力及删除条件满足前保留，之后按 6.5 退役；没有继续实施或勾选其未完成任务。
 
 | 旧任务              | 当前 change 对应任务      | 处理                                                                  |
 | ------------------- | ------------------------- | --------------------------------------------------------------------- |
@@ -27,3 +27,9 @@
 实跑 `openspec list --json` 仅列出 `layered-perfect-freehand-surface`；`openspec validate layered-perfect-freehand-surface --strict` exit 0。当前 proposal 的 supersedes、规范和历史说明仍有意提及旧名称；活动脚本已不读取旧目录，独立数学 spike 输出到 `artifacts/research/`。因此没有可执行路径或活动 change 断链。
 
 `73431a4` 退役批的完整 Chromium 49/49、独立 WebKit 49/49 已实跑通过；设备观察仍未执行，见人工清单。6.4 的源码、包清单、锁文件与产物检查已在 `retirement-verification.md` 记录，不重复实现。
+
+## 当前归档状态（2026-10-18）
+
+`layered-perfect-freehand-surface` 已归档至 `openspec/changes/archive/2026-10-18-layered-perfect-freehand-surface/`，五份 capability 已同步到 `openspec/specs/`。`migrate-expo57-skia-surface` 仍按 6.5 退役，未恢复、未伪造完成归档；上文旧路径与校验命令仅为删除前/当轮历史证据。
+
+当前 CI 使用 `pnpm dlx @fission-ai/openspec@1.13.1 validate --all --strict --no-interactive`，不再依赖已归档的活动 change 路径。源码、脚本、CI 没有读取这两个旧活动目录；文档中的历史备份路径与 supersedes 名称保留。设备预算和观察按修勾 2026-10-18 决策延后、未验证，详见 `manual-acceptance.md`；本轮完整命令结果见 `archive-verification.md`。

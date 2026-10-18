@@ -43,7 +43,7 @@ export function Board() {
 
 Web 使用 SVG + Canvas。Web/iOS/Android 三个平台 DrawingLayer 入口第一期均委托 Web；Expo native 应用通过 Expo DOM/WebView 承载整个编辑器，参考 `apps/playground/src/layered-editor/LayeredEditorDom.tsx` 和 `apps/playground/src/App.tsx`。宿主项目需要 Expo DOM 配置，不能把含 DOM 的 board 直接当作原生 View 使用。本期没有 native ink，也没有逐点 RN props bridge；未来 native adapter 只定义了语义契约，mock ACK 不证明跨桥或 physical paint 同步。
 
-Chromium 与独立 WebKit 自动化不等同 Safari/iOS 真机。系统 IME/软键盘、真笔四模式与掌触、高刷新率交接、iOS/Android 启动及长笔 CPU/内存/rAF 预算均待人工验收，详见 `docs/implementation/layered-perfect-freehand-surface/manual-acceptance.md`。
+Chromium 与独立 WebKit 自动化不等同 Safari/iOS 真机。系统 IME/软键盘、真笔四模式与掌触、高刷新率交接、iOS/Android 启动及长笔 CPU/内存/rAF 预算按修勾 2026-10-18 决定均为本期范围外/延后的未验证项，完整后续验收清单见 `docs/implementation/layered-perfect-freehand-surface/manual-acceptance.md`。
 
 ## 开发与验证
 

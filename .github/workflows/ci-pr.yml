@@ -50,8 +50,8 @@ jobs:
           pnpm test
           node --test scripts/perf/*.test.mjs
 
-      - name: Validate active OpenSpec change
-        run: pnpm dlx @fission-ai/openspec@1.13.1 validate layered-perfect-freehand-surface --strict
+      - name: Validate OpenSpec specs and active changes
+        run: pnpm dlx @fission-ai/openspec@1.13.1 validate --all --strict --no-interactive
 
       - name: Install Playwright Chromium and WebKit
         id: install-playwright

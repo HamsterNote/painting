@@ -1,6 +1,6 @@
 # 压力模式 begin 解析验证（Task 2.3 子项证据）
 
-- 变更：`openspec/changes/layered-perfect-freehand-surface`
+- 变更：`openspec/changes/archive/2026-10-18-layered-perfect-freehand-surface`
 - 任务：`tasks.md` 2.3 —— begin 时 auto 来源/能力解析及显式 real/simulated/constant 模式锁定
 - 验证对象：`packages/painting/src/model/document.ts` 的纯函数 `resolvePressureMode`
 - 新增测试：`packages/painting/src/__tests__/core/layered-pressure-mode.test.ts`

@@ -1,6 +1,6 @@
 # 自由笔几何 bug remediation（Task 2.4 / 2.5 子项证据）
 
-- 变更：`openspec/changes/layered-perfect-freehand-surface`
+- 变更：`openspec/changes/archive/2026-10-18-layered-perfect-freehand-surface`
 - 任务：`tasks.md` 2.4（raw→PF 派生）与 2.5（共享闭合路径）——**仅为两个 P0 bug 的局部修复证据**
 - 修复对象：
   - `packages/painting/src/geometry/freehand.ts`：`derivePressureSamples` 接触压力语义 + `StrokeOptions` 显式类型 + 删除未用 `PressureMode` import

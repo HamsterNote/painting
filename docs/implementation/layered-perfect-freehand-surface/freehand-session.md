@@ -1,6 +1,6 @@
 # 自由笔输入会话契约（Task 2.3 整笔锁定 + 4.2 / 4.3 纯会话基础）
 
-- 变更：`openspec/changes/layered-perfect-freehand-surface`
+- 变更：`openspec/changes/archive/2026-10-18-layered-perfect-freehand-surface`
 - 实现：`packages/painting/src/core/freehandSession.ts`（headless 状态机，无 DOM/React/Canvas/Skia/history/document 依赖，不创建文档对象或几何）
 - 契约来源：`packages/painting/src/model/document.ts`（`resolvePressureMode`、`AcceptedSample`、`BrushSnapshot`、`InputSource`、`PressureCapability`、`PressureMode`）与 `core/viewportTransform.ts`（`normalizeViewportTransform`）
 - 状态：纯会话基础实现已验证，Task 2.3 已验收；下述 DOM/controller 集成边界仍未完成。

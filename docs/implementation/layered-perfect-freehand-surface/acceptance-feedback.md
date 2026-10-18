@@ -1,5 +1,7 @@
 # 验收反馈修复与验证
 
+本文件保留归档前当轮验证历史；最终 8.1 设备复验结案、五项设备验收延后及归档后复核见 `archive-verification.md`。旧活动 change 的校验命令仅为历史证据，当前使用 `openspec validate --all --strict --no-interactive`。
+
 2026-10-18，基于 `9a7da6b` 修复四项验收缺陷。交互契约已写入当前 change 的 input/document specs 与任务 8.1–8.4；原五项设备人工验收不勾选、不缩小范围。
 
 ## 修复与回归对应

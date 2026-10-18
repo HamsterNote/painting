@@ -1,10 +1,10 @@
-# Spec Delta
+# document-object-interaction Specification
 
 ## Purpose
 
 明确分层改造后继续提供的文档编辑能力、工具配置隔离及几何命中行为，让文字输入、选择变换和整对象擦除在 DOM 与未来语义输入渠道下使用一致的对象模型。
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Preserve object editing and undo semantics
 
@@ -95,9 +95,14 @@ Web 普通 hover/click SHALL 支持从实际 DOM 目标定位对象；pointer ca
 
 ### Requirement: Virtual paper starts horizontally centered
 
-虚拟纸张首次显示时 SHALL 默认横向居中，使用唯一 controller viewport 的 `tx = (可绘制宽度 - 纸张世界宽度 × scale) / 2`，保持原 ty 和 scale。主图、活动层、历史层、小地图 viewport SHALL 同步使用此变换，不另加 CSS 平移。此初始化 SHALL 每个挂载的 controller/placement 只成功应用一次，后续 resize、平移缩放与纸张隐藏/重显不覆盖用户位置。显式 top-left 与完整 center 配置 SHALL 保留。
+虚拟纸张在进入页面后的首次呈现时 SHALL 默认横向居中，使用唯一 controller viewport 的 `tx = (可绘制宽度 - 794 × zoom) / 2`（默认纸张世界宽度 794，zoom 即 viewport scale），保持原 ty 和 scale。主图、活动层、历史层、小地图 viewport SHALL 同步使用此变换，不另加 CSS 平移。此初始化 SHALL 每个挂载的 controller/placement 只成功应用一次，后续 resize、平移缩放与纸张隐藏/重显不覆盖用户位置。显式 top-left 与完整 center 配置 SHALL 保留。
 
 #### Scenario: Zoom and narrow surfaces use the same initial placement
 
 - **WHEN** 用户在不同宽度和 zoom 下首次开启纸张
 - **THEN** 两侧间距相等（纸宽超过屏幕时允许负间距），ty 不变，小地图指示区域的 x 等于 `-tx / scale`，后续调整 viewport 不重新居中
+
+#### Scenario: Resize and visibility changes preserve the initialized viewport
+
+- **WHEN** 默认纸张首次在宽 1280、zoom=1 的可绘制区呈现，随后改变窗口尺寸、缩放或隐藏再显示纸张
+- **THEN** 初始 tx=243、ty 不变；后续仅执行相应 resize/导航/显示操作，不再次应用居中公式或重置当前 viewport
