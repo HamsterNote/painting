@@ -68,6 +68,13 @@
 - [x] 7.9 主编排完整审核 capability→实现→测试证据映射及用户决策保真，运行 `openspec validate layered-perfect-freehand-surface --strict` 并核对任务真实完成状态；交付删除清单、测试报告和未验证风险，不以规划 artifacts done 声称实现完成。（2026-10-18：复读五份 spec 共 19 条 requirement，逐项映射见 `capability-audit.md`；完整删除明细及 82/1065 测试数量变化见 `retirement-verification.md`，旧 change 八项义务/33 文件退出见 `skia-supersession.md`。`openspec validate layered-perfect-freehand-surface --strict` exit 0；3.3/6.1/7.5/7.6/7.8 的设备部分明确保留原 checkbox，移入人工验收。最终 CI/命令记录继续按实测更新，不以 artifact done 充当设备通过。）
 - [x] 7.10 承接被取代 change 11.4：更新 CI 覆盖分层 Web 交付/打包、iOS/Android Expo 静态导出及 native 最小挂载，移除 CanvasKit 专用门；验证配置已提交并记录实际 CI 结果，静态导出不冒充设备运行。（2026-10-18：`.github/workflows/ci-pr.yml` 固定 ubuntu-24.04 / Node 24.15.0，覆盖完整 Jest/native host、纯工具、strict、Chromium + 独立 WebKit、build/pack/无 Skia 产物检查、Android/iOS 静态导出。实际 `gh pr checks 24 --watch --interval 20` exit 0；`e9f4356` 的 [Test and Build](https://github.com/HamsterNote/painting/actions/runs/39053474621) 全步骤成功，用时 7m8s；CodeQL 三项也全部 PASS。没有 CanvasKit 专用门，未将静态导出描述为真机启动。覆盖关系见 `skia-supersession.md`；本记录后续仅证据文字提交会正常触发 CI 重跑，不冒称该新 SHA 已跑完。）
 
+## 8. Acceptance Regression Fixes
+
+- [x] 8.1 修复快速自由笔松手消失：任何速度的有效 pen up 均提交最终几何到历史，owner 的终止不被导航/尺子/捕获交接抢走；在真实分层入口用快/慢两档 pen 检查历史条目、最终可见性和 undo/redo，并记录实跑结果。（`pnpm test:ui tests/ui/acceptance-feedback.spec.ts --workers=1 --trace=off` 7/7 PASS，含快/慢两例；`pnpm test` 82/1065 PASS；修复子节点捕获转交误取消，真笔速度问题仍需原设备复验，边界见 `acceptance-feedback.md`。）
+- [x] 8.2 恢复贝塞尔三阶段交互：按下拖动松手确定直线两端，随后两次点击分别确定两个控制点；中间仅预览，最后形成一个事务，取消不写历史；补真实入口手势序列回归并记录实跑结果。（`pnpm test:ui tests/ui/acceptance-feedback.spec.ts --workers=1 --trace=off` 7/7 PASS，含精确端点/控制点、单次 undo/redo 与取消；`pnpm test` 82/1065 PASS；见 `acceptance-feedback.md`。）
+- [x] 8.3 恢复多边形逐点交互：每次点击追加一个顶点并连线，移动仅预览、双击闭合且不重复终点；完成前不写历史、完成后一次 undo/redo；补真实入口回归并记录实跑结果。（`pnpm test:ui tests/ui/acceptance-feedback.spec.ts --workers=1 --trace=off` 7/7 PASS，含拖动采样排除、带偏移双击、精确顶点/闭合 path 与取消；`pnpm test` 82/1065 PASS；见 `acceptance-feedback.md`。）
+- [x] 8.4 修复小地图背景：虚拟纸张关闭时纯白背景且不绘制纸张矩形，开启时与主画布一致；通过真实入口切换工具栏并断言渲染树/像素，记录实跑结果。五项设备人工验收保持不动。（`pnpm test:ui tests/ui/acceptance-feedback.spec.ts --workers=1 --trace=off` 7/7 PASS，实际 toolbar 切换后主纸张/地图纸张均退出、背景 CSS 纯白；`pnpm typecheck` / `pnpm lint` exit 0，lint 0 errors / 32 warnings；见 `acceptance-feedback.md`。）
+
 ## 本轮抢救与分批续做证据
 
 - 2026-10-18 首批 cutover：board 的公开组件与 playground App 调用方迁到分层入口；七份旧 UI 文件按保留行为迁移，补齐鼠标/双指缩放百分比浮层及过期 timer 归属。`pnpm exec jest --runInBand --testPathPattern 'layered-|painting-board/src/__tests__'` 24 suites / 343 tests PASS；七文件专项 `pnpm test:ui ... --workers=1 --trace=off` Chromium 17/17 PASS。完整命令和逐类迁移映射见 `cutover-regression-map.md`。尚未删除 Skia/旧目录，6.3 / 7.1 / 7.2 / 7.9 保持未完成。

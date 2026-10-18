@@ -208,7 +208,7 @@ export function NavigationOverlay({ controller }: { controller: LayeredEditorCon
             bottom: 12,
             width: 176,
             height: 126,
-            background: '#f3f4f6',
+            background: navigation.paper ? '#e5e7eb' : '#fff',
             border: '1px solid #9ca3af',
             borderRadius: 4,
             pointerEvents: 'auto',
@@ -275,7 +275,9 @@ export function NavigationOverlay({ controller }: { controller: LayeredEditorCon
             transform={`translate(${(176 - mapWidth * mapScale) / 2} ${(126 - mapHeight * mapScale) / 2}) scale(${mapScale}) translate(${-mapOrigin.x} ${-mapOrigin.y})`}
             pointerEvents="none"
           >
-            <rect x={0} y={0} width={794} height={1123} fill="#fff" />
+            {navigation.paper ? (
+              <rect data-minimap-paper="true" x={0} y={0} width={794} height={1123} fill="#fff" />
+            ) : null}
             {document.objects.map((object) => {
               const t = object.transform;
               return (

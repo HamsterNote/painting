@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 形状/图片/foreignObject 文字按文档顺序混排，保留 IME 编辑、选择/套索/变换、半径扫掠整对象擦除、undo/redo、尺子、virtual paper 与 minimap，统一由 headless controller 管理。
 - 独立 WebKit 回归、分层产物检查与移动端静态导出 CI。未新增 PNG/SVG 导出功能。
 
+### 验收反馈修复
+
+验收反馈修复：区分子节点向宿主转交 pen capture 与宿主真正丢失 capture，保护快速笔的有效 up 收尾；恢复贝塞尔「拖线 + 两次控制点点击」与多边形「逐点 + 双击闭合」；关闭纸张时小地图不再绘制纸张背景。新增真实分层入口的自动化回归，硬件快速书写仍需设备复验。
+
 ### 待人工验收
 
 - Safari/iOS WebView 混排、系统 IME/软键盘与真机启动；实际 pen 四压力模式、up=0、掌触、高刷新率交接；目标设备长笔 CPU/内存/rAF、历史 reconcile 与 WebView 预算。自动化 WebKit、合成事件和 Expo 静态导出不代表这些设备验证已完成。

@@ -34,6 +34,19 @@
 - `d913148` 删除旧 change 全部 33 文件，未归档、未把旧未完成项勾选。`skia-supersession.md` 记录八项未完成义务与 Git 恢复依据；proposal 的 supersedes 历史声明仍保留。
 - 历史文档中的 Skia 字样、基线日志与删除清单是可审计证据，不属于运行入口。没有删除无关 Expo/native 工程、平台无关数学或原手势回归。
 
+## 验收反馈增补
+
+原 19 条 requirement 之外，本轮新增 4 条明确的验收契约，共 23 条。它们是原有交互的缺陷修复，不新增产品范围；五项设备人工验收保持不变。
+
+| 新增 requirement                                            | 实现                                                                                             | 真实入口回归                                                                                                                 |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| Stroke completion is independent of input speed             | freehandWebAdapter 只响应宿主自身的 capture loss；有效 owner 的 up/cancel 在 window capture 收尾 | `acceptance-feedback.spec.ts` 的 fast/slow pen，跨旧墨迹、子节点捕获转交、最终历史可见与 undo/redo；合成输入，不伪装硬件复现 |
+| Bezier creation uses a line and two control placements      | layeredToolSession 保存端点/两个控制点阶段，semantic adapter 保留跨点击草稿                      | 同文件真实 mouse 拖线 + 两次点击，检查精确 `[A,B,C,D]`、完成前无历史与一次 undo/redo、Escape/工具切换取消                    |
+| Polygon creation places vertices and closes on double click | 只在 begin 接受点击顶点，移动为预览；使用浏览器 dblclick 确认，不以采样密度推断闭合              | 同文件多点点击、拖动采样排除、带微小偏移的双击去掉第二点击、精确顶点与闭合 path、取消与一次 undo/redo                        |
+| Minimap background follows virtual paper visibility         | NavigationOverlay 的背景/纸张矩形共用 navigation.paper                                           | 同文件实际工具栏切换，检查主纸张与地图纸张同步退出、背景 CSS 为纯白                                                          |
+
+以上用例属于既有 `tests/ui` 收集路径，也显式加入独立 WebKit 配置。初始在旧实现上 4 failed / 1 passed；没有通过调用内部 controller mutation 或 mock gesture engine 证明交互正确。完整实跑与设备复验限制见 `acceptance-feedback.md`。
+
 ## 验收边界
 
 3.3、6.1、7.5、7.6、7.8 的设备部分明确移入 `manual-acceptance.md`，原 checkbox 保持未完成。真实 Safari/iOS WebView、pen/掌触/高刷新交接与目标设备长笔性能预算尚无证据，不能由静态导出、Linux WebKit、宿主 rAF 或 mock ACK 补齐。其余开发验证以最终实际命令记录为准。

@@ -56,3 +56,12 @@
 
 - **WHEN** 使用模拟 adapter 测试发送 pan 意图或完成的笔迹批次
 - **THEN** 只有 Web 更新 viewport/最终文档，重复批次按 commitId 去重；无 native WebView transform 补偿或预测点进入文档
+
+### Requirement: Stroke completion is independent of input speed
+
+对已经取得归属的自由笔，系统 SHALL 接收其有效 pointerup 并提交最终几何与一个历史事务，不因快速/稀疏移动、同一帧结束或终止事件经过导航/尺子/virtual paper 而静默丢弃。捕获从子节点交到宿主的通知 MUST NOT 取消宿主拥有的笔；真正 pointercancel、失焦及卸载仍取消未完成笔，不把取消伪装成正常提交。
+
+#### Scenario: Fast and slow pen both survive release
+
+- **WHEN** 用户在真实分层入口分别快速和慢速绘制 pen 笔迹并松手，包括跨已有对象的快速轨迹
+- **THEN** 每笔按接受的 raw 与最终几何进入可见历史，undo/redo 每次只移除/恢复对应的一笔，viewport 不被竞争导航移动

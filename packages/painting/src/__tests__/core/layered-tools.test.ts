@@ -15,7 +15,11 @@ test.each(['line', 'rect', 'ellipse', 'polygon', 'bezier'] as const)(
       { x: 100, y: 80 },
       { x: 20, y: 100 },
     ]);
-    expect(controller.getSnapshot('preview').objects).toHaveLength(1);
+    expect(
+      tool === 'polygon'
+        ? controller.getSnapshot('preview').path.length
+        : controller.getSnapshot('preview').objects.length
+    ).toBeGreaterThan(0);
     expect(controller.getSnapshot('document').objects).toHaveLength(0);
     expect(controller.getSnapshot('history').canUndo).toBe(false);
     session.cancel();
@@ -27,6 +31,19 @@ test.each(['line', 'rect', 'ellipse', 'polygon', 'bezier'] as const)(
       { x: 20, y: 100 },
     ]);
     session.end();
+    expect(controller.getSnapshot('document').objects).toHaveLength(
+      tool === 'polygon' || tool === 'bezier' ? 0 : 1
+    );
+    if (tool === 'polygon' || tool === 'bezier') {
+      for (const point of [
+        { x: 80, y: 20 },
+        { x: 100, y: 80 },
+      ]) {
+        session.begin(point);
+        session.end();
+      }
+      if (tool === 'polygon') session.completePolygon();
+    }
     expect(controller.getSnapshot('document').objects).toHaveLength(1);
     controller.undo();
     expect(controller.getSnapshot('document').objects).toHaveLength(0);

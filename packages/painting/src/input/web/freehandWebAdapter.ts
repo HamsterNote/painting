@@ -709,7 +709,9 @@ export function createFreehandWebAdapter(
   }
 
   function handleLostPointerCapture(event: PointerEvent): void {
-    if (destroyed) {
+    // Implicit pen capture can move from a child path to our host. Its bubbling
+    // loss notification does not mean the host lost ownership of this stroke.
+    if (destroyed || event.target !== host) {
       return;
     }
     const current = owner;
@@ -778,8 +780,8 @@ export function createFreehandWebAdapter(
     host.removeEventListener('pointerdown', handlePointerDown);
     host.removeEventListener('lostpointercapture', handleLostPointerCapture);
     view?.removeEventListener('pointermove', handlePointerMove);
-    view?.removeEventListener('pointerup', handlePointerUp);
-    view?.removeEventListener('pointercancel', handleWindowPointerCancel);
+    view?.removeEventListener('pointerup', handlePointerUp, true);
+    view?.removeEventListener('pointercancel', handleWindowPointerCancel, true);
     view?.removeEventListener('blur', handleBackground);
     view?.removeEventListener('pagehide', handleBackground);
     doc?.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -871,8 +873,9 @@ export function createFreehandWebAdapter(
   host.addEventListener('pointerdown', handlePointerDown);
   host.addEventListener('lostpointercapture', handleLostPointerCapture);
   view?.addEventListener('pointermove', handlePointerMove);
-  view?.addEventListener('pointerup', handlePointerUp);
-  view?.addEventListener('pointercancel', handleWindowPointerCancel);
+  // Finish the accepted owner before descendant navigation/capture handlers run.
+  view?.addEventListener('pointerup', handlePointerUp, true);
+  view?.addEventListener('pointercancel', handleWindowPointerCancel, true);
   view?.addEventListener('blur', handleBackground);
   view?.addEventListener('pagehide', handleBackground);
   doc?.addEventListener('visibilitychange', handleVisibilityChange);

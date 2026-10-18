@@ -65,3 +65,30 @@ Web 普通 hover/click SHALL 支持从实际 DOM 目标定位对象；pointer ca
 
 - **WHEN** 用户在 Web 或 Expo WebView 中进入文字编辑，输入并完成或取消
 - **THEN** 真实 DOM 编辑器取得焦点并处理键盘，完成生成一次文档事务，取消不改写内容
+
+### Requirement: Bezier creation uses a line and two control placements
+
+贝塞尔工具 SHALL 首先以按下、拖动、松手确定起点和终点，预览为直线；随后两次点击依次指定第一、第二控制点。移动轨迹 MUST NOT 被当作控制点采样。最后一次确认前只有临时预览，完成后存储 `[起点, 控制点1, 控制点2, 终点]` 并形成一个可逆事务；Escape、pointercancel、失焦、卸载或切换工具取消整个未完成草稿。
+
+#### Scenario: Drag endpoints then place both controls
+
+- **WHEN** 用户拖出 A 到 D 的直线并松手，随后点击 B 和 C
+- **THEN** 第一次松手及第一次点击不新增历史，第二次点击完成一个 points 为 `[A,B,C,D]` 的贝塞尔，撤销/重做为一次操作
+
+### Requirement: Polygon creation places vertices and closes on double click
+
+多边形工具 SHALL 按逐次点击追加顶点并连线，指针移动仅更新下一段预览，不将拖动轨迹写为顶点；至少三个顶点后双击闭合。双击确认 MUST NOT 重复追加相同终点，完成前不写历史，完成为一个可逆事务；取消整个草稿不留对象。
+
+#### Scenario: Click vertices then double click to close
+
+- **WHEN** 用户依次点击多个顶点，在最后一个顶点双击
+- **THEN** 历史中出现一个闭合多边形，只包含点击确认的不同连续顶点，无移动采样点或重复终点，undo/redo 一次移除/恢复整个对象
+
+### Requirement: Minimap background follows virtual paper visibility
+
+小地图 SHALL 与主编辑器的虚拟纸张显示状态一致；关闭纸张时背景为纯白且不渲染纸张矩形，开启时才显示纸张及其周围底色。背景开关 MUST NOT 隐藏文档对象或另建 viewport 状态。
+
+#### Scenario: Turning paper off removes it from the minimap
+
+- **WHEN** 用户通过真实工具栏开启、再关闭虚拟纸张
+- **THEN** 主画布和小地图同步显示/移除纸张，关闭后小地图空白区域为纯白，文档对象与历史不变

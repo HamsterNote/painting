@@ -37,6 +37,8 @@ export function Board() {
 
 形状、文字、图片、选择/套索、变换、整对象擦除、undo/redo、尺子、virtual paper 和 minimap 共用同一文档与 viewport。没有增加 PNG/SVG 导出功能。
 
+贝塞尔先按下拖动松手确定直线两端，再点击两次确定两个控制点；多边形逐次点击顶点，最后双击闭合。完成前只有临时预览，Escape 或切换工具可取消，完成后仅形成一次撤销事务。关闭虚拟纸张时，主画布和小地图都使用纯白背景。
+
 ## 平台边界
 
 Web 使用 SVG + Canvas。Web/iOS/Android 三个平台 DrawingLayer 入口第一期均委托 Web；Expo native 应用通过 Expo DOM/WebView 承载整个编辑器，参考 `apps/playground/src/layered-editor/LayeredEditorDom.tsx` 和 `apps/playground/src/App.tsx`。宿主项目需要 Expo DOM 配置，不能把含 DOM 的 board 直接当作原生 View 使用。本期没有 native ink，也没有逐点 RN props bridge；未来 native adapter 只定义了语义契约，mock ACK 不证明跨桥或 physical paint 同步。

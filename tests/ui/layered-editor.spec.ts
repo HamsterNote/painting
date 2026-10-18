@@ -294,7 +294,11 @@ for (const [tool, kind] of [
     await pointer(page, 'down', 100, 100);
     await pointer(page, 'move', 200, 100);
     await pointer(page, 'move', 200, 200);
-    await expect(page.locator('[data-object-id="preview-shape"]')).toBeVisible();
+    await expect(
+      kind === 'polygon'
+        ? page.getByTestId('layered-display').locator('polyline')
+        : page.locator('[data-object-id="preview-shape"]')
+    ).toBeVisible();
     await page
       .getByTestId('layered-surface')
       .dispatchEvent('pointercancel', { pointerId: 41, pointerType: 'pen' });
@@ -304,6 +308,19 @@ for (const [tool, kind] of [
     await pointer(page, 'move', 200, 100);
     await pointer(page, 'move', 200, 200);
     await pointer(page, 'up', 100, 200);
+    expect(
+      await page.evaluate(() => window.__layeredEditor!.getSnapshot('document').objects)
+    ).toHaveLength(kind === 'polygon' || kind === 'bezier' ? 0 : 1);
+    if (kind === 'polygon' || kind === 'bezier') {
+      for (const [x, y] of [
+        [200, 100],
+        [200, 200],
+      ]) {
+        await pointer(page, 'down', x, y);
+        await pointer(page, 'up', x, y);
+      }
+      if (kind === 'polygon') await page.getByTestId('layered-surface').dispatchEvent('dblclick');
+    }
     expect(
       await page.evaluate(() => window.__layeredEditor!.getSnapshot('document').objects.at(-1))
     ).toMatchObject({ kind: 'shape', shapeType: kind });
