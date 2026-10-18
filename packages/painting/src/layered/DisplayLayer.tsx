@@ -74,6 +74,9 @@ export const ObjectNode = memo(function ObjectNode({
               color: object.color,
               fontFamily: 'sans-serif',
               lineHeight: 1.25,
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+              WebkitTouchCallout: 'none',
             }}
           >
             {object.content}
