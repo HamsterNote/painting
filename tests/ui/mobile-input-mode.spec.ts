@@ -458,6 +458,67 @@ for (const mode of ['auto', 'finger']) {
   }
 }
 
+for (const mode of ['auto', 'finger']) {
+  test(`down-role-ownership: ${mode} captured resize handle excludes a paper second finger`, async ({
+    page,
+  }) => {
+    await openLayeredEditor(page);
+    await page.getByLabel('输入模式').selectOption(mode);
+    await page.getByRole('button', { name: '矩形', exact: true }).click();
+    await pointer(page, 'down', { x: 100, y: 100 }, { source: 'mouse', id: 1 });
+    await pointer(page, 'move', { x: 200, y: 200 }, { source: 'mouse', id: 1 });
+    await pointer(page, 'up', { x: 200, y: 200 }, { source: 'mouse', id: 1 });
+    await page.getByRole('button', { name: '选择', exact: true }).click();
+    await page.evaluate(() => {
+      const editor = window.__layeredEditor!;
+      editor.setSelection([editor.getSnapshot('document').objects[0].objectId]);
+    });
+    const initial = await layeredState(page);
+    const handle = page.locator('[data-selection-operation="resize"]');
+    await expect(handle).toBeVisible();
+    const box = (await handle.boundingBox())!;
+    const surface = (await page.getByTestId('layered-surface').boundingBox())!;
+    const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const moved = { x: start.x - surface.x + 50, y: start.y - surface.y + 50 };
+    // Hit the real handle on down, then deliver captured events to its host.
+    await handle.dispatchEvent('pointerdown', {
+      pointerId: -101,
+      pointerType: 'touch',
+      clientX: start.x,
+      clientY: start.y,
+      button: 0,
+      buttons: 1,
+      pressure: 0.5,
+    });
+    await pointer(page, 'move', moved, { source: 'touch', id: -101 });
+    const preview = (await layeredState(page)).preview;
+    expect(preview.objects).toHaveLength(1);
+    expect(preview.objects[0].transform).not.toEqual(initial.document.objects[0].transform);
+    await pointer(page, 'down', { x: 360, y: 240 }, { source: 'touch', id: -102 });
+    await pointer(page, 'move', { x: 460, y: 300 }, { source: 'touch', id: -102 });
+    const during = await layeredState(page);
+    expect(during.preview).toEqual(preview);
+    expect(during.document).toEqual(initial.document);
+    expect(during.history).toEqual(initial.history);
+    expect(during.viewport).toEqual(initial.viewport);
+    await pointer(page, 'up', moved, { source: 'touch', id: -101 });
+    const committed = await layeredState(page);
+    expect(committed.document.objects).toEqual(preview.objects);
+    expect(committed.document.documentRevision).toBe(initial.document.documentRevision + 1);
+    await pointer(page, 'up', { x: 460, y: 300 }, { source: 'touch', id: -102 });
+    const after = await layeredState(page);
+    expect(after.document).toEqual(committed.document);
+    expect(after.history).toEqual(committed.history);
+    expect(after.selection).toEqual(initial.selection);
+    expect(after.viewport).toEqual(initial.viewport);
+    await page.getByRole('button', { name: '撤销', exact: true }).click();
+    expect((await layeredState(page)).document.objects).toEqual(initial.document.objects);
+    await page.getByRole('button', { name: '重做', exact: true }).click();
+    expect((await layeredState(page)).document.objects).toEqual(committed.document.objects);
+    await expect(page.getByRole('button', { name: '重做', exact: true })).toBeDisabled();
+  });
+}
+
 for (const interruption of ['mode', 'blur', 'hidden'] as const) {
   for (const [label, tool] of [
     ['贝塞尔', 'bezier'],

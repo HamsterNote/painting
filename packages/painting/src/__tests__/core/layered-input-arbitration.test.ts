@@ -169,9 +169,31 @@ test('controls and ruler do not mix with paper; selection handles retain their o
   expect(h.state().ownership.active.some((p) => p.pointerId === 11)).toBe(false);
   h.dispatch(pointer(1, 'up'));
   h.dispatch(pointer(2, 'down', 'touch', 'selection'));
+  h.dispatch(pointer(2, 'move', 'touch', 'paper'));
+  expect(h.state().contacts[0].targetRole).toBe('selection');
   expect(h.dispatch(pointer(3))).toEqual([]);
   expect(h.state().gesture?.ids).toEqual([2]);
+  expect(h.dispatch(pointer(2, 'up'))).toEqual([
+    { type: 'route', target: 'tool', input: pointer(2, 'up') },
+  ]);
 });
+
+test.each(['selection', 'ruler', 'safe-control'] as const)(
+  'paper contact crossing %s retains its down role and still forms a paper pair',
+  (role) => {
+    const h = harness();
+    h.dispatch(pointer(1));
+    h.dispatch(pointer(1, 'move', 'touch', role));
+    expect(h.state().contacts[0]).toEqual(pointer(1, 'move'));
+    expect(h.dispatch(pointer(2))).toEqual([{ type: 'cancel', target: 'tool' }]);
+    expect(h.ack(true)).toEqual([
+      { type: 'begin-navigation', pointers: [pointer(1, 'move'), pointer(2)] },
+    ]);
+    expect(h.dispatch(pointer(2, 'move'))).toEqual([
+      { type: 'route', target: 'navigation', input: pointer(2, 'move') },
+    ]);
+  }
+);
 
 test('policy reset cancels business transactions and isolates old contacts without replay', () => {
   const h = harness();

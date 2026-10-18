@@ -159,9 +159,10 @@ export function reduceLayeredInputArbitration(
   if (!existing) return { state: { ...state, ownership }, intents };
   if (existing.device !== input.device) return { state, intents };
   const ended = input.phase === 'up' || input.phase === 'cancel';
+  // Capture and hit-target changes must not replace the role claimed on down.
   const contacts = ended
     ? state.contacts.filter((p) => p.pointerId !== id)
-    : state.contacts.map((p) => (p.pointerId === id ? input : p));
+    : state.contacts.map((p) => (p.pointerId === id ? { ...input, targetRole: p.targetRole } : p));
   const next = { ...state, ownership, contacts };
   if (state.suppressed.includes(id)) {
     return {
