@@ -6,6 +6,7 @@ import { LayeredPaintingBoard } from '@hamster-note/painting-board';
 import { mixedFixture, resourceFixture } from './mixedFixture';
 import { createGestureTrace, type GestureTrace } from './gestureTrace';
 import { GestureTracePanel } from './GestureTracePanel';
+import { InputDeviceDiagnostics } from './InputDeviceDiagnostics';
 
 declare global {
   interface Window {
@@ -71,6 +72,7 @@ export default function LayeredEditorDom(_props: { dom?: import('expo/dom').DOMP
             : undefined
         }
       />
+      {diagnostics ? <InputDeviceDiagnostics /> : null}
       {trace ? <GestureTracePanel trace={trace} /> : null}
     </div>
   );

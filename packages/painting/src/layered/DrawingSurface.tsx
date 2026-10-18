@@ -133,11 +133,14 @@ export function LayeredDrawingSurface({
       targetRole: navigation.targetRole,
       onDiagnostic: setToolError,
     });
+    const surface = host.current!;
+    surface.dataset.inputArbiter = 'ready';
     retry.current = (commitId) => {
       const result = adapter.retryCommit(commitId);
       setFailure(result.ok ? undefined : { commitId, message: result.error.code });
     };
     return () => {
+      delete surface.dataset.inputArbiter;
       arbiter?.destroy();
       navigation.destroy();
       semantic.destroy();
