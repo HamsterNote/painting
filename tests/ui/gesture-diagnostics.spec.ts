@@ -41,6 +41,23 @@ test('capture release preserves the owner through outside move/up, even when the
     trace.entries.some((entry) => entry.action === 'lostpointercapture' && entry.trusted)
   ).toBe(true);
   expect(trace.state.objectCount).toBe(1);
+  expect(trace.entries).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        scope: 'freehand',
+        action: 'pointerup',
+        ownerPointerId: trace.entries.find(
+          (entry) => entry.scope === 'event' && entry.action === 'pointerdown'
+        )!.pointerId,
+        operating: false,
+        destroyed: false,
+        destroyRequested: false,
+        pendingCount: 0,
+        sampleCount: 3,
+        lastSample: expect.objectContaining({ phase: 'move' }),
+      }),
+    ])
+  );
   expect(
     trace.entries.some(
       (entry) => entry.scope === 'freehand' && entry.action === 'commit' && entry.ok
@@ -91,9 +108,15 @@ test('trace exports bounded ordered records, cancellation reason and coalesced a
       value: () => [make('pointermove', 180), make('pointermove', 200)],
     });
     host.dispatchEvent(coalesced);
+    const invalid = make('pointermove', 210);
+    Object.defineProperty(invalid, 'getCoalescedEvents', {
+      value: () => [make('pointermove', 210, 99)],
+    });
+    host.dispatchEvent(invalid);
     host.dispatchEvent(make('pointercancel', 200));
     host.dispatchEvent(make('pointerup', 200));
     host.dispatchEvent(make('pointerdown', 110, 42));
+    host.dispatchEvent(make('pointerrawupdate', 180, 42));
     host.dispatchEvent(make('pointerup', 210, 42));
   });
   await expect(page.getByTestId('layered-display').locator('[data-object-id]')).toHaveCSS(
@@ -118,9 +141,30 @@ test('trace exports bounded ordered records, cancellation reason and coalesced a
         ownerPointerId: 41,
       }),
       expect.objectContaining({ scope: 'presentation', action: 'visible' }),
+      expect.objectContaining({ scope: 'event', action: 'pointerrawupdate', pointerId: 42 }),
+      expect.objectContaining({
+        scope: 'freehand',
+        action: 'reject',
+        reason: 'coalesced-identity-mismatch',
+        samplePointerId: 99,
+      }),
+      expect.objectContaining({
+        scope: 'freehand',
+        action: 'pointerup',
+        pointerId: 42,
+        sampleCount: 1,
+      }),
     ])
   );
   expect(trace.state).not.toHaveProperty('document');
+  await page.evaluate(() =>
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+  );
+  await page.getByRole('button', { name: '复制记录', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('长按全选');
+  expect(
+    JSON.parse(await page.getByLabel('手势记录', { exact: true }).inputValue()).state.objectCount
+  ).toBe(1);
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: '下载记录', exact: true }).click();
   expect((await download).suggestedFilename()).toBe('painting-gesture-trace.json');

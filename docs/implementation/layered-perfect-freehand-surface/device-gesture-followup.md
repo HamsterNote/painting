@@ -1,6 +1,6 @@
 # 快速丢笔的设备诊断与纸张定位
 
-本轮基于 `2fb15e9`，单人沿 PR #24 分支推进。用户原设备尚未给出 trace，任务 8.1 重新打开；下述捕获释放漏洞有浏览器证据，但不能宣称就是原设备快速丢笔的根因。原五项人工验收不变。
+本轮基于 `2fb15e9`，单人沿 PR #24 分支推进。用户补充原设备为 **macOS + Edge + 鼠标**，已将调查重点转回桌面输入；触摸只是浏览器取消路径的对照，未据此归因。原设备尚未给出 trace，任务 8.1 重新打开；下述捕获释放漏洞有浏览器证据，但不能宣称就是原设备快速丢笔的根因。原五项人工验收不变。
 
 ## 已证实的捕获释放漏洞
 
@@ -34,7 +34,7 @@ Chromium CDP touch（trusted 浏览器输入，非物理设备）在移动 viewp
 
 打开 `/layered-editor?diagnostics=1&traceGestures=1`，保持原来的工具/输入源复现；若本来用手指绘制，沿用原来的 `&touchDraw=1`。复现后展开页面底部「手势诊断（记录中）」，点击「复制记录」或「下载记录」。HTTP LAN 无 Clipboard API 时，「查看记录」提供可全选的文本框，不要求 DevTools。
 
-JSON 包含设备/浏览器环境、当前 viewport、工具/导航设置、最近 2048 条事件及累计计数/丢弃数量；有 pointer id/source/trusted、owner/session/commit、coalesced batch 数、拒绝/取消原因和 pending/visible 呈现记录。仅保留元数据与事件坐标，不包含文档文字、图片或原始文档。逐点仅写固定环形缓冲，不 setState 或复制整笔；界面在用户导出时更新。不开两个开关时不创建记录器/事件观察器/面板。
+JSON 包含设备/浏览器环境、当前 viewport、工具/导航设置、最近 2048 条事件及累计计数/丢弃数量；有 pointer id/source/trusted、owner/session/commit、coalesced 数量/接受批次、timeStamp、movementX/Y、pointerrawupdate、拒绝/取消原因和 pending/visible 呈现记录。up 时另记 operating/destroyed/destroyRequested、最后已接受世界坐标样本与 pending candidate 数；adapter 同步消费 move，不存在待刷新的 lastPoint 队列。rawupdate 只观察，不加入文档采样。仅保留元数据与事件坐标，不包含文档文字、图片或原始文档。逐点仅写固定环形缓冲，不 setState 或复制整笔；界面在用户导出时更新。不开两个开关时不创建记录器/事件观察器/面板。
 
 排查顺序：同一 session 的 begin → update/reject → up/cancel → end → commit → presentation visible。up 已到但无 owner、source 不匹配、coalesced identity 不符、commit 错误与已提交未交接可据此区分。取消请求记录明确原因；真正的 native capture 事件不伪装成 cancel。
 
@@ -45,3 +45,9 @@ JSON 包含设备/浏览器环境、当前 viewport、工具/导航设置、最�
 - `pnpm exec jest --runInBand --testPathPattern 'freehandWebAdapter|layered-navigation|rulerGestureController'`：3 suites / 81 tests PASS。
 
 后续完整验证结果在本文件继续记录。任务 8.1 要等原设备证据；不将这次路径修复当作原问题已验收。
+
+## 纸张初始横向居中
+
+默认新增 `top-center`，纸张首次显示且布局宽度可用时写入 controller viewport 的 tx；保持 ty 与 scale。显式 `top-left`、完整 `center` 仍可使用。初始化按 controller/placement 记一次，隐藏/重显、窗口 resize 和后续手动导航不重置。1280 宽、zoom=1 的左边距为 243 px；纸张比屏幕宽时允许负边距，仍保持几何中心一致。
+
+回归覆盖宽度 1280 / 390、zoom=1 / 非单位缩放、已有纵向平移、输入 screen→world 转换、主 SVG/纸张 matrix 与小地图 indicator 一致、隐藏重显和 resize 后导航不被覆盖。纸张单测在修复前 3 failed / 2 passed，修复后完整 `pnpm test` 为 82 suites / 1070 tests PASS（追加测试时曾误嵌套两个 test，修正后全量复跑通过）。纸张与分层入口 Chromium 专项 27/27 PASS。

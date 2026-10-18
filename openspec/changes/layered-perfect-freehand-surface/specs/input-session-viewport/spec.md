@@ -73,7 +73,7 @@
 
 ### Requirement: Device gesture diagnostics are bounded and exportable
 
-示例 SHALL 仅在 `diagnostics=1&traceGestures=1` 时记录最近 2048 条手势事件和累计计数。记录 SHALL 包含事件时间、pointer id/source、owner/session/commit 归属、批次样本数、拒绝与取消原因、提交结果及历史呈现交接；保留 trusted 标志以区分合成输入。诊断 MUST NOT 保存文档文字/图片内容或逐点更新 React 状态。用户 SHALL 能在原设备查看、复制或下载 JSON，包括无 Clipboard API 的 HTTP LAN 环境。
+示例 SHALL 仅在 `diagnostics=1&traceGestures=1` 时记录最近 2048 条手势事件和累计计数。记录 SHALL 包含事件时间、pointer id/source、owner/session/commit 归属、movementX/Y、pointerrawupdate、up 时 operation/销毁状态与最后已接受样本、coalesced 数量与批次样本数、拒绝与取消原因、提交结果及历史呈现交接；保留 trusted 标志以区分合成输入。诊断 MUST NOT 保存文档文字/图片内容或逐点更新 React 状态。用户 SHALL 能在原设备查看、复制或下载 JSON，包括无 Clipboard API 的 HTTP LAN 环境。
 
 #### Scenario: A device trace distinguishes cancellation from lost presentation
 

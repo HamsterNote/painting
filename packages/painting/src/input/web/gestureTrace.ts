@@ -17,6 +17,15 @@ export type GestureTraceEntry = Readonly<{
   pressure?: number;
   x?: number;
   y?: number;
+  movementX?: number;
+  movementY?: number;
+  coalescedCount?: number;
+  samplePointerId?: number;
+  sampleSource?: string;
+  operating?: boolean;
+  destroyed?: boolean;
+  destroyRequested?: boolean;
+  lastSample?: Readonly<{ x: number; y: number; time: number; phase: string }>;
   captured?: boolean;
   defaultPrevented?: boolean;
   cancelable?: boolean;
@@ -46,16 +55,25 @@ export function observeGestureEvents(host: HTMLElement, observer: GestureTraceOb
   const events = [
     'pointerdown',
     'pointermove',
+    'pointerrawupdate',
     'pointerup',
     'pointercancel',
     'gotpointercapture',
     'lostpointercapture',
   ] as const;
-  const record = (event: PointerEvent) => {
+  const record: EventListener = (input) => {
+    // DOM typings still expose pointerrawupdate as Event in some TS versions.
+    const event = input as PointerEvent;
     const target = event.target instanceof Element ? event.target : undefined;
     if (event.type === 'pointerdown' && target && host.contains(target))
       pointers.add(event.pointerId);
     if (!pointers.has(event.pointerId)) return;
+    let coalescedCount: number | undefined;
+    try {
+      coalescedCount = event.getCoalescedEvents?.().length;
+    } catch {
+      // Older browsers may expose an unsupported getter.
+    }
     traceGesture(observer, {
       scope: 'event',
       action: event.type,
@@ -67,6 +85,9 @@ export function observeGestureEvents(host: HTMLElement, observer: GestureTraceOb
       pressure: event.pressure,
       x: event.clientX,
       y: event.clientY,
+      movementX: event.movementX,
+      movementY: event.movementY,
+      coalescedCount,
       captured: host.hasPointerCapture?.(event.pointerId) ?? false,
       defaultPrevented: event.defaultPrevented,
       cancelable: event.cancelable,

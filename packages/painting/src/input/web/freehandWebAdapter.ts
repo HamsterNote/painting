@@ -253,6 +253,9 @@ export function createFreehandWebAdapter(
       commitId: owner?.commitId,
       batchSequence: owner?.nextBatchSequence,
       viewportRevision: owner?.viewportRevision,
+      operating,
+      destroyed,
+      destroyRequested,
       tool: controller.getSnapshot('tools').activeTool,
       ...details,
     });
@@ -666,7 +669,10 @@ export function createFreehandWebAdapter(
         moveEvent.pointerId !== current.pointerId ||
         resolveSource(moveEvent) !== current.source
       ) {
-        trace('reject', 'coalesced-identity-mismatch', event);
+        trace('reject', 'coalesced-identity-mismatch', event, {
+          samplePointerId: moveEvent.pointerId,
+          sampleSource: moveEvent.pointerType,
+        });
         return;
       }
       const sample = toSample(origin, expectedSequence, moveEvent, 'move');
@@ -712,15 +718,28 @@ export function createFreehandWebAdapter(
   }
 
   function handlePointerUp(event: PointerEvent): void {
-    trace('pointerup', 'received', event);
+    if (options.onTrace) {
+      const interaction = controller.getSnapshot('interaction');
+      const active = interaction.activeFreehand;
+      const last =
+        active?.status === 'collecting' ? active.samples[active.samples.length - 1] : undefined;
+      trace('pointerup', 'received', event, {
+        sampleCount: active?.status === 'collecting' ? active.samples.length : 0,
+        pendingCount: interaction.pendingCandidates.length,
+        lastSample: last ? { x: last.x, y: last.y, time: last.time, phase: last.phase } : undefined,
+      });
+    }
     if (destroyed || destroyRequested || operating) {
+      trace('ignore', 'unavailable', event);
       return;
     }
     const current = owner;
     if (!current || event.pointerId !== current.pointerId) {
+      trace('ignore', current ? 'pointer-mismatch' : 'no-owner', event);
       return;
     }
     if (resolveSource(event) !== current.source) {
+      trace('ignore', 'source-mismatch', event);
       return;
     }
 
