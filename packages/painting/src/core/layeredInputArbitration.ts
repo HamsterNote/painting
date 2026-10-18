@@ -12,9 +12,10 @@ export type LayeredInputGesture = Readonly<{
   ids: readonly (string | number)[];
 }>;
 type Target = 'tool' | 'navigation';
+export type LayeredInputResetReason = 'policy' | 'lifecycle';
 export type LayeredInputIntent =
   | { type: 'detect-pen' }
-  | { type: 'cancel'; target: Target }
+  | { type: 'cancel'; target: Target; reason?: LayeredInputResetReason }
   | { type: 'route'; target: Target; input: Pointer }
   | { type: 'begin-navigation'; pointers: readonly Pointer[] };
 export type LayeredInputArbitration = Readonly<{
@@ -28,7 +29,7 @@ export type LayeredInputArbitration = Readonly<{
 export type LayeredInputArbitrationEvent =
   | { type: 'pointer'; input: Pointer; policy: LayeredInputSnapshot; panTool: boolean }
   | { type: 'cancel-result'; ok: boolean }
-  | { type: 'reset' };
+  | { type: 'reset'; reason?: LayeredInputResetReason };
 
 export function createLayeredInputArbitration(): LayeredInputArbitration {
   return {
@@ -50,15 +51,23 @@ export function reduceLayeredInputArbitration(
 ): { state: LayeredInputArbitration; intents: readonly LayeredInputIntent[] } {
   const intents: LayeredInputIntent[] = [];
   if (event.type === 'reset') {
-    if (state.gesture) intents.push({ type: 'cancel', target: target(state.gesture) });
+    const reason = event.reason ?? 'policy';
+    // Business transactions (staged shapes and the ruler) can outlive a pointer gesture.
+    intents.push(
+      { type: 'cancel', target: 'tool', reason },
+      { type: 'cancel', target: 'navigation', reason }
+    );
     return {
-      state: {
-        ...state,
-        gesture: undefined,
-        pending: undefined,
-        draining: false,
-        suppressed: state.contacts.map((p) => p.pointerId),
-      },
+      state:
+        reason === 'lifecycle'
+          ? createLayeredInputArbitration()
+          : {
+              ...state,
+              gesture: undefined,
+              pending: undefined,
+              draining: false,
+              suppressed: state.contacts.map((p) => p.pointerId),
+            },
       intents,
     };
   }

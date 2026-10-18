@@ -429,6 +429,8 @@ for (const mode of ['auto', 'finger']) {
     ['套索', 'lasso'],
     ['橡皮擦', 'eraser'],
     ['选择', 'selection'],
+    ['贝塞尔', 'bezier'],
+    ['多边形', 'polygon'],
   ] as const) {
     test(`adapter-matrix: ${mode} ${tool} touch preview cancels before pair navigation`, async ({
       page,
@@ -454,6 +456,105 @@ for (const mode of ['auto', 'finger']) {
       expect(after.viewport.viewport.scale).toBeGreaterThan(initial.viewport.viewport.scale);
     });
   }
+}
+
+for (const interruption of ['mode', 'blur', 'hidden'] as const) {
+  for (const [label, tool] of [
+    ['贝塞尔', 'bezier'],
+    ['多边形', 'polygon'],
+  ] as const) {
+    test(`staged-lifecycle: ${tool} ${interruption} cancels between releases without late commit`, async ({
+      page,
+    }) => {
+      await openLayeredEditor(page);
+      await page.getByRole('button', { name: label, exact: true }).click();
+      const click = async (x: number, y: number) => {
+        await pointer(page, 'down', { x, y }, { source: 'mouse', id: 1 });
+        await pointer(page, 'up', { x, y }, { source: 'mouse', id: 1 });
+      };
+      await pointer(page, 'down', { x: 80, y: 100 }, { source: 'mouse', id: 1 });
+      await pointer(page, 'move', { x: 320, y: 100 }, { source: 'mouse', id: 1 });
+      await pointer(page, 'up', { x: 320, y: 100 }, { source: 'mouse', id: 1 });
+      if (tool === 'polygon') {
+        await click(320, 100);
+        await click(320, 240);
+      }
+      const preview = (await layeredState(page)).preview;
+      expect(preview.objects.length + preview.path.length).toBeGreaterThan(0);
+      if (interruption === 'mode') await page.getByLabel('输入模式').selectOption('finger');
+      else
+        await page.evaluate((kind) => {
+          if (kind === 'blur') window.dispatchEvent(new Event('blur'));
+          else {
+            Object.defineProperty(document, 'visibilityState', {
+              configurable: true,
+              value: 'hidden',
+            });
+            document.dispatchEvent(new Event('visibilitychange'));
+            delete (document as unknown as Record<string, unknown>).visibilityState;
+            document.dispatchEvent(new Event('visibilitychange'));
+          }
+        }, interruption);
+      expect((await layeredState(page)).preview).toEqual({ objects: [], hiddenIds: [], path: [] });
+      await pointer(page, 'up', { x: 320, y: 240 }, { source: 'mouse', id: 1 });
+      await page.getByTestId('layered-surface').dispatchEvent('dblclick', { detail: 2 });
+      expect((await layeredState(page)).document.objects).toHaveLength(0);
+      await click(120, 160);
+      await click(240, 180);
+      expect((await layeredState(page)).document.objects).toHaveLength(0);
+      expect((await layeredState(page)).history.canUndo).toBe(false);
+      await click(280, 260);
+      if (tool === 'polygon')
+        await page.getByTestId('layered-surface').dispatchEvent('dblclick', { detail: 1 });
+      const objects = (await layeredState(page)).document.objects;
+      expect(objects).toHaveLength(1);
+      expect(objects[0]).toMatchObject({ kind: 'shape', shapeType: tool });
+      if (objects[0].kind !== 'shape') throw new Error('missing shape');
+      expect(objects[0].points[0]).toEqual({ x: 120, y: 160 });
+    });
+  }
+
+  test(`ruler-lifecycle: ${interruption} isolates old contacts and accepts a fresh pair`, async ({
+    page,
+  }) => {
+    await openLayeredEditor(page);
+    await page.evaluate(() =>
+      window.__layeredEditor!.setNavigation({
+        ruler: { visible: true, center: { x: 200, y: 200 }, rotationRad: 0, height: 80 },
+      })
+    );
+    const initial = await layeredState(page);
+    await pointer(page, 'down', { x: 150, y: 200 }, { source: 'touch', id: -201 });
+    await pointer(page, 'down', { x: 250, y: 200 }, { source: 'touch', id: -202 });
+    if (interruption === 'mode') await page.getByLabel('输入模式').selectOption('finger');
+    else
+      await page.evaluate((kind) => {
+        if (kind === 'blur') window.dispatchEvent(new Event('blur'));
+        else {
+          Object.defineProperty(document, 'visibilityState', {
+            configurable: true,
+            value: 'hidden',
+          });
+          document.dispatchEvent(new Event('visibilitychange'));
+          delete (document as unknown as Record<string, unknown>).visibilityState;
+          document.dispatchEvent(new Event('visibilitychange'));
+        }
+      }, interruption);
+    await pointer(page, 'move', { x: 150, y: 280 }, { source: 'touch', id: -201 });
+    await pointer(page, 'move', { x: 250, y: 280 }, { source: 'touch', id: -202 });
+    expect((await layeredState(page)).navigation.ruler.center).toEqual({ x: 200, y: 200 });
+    await pointer(page, 'down', { x: 150, y: 200 }, { source: 'touch', id: -203 });
+    await pointer(page, 'down', { x: 250, y: 200 }, { source: 'touch', id: -204 });
+    await pointer(page, 'move', { x: 150, y: 240 }, { source: 'touch', id: -203 });
+    await pointer(page, 'move', { x: 250, y: 240 }, { source: 'touch', id: -204 });
+    expect((await layeredState(page)).navigation.ruler.center).toEqual({ x: 200, y: 240 });
+    await pointer(page, 'up', { x: 150, y: 240 }, { source: 'touch', id: -203 });
+    await pointer(page, 'up', { x: 250, y: 240 }, { source: 'touch', id: -204 });
+    const after = await layeredState(page);
+    expect(after.viewport).toEqual(initial.viewport);
+    expect(after.document).toEqual(initial.document);
+    expect(after.history).toEqual(initial.history);
+  });
 }
 
 for (const width of [1366, 390]) {

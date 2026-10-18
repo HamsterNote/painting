@@ -5,11 +5,12 @@ import {
   reduceLayeredInputArbitration,
   type LayeredInputArbitrationEvent,
   type LayeredInputIntent,
+  type LayeredInputResetReason,
 } from '../../core/layeredInputArbitration';
 
 export type LayeredInputPort = {
   dispatch(event: PointerEvent): void;
-  cancel(): boolean;
+  cancel(reason?: LayeredInputResetReason): boolean;
 };
 
 export function createLayeredInputArbiter(options: {
@@ -33,7 +34,7 @@ export function createLayeredInputArbiter(options: {
     for (const intent of intents) {
       if (intent.type === 'detect-pen') controller.recordPenDown();
       else if (intent.type === 'cancel') {
-        const ok = (intent.target === 'tool' ? tool : navigation).cancel();
+        const ok = (intent.target === 'tool' ? tool : navigation).cancel(intent.reason);
         if (!ok) options.onDiagnostic?.('Input cancellation failed; navigation refused');
         dispatch({ type: 'cancel-result', ok });
       } else if (intent.type === 'begin-navigation') {
@@ -111,9 +112,13 @@ export function createLayeredInputArbiter(options: {
     });
     if (input.phase === 'up' || input.phase === 'cancel') events.delete(input.pointerId);
   }
-  const reset = () => dispatch({ type: 'reset' });
+  const reset = (reason: LayeredInputResetReason = 'policy') => {
+    events.clear();
+    dispatch({ type: 'reset', reason });
+  };
+  const interrupt = () => reset('lifecycle');
   const hidden = () => {
-    if (host.ownerDocument.visibilityState === 'hidden') reset();
+    if (host.ownerDocument.visibilityState === 'hidden') interrupt();
   };
   const stopInput = controller.subscribe('input', () => {
     const next = controller.getSnapshot('input').mode;
@@ -133,14 +138,14 @@ export function createLayeredInputArbiter(options: {
   view.addEventListener('pointermove', pointer, true);
   view.addEventListener('pointerup', pointer, true);
   view.addEventListener('pointercancel', pointer, true);
-  view.addEventListener('blur', reset);
-  view.addEventListener('pagehide', reset);
+  view.addEventListener('blur', interrupt);
+  view.addEventListener('pagehide', interrupt);
   host.ownerDocument.addEventListener('visibilitychange', hidden);
   return {
     isWriting: () => state.gesture?.kind === 'single-tool' || state.gesture?.kind === 'pen-tool',
     destroy() {
       if (destroyed) return;
-      reset();
+      interrupt();
       destroyed = true;
       stopInput();
       stopTools();
@@ -148,8 +153,8 @@ export function createLayeredInputArbiter(options: {
       view.removeEventListener('pointermove', pointer, true);
       view.removeEventListener('pointerup', pointer, true);
       view.removeEventListener('pointercancel', pointer, true);
-      view.removeEventListener('blur', reset);
-      view.removeEventListener('pagehide', reset);
+      view.removeEventListener('blur', interrupt);
+      view.removeEventListener('pagehide', interrupt);
       host.ownerDocument.removeEventListener('visibilitychange', hidden);
       events.clear();
     },

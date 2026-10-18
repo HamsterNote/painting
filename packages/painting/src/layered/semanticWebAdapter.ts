@@ -247,9 +247,9 @@ export function createSemanticWebAdapter(options: {
     view.addEventListener('pointermove', move);
     view.addEventListener('pointerup', up);
     view.addEventListener('pointercancel', pointerCancel);
-    view.addEventListener('blur', cancel);
-    host.ownerDocument.addEventListener('visibilitychange', hidden);
   }
+  view.addEventListener('blur', cancel);
+  host.ownerDocument.addEventListener('visibilitychange', hidden);
   host.addEventListener('pointermove', hover);
   host.addEventListener('dblclick', doubleClick);
   host.addEventListener('wheel', wheel, { passive: false });

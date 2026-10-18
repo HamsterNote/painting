@@ -77,7 +77,7 @@ test('source policy and ownership preserve live mouse tools and cancel touch pre
   host.remove();
 });
 
-test.each(['rect', 'lasso', 'eraser', 'selection'] as const)(
+test.each(['rect', 'lasso', 'eraser', 'selection', 'bezier', 'polygon'] as const)(
   '%s touch transaction cancels before pair and late up cannot edit history',
   (tool) => {
     const controller = makeLayeredController([layeredRect()]);
@@ -133,3 +133,61 @@ test.each(['rect', 'lasso', 'eraser', 'selection'] as const)(
     host.remove();
   }
 );
+
+describe.each(['bezier', 'polygon'] as const)('%s staged cancellation', (tool) => {
+  test.each(['mode', 'blur', 'hidden'] as const)(
+    '%s cancels between releases and prevents the old shape from completing',
+    (interruption) => {
+      const controller = makeLayeredController();
+      controller.setTool(tool);
+      const host = document.createElement('div');
+      document.body.append(host);
+      const semantic = createSemanticWebAdapter({
+        host,
+        controller,
+        listen: false,
+        allocateId: () => 'shape',
+        onText: jest.fn(),
+        onError: (error) => {
+          throw error;
+        },
+      });
+      const navigation = createNavigationWebAdapter(host, controller, false, undefined, {
+        listen: false,
+      });
+      const arbiter = createLayeredInputArbiter({ host, controller, tool: semantic, navigation });
+      const click = (x: number, y: number) => {
+        pointer(host, 'down', x, y);
+        pointer(window, 'up', x, y);
+      };
+      pointer(host, 'down', 20, 20);
+      pointer(window, 'move', 100, 20);
+      pointer(window, 'up', 100, 20);
+      if (tool === 'polygon') {
+        click(100, 20);
+        click(100, 100);
+      }
+      const preview = controller.getSnapshot('preview');
+      expect(preview.objects.length + preview.path.length).toBeGreaterThan(0);
+      if (interruption === 'mode') controller.setInputMode('finger');
+      else if (interruption === 'blur') window.dispatchEvent(new Event('blur'));
+      else {
+        const visibility = jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+        document.dispatchEvent(new Event('visibilitychange'));
+        visibility.mockRestore();
+      }
+      expect(controller.getSnapshot('preview')).toEqual({ objects: [], hiddenIds: [], path: [] });
+      pointer(window, 'up', 100, 100);
+      if (tool === 'bezier') {
+        click(40, 80);
+        click(80, 80);
+      } else host.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }));
+      expect(controller.getSnapshot('document').objects).toHaveLength(0);
+      expect(controller.getSnapshot('history').canUndo).toBe(false);
+      arbiter.destroy();
+      semantic.destroy();
+      navigation.destroy();
+      host.remove();
+    }
+  );
+});

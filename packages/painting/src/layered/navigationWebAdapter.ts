@@ -10,6 +10,7 @@ import {
 } from '../ruler/geometry';
 import { applyViewportTransformIntent } from '../core/viewportTransform';
 import type { Point } from '../model/document';
+import type { LayeredInputResetReason } from '../core/layeredInputArbitration';
 import { createZoomFeedback } from './zoomFeedback';
 import { traceGesture, type GestureTraceObserver } from '../input/web/gestureTrace';
 
@@ -269,16 +270,17 @@ export function createNavigationWebAdapter(
     view.addEventListener('pointermove', move, true);
     view.addEventListener('pointerup', end, true);
     view.addEventListener('pointercancel', end, true);
-    view.addEventListener('blur', cancel);
-    view.addEventListener('pagehide', cancel);
   }
-  const hidden = () => {
-    if (host.ownerDocument.visibilityState === 'hidden') {
-      cancel();
-      ruler.cancel();
-    }
+  const interrupt = () => {
+    cancel();
+    ruler.cancel({ releaseContacts: true });
   };
-  if (options.listen !== false) host.ownerDocument.addEventListener('visibilitychange', hidden);
+  const hidden = () => {
+    if (host.ownerDocument.visibilityState === 'hidden') interrupt();
+  };
+  view.addEventListener('blur', interrupt);
+  view.addEventListener('pagehide', interrupt);
+  host.ownerDocument.addEventListener('visibilitychange', hidden);
   const capture = (id: number) => {
     try {
       host.setPointerCapture(id);
@@ -296,8 +298,9 @@ export function createNavigationWebAdapter(
         ? ('ruler' as const)
         : undefined;
     },
-    cancel() {
+    cancel(reason?: LayeredInputResetReason) {
       cancel();
+      if (reason) ruler.cancel({ releaseContacts: reason === 'lifecycle' });
       return true;
     },
     begin(events: readonly PointerEvent[]) {
@@ -328,8 +331,8 @@ export function createNavigationWebAdapter(
       view.removeEventListener('pointermove', move, true);
       view.removeEventListener('pointerup', end, true);
       view.removeEventListener('pointercancel', end, true);
-      view.removeEventListener('blur', cancel);
-      view.removeEventListener('pagehide', cancel);
+      view.removeEventListener('blur', interrupt);
+      view.removeEventListener('pagehide', interrupt);
       host.ownerDocument.removeEventListener('visibilitychange', hidden);
     },
   };

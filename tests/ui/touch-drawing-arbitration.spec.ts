@@ -63,10 +63,30 @@ test('touch cancellation and page blur recover input without committing partial 
   await pointer(page, 'move', { x: 200, y: 100 }, { source: 'touch' });
   await pointer(page, 'cancel', { x: 200, y: 100 }, { source: 'touch' });
   expect((await layeredState(page)).history.canUndo).toBe(false);
-  await pointer(page, 'down', { x: 100, y: 100 });
+  await pointer(page, 'down', { x: 100, y: 100 }, { source: 'mouse', id: 1 });
   await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-  await pointer(page, 'up', { x: 200, y: 100 });
   expect((await layeredState(page)).document.objects).toHaveLength(0);
-  await drawLayeredStroke(page);
+  // The mouse reuses its ID; its old up was lost outside the window.
+  for (const phase of ['down', 'move', 'up'] as const) {
+    await pointer(
+      page,
+      phase,
+      { x: phase === 'down' ? 100 : 220, y: 120 },
+      { source: 'mouse', id: 1 }
+    );
+  }
   expect((await layeredState(page)).document.objects).toHaveLength(1);
+  await pointer(page, 'down', { x: 100, y: 160 }, { source: 'touch', id: 20 });
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  for (const id of [21, 22, 23]) {
+    for (const phase of ['down', 'move', 'up'] as const) {
+      await pointer(
+        page,
+        phase,
+        { x: phase === 'down' ? 100 : 220, y: 160 },
+        { source: 'touch', id }
+      );
+    }
+    expect((await layeredState(page)).document.objects).toHaveLength(id - 19);
+  }
 });

@@ -1,5 +1,7 @@
 import { makeLayeredController } from '../../../__tests__/fixtures/layered';
 import { createLayeredInputArbiter } from '../layeredInputArbiter';
+import { createFreehandWebAdapter } from '../freehandWebAdapter';
+import { createNavigationWebAdapter } from '../../../layered/navigationWebAdapter';
 
 function setup() {
   const host = document.createElement('div');
@@ -109,8 +111,8 @@ test('failed cancel refuses navigation and reports a diagnostic', () => {
   h.destroy();
 });
 
-test.each(['blur', 'pagehide', 'visibilitychange', 'destroy'])(
-  '%s cancels without committing and removes listeners on destroy',
+test.each(['blur', 'pagehide', 'visibilitychange'])(
+  '%s cancels and recovers without the old terminal event',
   (kind) => {
     const h = setup();
     h.send();
@@ -118,11 +120,129 @@ test.each(['blur', 'pagehide', 'visibilitychange', 'destroy'])(
       jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
       document.dispatchEvent(new Event(kind));
       jest.restoreAllMocks();
-    } else if (kind === 'destroy') h.destroy();
-    else window.dispatchEvent(new Event(kind));
+    } else window.dispatchEvent(new Event(kind));
     expect(h.tool.cancel).toHaveBeenCalledTimes(1);
+    h.tool.dispatch.mockClear();
+    // No terminal event is delivered for the interrupted contact.
+    for (const id of [1, 2, 3]) {
+      h.send('pointerdown', id);
+      h.send('pointermove', id, 'touch', window);
+      h.send('pointerup', id, 'touch', window);
+    }
+    expect(h.tool.dispatch).toHaveBeenCalledTimes(9);
     h.destroy();
+    const routed = h.tool.dispatch.mock.calls.length;
     h.send('pointerdown', 3);
-    expect(h.tool.dispatch).toHaveBeenCalledTimes(1);
+    expect(h.tool.dispatch).toHaveBeenCalledTimes(routed);
+  }
+);
+
+test('destroy cancels without committing and removes all listeners', () => {
+  const h = setup();
+  h.send();
+  h.destroy();
+  expect(h.tool.cancel).toHaveBeenCalledTimes(1);
+  h.send('pointerdown', 2);
+  h.send('pointermove', 1, 'touch', window);
+  h.send('pointerup', 1, 'touch', window);
+  expect(h.tool.dispatch).toHaveBeenCalledTimes(1);
+  h.destroy();
+});
+
+describe.each(['blur', 'pagehide', 'hidden'] as const)('%s real ink recovery', (kind) => {
+  test.each(['mouse', 'touch'] as const)(
+    '%s commits consecutive fresh strokes without old up',
+    (source) => {
+      const host = document.createElement('div');
+      document.body.append(host);
+      const controller = makeLayeredController();
+      let sequence = 0;
+      const ink = createFreehandWebAdapter({
+        host,
+        controller,
+        listen: false,
+        createSessionId: () => `s${++sequence}`,
+        createCommitId: () => `c${sequence}`,
+      });
+      const navigation = createNavigationWebAdapter(host, controller, false, undefined, {
+        listen: false,
+      });
+      const arbiter = createLayeredInputArbiter({ host, controller, tool: ink, navigation });
+      const send = (phase: string, id: number, x = 10) => {
+        const event = new Event(`pointer${phase}`, { bubbles: true, cancelable: true });
+        Object.assign(event, {
+          pointerId: id,
+          pointerType: source,
+          clientX: x,
+          clientY: 10,
+          button: 0,
+          buttons: phase === 'up' ? 0 : 1,
+          pressure: 0.5,
+        });
+        (phase === 'down' ? host : window).dispatchEvent(event);
+      };
+      send('down', source === 'mouse' ? 1 : -20);
+      send('move', source === 'mouse' ? 1 : -20, 40);
+      if (kind === 'hidden') {
+        const visibility = jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+        document.dispatchEvent(new Event('visibilitychange'));
+        visibility.mockRestore();
+      } else window.dispatchEvent(new Event(kind));
+      expect(controller.getSnapshot('document').objects).toHaveLength(0);
+      expect(controller.getSnapshot('history').canUndo).toBe(false);
+      for (const [index, id] of (source === 'mouse' ? [1, 1, 1] : [-21, -22, -23]).entries()) {
+        send('down', id);
+        send('move', id, 40);
+        send('up', id, 80);
+        expect(controller.getSnapshot('document').objects).toHaveLength(index + 1);
+      }
+      arbiter.destroy();
+      ink.destroy();
+      navigation.destroy();
+      host.remove();
+    }
+  );
+});
+
+test.each(['pen', 'touch'] as const)(
+  'negative %s IDs commit through the real arbiter and controller',
+  (source) => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const controller = makeLayeredController();
+    const ink = createFreehandWebAdapter({
+      host,
+      controller,
+      listen: false,
+      createSessionId: () => 'signed',
+      createCommitId: () => 'signed',
+    });
+    const navigation = createNavigationWebAdapter(host, controller, false, undefined, {
+      listen: false,
+    });
+    const arbiter = createLayeredInputArbiter({ host, controller, tool: ink, navigation });
+    for (const phase of ['down', 'move', 'up']) {
+      const event = new Event(`pointer${phase}`, { bubbles: true, cancelable: true });
+      Object.assign(event, {
+        pointerId: -765894345,
+        pointerType: source,
+        clientX: phase === 'down' ? 10 : 80,
+        clientY: 10,
+        button: 0,
+        buttons: phase === 'up' ? 0 : 1,
+        pressure: 0.5,
+      });
+      (phase === 'down' ? host : window).dispatchEvent(event);
+    }
+    expect(controller.getSnapshot('document').objects).toHaveLength(1);
+    const object = controller.getSnapshot('document').objects[0];
+    expect(object.kind).toBe('freehand');
+    if (object.kind !== 'freehand') throw new Error('missing ink');
+    expect(object.samples.every((sample) => sample.source === source)).toBe(true);
+    expect(controller.getSnapshot('history').canUndo).toBe(true);
+    arbiter.destroy();
+    ink.destroy();
+    navigation.destroy();
+    host.remove();
   }
 );

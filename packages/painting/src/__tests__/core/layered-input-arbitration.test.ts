@@ -173,11 +173,29 @@ test('controls and ruler do not mix with paper; selection handles retain their o
   expect(h.state().gesture?.ids).toEqual([2]);
 });
 
-test('reset cancels one owner and drains old contacts without replay', () => {
+test('policy reset cancels business transactions and isolates old contacts without replay', () => {
   const h = harness();
   h.dispatch(pointer(1));
   const reset = reduceLayeredInputArbitration(h.state(), { type: 'reset' });
-  expect(reset.intents).toEqual([{ type: 'cancel', target: 'tool' }]);
+  expect(reset.intents).toEqual([
+    { type: 'cancel', target: 'tool', reason: 'policy' },
+    { type: 'cancel', target: 'navigation', reason: 'policy' },
+  ]);
   expect(reset.state.gesture).toBeUndefined();
   expect(reset.state.suppressed).toEqual([1]);
+});
+
+test('lifecycle reset drops ownership without waiting for missing terminal events', () => {
+  const h = harness();
+  h.dispatch(pointer(1));
+  const reset = reduceLayeredInputArbitration(h.state(), { type: 'reset', reason: 'lifecycle' });
+  expect(reset.state).toEqual(createLayeredInputArbitration());
+  expect(reset.intents.map((intent) => intent.type)).toEqual(['cancel', 'cancel']);
+  const next = reduceLayeredInputArbitration(reset.state, {
+    type: 'pointer',
+    input: pointer(1),
+    policy: createLayeredInputSnapshot('auto', false),
+    panTool: false,
+  });
+  expect(next.intents).toEqual([{ type: 'route', target: 'tool', input: pointer(1) }]);
 });

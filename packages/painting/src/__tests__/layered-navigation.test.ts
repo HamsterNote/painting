@@ -57,6 +57,55 @@ test('ruler and paper touches retain independent concurrent ownership', () => {
   host.remove();
 });
 
+test.each(['mode', 'blur', 'hidden'] as const)(
+  'composed ruler %s cancels old contacts and accepts a fresh pair without old up',
+  (interruption) => {
+    const controller = makeLayeredController();
+    controller.setNavigation({
+      ruler: { visible: true, center: { x: 200, y: 200 }, rotationRad: 0, height: 80 },
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    const navigation = createNavigationWebAdapter(host, controller, false, undefined, {
+      listen: false,
+    });
+    const arbiter = createLayeredInputArbiter({
+      host,
+      controller,
+      navigation,
+      targetRole: navigation.targetRole,
+      tool: { dispatch: jest.fn(), cancel: () => true },
+    });
+    const viewport = controller.getSnapshot('viewport');
+    pointer(host, 'down', -1, 150, 200);
+    pointer(host, 'down', -2, 250, 200);
+    if (interruption === 'mode') controller.setInputMode('finger');
+    else if (interruption === 'blur') window.dispatchEvent(new Event('blur'));
+    else {
+      const visibility = jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+      visibility.mockRestore();
+    }
+    pointer(document, 'move', -1, 150, 280);
+    pointer(document, 'move', -2, 250, 280);
+    expect(controller.getSnapshot('navigation').ruler.center).toEqual({ x: 200, y: 200 });
+    expect(controller.getSnapshot('navigation').rotationFeedback).toBeNull();
+    // Fresh contacts are usable even when the OS never delivers the old pair's up.
+    pointer(host, 'down', -3, 150, 200);
+    pointer(host, 'down', -4, 250, 200);
+    pointer(document, 'move', -3, 150, 240);
+    pointer(document, 'move', -4, 250, 240);
+    expect(controller.getSnapshot('navigation').ruler.center).toEqual({ x: 200, y: 240 });
+    pointer(document, 'up', -3, 150, 240);
+    pointer(document, 'up', -4, 250, 240);
+    expect(controller.getSnapshot('viewport')).toBe(viewport);
+    expect(controller.getSnapshot('history').canUndo).toBe(false);
+    arbiter.destroy();
+    navigation.destroy();
+    host.remove();
+  }
+);
+
 test('mouse ruler rotation uses the visible segment midpoint instead of its logical origin', () => {
   const controller = makeLayeredController();
   controller.setNavigation({
