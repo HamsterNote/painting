@@ -31,14 +31,22 @@
 
 ## 4. 真实分层入口的自动化回归
 
-- [ ] 4.1 新增 `tests/ui/mobile-input-mode.spec.ts` 用例名含 `auto-default-touch`：隔离存储，不传 touchDraw，断言菜单默认自动、单指预览与最终笔迹可见、对象增一、undo/redo 一次一笔、viewport 不动。验收：`pnpm run test:ui -- tests/ui/mobile-input-mode.spec.ts --project=chromium -g auto-default-touch`。
-- [ ] 4.2 同文件新增 `second-finger-cancels`：自动初始和强制手指两档分别单指移动到已有预览，再落第二指并改变中点和间距；断言无提交对象、无新增 undo、预览清除且 viewport 平移/缩放，迟到 up 不补笔迹。验收：`pnpm run test:ui -- tests/ui/mobile-input-mode.spec.ts --project=chromium -g second-finger-cancels`。
-- [ ] 4.3 同文件新增 `auto-pen-latch`：首有效 pen down 所在笔正常提交，之后单指只拖动；虚拟时间推进、blur/返回和换工具不重置；重开新 controller/reload 后自动档再次允许单指画；hover/控制区 pen 不触发检测。验收：`pnpm run test:ui -- tests/ui/mobile-input-mode.spec.ts --project=chromium -g auto-pen-latch`。
-- [ ] 4.4 同文件新增 `forced-finger-override`：从已经 latch 的 auto 切 finger，下一次新单指立即画；finger 中完成 pen 后下一次 touch 仍画，切回 auto 使用原 latch；模式切换中残留 pointer 不复活。验收：`pnpm run test:ui -- tests/ui/mobile-input-mode.spec.ts --project=chromium -g forced-finger-override`。
-- [ ] 4.5 同文件新增 `forced-pen`：无笔检测也能单指拖动且无文档/undo 变更，笔正常画，空闲时双指可导航；实际 pen 写时两 touch 被抑制，笔结束不重放，全部抬起后新双指再导航。验收：`pnpm run test:ui -- tests/ui/mobile-input-mode.spec.ts --project=chromium -g forced-pen`。
-- [ ] 4.6 同文件新增 `storage-unavailable`：通过浏览器 init script 在应用初始化前分别令 Storage 读/写抛异常，监听 pageerror；无合法偏好时默认 auto，菜单改 finger 后本会话仍可画，无未捕获异常、不要求 reload 记住失败写入。验收：`pnpm run test:ui -- tests/ui/mobile-input-mode.spec.ts --project=chromium -g storage-unavailable`；同步执行任务 1.2 的 Jest 命令覆盖解析异常。
-- [ ] 4.7 同文件新增 `preference-first-frame`：页面初始化前预置 pen 档，监测首个可交互 Surface 即为 pen，第一次 touch 只导航；保存 finger 后 reload 恢复；自动检测不写入存储，非法枚举回 auto。验收：`pnpm run test:ui -- tests/ui/mobile-input-mode.spec.ts --project=chromium -g preference-first-frame`。
-- [ ] 4.8 同文件新增 `adapter-matrix`：参数化三档的鼠标绘制/pan、双指导航、固定 pair/第三指、touch 语义工具取消、pen 抢占 touch 与 pen 不抢已有 pair、控件和尺子不计入纸面 pair；同时更新 `touch-drawing-arbitration.spec.ts` 的过时默认和第二指断言，保留取消/失焦覆盖。验收：`pnpm run test:ui -- tests/ui/mobile-input-mode.spec.ts tests/ui/touch-drawing-arbitration.spec.ts --project=chromium`。
+- [x] 4.1 新增 `tests/ui/mobile-input-mode.spec.ts` 用例名含 `auto-default-touch`：隔离存储，不传 touchDraw，断言菜单默认自动、单指预览与最终笔迹可见、对象增一、undo/redo 一次一笔、viewport 不动。验收：`pnpm run test:ui -- tests/ui/mobile-input-mode.spec.ts --project=chromium -g auto-default-touch`。
+  - 实跑上述 Chromium 命令：PASS，1 test（28.1s）；Canvas 像素与 SVG 笔迹均检查。
+- [x] 4.2 同文件新增 `second-finger-cancels`：自动初始和强制手指两档分别单指移动到已有预览，再落第二指并改变中点和间距；断言无提交对象、无新增 undo、预览清除且 viewport 平移/缩放，迟到 up 不补笔迹。验收：`pnpm run test:ui -- tests/ui/mobile-input-mode.spec.ts --project=chromium -g second-finger-cancels`。
+  - 实跑原命令：PASS，文件内 3 tests；pnpm 透传 -- 使 -g 失效。补跑 pnpm run test:ui tests/ui/mobile-input-mode.spec.ts --project=chromium -g second-finger-cancels：PASS，2 tests（21.3s）。
+- [x] 4.3 同文件新增 `auto-pen-latch`：首有效 pen down 所在笔正常提交，之后单指只拖动；虚拟时间推进、blur/返回和换工具不重置；重开新 controller/reload 后自动档再次允许单指画；hover/控制区 pen 不触发检测。验收：`pnpm run test:ui -- tests/ui/mobile-input-mode.spec.ts --project=chromium -g auto-pen-latch`。
+  - 实跑原命令：PASS，文件内 4 tests；补跑 pnpm run test:ui tests/ui/mobile-input-mode.spec.ts --project=chromium -g auto-pen-latch：PASS，1 test（25.3s）。
+- [x] 4.4 同文件新增 `forced-finger-override`：从已经 latch 的 auto 切 finger，下一次新单指立即画；finger 中完成 pen 后下一次 touch 仍画，切回 auto 使用原 latch；模式切换中残留 pointer 不复活。验收：`pnpm run test:ui -- tests/ui/mobile-input-mode.spec.ts --project=chromium -g forced-finger-override`。
+  - 实跑原命令：PASS，文件内 5 tests；补跑 pnpm run test:ui tests/ui/mobile-input-mode.spec.ts --project=chromium -g forced-finger-override：PASS，1 test（19.7s）。
+- [x] 4.5 同文件新增 `forced-pen`：无笔检测也能单指拖动且无文档/undo 变更，笔正常画，空闲时双指可导航；实际 pen 写时两 touch 被抑制，笔结束不重放，全部抬起后新双指再导航。验收：`pnpm run test:ui -- tests/ui/mobile-input-mode.spec.ts --project=chromium -g forced-pen`。
+  - 实跑原命令：PASS，文件内 6 tests；补跑 pnpm run test:ui tests/ui/mobile-input-mode.spec.ts --project=chromium -g forced-pen：PASS，1 test（22.2s）。
+- [x] 4.6 同文件新增 `storage-unavailable`：通过浏览器 init script 在应用初始化前分别令 Storage 读/写抛异常，监听 pageerror；无合法偏好时默认 auto，菜单改 finger 后本会话仍可画，无未捕获异常、不要求 reload 记住失败写入。验收：`pnpm run test:ui -- tests/ui/mobile-input-mode.spec.ts --project=chromium -g storage-unavailable`；同步执行任务 1.2 的 Jest 命令覆盖解析异常。
+  - 实跑原 Chromium 命令：PASS，文件内 8 tests；补跑 pnpm run test:ui tests/ui/mobile-input-mode.spec.ts --project=chromium -g storage-unavailable：PASS，2 tests（21.7s）。同步实跑 1.2 Jest 命令：PASS，1 suite / 6 tests。
+- [x] 4.7 同文件新增 `preference-first-frame`：页面初始化前预置 pen 档，监测首个可交互 Surface 即为 pen，第一次 touch 只导航；保存 finger 后 reload 恢复；自动检测不写入存储，非法枚举回 auto。验收：`pnpm run test:ui -- tests/ui/mobile-input-mode.spec.ts --project=chromium -g preference-first-frame`。
+  - 实跑原命令：PASS，文件内 9 tests；补跑 pnpm run test:ui tests/ui/mobile-input-mode.spec.ts --project=chromium -g preference-first-frame：PASS，1 test（21.8s）。
+- [x] 4.8 同文件新增 `adapter-matrix`：参数化三档的鼠标绘制/pan、双指导航、固定 pair/第三指、touch 语义工具取消、pen 抢占 touch 与 pen 不抢已有 pair、控件和尺子不计入纸面 pair；同时更新 `touch-drawing-arbitration.spec.ts` 的过时默认和第二指断言，保留取消/失焦覆盖。验收：`pnpm run test:ui -- tests/ui/mobile-input-mode.spec.ts tests/ui/touch-drawing-arbitration.spec.ts --project=chromium`。
+  - 实跑上述命令：PASS，30 Chromium tests（1.1m）。初跑 28 passed / 2 failed 暴露尺子命中归属错误，修复后原断言全通过；1366px / 390px 截图与 Canvas 像素检查通过。
 
 ## 5. 集成校验与交接
 

@@ -41,6 +41,8 @@ export async function layeredState(page: Page) {
       viewport: editor.getSnapshot('viewport'),
       tools: editor.getSnapshot('tools'),
       navigation: editor.getSnapshot('navigation'),
+      input: editor.getSnapshot('input'),
+      preview: editor.getSnapshot('preview'),
     };
   });
 }

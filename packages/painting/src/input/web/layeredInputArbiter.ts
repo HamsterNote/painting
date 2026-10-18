@@ -17,7 +17,7 @@ export function createLayeredInputArbiter(options: {
   controller: LayeredEditorController;
   tool: LayeredInputPort;
   navigation: LayeredInputPort & { begin(events: readonly PointerEvent[]): void };
-  targetRole?: (event: PointerEvent) => TargetRole;
+  targetRole?: (event: PointerEvent) => TargetRole | undefined;
   onDiagnostic?: (message: string) => void;
 }) {
   const { host, controller, tool, navigation } = options;

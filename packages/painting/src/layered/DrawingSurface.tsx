@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+} from 'react';
 import type { LayeredEditorController } from '../core/layeredEditorController';
 import { createFreehandWebAdapter, type WebFreehandPolicy } from '../input/web/freehandWebAdapter';
 import { DisplayLayer, type RenderObserver } from './DisplayLayer';
@@ -14,7 +21,6 @@ import { createNavigationWebAdapter } from './navigationWebAdapter';
 import type { DrawingSurfaceVirtualPaperOptions } from '../virtualPaperOptions';
 import { observeGestureEvents, type GestureTraceObserver } from '../input/web/gestureTrace';
 import { useInputInitialization } from './useInputInitialization';
-import { useEditorSnapshot } from './useEditorSnapshot';
 import { createLayeredInputArbiter } from '../input/web/layeredInputArbiter';
 
 export type LayeredDrawingSurfaceProps = {
@@ -40,7 +46,12 @@ export function LayeredDrawingSurface({
   onGestureTrace,
 }: LayeredDrawingSurfaceProps) {
   const inputReady = useInputInitialization(controller, inputPolicy, true);
-  const input = useEditorSnapshot(controller, 'input');
+  const subscribeInput = useCallback(
+    (listener: () => void) => controller.subscribe('input', listener),
+    [controller]
+  );
+  const getInputMode = useCallback(() => controller.getSnapshot('input').mode, [controller]);
+  const inputMode = useSyncExternalStore(subscribeInput, getInputMode, getInputMode);
   const host = useRef<HTMLDivElement>(null);
   const [presentation, setPresentation] = useState<PresentationCoordinator>();
   const [failure, setFailure] = useState<{ commitId: string; message: string }>();
@@ -119,6 +130,7 @@ export function LayeredDrawingSurface({
         },
       },
       navigation,
+      targetRole: navigation.targetRole,
       onDiagnostic: setToolError,
     });
     retry.current = (commitId) => {
@@ -139,7 +151,7 @@ export function LayeredDrawingSurface({
       ref={host}
       data-testid="layered-surface"
       data-input-ready={inputReady}
-      data-input-mode={input.mode}
+      data-input-mode={inputMode}
       style={{
         position: 'relative',
         flex: 1,

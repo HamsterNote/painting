@@ -287,6 +287,15 @@ export function createNavigationWebAdapter(
     }
   };
   return {
+    targetRole(event: PointerEvent) {
+      const state = controller.getSnapshot('navigation').ruler;
+      // A frozen ruler still owns its hit area; it must not become a paper contact.
+      return event.pointerType === 'touch' &&
+        state.visible &&
+        isInsideRuler(screen(event), { ...state, length: 1 })
+        ? ('ruler' as const)
+        : undefined;
+    },
     cancel() {
       cancel();
       return true;

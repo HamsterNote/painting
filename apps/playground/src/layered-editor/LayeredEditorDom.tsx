@@ -19,16 +19,17 @@ export default function LayeredEditorDom(_props: { dom?: import('expo/dom').DOMP
   const [params] = useState(
     () => new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search)
   );
-  const [controller] = useState(() =>
-    createEditor(
+  const [controller] = useState(() => {
+    const editor = createEditor(
       params.get('fixture') === 'mixed'
         ? mixedFixture()
         : params.get('fixture') === 'resources'
           ? resourceFixture()
-          : undefined,
-      { inputMode: params.get('touchDraw') === '1' ? 'finger' : undefined }
-    )
-  );
+          : undefined
+    );
+    if (params.get('touchDraw') === '1') editor.initializeInputMode('finger');
+    return editor;
+  });
   const [renders] = useState(() => ({ display: 0, objects: 0 }));
   const diagnostics = params.get('diagnostics') === '1';
   const [trace] = useState(() =>
