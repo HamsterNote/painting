@@ -4,6 +4,7 @@ import { createEditor } from '../layered/createEditor';
 import { LayeredPaintingBoard } from '../layered/PaintingBoard';
 import { INPUT_MODE_PREFERENCE_KEY as key } from '../layered/inputModePreference';
 import { makeLayeredController } from './fixtures/layered';
+import { LayeredDrawingSurface } from '../layered/DrawingSurface';
 
 jest.mock('../layered/DrawingLayer', () => ({ DrawingLayer: () => null }));
 
@@ -45,4 +46,25 @@ test('core host can initialize explicitly before mounting and SSR blocks interac
   expect(html).not.toContain('role="toolbar"');
   render(<LayeredPaintingBoard controller={editor} />);
   expect(screen.getByRole('toolbar').getAttribute('data-input-mode')).toBe('finger');
+});
+
+test('consumer layout styles cannot remove the non-editing selection boundary', () => {
+  render(
+    <LayeredDrawingSurface
+      controller={createEditor()}
+      style={{
+        width: 640,
+        background: 'red',
+        userSelect: 'text',
+        WebkitUserSelect: 'text',
+        WebkitTouchCallout: 'default',
+      }}
+    />
+  );
+  const { style } = screen.getByTestId('layered-surface');
+  expect(style.width).toBe('640px');
+  expect(style.background).toBe('red');
+  expect(style.userSelect).toBe('none');
+  expect(style.WebkitUserSelect).toBe('none');
+  expect(style.WebkitTouchCallout).toBe('none');
 });

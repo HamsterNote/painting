@@ -138,7 +138,14 @@ export function TextEditor({
             height={bounds.maxY - bounds.minY + 90}
             style={{ overflow: 'visible', pointerEvents: 'auto' }}
           >
-            <div data-interactive="true">
+            <div
+              data-interactive="true"
+              style={{
+                userSelect: 'text',
+                WebkitUserSelect: 'text',
+                WebkitTouchCallout: 'default',
+              }}
+            >
               <textarea
                 ref={input}
                 aria-label="文字内容"
@@ -154,6 +161,9 @@ export function TextEditor({
                   background: '#fff',
                   padding: 0,
                   resize: 'none',
+                  userSelect: 'text',
+                  WebkitUserSelect: 'text',
+                  WebkitTouchCallout: 'default',
                 }}
                 onChange={(event) => {
                   const content = event.target.value;
@@ -197,7 +207,12 @@ export function TextEditor({
                   min={8}
                   max={200}
                   value={draft.fontSize}
-                  style={{ width: 56 }}
+                  style={{
+                    width: 56,
+                    userSelect: 'text',
+                    WebkitUserSelect: 'text',
+                    WebkitTouchCallout: 'default',
+                  }}
                   onChange={(event) => {
                     const fontSize = event.target.valueAsNumber;
                     if (!Number.isFinite(fontSize) || fontSize < 8 || fontSize > 200) return;

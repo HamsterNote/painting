@@ -163,6 +163,10 @@ export function LayeredDrawingSurface({
         background: '#fff',
         touchAction: 'none',
         ...style,
+        // Browser selection is separate from touch-action; editing controls opt back in.
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        WebkitTouchCallout: 'none',
         pointerEvents: inputReady ? style?.pointerEvents : 'none',
       }}
     >
