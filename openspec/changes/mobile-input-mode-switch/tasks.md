@@ -13,9 +13,12 @@
 
 ## 2. 纯仲裁和有序路由
 
-- [ ] 2.1 新建窄 `core/layeredInputArbitration.ts`，复用归属和 viewport 变换基础，不接旧 session 的 document-commit；在 `packages/painting/src/__tests__/core/layered-input-arbitration.test.ts` 覆盖三档 policy、single-tool 转 pair、先 cancel 确认后导航、取消失败不导航。验收：`pnpm exec jest --runInBand --selectProjects core-node --runTestsByPath packages/painting/src/__tests__/core/layered-input-arbitration.test.ts`。
-- [ ] 2.2 在同一 reducer 测试文件补齐 pen 首次 down、touch 转 pen、笔书写掌触、导航期间 pen 不抢占、固定 pair/第三指/残留触点排空及控件和其他 owner 不混入；用事件序列断言 route/cancel/begin-navigation 顺序和迟到 up 无提交。验收：`pnpm exec jest --runInBand --selectProjects core-node --runTestsByPath packages/painting/src/__tests__/core/layered-input-arbitration.test.ts`。
-- [ ] 2.3 新增 `input/web/layeredInputArbiter.ts` 作为分层唯一 DOM 仲裁入口，处理 down 与 window capture move/up/cancel、失焦/后台/销毁、模式切换；新增 `packages/painting/src/input/web/__tests__/layeredInputArbiter.test.ts` 验证同事件只路由一次、来源有效性、控制区排除、模式切换取消后下一次新 down 生效。验收：`pnpm exec jest --runInBand --selectProjects legacy-web --runTestsByPath packages/painting/src/input/web/__tests__/layeredInputArbiter.test.ts`。
+- [x] 2.1 新建窄 `core/layeredInputArbitration.ts`，复用归属和 viewport 变换基础，不接旧 session 的 document-commit；在 `packages/painting/src/__tests__/core/layered-input-arbitration.test.ts` 覆盖三档 policy、single-tool 转 pair、先 cancel 确认后导航、取消失败不导航。验收：`pnpm exec jest --runInBand --selectProjects core-node --runTestsByPath packages/painting/src/__tests__/core/layered-input-arbitration.test.ts`。
+  - 实跑上述验收命令：PASS，1 suite / 5 tests。
+- [x] 2.2 在同一 reducer 测试文件补齐 pen 首次 down、touch 转 pen、笔书写掌触、导航期间 pen 不抢占、固定 pair/第三指/残留触点排空及控件和其他 owner 不混入；用事件序列断言 route/cancel/begin-navigation 顺序和迟到 up 无提交。验收：`pnpm exec jest --runInBand --selectProjects core-node --runTestsByPath packages/painting/src/__tests__/core/layered-input-arbitration.test.ts`。
+  - 实跑上述验收命令：PASS，1 suite / 10 tests。
+- [x] 2.3 新增 `input/web/layeredInputArbiter.ts` 作为分层唯一 DOM 仲裁入口，处理 down 与 window capture move/up/cancel、失焦/后台/销毁、模式切换；新增 `packages/painting/src/input/web/__tests__/layeredInputArbiter.test.ts` 验证同事件只路由一次、来源有效性、控制区排除、模式切换取消后下一次新 down 生效。验收：`pnpm exec jest --runInBand --selectProjects legacy-web --runTestsByPath packages/painting/src/input/web/__tests__/layeredInputArbiter.test.ts`。
+  - 实跑上述验收命令：PASS，1 suite / 8 tests。
 
 ## 3. 三个 adapter、工具栏与示例接入
 
