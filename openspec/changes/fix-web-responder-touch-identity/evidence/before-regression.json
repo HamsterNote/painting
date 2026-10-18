@@ -1,0 +1,4633 @@
+[
+  {
+    "title": "identity regression: auto diagnostics=false ids=1,2",
+    "status": "passed",
+    "warnings": 0,
+    "trusted": true,
+    "logs": [],
+    "events": [
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          2
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 4
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 5
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 4
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          2
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 5
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 6
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 7
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 7
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 6
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 8
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 9
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 9
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 8
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 10
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 11
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 12
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          2,
+          1000001
+        ],
+        "changed": [
+          1000001
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 11
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          1,
+          1000001
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          1000001
+        ],
+        "changed": [
+          1000001
+        ]
+      },
+      {
+        "type": "touchcancel",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          1,
+          1000001
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 13
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 13
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 1
+      }
+    ]
+  },
+  {
+    "title": "identity regression: auto diagnostics=false ids=1,21",
+    "status": "failed",
+    "warnings": 4,
+    "trusted": true,
+    "logs": [
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      },
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      },
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      },
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      }
+    ],
+    "events": [
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 4
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 5
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 4
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 5
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 6
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 7
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 7
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 6
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 8
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 9
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 9
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 8
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 10
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 11
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 12
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          21,
+          1000001
+        ],
+        "changed": [
+          1000001
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 11
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          1,
+          1000001
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          1000001
+        ],
+        "changed": [
+          1000001
+        ]
+      },
+      {
+        "type": "touchcancel",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          1,
+          1000001
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 13
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 13
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 1
+      }
+    ]
+  },
+  {
+    "title": "identity regression: auto diagnostics=false ids=21,41",
+    "status": "failed",
+    "warnings": 4,
+    "trusted": true,
+    "logs": [
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      },
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      },
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      },
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      }
+    ],
+    "events": [
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21,
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21,
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          41
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 4
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 5
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21,
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21,
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 4
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          41
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 5
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 6
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 7
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21,
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21,
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 7
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 6
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 8
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 9
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21,
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21,
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 9
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 8
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 10
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 11
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21,
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 12
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21,
+          41,
+          1000001
+        ],
+        "changed": [
+          1000001
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 11
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          21,
+          1000001
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21,
+          1000001
+        ],
+        "changed": [
+          1000001
+        ]
+      },
+      {
+        "type": "touchcancel",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          21,
+          1000001
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 13
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 13
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 1
+      }
+    ]
+  },
+  {
+    "title": "identity regression: auto diagnostics=false ids=-1,-2",
+    "status": "failed",
+    "warnings": 2,
+    "trusted": true,
+    "logs": [
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      },
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      }
+    ],
+    "events": [
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          -2
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -2
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 4
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 5
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 4
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          -2
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -2
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 5
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 6
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 7
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 6
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 7
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 8
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 9
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 9
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 8
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 10
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 11
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 12
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1,
+          1000001
+        ],
+        "changed": [
+          1000001
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 10
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          -1,
+          1000001
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1,
+          1000001
+        ],
+        "changed": [
+          1000001
+        ]
+      },
+      {
+        "type": "touchcancel",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          -1,
+          1000001
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 13
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 13
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 1
+      }
+    ]
+  },
+  {
+    "title": "identity regression: auto diagnostics=true ids=1,2",
+    "status": "passed",
+    "warnings": 0,
+    "trusted": true,
+    "logs": [],
+    "events": [
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          2
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 4
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 5
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 4
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          2
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 5
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 6
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 7
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 7
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 6
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 8
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 9
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 9
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 8
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 10
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 11
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          2
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 12
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          2,
+          1000001
+        ],
+        "changed": [
+          1000001
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 11
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          1,
+          1000001
+        ],
+        "changed": [
+          2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          1000001
+        ],
+        "changed": [
+          1000001
+        ]
+      },
+      {
+        "type": "touchcancel",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          1,
+          1000001
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 13
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 13
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 1
+      }
+    ]
+  },
+  {
+    "title": "identity regression: auto diagnostics=true ids=1,21",
+    "status": "failed",
+    "warnings": 4,
+    "trusted": true,
+    "logs": [
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      },
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      },
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      },
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      }
+    ],
+    "events": [
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 4
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 5
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 4
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 5
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 6
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 7
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 7
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 6
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 8
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 9
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 9
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 8
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 10
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 11
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 12
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1,
+          21,
+          1000001
+        ],
+        "changed": [
+          1000001
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 11
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          1,
+          1000001
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1,
+          1000001
+        ],
+        "changed": [
+          1000001
+        ]
+      },
+      {
+        "type": "touchcancel",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          1,
+          1000001
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 13
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          1
+        ],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 13
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 1
+      }
+    ]
+  },
+  {
+    "title": "identity regression: auto diagnostics=true ids=21,41",
+    "status": "failed",
+    "warnings": 4,
+    "trusted": true,
+    "logs": [
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      },
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      },
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      },
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      }
+    ],
+    "events": [
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21,
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21,
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          41
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 4
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 5
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21,
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21,
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 4
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          41
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 5
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 6
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 7
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21,
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21,
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 7
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 6
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 8
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 9
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21,
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21,
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 9
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 8
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 10
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 11
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21,
+          41
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 12
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21,
+          41,
+          1000001
+        ],
+        "changed": [
+          1000001
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 11
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          21,
+          1000001
+        ],
+        "changed": [
+          41
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21,
+          1000001
+        ],
+        "changed": [
+          1000001
+        ]
+      },
+      {
+        "type": "touchcancel",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          21,
+          1000001
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 13
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          21
+        ],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 13
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          21
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 1
+      }
+    ]
+  },
+  {
+    "title": "identity regression: auto diagnostics=true ids=-1,-2",
+    "status": "failed",
+    "warnings": 2,
+    "trusted": true,
+    "logs": [
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      },
+      {
+        "level": "error",
+        "args": [
+          "Cannot find single active touch."
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at ResponderTouchHistoryStore.recordTouchTrack (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:32786:23)\n    at HTMLDocument.eventListener (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:31754:34)"
+      }
+    ],
+    "events": [
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          -2
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -2
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 4
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 5
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 4
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          -2
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -2
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 5
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 6
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 7
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 6
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 7
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 8
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 9
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 9
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 8
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 10
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 11
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 12
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1,
+          1000001
+        ],
+        "changed": [
+          1000001
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 10
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          -1,
+          1000001
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1,
+          1000001
+        ],
+        "changed": [
+          1000001
+        ]
+      },
+      {
+        "type": "touchcancel",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          -1,
+          1000001
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 13
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 13
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 1
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 1
+      }
+    ]
+  },
+  {
+    "title": "identity ownership: auto control down stays excluded after moving onto paper",
+    "status": "passed",
+    "warnings": 0,
+    "trusted": true,
+    "logs": [],
+    "events": [
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          -1
+        ]
+      }
+    ]
+  },
+  {
+    "title": "identity ownership: finger control down stays excluded after moving onto paper",
+    "status": "passed",
+    "warnings": 0,
+    "trusted": true,
+    "logs": [],
+    "events": [
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          -1
+        ]
+      }
+    ]
+  },
+  {
+    "title": "identity ownership: pen control down stays excluded after moving onto paper",
+    "status": "passed",
+    "warnings": 0,
+    "trusted": true,
+    "logs": [],
+    "events": [
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -2,
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 3
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -2
+        ]
+      },
+      {
+        "type": "touchmove",
+        "trusted": true,
+        "ids": [
+          -1
+        ],
+        "changed": [
+          -1
+        ]
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "pointerId": 2
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "ids": [],
+        "changed": [
+          -1
+        ]
+      }
+    ]
+  },
+  {
+    "title": "unrelated console errors still reach Expo development LogBox",
+    "status": "passed",
+    "warnings": 0,
+    "trusted": true,
+    "logs": [
+      {
+        "level": "error",
+        "args": [
+          "HAM50 unrelated error"
+        ],
+        "stack": "Error\n    at console.<computed> (<anonymous>:13:18)\n    at console.<computed> (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:68054:26)\n    at consoleErrorMiddleware (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:881:27)\n    at console.error (http://127.0.0.1:5266/apps/playground/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:821:29)\n    at eval (eval at evaluate (:302:30), <anonymous>:1:20)\n    at UtilityScript.evaluate (<anonymous>:304:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)"
+      }
+    ],
+    "events": []
+  }
+]

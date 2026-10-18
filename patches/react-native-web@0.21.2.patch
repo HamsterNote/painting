@@ -1,0 +1,217 @@
+diff --git a/dist/cjs/modules/useResponderEvents/createResponderEvent.js b/dist/cjs/modules/useResponderEvents/createResponderEvent.js
+index b71d41d32ad3178fa3e722edba6b148b6eaa61ae..362defa2991e0013b2896a16beb233ad3eed5405 100644
+--- a/dist/cjs/modules/useResponderEvents/createResponderEvent.js
++++ b/dist/cjs/modules/useResponderEvents/createResponderEvent.js
+@@ -17,13 +17,23 @@ var emptyFunction = () => {};
+ var emptyObject = {};
+ var emptyArray = [];
+ 
+-/**
+- * Safari produces very large identifiers that would cause the `touchBank` array
+- * length to be so large as to crash the browser, if not normalized like this.
+- * In the future the `touchBank` should use an object/map instead.
+- */
+-function normalizeIdentifier(identifier) {
+-  return identifier > 20 ? identifier % 20 : identifier;
++// Keep touchBank indices compact without conflating browser identifiers.
++// Slot 0 belongs to emulated mouse events; touch slots live for one contact.
++var touchIdentifiers = new WeakMap();
++function normalizeIdentifier(identifier, store) {
++  var identifiers = touchIdentifiers.get(store);
++  if (identifiers == null) {
++    identifiers = new Map();
++    touchIdentifiers.set(store, identifiers);
++  }
++  var slot = identifiers.get(identifier);
++  if (slot == null) {
++    var occupied = new Set(identifiers.values());
++    slot = 1;
++    while (occupied.has(slot)) slot++;
++    identifiers.set(identifier, slot);
++  }
++  return slot;
+ }
+ 
+ /**
+@@ -40,7 +50,7 @@ function createResponderEvent(domEvent, responderTouchHistoryStore) {
+   var metaKey = domEvent.metaKey === true;
+   var shiftKey = domEvent.shiftKey === true;
+   var force = domEventChangedTouches && domEventChangedTouches[0].force || 0;
+-  var identifier = normalizeIdentifier(domEventChangedTouches && domEventChangedTouches[0].identifier || 0);
++  var identifier = domEventChangedTouches && domEventChangedTouches[0] ? normalizeIdentifier(domEventChangedTouches[0].identifier, responderTouchHistoryStore) : 0;
+   var clientX = domEventChangedTouches && domEventChangedTouches[0].clientX || domEvent.clientX;
+   var clientY = domEventChangedTouches && domEventChangedTouches[0].clientY || domEvent.clientY;
+   var pageX = domEventChangedTouches && domEventChangedTouches[0].pageX || domEvent.pageX;
+@@ -51,7 +61,7 @@ function createResponderEvent(domEvent, responderTouchHistoryStore) {
+     return Array.prototype.slice.call(touches).map(touch => {
+       return {
+         force: touch.force,
+-        identifier: normalizeIdentifier(touch.identifier),
++        identifier: normalizeIdentifier(touch.identifier, responderTouchHistoryStore),
+         get locationX() {
+           return locationX(touch.clientX);
+         },
+@@ -68,6 +78,17 @@ function createResponderEvent(domEvent, responderTouchHistoryStore) {
+   if (domEventChangedTouches != null) {
+     changedTouches = normalizeTouches(domEventChangedTouches);
+     touches = normalizeTouches(domEvent.touches);
++    // Release only after all lists (and the top-level identifier) agree.
++    // The event retains its numeric slots for the subsequent history update.
++    if (domEventType === 'touchend' || domEventType === 'touchcancel') {
++      var identifiers = touchIdentifiers.get(responderTouchHistoryStore);
++      var active = new Set(Array.from(domEvent.touches, touch => touch.identifier));
++      if (identifiers != null) {
++        for (var touch of Array.from(domEventChangedTouches)) {
++          if (!active.has(touch.identifier)) identifiers.delete(touch.identifier);
++        }
++      }
++    }
+   } else {
+     var emulatedTouches = [{
+       force,
+diff --git a/dist/modules/useResponderEvents/createResponderEvent.js b/dist/modules/useResponderEvents/createResponderEvent.js
+index 0e15e64b8923ed0dbe82cd78448863e21762be2c..11b19cdf01292b5521295fae64a359359ee38cab 100644
+--- a/dist/modules/useResponderEvents/createResponderEvent.js
++++ b/dist/modules/useResponderEvents/createResponderEvent.js
+@@ -12,13 +12,23 @@ var emptyFunction = () => {};
+ var emptyObject = {};
+ var emptyArray = [];
+ 
+-/**
+- * Safari produces very large identifiers that would cause the `touchBank` array
+- * length to be so large as to crash the browser, if not normalized like this.
+- * In the future the `touchBank` should use an object/map instead.
+- */
+-function normalizeIdentifier(identifier) {
+-  return identifier > 20 ? identifier % 20 : identifier;
++// Keep touchBank indices compact without conflating browser identifiers.
++// Slot 0 belongs to emulated mouse events; touch slots live for one contact.
++var touchIdentifiers = new WeakMap();
++function normalizeIdentifier(identifier, store) {
++  var identifiers = touchIdentifiers.get(store);
++  if (identifiers == null) {
++    identifiers = new Map();
++    touchIdentifiers.set(store, identifiers);
++  }
++  var slot = identifiers.get(identifier);
++  if (slot == null) {
++    var occupied = new Set(identifiers.values());
++    slot = 1;
++    while (occupied.has(slot)) slot++;
++    identifiers.set(identifier, slot);
++  }
++  return slot;
+ }
+ 
+ /**
+@@ -35,7 +45,7 @@ export default function createResponderEvent(domEvent, responderTouchHistoryStor
+   var metaKey = domEvent.metaKey === true;
+   var shiftKey = domEvent.shiftKey === true;
+   var force = domEventChangedTouches && domEventChangedTouches[0].force || 0;
+-  var identifier = normalizeIdentifier(domEventChangedTouches && domEventChangedTouches[0].identifier || 0);
++  var identifier = domEventChangedTouches && domEventChangedTouches[0] ? normalizeIdentifier(domEventChangedTouches[0].identifier, responderTouchHistoryStore) : 0;
+   var clientX = domEventChangedTouches && domEventChangedTouches[0].clientX || domEvent.clientX;
+   var clientY = domEventChangedTouches && domEventChangedTouches[0].clientY || domEvent.clientY;
+   var pageX = domEventChangedTouches && domEventChangedTouches[0].pageX || domEvent.pageX;
+@@ -46,7 +56,7 @@ export default function createResponderEvent(domEvent, responderTouchHistoryStor
+     return Array.prototype.slice.call(touches).map(touch => {
+       return {
+         force: touch.force,
+-        identifier: normalizeIdentifier(touch.identifier),
++        identifier: normalizeIdentifier(touch.identifier, responderTouchHistoryStore),
+         get locationX() {
+           return locationX(touch.clientX);
+         },
+@@ -63,6 +73,17 @@ export default function createResponderEvent(domEvent, responderTouchHistoryStor
+   if (domEventChangedTouches != null) {
+     changedTouches = normalizeTouches(domEventChangedTouches);
+     touches = normalizeTouches(domEvent.touches);
++    // Release only after all lists (and the top-level identifier) agree.
++    // The event retains its numeric slots for the subsequent history update.
++    if (domEventType === 'touchend' || domEventType === 'touchcancel') {
++      var identifiers = touchIdentifiers.get(responderTouchHistoryStore);
++      var active = new Set(Array.from(domEvent.touches, touch => touch.identifier));
++      if (identifiers != null) {
++        for (var touch of Array.from(domEventChangedTouches)) {
++          if (!active.has(touch.identifier)) identifiers.delete(touch.identifier);
++        }
++      }
++    }
+   } else {
+     var emulatedTouches = [{
+       force,
+diff --git a/src/modules/useResponderEvents/createResponderEvent.js b/src/modules/useResponderEvents/createResponderEvent.js
+index ca063955881268b78995498a3f13a673cf98800f..90539e923ebca2ad850c43942dd128b92c928d27 100644
+--- a/src/modules/useResponderEvents/createResponderEvent.js
++++ b/src/modules/useResponderEvents/createResponderEvent.js
+@@ -44,13 +44,23 @@ const emptyFunction = () => {};
+ const emptyObject = {};
+ const emptyArray = [];
+ 
+-/**
+- * Safari produces very large identifiers that would cause the `touchBank` array
+- * length to be so large as to crash the browser, if not normalized like this.
+- * In the future the `touchBank` should use an object/map instead.
+- */
+-function normalizeIdentifier(identifier) {
+-  return identifier > 20 ? identifier % 20 : identifier;
++// Keep touchBank indices compact without conflating browser identifiers.
++// Slot 0 belongs to emulated mouse events; touch slots live for one contact.
++const touchIdentifiers: WeakMap<ResponderTouchHistoryStore, Map<number, number>> = new WeakMap();
++function normalizeIdentifier(identifier, store) {
++  let identifiers = touchIdentifiers.get(store);
++  if (identifiers == null) {
++    identifiers = new Map();
++    touchIdentifiers.set(store, identifiers);
++  }
++  let slot = identifiers.get(identifier);
++  if (slot == null) {
++    const occupied = new Set(identifiers.values());
++    slot = 1;
++    while (occupied.has(slot)) slot++;
++    identifiers.set(identifier, slot);
++  }
++  return slot;
+ }
+ 
+ /**
+@@ -73,9 +83,9 @@ export default function createResponderEvent(
+   const shiftKey = domEvent.shiftKey === true;
+   const force =
+     (domEventChangedTouches && domEventChangedTouches[0].force) || 0;
+-  const identifier = normalizeIdentifier(
+-    (domEventChangedTouches && domEventChangedTouches[0].identifier) || 0
+-  );
++  const identifier = domEventChangedTouches && domEventChangedTouches[0]
++    ? normalizeIdentifier(domEventChangedTouches[0].identifier, responderTouchHistoryStore)
++    : 0;
+   const clientX =
+     (domEventChangedTouches && domEventChangedTouches[0].clientX) ||
+     domEvent.clientX;
+@@ -98,7 +108,7 @@ export default function createResponderEvent(
+     return Array.prototype.slice.call(touches).map((touch) => {
+       return {
+         force: touch.force,
+-        identifier: normalizeIdentifier(touch.identifier),
++        identifier: normalizeIdentifier(touch.identifier, responderTouchHistoryStore),
+         get locationX() {
+           return locationX(touch.clientX);
+         },
+@@ -116,6 +126,17 @@ export default function createResponderEvent(
+   if (domEventChangedTouches != null) {
+     changedTouches = normalizeTouches(domEventChangedTouches);
+     touches = normalizeTouches(domEvent.touches);
++    // Release only after all lists (and the top-level identifier) agree.
++    // The event retains its numeric slots for the subsequent history update.
++    if (domEventType === 'touchend' || domEventType === 'touchcancel') {
++      const identifiers = touchIdentifiers.get(responderTouchHistoryStore);
++      const active = new Set(Array.from(domEvent.touches, touch => touch.identifier));
++      if (identifiers != null) {
++        for (const touch of Array.from(domEventChangedTouches)) {
++          if (!active.has(touch.identifier)) identifiers.delete(touch.identifier);
++        }
++      }
++    }
+   } else {
+     const emulatedTouches = [
+       {
