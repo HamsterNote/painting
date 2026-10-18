@@ -77,6 +77,8 @@
 
 ## 本轮抢救与分批续做证据
 
+- 2026-10-18 验收缺陷轮：8.1–8.4 已各自补入口回归、spec 契约与实跑证据；`pnpm test` 82 suites / 1065 tests PASS，`pnpm typecheck` exit 0，`pnpm lint` 0 errors / 32 warnings；全量 `pnpm test:ui --workers=1 --trace=off` Chromium 56/56 PASS，独立 `pnpm exec playwright test --config=playwright.webkit.config.ts --workers=1 --trace=off` 在 Ubuntu 24.04 Podman 中 WebKit 56/56 PASS；串行 `pnpm build` / `pnpm pack:dry` / `pnpm verify:layered` 均 exit 0，strict PASS。修复提交 `9751a57` 已普通推送；捕获转交复现及真实 pen 限制详见 `acceptance-feedback.md`。当前 44/49，原五项人工验收未改，5266 临时服务已停。
+
 - 2026-10-18 首批 cutover：board 的公开组件与 playground App 调用方迁到分层入口；七份旧 UI 文件按保留行为迁移，补齐鼠标/双指缩放百分比浮层及过期 timer 归属。`pnpm exec jest --runInBand --testPathPattern 'layered-|painting-board/src/__tests__'` 24 suites / 343 tests PASS；七文件专项 `pnpm test:ui ... --workers=1 --trace=off` Chromium 17/17 PASS。完整命令和逐类迁移映射见 `cutover-regression-map.md`。尚未删除 Skia/旧目录，6.3 / 7.1 / 7.2 / 7.9 保持未完成。
 - `1bc78e7` 抢救复验：`pnpm test` 89 suites / 1472 tests PASS；`pnpm typecheck` exit 0；十份分层 UI 文件的 Chromium 38/38 PASS；`pnpm exec playwright test --config=playwright.webkit.config.ts --workers=1 --trace=off` 在 Ubuntu 24.04 Podman + 宿主 HTTP 200 服务运行，WebKit 21/21 PASS。已普通推送 `13fa7e9`（含生成的 board 声明同步），未推本地 WIP。
 

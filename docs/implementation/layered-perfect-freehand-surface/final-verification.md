@@ -1,5 +1,7 @@
 # 最终开发验证记录
 
+本文保留截至 `9a7da6b` 的退役交付基线；之后四项验收缺陷的修复与最新完整验证见 `acceptance-feedback.md`。当前 Chromium/WebKit 均为 56/56，任务为 44/49；原五项人工验收保持未完成。下文 49/49、40/45 与 CI SHA 均为历史实跑记录。
+
 日期：2026-10-18。分支始终为 `feat/use-perfect-freehand`，正常 fast-forward 推送至 PR #24；没有 rebase/force-push。失败树 `agent/ham40-wip-failed-run` 保持本地，不推送。
 
 ## 实际命令与结果

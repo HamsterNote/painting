@@ -19,9 +19,15 @@
 - `pnpm typecheck`：exit 0。
 - `pnpm lint`：exit 0，**0 errors / 32 warnings**，未增加 error、未禁用规则。
 - `pnpm test:ui --workers=1 --trace=off`：全量 Chromium **56/56 PASS**，包括新增七例和原 49 例。
+- `pnpm exec playwright test --config=playwright.webkit.config.ts --workers=1 --trace=off`：独立 WebKit **56/56 PASS**。宿主 Ubuntu 26 不受支持，实际在已有 `localhost/ham40-webkit:noble` Ubuntu 24.04 Podman 中执行，使用 `--network host` 连接临时 5266 服务、绑定同路径代码和 Playwright 浏览器缓存；没有用 Chromium 代替。
 - `openspec validate layered-perfect-freehand-surface --strict`：exit 0。apply 状态为 **44/49**，只剩原五项人工验收。
 
-独立 WebKit、构建和打包最终结果随本轮后续实跑补录。
+- `pnpm build`：exit 0，两个库与 Expo Web 静态产物构建成功；浏览器结束后串行执行，未与其他导出竞争共享目录。
+- `pnpm pack:dry`：exit 0，painting 977 files / 1.0 MB，board 12 files / 4.5 kB；未发布包。
+- `pnpm verify:layered`：exit 0，exports 存在，源码/锁文件/两个包和 Expo 产物无退役 Skia runtime。
+- `pnpm exec prettier --check <本轮 16 个源码/测试/配置/文档>`：exit 0；最终证据文字补录后另查修改文档。`git diff --check` 无错误。
+
+功能与回归提交 `9751a57` 已普通推送至原 PR #24 分支，后续证据提交不改变运行实现。构建/打包完成后按 `/proc/1206666/cwd` 核对本轮临时服务 PID，仅终止该服务并收齐前台会话；`ss -ltn '( sport = :5266 )'` 确认无监听。没有启动持久验证服务。新 SHA 的 CI 由推送触发，本地结果不冒充 CI 结果。
 
 ## 验证限制
 
