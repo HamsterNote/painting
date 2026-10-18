@@ -248,6 +248,9 @@ test('paper, ruler, touch pinch and minimap use the same viewport', async ({ pag
   await expect(page.getByTestId('layered-ruler')).toBeVisible();
   const surface = page.getByTestId('layered-surface');
   const box = (await surface.boundingBox())!;
+  const initial = await page.evaluate(
+    () => window.__layeredEditor!.getSnapshot('viewport').viewport
+  );
   const touch = async (phase: string, id: number, x: number, y: number) =>
     surface.dispatchEvent(`pointer${phase}`, {
       pointerId: id,
@@ -263,14 +266,14 @@ test('paper, ruler, touch pinch and minimap use the same viewport', async ({ pag
   await touch('up', 1, 100, 100);
   expect(
     await page.evaluate(() => window.__layeredEditor!.getSnapshot('viewport').viewport)
-  ).toEqual({ scale: 2, tx: -100, ty: -100 });
+  ).toEqual({ scale: 2, tx: initial.tx * 2 - 100, ty: initial.ty * 2 - 100 });
   await expect(page.getByTestId('layered-display').locator(':scope > g')).toHaveAttribute(
     'transform',
-    'matrix(2 0 0 2 -100 -100)'
+    `matrix(2 0 0 2 ${initial.tx * 2 - 100} ${initial.ty * 2 - 100})`
   );
   await expect(page.getByTestId('layered-paper').locator('g')).toHaveAttribute(
     'transform',
-    'matrix(2 0 0 2 -100 -100)'
+    `matrix(2 0 0 2 ${initial.tx * 2 - 100} ${initial.ty * 2 - 100})`
   );
   const before = await page.evaluate(() => window.__layeredEditor!.getSnapshot('viewport'));
   const map = page.getByTestId('layered-minimap');

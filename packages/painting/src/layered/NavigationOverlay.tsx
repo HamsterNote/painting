@@ -11,7 +11,9 @@ import { useEditorSnapshot } from './useEditorSnapshot';
 export function NavigationOverlay({ controller }: { controller: LayeredEditorController }) {
   const navigation = useEditorSnapshot(controller, 'navigation');
   const { viewport } = useEditorSnapshot(controller, 'viewport');
-  const placed = useRef<string | undefined>(undefined);
+  const placed = useRef<{ controller: LayeredEditorController; placement: string } | undefined>(
+    undefined
+  );
   const document = useEditorSnapshot(controller, 'document');
   const root = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 1, height: 1 });
@@ -28,25 +30,38 @@ export function NavigationOverlay({ controller }: { controller: LayeredEditorCon
     return () => observer?.disconnect();
   }, []);
   useLayoutEffect(() => {
-    if (!navigation.virtualPaper.enabled || size.width <= 1) {
-      placed.current = undefined;
+    if (!navigation.virtualPaper.enabled || size.width <= 1) return;
+    const placement = navigation.virtualPaper.initialPlacement;
+    // Default placement applies when the paper first becomes visible. Hiding it
+    // or resizing the surface must not reset a viewport the user has navigated.
+    if (placement === 'top-center' && !navigation.paper) return;
+    if (placed.current?.controller === controller && placed.current.placement === placement) return;
+    if (placement === 'top-left') {
+      placed.current = { controller, placement };
       return;
     }
-    const placement = navigation.virtualPaper.initialPlacement;
-    if (placed.current === placement) return;
-    placed.current = placement;
-    if (placement !== 'center') return;
     const current = controller.getSnapshot('viewport');
-    controller.updateViewport({
+    const result = controller.updateViewport({
       type: 'replace',
       expectedRevision: current.revision,
       viewport: {
         ...current.viewport,
         tx: (size.width - 794 * current.viewport.scale) / 2,
-        ty: (size.height - 1123 * current.viewport.scale) / 2,
+        ty:
+          placement === 'center'
+            ? (size.height - 1123 * current.viewport.scale) / 2
+            : current.viewport.ty,
       },
     });
-  }, [controller, navigation.virtualPaper.enabled, navigation.virtualPaper.initialPlacement, size]);
+    if (result.ok && (result.value.applied || result.value.reason === 'unchanged'))
+      placed.current = { controller, placement };
+  }, [
+    controller,
+    navigation.paper,
+    navigation.virtualPaper.enabled,
+    navigation.virtualPaper.initialPlacement,
+    size,
+  ]);
   const bounds = useMemo(() => {
     cache.syncDocument(document);
     const objects = document.objects

@@ -188,3 +188,72 @@ test('minimap paper is absent and background is white when the toolbar paper tog
   await expect(map).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   expect(await history(page)).toHaveLength(0);
 });
+
+for (const width of [1280, 390]) {
+  for (const zoom of [false, true]) {
+    test(`paper starts horizontally centered at width ${width}, zoom changed ${zoom}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 1000 });
+      await openEditor(page);
+      const surface = page.getByTestId('layered-surface');
+      const box = (await surface.boundingBox())!;
+      await page.mouse.move(box.x + box.width / 2, box.y + 120);
+      if (zoom) {
+        await page.keyboard.down('Control');
+        await page.mouse.wheel(0, -200);
+        await page.keyboard.up('Control');
+        await page.waitForFunction(
+          () => window.__layeredEditor!.getSnapshot('viewport').viewport.scale > 1
+        );
+      }
+      const before = await page.evaluate(
+        () => window.__layeredEditor!.getSnapshot('viewport').viewport
+      );
+      await page.getByLabel('虚拟纸张', { exact: true }).check();
+      await page.getByLabel('小地图', { exact: true }).check();
+      const paper = page.getByTestId('layered-paper');
+      const paperWidth = Number(await paper.locator('rect').getAttribute('width'));
+      const tx = (box.width - paperWidth * before.scale) / 2;
+      const matrix = `matrix(${before.scale} 0 0 ${before.scale} ${tx} ${before.ty})`;
+      await expect(paper.locator('g')).toHaveAttribute('transform', matrix);
+      await expect(page.getByTestId('layered-display').locator(':scope > g')).toHaveAttribute(
+        'transform',
+        matrix
+      );
+      const rect = (await paper.locator('rect').boundingBox())!;
+      expect(rect.x + rect.width / 2).toBeCloseTo(box.x + box.width / 2, 1);
+      expect(Number(await page.getByTestId('minimap-viewport').getAttribute('x'))).toBeCloseTo(
+        -tx / before.scale
+      );
+      const viewport = await page.evaluate(() => window.__layeredEditor!.getSnapshot('viewport'));
+      expect(viewport.viewport).toEqual({ ...before, tx });
+      // Verify input uses this same transform; CSS-only centering would fail.
+      await page.mouse.move(box.x + box.width / 2, box.y + 180);
+      await page.mouse.down();
+      await page.mouse.move(box.x + box.width / 2 + 40, box.y + 200);
+      await page.mouse.up();
+      const object = (await history(page))[0];
+      if (object.kind !== 'freehand') throw new Error('missing ink');
+      expect(object.samples[0].x).toBeCloseTo((box.width / 2 - tx) / before.scale);
+      expect(object.samples[0].y).toBeCloseTo((180 - before.ty) / before.scale);
+      await expect(page.getByTestId('layered-display').locator('[data-object-id]')).toHaveCSS(
+        'visibility',
+        'visible'
+      );
+      await page.mouse.wheel(40, 30);
+      await page.waitForFunction(
+        (revision) => window.__layeredEditor!.getSnapshot('viewport').revision > revision,
+        viewport.revision
+      );
+      const navigated = await page.evaluate(() => window.__layeredEditor!.getSnapshot('viewport'));
+      await page.getByLabel('虚拟纸张', { exact: true }).uncheck();
+      await page.getByLabel('虚拟纸张', { exact: true }).check();
+      await page.setViewportSize({ width: width + 80, height: 900 });
+      await expect(surface).toHaveCSS('width', `${width + 80}px`);
+      expect(await page.evaluate(() => window.__layeredEditor!.getSnapshot('viewport'))).toEqual(
+        navigated
+      );
+    });
+  }
+}

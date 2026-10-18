@@ -171,7 +171,7 @@ export type LayeredNavigationSnapshot = Readonly<{
   zoomFeedback: Readonly<{ point: Point; scale: number; token: number }> | null;
   virtualPaper: Readonly<{
     enabled: boolean;
-    initialPlacement: 'top-left' | 'center';
+    initialPlacement: 'top-left' | 'top-center' | 'center';
     minScale: number;
     maxScale: number;
     enabledInteractions: readonly DrawingSurfaceVirtualPaperInteraction[];
@@ -1417,7 +1417,7 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
     zoomFeedback: null,
     virtualPaper: Object.freeze({
       enabled: true,
-      initialPlacement: 'top-left',
+      initialPlacement: 'top-center',
       minScale: MIN_VIEWPORT_SCALE,
       maxScale: MAX_VIEWPORT_SCALE,
       enabledInteractions: Object.freeze([
@@ -1528,7 +1528,7 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
     if (
       !config ||
       typeof config.enabled !== 'boolean' ||
-      !['top-left', 'center'].includes(config.initialPlacement) ||
+      !['top-left', 'top-center', 'center'].includes(config.initialPlacement) ||
       !Number.isFinite(config.minScale) ||
       !Number.isFinite(config.maxScale) ||
       config.minScale < MIN_VIEWPORT_SCALE ||
