@@ -1,5 +1,7 @@
 import { createSemanticWebAdapter } from '../layered/semanticWebAdapter';
 import { layeredRect, makeLayeredController } from './fixtures/layered';
+import { createNavigationWebAdapter } from '../layered/navigationWebAdapter';
+import { createLayeredInputArbiter } from '../input/web/layeredInputArbiter';
 
 function pointer(target: EventTarget, phase: string, x: number, y: number, pointerType = 'mouse') {
   const event = new Event(`pointer${phase}`, { bubbles: true, cancelable: true });
@@ -74,3 +76,60 @@ test('source policy and ownership preserve live mouse tools and cancel touch pre
   adapter.destroy();
   host.remove();
 });
+
+test.each(['rect', 'lasso', 'eraser', 'selection'] as const)(
+  '%s touch transaction cancels before pair and late up cannot edit history',
+  (tool) => {
+    const controller = makeLayeredController([layeredRect()]);
+    controller.setTool(tool);
+    controller.setSelection(['rect']);
+    controller.setNavigation({
+      virtualPaper: { ...controller.getSnapshot('navigation').virtualPaper, enabled: false },
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    let arbiter: ReturnType<typeof createLayeredInputArbiter>;
+    const navigation = createNavigationWebAdapter(host, controller, false, undefined, {
+      listen: false,
+      canNavigate: () => !arbiter?.isWriting(),
+    });
+    const semantic = createSemanticWebAdapter({
+      host,
+      controller,
+      listen: false,
+      allocateId: () => 'new',
+      onText: jest.fn(),
+      onError: (error) => {
+        throw error;
+      },
+    });
+    arbiter = createLayeredInputArbiter({ host, controller, tool: semantic, navigation });
+    const send = (phase: string, id: number, x: number, y: number) => {
+      const event = new Event(`pointer${phase}`, { bubbles: true, cancelable: true });
+      Object.assign(event, {
+        pointerId: id,
+        pointerType: 'touch',
+        clientX: x,
+        clientY: y,
+        button: 0,
+      });
+      (phase === 'down' ? host : window).dispatchEvent(event);
+    };
+    const saved = controller.getSnapshot('document');
+    send('down', 1, 10, 10);
+    send('move', 1, 80, 80);
+    expect(controller.getSnapshot('preview')).not.toEqual({ objects: [], hiddenIds: [], path: [] });
+    send('down', 2, 180, 80);
+    expect(controller.getSnapshot('preview')).toEqual({ objects: [], hiddenIds: [], path: [] });
+    send('move', 2, 280, 120);
+    expect(controller.getSnapshot('viewport').viewport.scale).toBeGreaterThan(1);
+    send('up', 1, 80, 80);
+    send('up', 2, 280, 120);
+    expect(controller.getSnapshot('document')).toBe(saved);
+    expect(controller.getSnapshot('history').canUndo).toBe(false);
+    arbiter.destroy();
+    semantic.destroy();
+    navigation.destroy();
+    host.remove();
+  }
+);

@@ -4,6 +4,8 @@ import type { LayeredEditorController, LayeredEditorTool } from '../core/layered
 import type { PressureMode } from '../model/document';
 import { useEditorSnapshot } from './useEditorSnapshot';
 import { useInputInitialization } from './useInputInitialization';
+import { isLayeredInputMode } from '../core/layeredInputMode';
+import { writeInputModePreference } from './inputModePreference';
 
 const TOOLS: readonly [LayeredEditorTool, string, IconName][] = [
   ['freehand', '自由笔', 'pen'],
@@ -32,7 +34,7 @@ const buttonStyle: CSSProperties = {
   color: '#20262d',
 };
 
-/** Only the tools/history channels are observed; raw input never renders the toolbar. */
+/** Low-frequency channels only; raw input never renders the toolbar. */
 export function Toolbar({ controller }: { controller: LayeredEditorController }) {
   const inputReady = useInputInitialization(controller);
   const input = useEditorSnapshot(controller, 'input');
@@ -87,6 +89,21 @@ export function Toolbar({ controller }: { controller: LayeredEditorController })
           <Icon name={icon} style={{ width: 18, height: 18 }} />
         </button>
       ))}
+      <select
+        aria-label="输入模式"
+        title="输入模式"
+        value={input.mode}
+        style={{ maxWidth: '100%', minHeight: 34 }}
+        onChange={(event) => {
+          const mode = event.target.value;
+          if (!isLayeredInputMode(mode)) return;
+          if (controller.setInputMode(mode).ok) writeInputModePreference(mode);
+        }}
+      >
+        <option value="auto">自动</option>
+        <option value="finger">强制手指绘制</option>
+        <option value="pen">强制手写笔绘制</option>
+      </select>
       <button
         type="button"
         title="撤销"

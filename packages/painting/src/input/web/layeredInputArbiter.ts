@@ -131,6 +131,7 @@ export function createLayeredInputArbiter(options: {
   view.addEventListener('pagehide', reset);
   host.ownerDocument.addEventListener('visibilitychange', hidden);
   return {
+    isWriting: () => state.gesture?.kind === 'single-tool' || state.gesture?.kind === 'pen-tool',
     destroy() {
       if (destroyed) return;
       reset();

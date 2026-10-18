@@ -15,6 +15,7 @@ import type { DrawingSurfaceVirtualPaperOptions } from '../virtualPaperOptions';
 import { observeGestureEvents, type GestureTraceObserver } from '../input/web/gestureTrace';
 import { useInputInitialization } from './useInputInitialization';
 import { useEditorSnapshot } from './useEditorSnapshot';
+import { createLayeredInputArbiter } from '../input/web/layeredInputArbiter';
 
 export type LayeredDrawingSurfaceProps = {
   controller: LayeredEditorController;
@@ -65,22 +66,19 @@ export function LayeredDrawingSurface({
     setPresentation(queue);
     const surfaceId = ++nextSurface;
     let sequence = 0;
+    let arbiter: ReturnType<typeof createLayeredInputArbiter> | undefined;
+    const canNavigate = () => !arbiter?.isWriting();
     const navigation = createNavigationWebAdapter(
       host.current!,
       controller,
-      inputPolicy?.touch === 'draw',
-      onGestureTrace
+      false,
+      onGestureTrace,
+      { listen: false, canNavigate }
     );
-    const policy = {
-      mouse: 'draw',
-      pen: 'draw',
-      touch: 'none',
-      ...inputPolicy,
-    } as WebFreehandPolicy;
     const adapter = createFreehandWebAdapter({
       host: host.current!,
       controller,
-      policy,
+      listen: false,
       onTrace: onGestureTrace,
       createSessionId: () => `surface-${surfaceId}-session-${++sequence}`,
       createCommitId: () => `surface-${surfaceId}-commit-${sequence}`,
@@ -96,7 +94,8 @@ export function LayeredDrawingSurface({
     const semantic = createSemanticWebAdapter({
       host: host.current!,
       controller,
-      policy,
+      listen: false,
+      canNavigate,
       allocateId,
       beforeGesture: () => queue.confirmMounted(),
       onText: setTextPoint,
@@ -104,18 +103,37 @@ export function LayeredDrawingSurface({
       onError: (error) => setToolError(String(error)),
       onTrace: onGestureTrace,
     });
+    arbiter = createLayeredInputArbiter({
+      host: host.current!,
+      controller,
+      tool: {
+        dispatch(event) {
+          (controller.getSnapshot('tools').activeTool === 'freehand' ? adapter : semantic).dispatch(
+            event
+          );
+        },
+        cancel() {
+          const ink = adapter.cancel();
+          const tool = semantic.cancel();
+          return ink && tool;
+        },
+      },
+      navigation,
+      onDiagnostic: setToolError,
+    });
     retry.current = (commitId) => {
       const result = adapter.retryCommit(commitId);
       setFailure(result.ok ? undefined : { commitId, message: result.error.code });
     };
     return () => {
+      arbiter?.destroy();
       navigation.destroy();
       semantic.destroy();
       adapter.destroy();
       queue.destroy();
       stopTrace?.();
     };
-  }, [controller, inputReady, inputPolicy, allocateId, openImage, onGestureTrace]);
+  }, [controller, inputReady, allocateId, openImage, onGestureTrace]);
   return (
     <div
       ref={host}

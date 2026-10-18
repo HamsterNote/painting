@@ -5,6 +5,7 @@ import { FreehandGeometryCache } from '../geometry/freehandCache';
 import { readLayeredDocument, serializeLayeredDocument } from '../model/documentReader';
 import { deriveFreehandGeometry } from '../geometry/freehand';
 import { createSemanticWebAdapter } from '../layered/semanticWebAdapter';
+import { createLayeredInputArbiter } from '../input/web/layeredInputArbiter';
 
 function pointer(
   target: EventTarget,
@@ -270,3 +271,58 @@ test('virtual paper options independently gate mouse/pen/touch/wheel navigation 
   navigation.destroy();
   host.remove();
 });
+
+test.each(['mouse', 'pen'])(
+  'composed %s writing freezes viewport, drains palms and retains pair limits',
+  (source) => {
+    const controller = makeLayeredController();
+    controller.setNavigation({
+      virtualPaper: {
+        ...controller.getSnapshot('navigation').virtualPaper,
+        enabled: false,
+        maxScale: 1.5,
+      },
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    let sequence = 0;
+    let arbiter: ReturnType<typeof createLayeredInputArbiter>;
+    const navigation = createNavigationWebAdapter(host, controller, false, undefined, {
+      listen: false,
+      canNavigate: () => !arbiter?.isWriting(),
+    });
+    const ink = createFreehandWebAdapter({
+      host,
+      controller,
+      listen: false,
+      createSessionId: () => `s${++sequence}`,
+      createCommitId: () => `c${sequence}`,
+    });
+    arbiter = createLayeredInputArbiter({ host, controller, tool: ink, navigation });
+    const before = controller.getSnapshot('viewport');
+    pointer(host, 'down', 9, 20, 20, source);
+    pointer(host, 'down', 1, 100, 100);
+    pointer(host, 'down', 2, 200, 100);
+    pointer(window, 'move', 2, 400, 200);
+    pointer(window, 'up', 9, 50, 50, source);
+    pointer(window, 'move', 1, 40, 40);
+    expect(controller.getSnapshot('viewport')).toBe(before);
+    expect(controller.getSnapshot('document').objects).toHaveLength(1);
+    pointer(window, 'up', 1, 40, 40);
+    pointer(window, 'up', 2, 400, 200);
+    pointer(host, 'down', 3, 100, 100);
+    pointer(host, 'down', 4, 200, 100);
+    pointer(window, 'move', 4, 400, 100);
+    expect(controller.getSnapshot('viewport').viewport.scale).toBe(1.5);
+    const pair = controller.getSnapshot('viewport');
+    pointer(host, 'down', 5, 500, 500);
+    pointer(window, 'up', 3, 100, 100);
+    pointer(window, 'move', 4, 600, 500);
+    pointer(window, 'move', 5, 700, 500);
+    expect(controller.getSnapshot('viewport')).toBe(pair);
+    arbiter.destroy();
+    ink.destroy();
+    navigation.destroy();
+    host.remove();
+  }
+);

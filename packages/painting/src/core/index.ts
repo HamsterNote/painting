@@ -2,6 +2,7 @@
 export * from '../model/document';
 export * from '../model/documentReader';
 export * from './layeredEditorController';
+export * from './layeredInputMode';
 export * from './freehandSession';
 export * from './layeredToolSession';
 export * from './layeredTextEditSession';

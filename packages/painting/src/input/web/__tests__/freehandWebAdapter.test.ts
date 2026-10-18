@@ -30,6 +30,7 @@ import {
   type FreehandObject,
 } from '../../../model/document';
 import type { DrawingViewport } from '../../../viewport';
+import { createLayeredInputArbiter } from '../layeredInputArbiter';
 
 // ---------------------------------------------------------------------------
 // PointerEvent / DOM shims
@@ -283,6 +284,32 @@ const noticesOf = (h: Harness, phase: FreehandWebAdapterNotice['phase']) =>
   h.notices.filter((notice) => notice.phase === phase);
 
 const lastNotice = (h: Harness) => h.notices[h.notices.length - 1];
+
+test('composed input preserves first pen down and ignores late up after explicit cancel', () => {
+  const h = setup({ listen: false });
+  const navigation = { dispatch: jest.fn(), cancel: () => true, begin: jest.fn() };
+  const arbiter = createLayeredInputArbiter({
+    host: h.host,
+    controller: h.controller,
+    tool: h.adapter,
+    navigation,
+  });
+  drawStroke(h, { clientX: 10, clientY: 20 });
+  expect(h.controller.getSnapshot('input').penSeen).toBe(true);
+  expect(h.controller.getSnapshot('document').objects).toHaveLength(1);
+  h.controller.setInputMode('finger');
+  fireHost(h.host, pointer('pointerdown', { pointerId: 2, pointerType: 'touch' }));
+  fireWindow(pointer('pointermove', { pointerId: 2, pointerType: 'touch', clientX: 20 }));
+  fireHost(h.host, pointer('pointerdown', { pointerId: 3, pointerType: 'touch', clientX: 40 }));
+  expect(h.controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
+  expect(navigation.begin).toHaveBeenCalledTimes(1);
+  fireWindow(pointer('pointerup', { pointerId: 2, pointerType: 'touch' }));
+  fireWindow(pointer('pointerup', { pointerId: 3, pointerType: 'touch' }));
+  expect(h.controller.getSnapshot('document').objects).toHaveLength(1);
+  expect(noticesOf(h, 'cancel')).toHaveLength(1);
+  expect(noticesOf(h, 'commit')).toHaveLength(1);
+  arbiter.destroy();
+});
 
 // ---------------------------------------------------------------------------
 // A. 默认策略 / pressure 解析

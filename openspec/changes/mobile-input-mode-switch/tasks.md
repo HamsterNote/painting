@@ -22,9 +22,12 @@
 
 ## 3. 三个 adapter、工具栏与示例接入
 
-- [ ] 3.1 调整 freehand adapter 支持组合路径派发与显式取消，移除该路径的竞争监听；保留独立静态 policy、coalesced、快速 up、capture、pending commit 语义。在现有 adapter 测试补取消后迟到 up 和首 pen down 不丢。验收：`pnpm exec jest --runInBand --selectProjects legacy-web --runTestsByPath packages/painting/src/input/web/__tests__/freehandWebAdapter.test.ts packages/painting/src/input/web/__tests__/layeredInputArbiter.test.ts`。
-- [ ] 3.2 接入 semantic/navigation adapter 和 Surface：统一来源准入，移除 touchDraw 全禁导航分支，支持取消未提交语义事务后以当前双指/viewport 建基线；默认纸面双指不因 virtual paper 可视开关关闭。在现有测试补形状/套索/擦除/选择事务取消、鼠标和笔写时冻结、固定 pair 与导航边界。验收：`pnpm exec jest --runInBand --selectProjects legacy-web --runTestsByPath packages/painting/src/__tests__/layered-semantic-adapter.test.ts packages/painting/src/__tests__/layered-navigation.test.ts packages/painting/src/__tests__/layered-canvas.test.tsx`。
-- [ ] 3.3 Toolbar 在所有工具下显示可访问“输入模式”三档 select，连接 controller 和偏好写入；更新公开入口、PaintingBoard、示例及 touchDraw 兼容初始化，保留窄屏换行；在现有 toolbar/public-entry 测试验证选项、默认/恢复值和不新增 undo。验收：`pnpm exec jest --runInBand --selectProjects legacy-web --runTestsByPath packages/painting/src/__tests__/layered-toolbar.test.tsx packages/painting/src/__tests__/layered-public-entry.test.tsx` 及 `pnpm run typecheck`。
+- [x] 3.1 调整 freehand adapter 支持组合路径派发与显式取消，移除该路径的竞争监听；保留独立静态 policy、coalesced、快速 up、capture、pending commit 语义。在现有 adapter 测试补取消后迟到 up 和首 pen down 不丢。验收：`pnpm exec jest --runInBand --selectProjects legacy-web --runTestsByPath packages/painting/src/input/web/__tests__/freehandWebAdapter.test.ts packages/painting/src/input/web/__tests__/layeredInputArbiter.test.ts`。
+  - 实跑上述验收命令：PASS，2 suites / 80 tests，包含真实 controller 的首笔与取消后迟到 up 回归。
+- [x] 3.2 接入 semantic/navigation adapter 和 Surface：统一来源准入，移除 touchDraw 全禁导航分支，支持取消未提交语义事务后以当前双指/viewport 建基线；默认纸面双指不因 virtual paper 可视开关关闭。在现有测试补形状/套索/擦除/选择事务取消、鼠标和笔写时冻结、固定 pair 与导航边界。验收：`pnpm exec jest --runInBand --selectProjects legacy-web --runTestsByPath packages/painting/src/__tests__/layered-semantic-adapter.test.ts packages/painting/src/__tests__/layered-navigation.test.ts packages/painting/src/__tests__/layered-canvas.test.tsx`。
+  - 实跑上述验收命令：PASS，3 suites / 16 tests。
+- [x] 3.3 Toolbar 在所有工具下显示可访问“输入模式”三档 select，连接 controller 和偏好写入；更新公开入口、PaintingBoard、示例及 touchDraw 兼容初始化，保留窄屏换行；在现有 toolbar/public-entry 测试验证选项、默认/恢复值和不新增 undo。验收：`pnpm exec jest --runInBand --selectProjects legacy-web --runTestsByPath packages/painting/src/__tests__/layered-toolbar.test.tsx packages/painting/src/__tests__/layered-public-entry.test.tsx` 及 `pnpm run typecheck`。
+  - 实跑上述 Jest 命令：PASS，2 suites / 4 tests；实跑 pnpm run typecheck：PASS（painting / painting-board / playground）。
 
 ## 4. 真实分层入口的自动化回归
 

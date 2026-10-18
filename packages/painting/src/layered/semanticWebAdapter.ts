@@ -22,6 +22,8 @@ export function createSemanticWebAdapter(options: {
   onError: (error: unknown) => void;
   beforeGesture?: () => void;
   onTrace?: GestureTraceObserver;
+  listen?: boolean;
+  canNavigate?: () => boolean;
 }) {
   const { host, controller } = options;
   const view = host.ownerDocument.defaultView!;
@@ -175,6 +177,11 @@ export function createSemanticWebAdapter(options: {
     zoomFeedback.clear();
     engine.cancel();
     release();
+    return (
+      controller.getSnapshot('preview').objects.length === 0 &&
+      controller.getSnapshot('preview').path.length === 0 &&
+      controller.getSnapshot('preview').hiddenIds.length === 0
+    );
   }
   function pointerCancel(event: PointerEvent) {
     if (owner?.id === event.pointerId) cancel();
@@ -195,7 +202,7 @@ export function createSemanticWebAdapter(options: {
     if (host.ownerDocument.visibilityState === 'hidden') cancel();
   }
   function wheel(event: WheelEvent) {
-    if (control(event.target)) return;
+    if (control(event.target) || options.canNavigate?.() === false) return;
     const config = controller.getSnapshot('navigation').virtualPaper;
     const modified = event.ctrlKey || event.metaKey;
     const zoom =
@@ -235,17 +242,26 @@ export function createSemanticWebAdapter(options: {
   const unsubscribe = controller.subscribe('tools', () => {
     if (owner) cancel();
   });
-  host.addEventListener('pointerdown', down);
+  if (options.listen !== false) {
+    host.addEventListener('pointerdown', down);
+    view.addEventListener('pointermove', move);
+    view.addEventListener('pointerup', up);
+    view.addEventListener('pointercancel', pointerCancel);
+    view.addEventListener('blur', cancel);
+    host.ownerDocument.addEventListener('visibilitychange', hidden);
+  }
   host.addEventListener('pointermove', hover);
   host.addEventListener('dblclick', doubleClick);
   host.addEventListener('wheel', wheel, { passive: false });
-  view.addEventListener('pointermove', move);
-  view.addEventListener('pointerup', up);
-  view.addEventListener('pointercancel', pointerCancel);
-  view.addEventListener('blur', cancel);
   view.addEventListener('keydown', keyDown);
-  host.ownerDocument.addEventListener('visibilitychange', hidden);
   return {
+    cancel,
+    dispatch(event: PointerEvent) {
+      if (event.type === 'pointerdown') down(event);
+      else if (event.type === 'pointermove') move(event);
+      else if (event.type === 'pointerup') up(event);
+      else if (event.type === 'pointercancel') pointerCancel(event);
+    },
     destroy() {
       cancel();
       engine.destroy();

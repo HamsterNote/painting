@@ -17,8 +17,9 @@ import { traceGesture, type GestureTraceObserver } from '../input/web/gestureTra
 export function createNavigationWebAdapter(
   host: HTMLElement,
   controller: LayeredEditorController,
-  touchDraw = false,
-  onTrace?: GestureTraceObserver
+  _touchDraw = false,
+  onTrace?: GestureTraceObserver,
+  options: { listen?: boolean; canNavigate?: () => boolean } = {}
 ) {
   const view = host.ownerDocument.defaultView!;
   const zoomFeedback = createZoomFeedback(controller, view);
@@ -30,7 +31,9 @@ export function createNavigationWebAdapter(
   const config = () => controller.getSnapshot('navigation').virtualPaper;
   const allows = (
     interaction: Parameters<ReturnType<typeof config>['enabledInteractions']['includes']>[0]
-  ) => config().enabled && config().enabledInteractions.includes(interaction);
+  ) =>
+    (options.listen === false && interaction.startsWith('touch')) ||
+    (config().enabled && config().enabledInteractions.includes(interaction));
   const screen = (event: PointerEvent): Point => {
     const rect = host.getBoundingClientRect();
     return {
@@ -39,7 +42,8 @@ export function createNavigationWebAdapter(
     };
   };
   const writing = () =>
-    controller.getSnapshot('interaction').activeFreehand?.status === 'collecting';
+    controller.getSnapshot('interaction').activeFreehand?.status === 'collecting' ||
+    options.canNavigate?.() === false;
   const measure = () => {
     const [a, b] = [...touches.values()];
     return {
@@ -102,9 +106,8 @@ export function createNavigationWebAdapter(
       return;
     }
     if (
-      touchDraw ||
-      (event.target instanceof Element &&
-        event.target.closest('[data-interactive],button,input,textarea,select'))
+      event.target instanceof Element &&
+      event.target.closest('[data-interactive],button,input,textarea,select')
     )
       return;
     if (
@@ -130,7 +133,7 @@ export function createNavigationWebAdapter(
   }
   function move(event: PointerEvent) {
     if (drag?.id === event.pointerId && drag.source === event.pointerType) {
-      if (writing() || !config().enabled) {
+      if (writing() || (options.listen !== false && !config().enabled)) {
         drag = undefined;
         return;
       }
@@ -261,20 +264,54 @@ export function createNavigationWebAdapter(
           : null,
       }),
   });
-  host.addEventListener('pointerdown', down, true);
-  view.addEventListener('pointermove', move, true);
-  view.addEventListener('pointerup', end, true);
-  view.addEventListener('pointercancel', end, true);
-  view.addEventListener('blur', cancel);
-  view.addEventListener('pagehide', cancel);
+  if (options.listen !== false) {
+    host.addEventListener('pointerdown', down, true);
+    view.addEventListener('pointermove', move, true);
+    view.addEventListener('pointerup', end, true);
+    view.addEventListener('pointercancel', end, true);
+    view.addEventListener('blur', cancel);
+    view.addEventListener('pagehide', cancel);
+  }
   const hidden = () => {
     if (host.ownerDocument.visibilityState === 'hidden') {
       cancel();
       ruler.cancel();
     }
   };
-  host.ownerDocument.addEventListener('visibilitychange', hidden);
+  if (options.listen !== false) host.ownerDocument.addEventListener('visibilitychange', hidden);
+  const capture = (id: number) => {
+    try {
+      host.setPointerCapture(id);
+    } catch {
+      /* Window retains continuity. */
+    }
+  };
   return {
+    cancel() {
+      cancel();
+      return true;
+    },
+    begin(events: readonly PointerEvent[]) {
+      cancel();
+      for (const event of events) {
+        touches.set(event.pointerId, screen(event));
+        capture(event.pointerId);
+      }
+      resetBaseline();
+    },
+    dispatch(event: PointerEvent) {
+      if (event.type === 'pointerdown') {
+        drag = {
+          id: event.pointerId,
+          source: event.pointerType,
+          start: screen(event),
+          viewport: controller.getSnapshot('viewport'),
+        };
+        capture(event.pointerId);
+        consume(event);
+      } else if (event.type === 'pointermove') move(event);
+      else if (event.type === 'pointerup' || event.type === 'pointercancel') end(event);
+    },
     destroy() {
       ruler.dispose();
       cancel();
