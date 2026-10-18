@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import type { DrawingValue } from '../../components/DrawingSurface';
+import type { DrawingValue } from '../../model/geometryTypes';
 import { usePaintingHistory } from '../usePaintingHistory';
 
 const EMPTY_VALUE: DrawingValue = { strokes: [] };

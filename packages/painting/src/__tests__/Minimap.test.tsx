@@ -1,219 +1,122 @@
-import { normalizeViewport as normalizeViewportFromIndex } from '@hamster-note/painting';
-import { fireEvent, render, screen } from '@testing-library/react';
-import { DrawingSurface } from '../components/DrawingSurface';
-import { Minimap } from '../components/Minimap';
+// Retained navigation behavior uses the controller's single viewport.
+import { act, render, screen } from '@testing-library/react';
+import { NavigationOverlay } from '../layered/NavigationOverlay';
+import { makeLayeredController, layeredRect, commitLayeredStroke } from './fixtures/layered';
+import {
+  layeredImage,
+  layeredText,
+  layeredPointer as pointer,
+  mockLayeredDom,
+} from './fixtures/layeredDom';
 
-describe('minimap regression coverage', () => {
-  const originalResizeObserver = Object.getOwnPropertyDescriptor(globalThis, 'ResizeObserver');
+beforeEach(() => {
+  mockLayeredDom();
+});
+afterEach(() => jest.restoreAllMocks());
 
-  afterEach(() => {
-    jest.restoreAllMocks();
-    if (originalResizeObserver) {
-      Object.defineProperty(globalThis, 'ResizeObserver', originalResizeObserver);
-    } else {
-      Reflect.deleteProperty(globalThis, 'ResizeObserver');
-    }
+test('minimap includes mixed geometry and obeys controller visibility', () => {
+  const controller = makeLayeredController([layeredRect(), layeredText, layeredImage]);
+  commitLayeredStroke(controller, 'ink');
+  render(<NavigationOverlay controller={controller} />);
+  expect(screen.queryByTestId('layered-minimap')).toBeNull();
+  act(() => {
+    controller.setNavigation({ minimap: true });
   });
-
-  it('mounts DrawingSurface without ResizeObserver when minimap is omitted', () => {
-    render(<DrawingSurface testID="drawing-surface" />);
-
-    expect(screen.getByTestId('drawing-surface')).toBeTruthy();
+  const map = screen.getByTestId('layered-minimap');
+  expect(map.querySelectorAll('path')).toHaveLength(2);
+  expect(map.querySelectorAll('image')).toHaveLength(1);
+  expect(map.querySelector('foreignObject')?.textContent).toBe('Hamster 中文');
+  act(() => {
+    controller.setNavigation({ minimap: false });
   });
+  expect(screen.queryByTestId('layered-minimap')).toBeNull();
+});
 
-  it('does not render or observe the host when minimap.enabled is false', () => {
-    const observe = jest.fn();
-    const resizeObserver = jest.fn(() => ({
-      observe,
-      disconnect: jest.fn(),
-      unobserve: jest.fn(),
-    }));
-    Object.defineProperty(globalThis, 'ResizeObserver', {
-      configurable: true,
-      value: resizeObserver,
-    });
-    jest.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640);
-    jest.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(480);
+test('minimap drag changes only authoritative viewport and preserves scale/history', () => {
+  const controller = makeLayeredController([layeredRect()]);
+  controller.setNavigation({ minimap: true });
+  controller.updateViewport({
+    type: 'replace',
+    expectedRevision: 0,
+    viewport: { scale: 2, tx: -20, ty: -20 },
+  });
+  render(<NavigationOverlay controller={controller} />);
+  const map = screen.getByTestId('layered-minimap');
+  Object.assign(map, { setPointerCapture: jest.fn() });
+  const document = controller.getSnapshot('document');
+  pointer(map, 'down', 100, 80, 'mouse');
+  const current = controller.getSnapshot('viewport');
+  expect(current.revision).toBeGreaterThan(1);
+  expect(current.viewport.scale).toBe(2);
+  pointer(map, 'move', 130, 100, 'mouse');
+  expect(controller.getSnapshot('viewport').viewport).not.toEqual(current.viewport);
+  pointer(map, 'up', 130, 100, 'mouse');
+  const ended = controller.getSnapshot('viewport');
+  pointer(map, 'move', 150, 110, 'mouse');
+  expect(controller.getSnapshot('viewport')).toBe(ended);
+  expect(controller.getSnapshot('document')).toBe(document);
+  expect(controller.getSnapshot('history').canUndo).toBe(false);
+});
 
-    render(
-      <DrawingSurface testID="drawing-surface" minimap={{ enabled: false, testID: 'minimap' }} />
+test('transformed off-paper geometry and a far viewport produce finite map projection', () => {
+  const object = {
+    ...layeredRect(),
+    transform: { a: 2, b: 0, c: 0, d: 2, tx: -5000, ty: 3000 },
+    transformRevision: 2,
+  };
+  const controller = makeLayeredController([object]);
+  controller.setNavigation({ minimap: true });
+  controller.updateViewport({
+    type: 'replace',
+    expectedRevision: 0,
+    viewport: { scale: 0.25, tx: 10000, ty: -20000 },
+  });
+  render(<NavigationOverlay controller={controller} />);
+  const map = screen.getByTestId('layered-minimap');
+  const projection = map.querySelector(':scope > g')!.getAttribute('transform');
+  expect(projection).toEqual(expect.stringContaining('scale('));
+  expect(projection).not.toMatch(/NaN|Infinity/);
+  expect(Number(screen.getByTestId('minimap-viewport').getAttribute('width'))).toBe(3200);
+  expect(map.querySelector('path')).toBeTruthy();
+  expect(map.querySelectorAll('rect').length).toBeGreaterThan(0);
+});
+
+test.each(['mouse', 'touch', 'pen'])(
+  'minimap handle retains %s resize or pan semantics and pointer ownership',
+  (source) => {
+    const controller = makeLayeredController();
+    controller.setNavigation({ minimap: true });
+    render(<NavigationOverlay controller={controller} />);
+    const map = screen.getByTestId('layered-minimap');
+    Object.assign(map, { setPointerCapture: jest.fn() });
+    const handle = map.querySelector('[data-minimap-edge="corner-br"]')!;
+    const before = controller.getSnapshot('viewport').viewport;
+    pointer(handle, 'down', 110, 65, source);
+    pointer(map, 'down', 0, 0, 'touch', 2);
+    pointer(map, 'up', 0, 0, 'touch', 2);
+    pointer(map, 'move', 105, 60, source);
+    const after = controller.getSnapshot('viewport').viewport;
+    expect(after.scale > before.scale).toBe(source === 'mouse');
+    expect(after.scale === before.scale).toBe(source !== 'mouse');
+    expect(after.tx).not.toBe(before.tx);
+    expect((400 - after.tx) / after.scale === (400 - before.tx) / before.scale).toBe(
+      source === 'mouse'
     );
+    pointer(map, 'cancel', 105, 60, source);
+    const ended = controller.getSnapshot('viewport');
+    pointer(map, 'move', 90, 40, source);
+    expect(controller.getSnapshot('viewport')).toBe(ended);
+    expect(controller.getSnapshot('history').canUndo).toBe(false);
+  }
+);
 
-    expect(screen.queryByTestId('minimap')).toBeNull();
-    expect(resizeObserver).not.toHaveBeenCalled();
-    expect(observe).not.toHaveBeenCalled();
-  });
-
-  it('exports viewport normalization from the package entry point', () => {
-    expect(
-      normalizeViewportFromIndex({
-        scale: 0,
-        tx: Number.NaN,
-        ty: Number.POSITIVE_INFINITY,
-      })
-    ).toEqual({ scale: 0.25, tx: 0, ty: 0 });
-  });
-
-  it('filters invalid stroke points while preserving valid minimap geometry', () => {
-    const { container } = render(
-      <Minimap
-        strokes={[
-          {
-            id: 'pen-with-invalid-point',
-            tool: 'pen',
-            points: [
-              { x: Number.NaN, y: 0 },
-              { x: 0, y: 0 },
-              { x: 50, y: 50 },
-            ],
-          },
-        ]}
-        viewport={{ scale: 1, tx: 0, ty: 0 }}
-        onViewportChange={jest.fn()}
-        hostSize={{ width: 400, height: 300 }}
-      />
-    );
-
-    const path = container.querySelector('path');
-    expect(path?.getAttribute('d')).toContain('M 0 0');
-    expect(path?.getAttribute('d')).not.toContain('NaN');
-  });
-
-  it('clips an oversized viewport indicator and its handles to the minimap bounds', () => {
-    render(
-      <Minimap
-        strokes={[]}
-        viewport={{ scale: 0.25, tx: 0, ty: 0 }}
-        onViewportChange={jest.fn()}
-        hostSize={{ width: 1000, height: 800 }}
-        width={200}
-        height={150}
-        testID="minimap"
-      />
-    );
-
-    const minimap = screen.getByTestId('minimap');
-    const indicator = minimap.querySelector<HTMLElement>('[data-minimap-indicator]');
-    const rightHandle = minimap.querySelector<HTMLElement>('[data-minimap-edge="right"]');
-    const indicatorLeft = Number.parseFloat(indicator?.style.left ?? 'NaN');
-    const indicatorTop = Number.parseFloat(indicator?.style.top ?? 'NaN');
-    const indicatorWidth = Number.parseFloat(indicator?.style.width ?? 'NaN');
-    const indicatorHeight = Number.parseFloat(indicator?.style.height ?? 'NaN');
-
-    expect(minimap.style.overflow).toBe('hidden');
-    expect(indicatorLeft).toBeGreaterThanOrEqual(0);
-    expect(indicatorTop).toBeGreaterThanOrEqual(0);
-    expect(indicatorLeft + indicatorWidth).toBeLessThanOrEqual(200);
-    expect(indicatorTop + indicatorHeight).toBeLessThanOrEqual(150);
-    expect(rightHandle?.style.right).toBe('0px');
-  });
-
-  it('zooms in when an inward drag starts from a clipped resize handle', () => {
-    const onViewportChange = jest.fn();
-
-    render(
-      <Minimap
-        strokes={[]}
-        viewport={{ scale: 0.25, tx: 0, ty: 0 }}
-        onViewportChange={onViewportChange}
-        hostSize={{ width: 1000, height: 800 }}
-        width={200}
-        height={150}
-        testID="minimap"
-      />
-    );
-
-    const minimap = screen.getByTestId('minimap');
-    Object.defineProperty(minimap, 'setPointerCapture', {
-      configurable: true,
-      value: jest.fn(),
-    });
-    const cornerHandle = minimap.querySelector<HTMLElement>('[data-minimap-edge="corner-br"]');
-    expect(cornerHandle).not.toBeNull();
-    if (!cornerHandle) throw new Error('Bottom-right minimap resize handle not found');
-
-    const pointerDown = new MouseEvent('pointerdown', {
-      bubbles: true,
-      button: 0,
-      clientX: 200,
-      clientY: 150,
-    });
-    Object.defineProperties(pointerDown, {
-      pointerId: { value: 1 },
-      pointerType: { value: 'mouse' },
-    });
-    fireEvent(cornerHandle, pointerDown);
-
-    const pointerMove = new MouseEvent('pointermove', {
-      bubbles: true,
-      clientX: 150,
-      clientY: 100,
-    });
-    Object.defineProperties(pointerMove, {
-      pointerId: { value: 1 },
-      pointerType: { value: 'mouse' },
-    });
-    fireEvent(minimap, pointerMove);
-
-    expect(onViewportChange).toHaveBeenCalledWith(
-      expect.objectContaining({ scale: expect.any(Number) })
-    );
-    expect(onViewportChange.mock.calls[0][0].scale).toBeGreaterThan(0.25);
-  });
-
-  it.each(['touch', 'pen'] as const)(
-    'pans without resizing when a %s drag starts from a viewport handle',
-    (pointerType) => {
-      // Given: the viewport handle is visible and the minimap starts at a known scale.
-      const onViewportChange = jest.fn();
-      render(
-        <Minimap
-          strokes={[]}
-          viewport={{ scale: 1, tx: 0, ty: 0 }}
-          onViewportChange={onViewportChange}
-          hostSize={{ width: 400, height: 300 }}
-          width={200}
-          height={150}
-          testID="minimap"
-        />
-      );
-      const minimap = screen.getByTestId('minimap');
-      Object.defineProperty(minimap, 'setPointerCapture', {
-        configurable: true,
-        value: jest.fn(),
-      });
-      const cornerHandle = minimap.querySelector<HTMLElement>('[data-minimap-edge="corner-br"]');
-      if (!cornerHandle) throw new Error('Bottom-right minimap resize handle not found');
-
-      // When: a touch pointer drags that handle.
-      const pointerDown = new MouseEvent('pointerdown', {
-        bubbles: true,
-        button: 0,
-        clientX: 100,
-        clientY: 75,
-      });
-      Object.defineProperties(pointerDown, {
-        pointerId: { value: 2 },
-        pointerType: { value: pointerType },
-      });
-      fireEvent(cornerHandle, pointerDown);
-      const pointerMove = new MouseEvent('pointermove', {
-        bubbles: true,
-        clientX: 90,
-        clientY: 65,
-      });
-      Object.defineProperties(pointerMove, {
-        pointerId: { value: 2 },
-        pointerType: { value: pointerType },
-      });
-      fireEvent(minimap, pointerMove);
-
-      // Then: non-mouse input keeps navigation available but cannot change viewport scale.
-      expect(onViewportChange).toHaveBeenCalledWith(
-        expect.objectContaining({ scale: 1, tx: expect.any(Number), ty: expect.any(Number) })
-      );
-      expect(onViewportChange.mock.calls[0][0].tx).not.toBe(0);
-      expect(onViewportChange.mock.calls[0][0].ty).not.toBe(0);
-    }
-  );
+test('surface navigation mounts without ResizeObserver', () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'ResizeObserver');
+  Reflect.deleteProperty(globalThis, 'ResizeObserver');
+  try {
+    const { container } = render(<NavigationOverlay controller={makeLayeredController()} />);
+    expect(container.firstElementChild).toBeTruthy();
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, 'ResizeObserver', descriptor);
+  }
 });

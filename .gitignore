@@ -15,6 +15,7 @@ yarn-error.log
 coverage/
 playwright-report/
 test-results/
+artifacts/research/
 
 # IDE
 .idea/
@@ -25,6 +26,7 @@ packages/painting/lib/
 
 # OpenCode
 .omo/
+.slim/deepwork/
 
 # Misc
 .DS_Store

@@ -1,4 +1,5 @@
 import { migrateStroke, normalizeDrawingValue } from '../model/strokeMigration';
+import { readDrawingDocument } from '../core/document';
 import {
   appendPoint,
   createDrawingValue,
@@ -52,6 +53,68 @@ describe('stroke-helpers', () => {
         schemaVersion: 2,
         strokes: [v2PenStroke],
       });
+    });
+
+    it('tolerates unknown V2 fields while preserving known semantics without mutation', () => {
+      const value = Object.freeze({
+        ...v2DrawingValue,
+        unknownTopLevel: Object.freeze({ source: 'future-client' }),
+        strokes: Object.freeze([
+          Object.freeze({
+            ...v2PenStroke,
+            unknownStrokeOptional: 'ignored',
+            points: Object.freeze([
+              Object.freeze({ ...v2PenStroke.points[0], unknownPointOptional: true }),
+              Object.freeze(v2PenStroke.points[1]),
+            ]),
+          }),
+          ...v2DrawingValue.strokes.slice(1),
+        ]),
+      });
+      const beforeNormalize = JSON.parse(JSON.stringify(value));
+
+      // 未知 stroke/point 字段仅容忍输入；当前迁移器不会保留或承诺 round-trip 它们。
+      expect(() => normalizeDrawingValue(value)).not.toThrow();
+      expect(normalizeDrawingValue(value)).toEqual({
+        ...v2DrawingValue,
+        unknownTopLevel: { source: 'future-client' },
+      });
+      expect(value).toEqual(beforeNormalize);
+    });
+
+    it('reports a diagnostic when core reads a future document schema version', () => {
+      const result = readDrawingDocument({
+        ...v2DrawingValue,
+        schemaVersion: 3,
+      });
+
+      expect(result.diagnostics).toEqual([
+        { type: 'unsupported-schema-version', schemaVersion: 3 },
+      ]);
+      expect(result.document).toEqual(v2DrawingValue);
+    });
+
+    it('preserves non-empty image resource IDs while keeping old src-only images valid', () => {
+      const image = Object.freeze({
+        id: 'image-with-resource',
+        tool: 'image',
+        points: Object.freeze([{ x: 1, y: 2 }]),
+        resourceId: 'resource-1',
+        src: 'memory://image-1',
+      });
+      const oldImage = Object.freeze({
+        id: 'old-image',
+        tool: 'image',
+        points: Object.freeze([{ x: 3, y: 4 }]),
+        src: 'memory://old-image',
+      });
+
+      expect(migrateStroke(image)).toMatchObject({
+        resourceId: 'resource-1',
+        src: 'memory://image-1',
+      });
+      expect(migrateStroke(oldImage)).toMatchObject({ src: 'memory://old-image' });
+      expect(migrateStroke({ ...image, resourceId: '' })).not.toHaveProperty('resourceId');
     });
   });
 
@@ -285,7 +348,10 @@ describe('stroke-helpers', () => {
     });
 
     it('generates M + L for two points', () => {
-      const path = pointsToSvgPath([{ x: 10, y: 20 }, { x: 30, y: 40 }]);
+      const path = pointsToSvgPath([
+        { x: 10, y: 20 },
+        { x: 30, y: 40 },
+      ]);
       expect(path).toBe('M 10 20 L 30 40');
     });
 

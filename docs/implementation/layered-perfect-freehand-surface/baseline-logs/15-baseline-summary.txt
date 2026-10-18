@@ -1,0 +1,21 @@
+# 基线命令结果汇总（task 1.4）
+date: 2026-10-05T15:48:30+08:00
+git HEAD: ba4b1342ad2dc423fd0f5879bcb73b6610e6dc33
+
+| # | 命令 | 退出码 | 结果 | 日志 |
+|---|------|--------|------|------|
+| 1 | pnpm test | 0 | 65 suites / 1067 tests 全部通过（4 projects） | 10-pnpm-test.log |
+| 2 | pnpm run typecheck | 0 | painting + painting-board + playground tsc 通过 | 11-pnpm-typecheck.log |
+| 3 | pnpm run build | 0 | lib build + expo export --platform web 成功（dist） | 12-pnpm-build.log |
+| 4 | timeout 1800 pnpm run test:ui | 1 | 144 passed / 4 failed，用时 4.5m，未超时 | 13-pnpm-test-ui.log |
+
+## 前置失败（test:ui，均为既存失败，本次未修复）
+1. tests/ui/canvas-runtime.spec.ts:158 一次性重试 — TimeoutError page.waitForEvent 'framenavigated' 30000ms；伴随 page.waitForResponse 'Test ended'
+2. tests/ui/interaction-feedback.spec.ts:105 滚轮缩放百分比 — toBeCloseTo x: Expected 120, Received 119
+3. tests/ui/interaction-feedback.spec.ts:170 触摸缩放百分比 — toBeCloseTo x: Expected 131, Received 130
+4. tests/ui/touch-drawing-arbitration.spec.ts:77 首触转双指 — locator path[opacity="0.7"] toHaveCount Expected 0, Received 1
+
+## 结论
+- 单元/类型/构建基线全绿；UI E2E 基线有 4 个既存失败。
+- 未运行 pack:dry/lint（不在本次任务范围）。
+- apps/playground 的 7 个 *.unit.test 未被根 pnpm test 收集（见 14-jest-collection-analysis.txt）。

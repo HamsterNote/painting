@@ -20,6 +20,7 @@ type StrokeLike = {
   readonly rotationRad?: unknown;
   readonly text?: unknown;
   readonly fontSize?: unknown;
+  readonly resourceId?: unknown;
   readonly src?: unknown;
 };
 
@@ -27,7 +28,8 @@ type ValueLike = {
   readonly strokes?: readonly unknown[];
 };
 
-type NormalizedDrawingValue<T extends object> = Omit<T, 'schemaVersion' | 'strokes'> & DrawingValueV2;
+type NormalizedDrawingValue<T extends object> = Omit<T, 'schemaVersion' | 'strokes'> &
+  DrawingValueV2;
 
 const persistedStrokeTools: readonly DrawingStrokeToolV2[] = [
   'pen',
@@ -54,7 +56,12 @@ function clonePoint(point: unknown): DrawingPointV2 | null {
   }
 
   const { x, y, pressure } = point;
-  if (typeof x !== 'number' || !Number.isFinite(x) || typeof y !== 'number' || !Number.isFinite(y)) {
+  if (
+    typeof x !== 'number' ||
+    !Number.isFinite(x) ||
+    typeof y !== 'number' ||
+    !Number.isFinite(y)
+  ) {
     return null;
   }
 
@@ -81,7 +88,9 @@ function cloneDashArray(dashArray: unknown): number[] | undefined {
     return undefined;
   }
 
-  return dashArray.every((value): value is number => typeof value === 'number' && Number.isFinite(value))
+  return dashArray.every(
+    (value): value is number => typeof value === 'number' && Number.isFinite(value)
+  )
     ? [...dashArray]
     : undefined;
 }
@@ -132,7 +141,9 @@ function buildStroke(stroke: StrokeLike, tool: DrawingStrokeToolV2): DrawingStro
         tool,
         text: typeof stroke.text === 'string' ? stroke.text : '',
         fontSize:
-          typeof stroke.fontSize === 'number' && Number.isFinite(stroke.fontSize) && stroke.fontSize > 0
+          typeof stroke.fontSize === 'number' &&
+          Number.isFinite(stroke.fontSize) &&
+          stroke.fontSize > 0
             ? stroke.fontSize
             : 24,
       };
@@ -140,6 +151,10 @@ function buildStroke(stroke: StrokeLike, tool: DrawingStrokeToolV2): DrawingStro
       return {
         ...base,
         tool,
+        // 资源 ID 是 V2 的可选增量字段。空 ID 不具备引用语义，保持旧 src-only 文档形态。
+        ...(typeof stroke.resourceId === 'string' && stroke.resourceId.length > 0
+          ? { resourceId: stroke.resourceId }
+          : {}),
         src: typeof stroke.src === 'string' ? stroke.src : '',
       };
     default:
@@ -161,7 +176,9 @@ export function migrateStroke(stroke: unknown): DrawingStrokeV2 | null {
 }
 
 export function normalizeDrawingValue(value: null | undefined): DrawingValueV2;
-export function normalizeDrawingValue<T extends ValueLike & object>(value: T): NormalizedDrawingValue<T>;
+export function normalizeDrawingValue<T extends ValueLike & object>(
+  value: T
+): NormalizedDrawingValue<T>;
 export function normalizeDrawingValue(value: ValueLike | null | undefined): DrawingValueV2 {
   const source = isObject(value) ? value : {};
   const sourceStrokes = Array.isArray(source.strokes) ? source.strokes : [];

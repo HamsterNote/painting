@@ -7,14 +7,7 @@ export type DrawingPointV2 = {
 };
 
 export type DrawingStrokeToolV2 =
-  | 'pen'
-  | 'line'
-  | 'rect'
-  | 'ellipse'
-  | 'polygon'
-  | 'bezier'
-  | 'text'
-  | 'image';
+  'pen' | 'line' | 'rect' | 'ellipse' | 'polygon' | 'bezier' | 'text' | 'image';
 /** 连续指针交互使用的工具模式；图片通过一次性导入动作创建。 */
 export type DrawingToolModeV2 = Exclude<DrawingStrokeToolV2, 'image'> | 'eraser' | 'lasso';
 
@@ -43,6 +36,8 @@ export type TextStrokeV2 = DrawingStrokeBaseV2<'text'> & {
   fontSize: number;
 };
 export type ImageStrokeV2 = DrawingStrokeBaseV2<'image'> & {
+  /** 可选的宿主资源表标识；旧文档仍仅使用必填的 src。 */
+  resourceId?: string;
   src: string;
 };
 

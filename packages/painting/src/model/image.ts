@@ -1,4 +1,4 @@
-import type { DrawingPoint } from '../components/DrawingSurface';
+import type { DrawingPoint } from '../model/geometryTypes';
 import type { DrawingViewport } from '../viewport';
 import { screenToCanvas } from '../viewport';
 
@@ -28,10 +28,7 @@ export function fitImageIntoViewport({
   );
   const canvasWidth = (naturalWidth * screenScale) / viewport.scale;
   const canvasHeight = (naturalHeight * screenScale) / viewport.scale;
-  const center = screenToCanvas(
-    { x: containerWidth / 2, y: containerHeight / 2 },
-    viewport
-  );
+  const center = screenToCanvas({ x: containerWidth / 2, y: containerHeight / 2 }, viewport);
 
   return [
     { x: center.x - canvasWidth / 2, y: center.y - canvasHeight / 2 },

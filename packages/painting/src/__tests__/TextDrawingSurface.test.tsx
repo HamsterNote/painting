@@ -1,178 +1,120 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { DrawingSurface, type DrawingValue } from '../components/DrawingSurface';
-import {
-  ControlledTextSurface,
-  dispatchPointer,
-  mockHostRect,
-  TEXT_VALUE,
-} from '../../testUtils/textDrawingSurface';
+// Retained text editing and mixed selection behavior on the layered runtime.
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { TextEditor } from '../layered/TextEditor';
+import { SelectionOverlay } from '../layered/SelectionOverlay';
+import { createLayeredToolSession } from '../core/layeredToolSession';
+import { makeLayeredController } from './fixtures/layered';
+import { layeredImage, layeredText } from './fixtures/layeredDom';
 
-describe('DrawingSurface text editing', () => {
-  it('places an editable text box at the pointer and persists typed content', () => {
-    // Given: 一个空的受控文字画布。
-    const onChange = jest.fn();
-    render(<ControlledTextSurface onChange={onChange} />);
-    const host = screen.getByTestId('text-surface');
-    mockHostRect(host);
+function editExisting() {
+  const controller = makeLayeredController([layeredText, layeredImage]);
+  controller.setTool('text');
+  const close = jest.fn();
+  render(
+    <TextEditor
+      controller={controller}
+      point={{ x: 60, y: 60 }}
+      allocateId={() => 'unused'}
+      close={close}
+    />
+  );
+  return { controller, close, input: screen.getByLabelText('文字内容') };
+}
 
-    // When: 用户点击画布并输入文字。
-    dispatchPointer(host, 'pointerdown', { x: 40, y: 50 });
-    const editor = screen.getByTestId('text-editor');
-    fireEvent.change(editor, { target: { value: 'Hello text' } });
-
-    // Then: 文本框从点击位置开始，并保存当前颜色、字号和内容。
-    const lastChange = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as
-      | DrawingValue
-      | undefined;
-    const textStroke = lastChange?.strokes[0];
-    expect(textStroke).toEqual(
-      expect.objectContaining({
-        tool: 'text',
-        text: 'Hello text',
-        strokeColor: '#2563eb',
-        fontSize: 32,
-      })
-    );
-    expect(textStroke?.points[0]).toEqual(expect.objectContaining({ x: 40, y: 50 }));
-    expect(document.activeElement).toBe(editor);
+test('existing text edits once while preserving geometry, image and document order', () => {
+  const { controller, close, input } = editExisting();
+  const before = controller.getSnapshot('document');
+  expect(input).toHaveProperty('value', layeredText.content);
+  fireEvent.change(input, { target: { value: '新内容\nالعربية 😀' } });
+  expect(controller.getSnapshot('document')).toBe(before);
+  fireEvent.click(screen.getByRole('button', { name: '完成' }));
+  const after = controller.getSnapshot('document');
+  expect(after.documentRevision).toBe(before.documentRevision + 1);
+  expect(after.objects.map((o) => o.objectId)).toEqual(['text', 'image']);
+  expect(after.objects[0]).toMatchObject({
+    kind: 'text',
+    content: '新内容\nالعربية 😀',
+    localBounds: { ...layeredText.localBounds, maxY: 150 },
+    transform: layeredText.transform,
   });
-
-  it('keeps browser focus on the editor created by the placement pointer', () => {
-    // Given: 一个空的文字画布，浏览器会在 pointerdown 后执行默认聚焦动作。
-    render(<ControlledTextSurface />);
-    const host = screen.getByTestId('text-surface');
-    mockHostRect(host);
-
-    // When: 用户点击画布放置文字。
-    const pointerDown = dispatchPointer(host, 'pointerdown', { x: 40, y: 50 });
-
-    // Then: 画布消费默认聚焦动作，避免新编辑器立即失焦并删除空文字。
-    expect(pointerDown.defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Text content' }));
-  });
-
-  it('grows the persisted text box for multiline content and a larger font size', () => {
-    // Given: 一个受控文字框，初始字号为 24。
-    const onChange = jest.fn();
-    const { rerender } = render(
-      <DrawingSurface
-        testID="text-surface"
-        tool="text"
-        value={TEXT_VALUE}
-        selectedStrokeIds={['text-1']}
-        onChange={onChange}
-        fontSize={24}
-      />
-    );
-    const host = screen.getByTestId('text-surface');
-    mockHostRect(host);
-    dispatchPointer(host, 'pointerdown', { x: 60, y: 40 });
-
-    // When: 用户输入两行文字，并把字号调大到 48。
-    fireEvent.change(screen.getByRole('textbox', { name: 'Text content' }), {
-      target: { value: '第一行\n第二行' },
-    });
-    rerender(
-      <DrawingSurface
-        testID="text-surface"
-        tool="text"
-        value={onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] ?? TEXT_VALUE}
-        selectedStrokeIds={['text-1']}
-        onChange={onChange}
-        fontSize={48}
-      />
-    );
-
-    // Then: 持久化高度至少容纳两行 48px 文字。
-    const lastChange = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as DrawingValue;
-    const points = lastChange.strokes[0]?.points ?? [];
-    expect(Math.abs((points[1]?.y ?? 0) - (points[0]?.y ?? 0))).toBeCloseTo(115.2);
-  });
-
-  it('grows the text box when a larger font introduces soft wrapping', () => {
-    // Given: 一个宽度固定为 160 的中文文字框。
-    const onChange = jest.fn();
-    const wrappedValue: DrawingValue = {
-      strokes: [{ ...TEXT_VALUE.strokes[0], text: '浏览器文字完整显示' }],
-    };
-    const { rerender } = render(
-      <DrawingSurface
-        testID="text-surface"
-        tool="text"
-        value={wrappedValue}
-        selectedStrokeIds={['text-1']}
-        onChange={onChange}
-        fontSize={24}
-      />
-    );
-
-    // When: 用户把字号调大到 48，文字因此产生软换行。
-    rerender(
-      <DrawingSurface
-        testID="text-surface"
-        tool="text"
-        value={wrappedValue}
-        selectedStrokeIds={['text-1']}
-        onChange={onChange}
-        fontSize={48}
-      />
-    );
-
-    // Then: 持久化高度同步容纳估算出的三行文字。
-    const lastChange = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as DrawingValue;
-    const points = lastChange.strokes[0]?.points ?? [];
-    expect(Math.abs((points[1]?.y ?? 0) - (points[0]?.y ?? 0))).toBeCloseTo(172.8);
-  });
-
-  it('removes an empty text stroke when editing finishes', () => {
-    // Given: 用户刚放置了一个尚未输入内容的文字框。
-    const onChange = jest.fn();
-    render(<ControlledTextSurface onChange={onChange} />);
-    const host = screen.getByTestId('text-surface');
-    mockHostRect(host);
-    dispatchPointer(host, 'pointerdown', { x: 40, y: 50 });
-
-    // When: 编辑器在空内容状态下失焦。
-    fireEvent.blur(screen.getByRole('textbox', { name: 'Text content' }));
-
-    // Then: 空文字元素被从持久化画布中移除。
-    const lastChange = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as DrawingValue;
-    expect(lastChange.strokes).toHaveLength(0);
-    expect(screen.queryByTestId('text-editor')).toBeNull();
-  });
-
-  it('clears an existing text selection before placing text on a later blank click', () => {
-    // Given: 文字工具中已有一个选中的文字框。
-    const onChange = jest.fn();
-    const onSelectionChange = jest.fn();
-    render(
-      <DrawingSurface
-        testID="text-surface"
-        tool="text"
-        defaultValue={TEXT_VALUE}
-        defaultSelectedStrokeIds={['text-1']}
-        onChange={onChange}
-        onSelectionChange={onSelectionChange}
-      />
-    );
-    const host = screen.getByTestId('text-surface');
-    mockHostRect(host);
-
-    // When: 用户第一次点击空白处。
-    dispatchPointer(host, 'pointerdown', { x: 300, y: 200 }, 11);
-
-    // Then: 首次点击只取消选择，不创建新文字。
-    expect(onSelectionChange).toHaveBeenLastCalledWith([]);
-    expect(onChange).not.toHaveBeenCalled();
-    expect(screen.queryByTestId('text-editor')).toBeNull();
-
-    // When: 用户再次点击空白处。
-    dispatchPointer(host, 'pointerdown', { x: 300, y: 200 }, 12);
-
-    // Then: 第二次点击才创建并编辑新的文字框。
-    const lastChange = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as DrawingValue;
-    expect(lastChange.strokes).toHaveLength(2);
-    expect(lastChange.strokes[1]?.tool).toBe('text');
-    expect(screen.getByTestId('text-editor')).toBeTruthy();
-  });
+  expect(after.objects[1]).toEqual(layeredImage);
+  expect(close).toHaveBeenCalledTimes(1);
+  controller.undo();
+  expect(controller.getSnapshot('document').objects).toEqual(before.objects);
+  expect(controller.getSnapshot('history').canUndo).toBe(false);
+  controller.redo();
+  expect(controller.getSnapshot('document').objects).toEqual(after.objects);
 });
+
+test('unchanged completion closes without creating history', () => {
+  const { controller, close } = editExisting();
+  const before = controller.getSnapshot('document');
+  fireEvent.click(screen.getByRole('button', { name: '完成' }));
+  expect(controller.getSnapshot('history').canUndo).toBe(false);
+  expect(controller.getSnapshot('document')).toBe(before);
+  expect(close).toHaveBeenCalledTimes(1);
+});
+
+test('clearing existing text removes only that object, undo restores exact content', () => {
+  const { controller, input } = editExisting();
+  fireEvent.change(input, { target: { value: '' } });
+  fireEvent.click(screen.getByRole('button', { name: '完成' }));
+  expect(controller.getSnapshot('document').objects).toEqual([layeredImage]);
+  controller.undo();
+  expect(controller.getSnapshot('document').objects).toEqual([layeredText, layeredImage]);
+  expect(controller.getSnapshot('history').canUndo).toBe(false);
+});
+
+test('stale edit cannot overwrite a newer document revision', () => {
+  const { controller, close, input } = editExisting();
+  fireEvent.change(input, { target: { value: 'stale' } });
+  controller.editObjects({ expectedDocumentRevision: 0, removeIds: ['image'] });
+  const current = controller.getSnapshot('document');
+  fireEvent.click(screen.getByRole('button', { name: '完成' }));
+  expect(screen.getByRole('alert').textContent).toContain('invalid-input');
+  expect(controller.getSnapshot('document')).toBe(current);
+  expect(close).not.toHaveBeenCalled();
+});
+
+test.each(['move', 'resize', 'rotate'] as const)(
+  'mixed text/image selection %s uses reversible transforms and cancel discards preview',
+  (operation) => {
+    const controller = makeLayeredController([layeredText, layeredImage]);
+    controller.setTool('selection');
+    controller.setSelection(['text', 'image']);
+    const overlay = render(<SelectionOverlay controller={controller} />);
+    expect(overlay.container.querySelector('[data-selection-operation="resize"]')).toBeTruthy();
+    expect(overlay.container.querySelector('[data-selection-operation="rotate"]')).toBeTruthy();
+    const session = createLayeredToolSession(controller, () => 'unused');
+    const before = controller.getSnapshot('document');
+    act(() => {
+      session.begin({ x: 350, y: 130 }, operation);
+      session.update([{ x: 400, y: 180 }]);
+    });
+    expect(controller.getSnapshot('preview').objects).toHaveLength(2);
+    expect(controller.getSnapshot('document')).toBe(before);
+    act(() => {
+      session.cancel();
+    });
+    expect(controller.getSnapshot('preview').objects).toHaveLength(0);
+    expect(controller.getSnapshot('history').canUndo).toBe(false);
+    act(() => {
+      session.begin({ x: 350, y: 130 }, operation);
+      session.update([{ x: 400, y: 180 }]);
+      session.end();
+    });
+    expect(controller.getSnapshot('document').objects[0]).toMatchObject({
+      content: layeredText.content,
+      fontSize: layeredText.fontSize,
+      localBounds: layeredText.localBounds,
+    });
+    expect(controller.getSnapshot('document').objects[0].transform).not.toEqual(
+      layeredText.transform
+    );
+    act(() => {
+      controller.undo();
+    });
+    expect(controller.getSnapshot('document').objects).toEqual(before.objects);
+    session.destroy();
+  }
+);

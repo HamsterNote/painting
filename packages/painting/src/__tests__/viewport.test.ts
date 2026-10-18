@@ -35,7 +35,7 @@ describe('viewport', () => {
       expectPointClose(canvasPoint, point);
     });
 
-    it('converts translated and scaled coordinates with canvas-local invariant', () => {
+    it('converts translated and scaled coordinates with absolute global world DIP invariant', () => {
       const viewport = { scale: 2, tx: 10, ty: -30 };
 
       expect(canvasToScreen({ x: 5, y: 20 }, viewport)).toEqual({

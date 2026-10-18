@@ -1,0 +1,2 @@
+Running one project: skia-canvaskit
+/home/zhangxiao/frontend/HamsterNote/painting.feat-use-perfect-freehand/tests/jest/skia/canvaskit.skia.test.tsx

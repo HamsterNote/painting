@@ -1,0 +1,27 @@
+# Jest 收集基线分析（task 1.4）
+date: 2026-10-05T15:48:17+08:00
+git HEAD: ba4b1342ad2dc423fd0f5879bcb73b6610e6dc33
+命令: pnpm exec jest --listTests
+
+## 四个 projects 实际收集（--selectProjects 分别运行，已剔除 jest 'Running one project:' 头部行）
+legacy-web:      31
+core-node:       31
+native:          2
+skia-canvaskit:  1
+合计(union):     65
+全局 --listTests: 65
+重复项(应为空): 0
+
+## 缺口：apps/playground/*.unit.test 未被任何 project 收集
+apps/playground/src/editor-candidate/EditorCandidateAppendPipeline.unit.test.ts
+apps/playground/src/editor-candidate/EditorCandidateCanvas2dPenCanary.unit.test.tsx
+apps/playground/src/editor-candidate/EditorCandidateCorrectness.unit.test.ts
+apps/playground/src/editor-candidate/EditorCandidatePerformanceScheduler.unit.test.ts
+apps/playground/src/editor-candidate/EditorCandidatePerformance.unit.test.ts
+apps/playground/src/editor-candidate/EditorCandidateSplitCanvas.unit.test.ts
+apps/playground/src/editor-candidate/penPreviewCanvas.unit.test.ts
+被任何 project 收集的数量: 0
+
+## 结论
+- 根 jest.config.js 四个 projects 的 roots/testMatch 均不覆盖 apps/playground，故 7 个 playground unit test 不进入根 pnpm test。
+- 四 project 集合并集与全局 --listTests 完全一致（65），无重复收集。

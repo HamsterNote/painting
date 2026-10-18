@@ -1,4 +1,4 @@
-import type { DrawingPoint, DrawingStroke } from './components/DrawingSurface';
+import type { DrawingPoint, DrawingStroke } from './model/geometryTypes';
 import { rotatePointAroundCenter, type SelectionFrame } from './selectionRotation';
 
 export type SelectionResizeAxis = {
@@ -70,10 +70,8 @@ function resizedRectangle(
 
   if (Math.abs(orthogonality) <= Number.EPSILON * 16 * Math.max(1, axisMagnitude)) {
     const resizedCenter = resizePointInSelectionFrame(center, transform);
-    const signedWidth =
-      (last.x - first.x) * Math.hypot(resizedXAxis.x, resizedXAxis.y);
-    const signedHeight =
-      (last.y - first.y) * Math.hypot(resizedYAxis.x, resizedYAxis.y);
+    const signedWidth = (last.x - first.x) * Math.hypot(resizedXAxis.x, resizedXAxis.y);
+    const signedHeight = (last.y - first.y) * Math.hypot(resizedYAxis.x, resizedYAxis.y);
     return {
       ...stroke,
       points: stroke.points.map((point, index) => {
@@ -120,10 +118,7 @@ function resizedRectangle(
   };
 }
 
-function resizedEllipse(
-  stroke: DrawingStroke,
-  transform: SelectionResizeTransform
-): DrawingStroke {
+function resizedEllipse(stroke: DrawingStroke, transform: SelectionResizeTransform): DrawingStroke {
   const first = stroke.points[0];
   const last = stroke.points[stroke.points.length - 1];
   const center = { x: (first.x + last.x) / 2, y: (first.y + last.y) / 2 };
@@ -146,8 +141,7 @@ function resizedEllipse(
   const halfTrace = (covarianceXX + covarianceYY) / 2;
   const nextRadiusX = Math.sqrt(Math.max(0, halfTrace + eigenDistance));
   const nextRadiusY = Math.sqrt(Math.max(0, halfTrace - eigenDistance));
-  const nextRotationRad =
-    eigenDistance === 0 ? 0 : Math.atan2(covarianceXY, halfDifference) / 2;
+  const nextRotationRad = eigenDistance === 0 ? 0 : Math.atan2(covarianceXY, halfDifference) / 2;
   const resizedCenter = resizePointInSelectionFrame(center, transform);
 
   return {

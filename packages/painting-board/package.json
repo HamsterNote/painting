@@ -31,20 +31,21 @@
   ],
   "scripts": {
     "build": "bob build",
-    "test": "yarn --cwd ../.. test",
+    "test": "pnpm --dir ../.. test",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json"
   },
   "peerDependencies": {
-    "react": "^18.0.0",
+    "react": "^19.0.0",
     "react-native": ">=0.74"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.0.0",
     "@testing-library/react": "^16.0.0",
     "@types/jest": "^29.5.12",
-    "@types/react": "~18.3.12",
-    "react": "18.3.1",
-    "react-native": "0.76.5",
+    "@types/react": "~19.2.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
     "react-native-builder-bob": "^0.40.13",
     "typescript": "^5.8.3"
   },

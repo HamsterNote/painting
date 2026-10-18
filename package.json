@@ -4,24 +4,23 @@
   "private": true,
   "type": "module",
   "description": "HamsterNote Painting - React component library with React Native Web",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
   "scripts": {
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
-    "typecheck": "yarn workspace @hamster-note/painting typecheck && yarn workspace @hamster-note/painting-board typecheck && yarn workspace @hamster-note/painting-playground tsc --noEmit",
-    "build:lib": "yarn workspace @hamster-note/painting build && yarn workspace @hamster-note/painting-board build",
-    "build:demo": "yarn workspace @hamster-note/painting-playground build",
-    "build:all": "yarn build:lib && yarn build:demo",
-    "build": "yarn build:all",
+    "typecheck": "pnpm --filter @hamster-note/painting typecheck && pnpm --filter @hamster-note/painting-board typecheck && pnpm --filter @hamster-note/painting-playground exec tsc --noEmit",
+    "build:lib": "pnpm --filter @hamster-note/painting build && pnpm --filter @hamster-note/painting-board build",
+    "build:demo": "pnpm --filter @hamster-note/painting-playground build",
+    "build:all": "pnpm run build:lib && pnpm run build:demo",
+    "build": "pnpm run build:all",
+    "prepare:playground-artifacts": "pnpm --filter @hamster-note/painting build && pnpm --filter @hamster-note/painting-board build",
     "test": "jest --runInBand",
     "test:ui": "playwright test --config=playwright.config.ts",
-    "ci:local": "yarn install --frozen-lockfile && yarn lint && yarn test && yarn test:ui && yarn build && yarn pack:dry",
+    "test:webkit": "playwright test --config=playwright.webkit.config.ts",
+    "verify:layered": "node scripts/verify-layered-delivery.mjs",
+    "ci:local": "pnpm install --frozen-lockfile && pnpm run lint && pnpm run test && pnpm run test:ui && pnpm run build && pnpm run pack:dry",
     "pack:dry": "cd packages/painting && npm pack --dry-run && cd ../painting-board && npm pack --dry-run",
-    "dev": "yarn workspace @hamster-note/painting-playground dev"
+    "dev": "pnpm --filter @hamster-note/painting-playground dev"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.24.0",
@@ -29,10 +28,13 @@
     "@babel/preset-typescript": "^7.24.0",
     "@eslint/js": "^9.39.2",
     "@playwright/test": "1.59.1",
+    "@react-native/jest-preset": "^0.86.3",
+    "@testing-library/react-native": "^14.0.1",
     "@types/jest": "^29.5.12",
     "@typescript-eslint/eslint-plugin": "^8.8.0",
     "@typescript-eslint/parser": "^8.8.0",
     "babel-jest": "^29.7.0",
+    "babel-preset-expo": "57.0.12",
     "eslint": "^9.12.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-jest": "^27.9.0",
@@ -42,11 +44,18 @@
     "globals": "^17.0.0",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^30.4.1",
+    "jest-expo": "~57.0.5",
     "prettier": "^3.3.3",
     "prettier-config-standard": "^7.0.0",
-    "react-test-renderer": "^18.3.1",
+    "react-test-renderer": "19.2.3",
     "typescript": "^5.6.3",
     "typescript-eslint": "^8.52.0"
   },
-  "packageManager": "yarn@1.22.22"
+  "pnpm": {
+    "overrides": {
+      "@types/react": "19.2.18",
+      "@types/react-dom": "19.2.7"
+    }
+  },
+  "packageManager": "pnpm@10.28.2"
 }

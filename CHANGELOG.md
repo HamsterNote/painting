@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### BREAKING
+
+- 公共入口切换到 schema 3 分层编辑器，`PaintingBoard` / `DrawingSurface` 必须传入稳定的 controller。旧 `PaintingController`、V1/V2 受控 props/ref API、旧中心线和 Skia 入口退出；已有文档由消费方显式转换，不承诺自动迁移。
+- 删除 Skia/CanvasKit 依赖、专用字体与构建门，两个发布包和 Expo Web 使用 SVG 历史层 + Canvas 活动/待交接层。iOS/Android 继续通过 Expo DOM 承载整个 Web 编辑器，无本期 native ink 或逐点 RN props bridge。
+
+### 新增与保留
+
+- perfect-freehand 共享几何与真实 raw samples/不可变笔刷快照。压力模式为 auto、real、simulated、constant，在 begin 锁定；real 保留释放零压力。初始 preset 为 0.5 thinning/smoothing/streamline、identity easing、圆帽、taper 0，活动 last=false / 最终 last=true；constant thinning=0。自由笔无 dash，形状 dash 保留。
+- 形状/图片/foreignObject 文字按文档顺序混排，保留 IME 编辑、选择/套索/变换、半径扫掠整对象擦除、undo/redo、尺子、virtual paper 与 minimap，统一由 headless controller 管理。
+- 独立 WebKit 回归、分层产物检查与移动端静态导出 CI。未新增 PNG/SVG 导出功能。
+
+### 验收反馈修复
+
+验收反馈修复：区分子节点向宿主转交 pen capture 与宿主真正丢失 capture，保护快速笔的有效 up 收尾；恢复贝塞尔「拖线 + 两次控制点点击」与多边形「逐点 + 双击闭合」；关闭纸张时小地图不再绘制纸张背景。新增真实分层入口的自动化回归，硬件快速书写仍需设备复验。
+
+### 待人工验收
+
+- Safari/iOS WebView 混排、系统 IME/软键盘与真机启动；实际 pen 四压力模式、up=0、掌触、高刷新率交接；目标设备长笔 CPU/内存/rAF、历史 reconcile 与 WebView 预算。自动化 WebKit、合成事件和 Expo 静态导出不代表这些设备验证已完成。
+- 未来 native adapter 目前仅有语义契约与 mock，ACK 不证明 physical paint 同步。详情见 `docs/implementation/layered-perfect-freehand-surface/manual-acceptance.md`。
+
 ## [0.6.0] - 2026-08-06
 
 ### Added

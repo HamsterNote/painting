@@ -1,8 +1,5 @@
-import type { DrawingPoint, DrawingStroke } from '../components/DrawingSurface';
-import {
-  resizeStrokeInSelectionFrame,
-  type SelectionResizeTransform,
-} from '../selectionResize';
+import type { DrawingPoint, DrawingStroke } from '../model/geometryTypes';
+import { resizeStrokeInSelectionFrame, type SelectionResizeTransform } from '../selectionResize';
 import { rotatePointAroundCenter } from '../selectionRotation';
 
 const WORLD_AXIS_STRETCH: SelectionResizeTransform = {

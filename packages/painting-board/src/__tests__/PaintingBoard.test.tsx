@@ -1,79 +1,78 @@
-import { PaintingBoard } from '@hamster-note/painting-board';
-import type { PaintingBoardHandle } from '@hamster-note/painting-board';
-import { render, screen } from '@testing-library/react';
-import { createRef } from 'react';
+import { createEditor, PaintingBoard, LayeredPaintingBoard } from '@hamster-note/painting-board';
+import { IDENTITY_TRANSFORM } from '@hamster-note/painting/layered';
+import { act, render, screen } from '@testing-library/react';
 
-// 单笔画 value fixture，用于验证 value 透传到 DrawingSurface
-const SINGLE_STROKE_VALUE = {
-  strokes: [
-    {
-      id: 'stroke-1',
-      tool: 'pen' as const,
-      points: [
-        { x: 0, y: 0 },
-        { x: 10, y: 10 },
-      ],
-    },
-  ],
-};
+beforeEach(() => {
+  const context = Object.fromEntries(
+    [
+      'setTransform',
+      'clearRect',
+      'save',
+      'restore',
+      'transform',
+      'beginPath',
+      'moveTo',
+      'lineTo',
+      'closePath',
+      'fill',
+    ].map((key) => [key, jest.fn()])
+  );
+  jest
+    .spyOn(HTMLCanvasElement.prototype, 'getContext')
+    .mockReturnValue(context as unknown as CanvasRenderingContext2D);
+});
+afterEach(() => jest.restoreAllMocks());
 
-describe('PaintingBoard', () => {
-  it('renders a wrapper that fills its parent (100% x 100%)', () => {
-    const { container } = render(<PaintingBoard />);
-    // mock RN View 渲染为 <view> 标签，style 直接透传
-    const wrapper = container.querySelector<HTMLElement>('view');
-    expect(wrapper).toBeTruthy();
-    expect(wrapper?.style.width).toBe('100%');
-    expect(wrapper?.style.height).toBe('100%');
-    // 内部必须渲染出 DrawingSurface 的 svg
-    expect(container.querySelector('svg')).toBeTruthy();
+test('public board is the layered board and fills its parent', () => {
+  expect(PaintingBoard).toBe(LayeredPaintingBoard);
+  const { container } = render(<PaintingBoard controller={createEditor()} />);
+  expect(container.firstElementChild).toHaveProperty('style.width', '100%');
+  expect(container.firstElementChild).toHaveProperty('style.height', '100%');
+  expect(screen.getByTestId('layered-display')).toBeTruthy();
+  expect(screen.getByTestId('layered-drawing')).toBeTruthy();
+});
+
+test.each([false, { enabled: false }, { minScale: 0.5, maxScale: 4 }] as const)(
+  'board forwards virtual paper options %p to its one controller',
+  (virtualPaper) => {
+    const controller = createEditor();
+    render(<PaintingBoard controller={controller} virtualPaper={virtualPaper} />);
+    const options = controller.getSnapshot('navigation').virtualPaper;
+    expect(options.enabled).toBe(virtualPaper !== false && !('enabled' in virtualPaper));
+    expect(options.minScale).toBe(virtualPaper && 'minScale' in virtualPaper ? 0.5 : 0.25);
+    expect(options.maxScale).toBe(virtualPaper && 'maxScale' in virtualPaper ? 4 : 8);
+  }
+);
+
+test('controller owns initial document, selection and history instead of a second value/ref state', () => {
+  const controller = createEditor({
+    schemaVersion: 3,
+    documentRevision: 0,
+    objects: [
+      {
+        objectId: 'text',
+        kind: 'text',
+        objectRevision: 1,
+        transform: IDENTITY_TRANSFORM,
+        transformRevision: 1,
+        content: '初始文档',
+        localBounds: { minX: 10, minY: 10, maxX: 110, maxY: 50 },
+        color: '#000000',
+        fontSize: 20,
+      },
+    ],
   });
-
-  it('forwards testID to the underlying drawing surface host', () => {
-    render(<PaintingBoard testID="painting-board" />);
-    const host = screen.getByTestId('painting-board');
-    expect(host.getAttribute('data-scale')).toBe('1');
+  render(<PaintingBoard controller={controller} toolbar={false} />);
+  expect(screen.queryByRole('toolbar')).toBeNull();
+  expect(screen.getByText('初始文档')).toBeTruthy();
+  act(() => {
+    controller.setSelection(['text']);
+    controller.editObjects({ expectedDocumentRevision: 0, removeIds: ['text'] });
   });
-
-  it('enables virtual paper by default', () => {
-    const { container } = render(<PaintingBoard />);
-    expect(container.querySelector('[data-testid="virtual-paper-wrapper"]')).toBeTruthy();
+  expect(controller.getSnapshot('selection')).toEqual([]);
+  expect(screen.queryByText('初始文档')).toBeNull();
+  act(() => {
+    controller.undo();
   });
-
-  it('disables virtual paper when virtualPaper={false}', () => {
-    const { container } = render(<PaintingBoard virtualPaper={false} />);
-    expect(container.querySelector('[data-testid="virtual-paper-wrapper"]')).toBeNull();
-  });
-
-  it('disables virtual paper when virtualPaper={{ enabled: false }}', () => {
-    const { container } = render(<PaintingBoard virtualPaper={{ enabled: false }} />);
-    expect(container.querySelector('[data-testid="virtual-paper-wrapper"]')).toBeNull();
-  });
-
-  it('keeps virtual paper enabled with custom options object', () => {
-    const { container } = render(<PaintingBoard virtualPaper={{ minScale: 0.5, maxScale: 4 }} />);
-    expect(container.querySelector('[data-testid="virtual-paper-wrapper"]')).toBeTruthy();
-  });
-
-  it('passes value through to the drawing surface', () => {
-    render(<PaintingBoard testID="board" value={SINGLE_STROKE_VALUE} />);
-    const host = screen.getByTestId('board');
-    expect(host.getAttribute('data-stroke-count')).toBe('1');
-  });
-
-  it('passes other DrawingSurface props through (overflow)', () => {
-    const { container } = render(<PaintingBoard overflow="visible" />);
-    const svg = container.querySelector('svg');
-    expect(svg?.style.overflow).toBe('visible');
-  });
-
-  it('exposes the DrawingSurface handle through ref', () => {
-    const ref = createRef<PaintingBoardHandle>();
-    render(<PaintingBoard ref={ref} />);
-    expect(ref.current).toBeTruthy();
-    expect(typeof ref.current?.getHostSize).toBe('function');
-    expect(typeof ref.current?.clearSelection).toBe('function');
-    expect(typeof ref.current?.deleteSelectedStrokes).toBe('function');
-    expect(typeof ref.current?.getSelectedStrokeIds).toBe('function');
-  });
+  expect(screen.getByText('初始文档')).toBeTruthy();
 });

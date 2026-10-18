@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef } from 'react';
 import useUndo from 'use-undo';
-import type { DrawingValue } from '../components/DrawingSurface';
+import type { DrawingValue } from '../model/geometryTypes';
 
 export type PaintingHistoryValues = Readonly<Record<string, DrawingValue>>;
 
@@ -56,7 +56,10 @@ export function usePaintingHistory(initialValues: PaintingHistoryValues): Painti
   const setValues = useCallback(
     (values: PaintingHistoryValues) => {
       presentRef.current = values;
-      actions.set(values, transactionDepthRef.current === 0 || transactionCheckpointPendingRef.current);
+      actions.set(
+        values,
+        transactionDepthRef.current === 0 || transactionCheckpointPendingRef.current
+      );
       transactionCheckpointPendingRef.current = false;
     },
     [actions]

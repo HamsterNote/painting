@@ -10,7 +10,7 @@ export type DrawingSurfaceVirtualPaperInteraction =
 
 export type DrawingSurfaceVirtualPaperOptions = {
   readonly enabled?: boolean;
-  readonly initialPlacement?: 'top-left' | 'center';
+  readonly initialPlacement?: 'top-left' | 'top-center' | 'center';
   readonly minScale?: number;
   readonly maxScale?: number;
   readonly enabledInteractions?: readonly DrawingSurfaceVirtualPaperInteraction[];
