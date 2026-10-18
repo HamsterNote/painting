@@ -1,6 +1,41 @@
 # Validation
 
-## Baseline and evidence
+## Acceptance and closeout (2026-10-18)
+
+修勾 2026-10-18 文字确认验证通过。
+
+- User comment: `01a14f29-e771-789d-ac8c-bf2f41191246`, 2026-10-18 13:18:28 UTC, exact text: 「验证通过」.
+- Follow-up `01a14f2b-9933-7cc6-a36e-6a22dc74eeeb` identifies this as iPad device acceptance and authorizes archive, push and PR. This is user-reported acceptance, not agent-observed hardware input.
+- Accepted candidate branch head: `0d20f65`; application code served at `dc253b9`. Later candidate changes refined tests and records only.
+- No device/pen model, iPadOS/Safari version, screenshot, video, per-scenario results, round counts or event trace was provided. None is inferred from the confirmation.
+- Task 4.2 is accepted on this textual confirmation. Tasks 4.1 and 4.3 remain unchecked because their metadata/visual-evidence requirements are incomplete. Archive is explicitly authorized despite these documentation gaps.
+- PR #26 merged as `0496c2c`; this branch was rebased with `git rebase --onto origin/main 9834cec`. Rebased application/test candidate: `107b4e8` (application commit `6669e6e`). No application code was changed during closeout.
+- Post-rebase verification, append-only spec checks and completed service shutdown are recorded below. The initial delivery evidence below remains historical.
+
+## Post-rebase checks
+
+- Base: `origin/main` at `0496c2c5c85941e6dd20650712736eee242ae3f1`.
+- `git range-diff 9834cec..0d20f65 origin/main..107b4e8`: both commits have identical patches after rebase.
+- `pnpm install --frozen-lockfile`: passed; dependency files and RNW patches unchanged relative to main.
+- `pnpm test`: 87 suites / 1,156 tests passed; installed RNW responder tests 9/9 passed.
+- `pnpm typecheck`: passed.
+- `pnpm lint`: 0 errors, 32 existing assertion warnings.
+- `pnpm build:all`: passed (library build and Expo web export).
+- `openspec validate --all --strict --no-interactive`: 5/5 specs passed after archive.
+- Full Chromium suite: 166 passed, 0 failed (6.8 minutes), using `pnpm exec playwright test --project=chromium --workers=1 --retries=0`.
+- Full configured WebKit suite: 117 passed, 2 skipped, 0 failed (4.4 minutes), using `pnpm exec playwright test --config=playwright.webkit.config.ts --project=webkit --workers=1 --retries=0` inside the existing `localhost/ham40-webkit:noble` Ubuntu 24.04 Podman image because the Ubuntu 26 host lacks its runtime libraries. The two skips require Chromium CDP touch arbitration and do not execute on WebKit.
+- Saved HTML reports: `ham55-closeout-chromium-report.tar.gz` and `ham55-closeout-webkit-report.tar.gz`, attached to the closeout issue comment. These are desktop browser evidence, not device footage.
+- Archive: `openspec/changes/archive/2026-10-18-fix-ipad-pencil-text-selection/`, generated with `openspec archive fix-ipad-pencil-text-selection --yes --json` under this turn's explicit archive authorization.
+- Byte checks against main: all 7,579 existing bytes of `document-object-interaction/spec.md` are unchanged; 2,232 bytes appended. Existing prefix SHA-256: `77d5298137ced8b506f2a574a4f417abdab20533047c150a68ece786da73f3d2`. The appended requirement matches the delta byte for byte. The other four existing spec files (including HAM-44/HAM-50 input-session clauses) are byte-identical to main.
+- Tasks: 8/10 checked; missing device/version metadata (4.1) and screenshot/video (4.3) remain explicit documentary gaps. No missing data was manufactured to complete the checklist.
+
+## Service shutdown (2026-10-18)
+
+- After both browser suites completed, ran `node ham55-services.mjs stop baseline` and `node ham55-services.mjs stop candidate`. The helper checks the Multica daemon PID and recorded process identity before stopping the owned groups `1870322` (baseline) and `1888820` (candidate).
+- `ss -ltnp '( sport = :5266 or sport = :5267 )'`: no listeners.
+- Independently bound and closed a Node TCP server on each port with host `::` (IPv6 dual-stack): both 5266 and 5267 succeeded. Both acceptance ports are released; the historical LAN entries below are no longer running.
+
+## Initial baseline and evidence
 
 - Baseline: `9834cec61b641c7f5041a14280d8c56322390e68`.
 - Branch: `agent/agent/aca3a0e3fdf9-ham55`, created directly from that commit.
@@ -15,7 +50,7 @@
 | DOM PointerEvent / composition dispatch | Chromium: blank/mixed paper, 12 rapid strokes each, unique objects, +12 document revisions, 12 undo/redo steps, no editor opened; isTrusted=false. Synthetic composition commit/cancel and return to drawing pass. These do not prove native pen selection or system IME behavior. |
 | Browser mouse / keyboard | Chromium and WebKit: native double click/drag over displayed text creates no new selection; existing outside selection survives; outside text remains selectable; textarea native word selection/replacement and number input focus pass. Captured mouse dblclick isTrusted=true. Native polygon completion preserves three vertices and one undo/redo transaction. |
 | CDP pen | Not executed for this change. HAM-50 evidence is not evidence for this symptom. |
-| iPad Safari + physical pen | Pending mandatory baseline/candidate comparison. No claim of reproduction on the patched baseline or accepted fix. |
+| iPad Safari + physical pen | At initial delivery, the comparison was pending. Current user-reported acceptance and its limits are recorded above. |
 
 The proposed dblclick chain is a hypothesis, not an established root cause.
 
@@ -40,7 +75,7 @@ assertion checks the supported standard/prefixed property. Desktop engines do
 not necessarily support `-webkit-touch-callout`; computed callout checks are
 conditional on CSS.supports. Actual iPad menus remain part of device acceptance.
 
-## Automated checks
+## Initial candidate checks
 
 - Tested application code: `dc253b96a4b9b950bb3b4b30e2f4495e456b59c3` (later changes only refine test assertions and this record).
 - Chromium command: `pnpm exec playwright test tests/ui/interaction-feedback.spec.ts tests/ui/mobile-input-mode.spec.ts tests/ui/layered-editor.spec.ts --project=chromium --workers=1`: 69/69 passed.
@@ -52,7 +87,7 @@ conditional on CSS.supports. Actual iPad menus remain part of device acceptance.
 - `openspec validate fix-ipad-pencil-text-selection --strict --no-interactive`: passed.
 - WebKit full rerun: 69/69 passed. Direct host launch is unavailable on Ubuntu 26 (missing ICU74 and other system libraries). Tests ran with the existing `localhost/ham40-webkit:noble` rootless Podman image and browser cache. The first container run had two failures caused by unprefixed computed-style assertions; after correcting those assertions, the complete run passed with no application changes. This remains desktop WebKit evidence, not iPad acceptance.
 - Reports: `playwright-report/index.html` (Chromium) and `playwright-report/webkit/index.html` (WebKit), including screenshots and native-input evidence. Delivered in the verification archive with service logs/cleanup helper.
-- Final task progress: 7/10. The three device acceptance tasks remain open. No PR was opened; only the implementation branch is to be pushed for acceptance.
+- Initial handoff progress: 7/10. At that point the three device acceptance tasks were open and no PR had been opened. Current closeout is recorded above.
 
 WebKit command (using the existing independent candidate server on port 5266):
 
@@ -71,7 +106,7 @@ podman run --rm --name ham55-webkit-final --network host \
     --config=playwright.webkit.config.ts --project=webkit --workers=1 --retries=0
 ```
 
-## Device acceptance (pending)
+## Initial device acceptance handoff (historical)
 
 Both independently running Expo Dev Servers responded over LAN with HTTP 200
 and rendered the editor. The baseline surface computes user-select=auto;
