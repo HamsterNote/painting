@@ -14,7 +14,8 @@
     "build:all": "pnpm run build:lib && pnpm run build:demo",
     "build": "pnpm run build:all",
     "prepare:playground-artifacts": "pnpm --filter @hamster-note/painting build && pnpm --filter @hamster-note/painting-board build",
-    "test": "jest --runInBand",
+    "test": "jest --runInBand && pnpm test:responder",
+    "test:responder": "node --test tests/dependencies/web-responder-touch-identity.test.mjs",
     "test:ui": "playwright test --config=playwright.config.ts",
     "test:webkit": "playwright test --config=playwright.webkit.config.ts",
     "verify:layered": "node scripts/verify-layered-delivery.mjs",
@@ -55,6 +56,9 @@
     "overrides": {
       "@types/react": "19.2.18",
       "@types/react-dom": "19.2.7"
+    },
+    "patchedDependencies": {
+      "react-native-web@0.21.2": "patches/react-native-web@0.21.2.patch"
     }
   },
   "packageManager": "pnpm@10.28.2"
