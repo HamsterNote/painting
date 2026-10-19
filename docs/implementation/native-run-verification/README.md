@@ -1,6 +1,6 @@
 # Expo Dev Client 运行与设备验收
 
-本文对应 HAM-64。当前结论见 [results.md](./results.md)：已验证配置生成、打包和开发服务器响应；尚无 iOS / Android 设备运行证据。
+本文对应 HAM-64。当前结论见 [results.md](./results.md)：配置生成、打包和开发服务器响应已验证；用户已于 2026-10-19 在真机 dev client 上确认验证通过（具体设备与逐项记录未回传）。
 
 ## 运行边界与前提
 
