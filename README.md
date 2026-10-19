@@ -81,3 +81,5 @@ pnpm verify:layered
 ```
 
 开发端口为 5266，使用 Expo 支持的 `BROWSER=none` 禁止自动打开浏览器。WebKit 需要 Playwright 对应浏览器和受支持系统依赖。Android/iOS 的 `expo export` 只验证静态依赖解析，不是原生运行证据。
+
+Expo dev client 的构建、局域网连接与两条路由的设备验收步骤见 [Native 运行验证](docs/implementation/native-run-verification/README.md)，本次实际观察与未验证项见该目录的 `results.md`。

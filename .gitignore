@@ -4,6 +4,8 @@ node_modules/
 # Expo
 .expo/
 .metro-health-check*
+apps/playground/ios/
+apps/playground/android/
 
 # Build outputs
 dist/
