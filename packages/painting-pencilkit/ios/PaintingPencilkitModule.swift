@@ -1,0 +1,30 @@
+import ExpoModulesCore
+
+/**
+ * PaintingPencilkitModule —— HAM-66 tasks 2.1 的最小 Expo Module。
+ *
+ * 只声明一个原生 View（PKCanvasView 封装）与 probe 所需的三个 prop
+ * 和一个 onReady 事件；不包含 G1 采样器、G2 分流宿主或 G3 交接逻辑，
+ * 这些是后续门槛增量的范围（见 design.md D1/G1–G3）。
+ */
+public class PaintingPencilkitModule: Module {
+  public func definition() -> ModuleDefinition {
+    Name("PaintingPencilkit")
+
+    View(PaintingPencilkitView.self) {
+      Events("onReady")
+
+      Prop("pencilOnly") { (view: PaintingPencilkitView, pencilOnly: Bool) in
+        view.setPencilOnly(pencilOnly)
+      }
+
+      Prop("inkColor") { (view: PaintingPencilkitView, inkColor: UIColor) in
+        view.setInkColor(inkColor)
+      }
+
+      Prop("inkWidth") { (view: PaintingPencilkitView, inkWidth: Double) in
+        view.setInkWidth(inkWidth)
+      }
+    }
+  }
+}
