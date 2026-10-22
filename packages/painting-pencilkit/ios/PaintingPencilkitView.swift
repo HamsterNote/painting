@@ -63,7 +63,7 @@ final class PaintingPencilkitView: ExpoView {
   }
 
   func setInkWidth(_ inkWidth: Double) {
-    inkWidth = CGFloat(max(inkWidth, 0.1))
+    self.inkWidth = CGFloat(max(inkWidth, 0.1))
     applyTool()
   }
 
