@@ -18,7 +18,7 @@ import UIKit
  *   - 不做 raw→PF 交接与 undo 路由（G3/tasks 2.4、3.x/4.x）。
  */
 final class PaintingPencilkitView: ExpoView {
-  private let canvasView = PKCanvasView()
+  private let canvasView = PencilkitSamplingCanvasView()
 
   private var pencilOnly = true
   private var inkColor: UIColor = .systemBlue
@@ -28,9 +28,16 @@ final class PaintingPencilkitView: ExpoView {
   let onReady = EventDispatcher()
   private var didDispatchReady = false
 
+  /// 供 Module 的 Events("onStroke") 绑定；每笔完成（up/cancel）派发摘要。
+  let onStroke = EventDispatcher()
+
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
     configureCanvas()
+    // G1 采样器为探测期单例（单 view）；3.x 生产接入时按 view 实例隔离。
+    PencilkitG1Sampler.shared.onStrokeCompleted = { [weak self] summary in
+      self?.onStroke(summary)
+    }
   }
 
   @available(*, unavailable)

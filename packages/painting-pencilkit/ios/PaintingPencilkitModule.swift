@@ -11,8 +11,17 @@ public class PaintingPencilkitModule: Module {
   public func definition() -> ModuleDefinition {
     Name("PaintingPencilkit")
 
+    // G1 诊断导出：返回采样器当前保留的完成笔与规则说明（见 PencilkitG1Sampler）。
+    AsyncFunction("getStrokesLog") { () -> [String: Any] in
+      PencilkitG1Sampler.shared.strokesLog()
+    }
+
+    AsyncFunction("clearStrokesLog") { () -> Void in
+      PencilkitG1Sampler.shared.clear()
+    }
+
     View(PaintingPencilkitView.self) {
-      Events("onReady")
+      Events("onReady", "onStroke")
 
       Prop("pencilOnly") { (view: PaintingPencilkitView, pencilOnly: Bool) in
         view.setPencilOnly(pencilOnly)

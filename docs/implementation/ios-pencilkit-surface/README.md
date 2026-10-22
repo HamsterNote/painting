@@ -187,15 +187,29 @@ npx eas-cli@latest build --platform ios --profile development
 
 ### 2.2 G1（tasks 2.2）：真实 raw 采样
 
-前置增量（待交付）：PKCanvasView 旁路采样器（公开 UIKit touches 接口，主/coalesced 事件按身份去重、pressure capability、统一时间基准、estimated updates 处理）+ 探测页日志导出。
+前置增量（**已交付**）：`PencilkitG1Sampler`（PKCanvasView 子类公开 UIKit touches 重写 + super，主/coalesced 按事件身份去重、pressure capability、统一 UIKit 时间基准、estimated updates 只计数不改写）+ 探测页笔迹摘要与「导出日志」（系统分享导出 JSON，不依赖 Console.app）。
 
-执行步骤（增量交付后细化命令）：
+执行步骤：
 
-1. 重建 dev client 并打开 G1 探测页；
-2. 依次执行：Pencil 单击（tap）、快速短笔 ×5、快速长笔 ×2、慢速长笔 ×1、变化压力笔 ×2；
-3. 导出采样日志。
+1. 本增量含原生改动，必须重新 prebuild + 构建安装（命令同第 1 / 1A 节），确认构建提交为本增量提交；
+2. 打开 `painting-playground:///pencilkit-probe`，点「清空」重置采样器；
+3. 依次执行用例（每画一笔，屏幕列表最新一行即该笔摘要）：
+   - Pencil 单击 tap ×3；
+   - 快速短笔 ×5、快速长笔 ×2、慢速长笔 ×1；
+   - 同一条笔内由轻到重变化压力 ×2；
+4. 点「导出日志」，经系统分享（AirDrop / 存储到文件 / 邮件）导出 JSON 并回传，同时回传屏幕摘要列表截图；
+5. 全程 PK 墨迹应正常显示——采样器旁路工作、不抢占 PK 手势；若墨迹异常（断笔、不跟手），即判失败。
 
-通过判据：每笔 down/up 完整成对、无抢占 PK 手势（PK 预览正常）；coalesced 样本数 ≥ 主事件数；压力在 capability 可用时有真实分布（非恒值）；tap 有真实 down/up 而非合成；日志注明 estimated updates 的处理方式；提交后无迟到估计值改写。任一不满足 → 停止，回 D1 评审。
+通过判据（对照导出 JSON 逐笔核验）：
+
+- 每笔 `counts.down == 1` 且 `counts.up == 1`（cancel 笔除外，需说明触发原因）；tap 也有真实 down/up，非合成；
+- `samples` 按 `seq` 连续无重号；同一笔内不存在相同 `tabs`（绝对毫秒）的重复样本（事件身份去重生效，且未按坐标去重）；
+- 快速笔 `counts.coalesced > 0`（证明 coalesced 通道在工作）；样本只有 `kind: main/coalesced` 两类，无预测/插值样本；
+- `pressure.capability == true` 时变化压力笔的 `pressure.min/max` 有明显区间（非恒值、非 clamp 的 0/1）；`p` 恒在合理范围但不强制截断；能力缺失设备则 `p` 全为 `null` 并在回传注明；
+- 日志 `rules` 字段完整列出采样/去重/时间/压力/估计/限额六条规则；`estimated.lateEstimateEvents` 仅为计数，已收样本不被迟到估计值改写；
+- 屏幕 PK 墨迹与采样同时正常（不抢占手势）；`ignoredNonPencilTouches` 如实记录手指触摸次数（pencilOnly 下手指数 > 0 属预期）。
+
+任一不满足 → 停止后续接入，带日志回 D1 评审；不允许用 PKStrokePath 枚举或私有 API 补造 raw 顶替。
 
 ### 2.3 G2（tasks 2.3）：Pencil 与手指分流
 
