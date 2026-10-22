@@ -51,8 +51,8 @@ final class PencilkitG1Sampler {
     var pressureCapability: Bool?
     var pressureMin = Double.greatestFiniteMagnitude
     var pressureMax = -Double.greatestFiniteMagnitude
-    var estimatedFlagsUnion: UInt = 0
-    var expectingFlagsUnion: UInt = 0
+    var estimatedFlagsUnion: Int = 0
+    var expectingFlagsUnion: Int = 0
     var lateEstimateEvents = 0
     var overflow = false
     var cancelled = false
@@ -182,9 +182,11 @@ final class PencilkitG1Sampler {
       if completedStrokes.count > maxCompletedStrokes {
         completedStrokes.removeFirst(completedStrokes.count - maxCompletedStrokes)
       }
-      let callback = onStrokeCompleted
       // 回调在主线程同步触发（触摸回调本就在主线程），view 侧只做事件派发。
-      callback(summary)
+      // 回调由 view 在挂载时设置，未设置时仅记录不派发。
+      if let callback = onStrokeCompleted {
+        callback(summary)
+      }
     }
     countIgnored(touches)
   }
