@@ -1,6 +1,7 @@
 {
   "platforms": ["ios"],
   "ios": {
-    "podspecPath": "ios/PaintingPencilkit.podspec"
+    "podspecPath": "ios/PaintingPencilkit.podspec",
+    "modules": ["PaintingPencilkitModule"]
   }
 }

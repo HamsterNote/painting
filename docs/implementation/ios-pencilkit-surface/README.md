@@ -47,7 +47,10 @@ npx expo-modules-autolinking resolve --platform ios | grep -A3 PaintingPencilkit
 ```text
 packageName: '@hamster-note/painting-pencilkit',
 pods: [ { podName: 'PaintingPencilkit', podspecDir: '.../packages/painting-pencilkit/ios' } ],
+modules: [ { name: null, class: 'PaintingPencilkitModule' } ],
 ```
+
+注意：`pods` 只证明代码进了工程，`modules` 非空才证明模块类会注册进生成的 provider；若 `modules: []`，探测页会报 `Unimplemented component: <ViewManagerAdapter_PaintingPencilkit>`。
 
 ### 1.2 prebuild + 编译安装到真机
 
