@@ -138,6 +138,34 @@ npx eas-cli@latest build --platform ios --profile development
 
 预期输出：构建进入队列后给出 EAS 构建页链接；完成后该页提供安装链接与二维码。构建耗时通常数十分钟（含排队），日志在 EAS 网页可见；失败时下载完整日志回传，不要只截最后一行。
 
+#### 包管理器预检与已有 Mac 工作树的重试
+
+EAS 的 `development` profile（模拟器 profile 也继承）启用 Corepack，并将 pnpm 固定为根 `package.json` 声明的 `10.28.2`。版本配置不会改变按锁文件检测包管理器的优先级：根 `.easignore` 沿用 `.gitignore` 的排除规则，再额外排除上传包中的 `/yarn.lock`，让远端从根 `pnpm-lock.yaml` 和 `pnpm-workspace.yaml` 识别 pnpm 工作区。仓库内两个锁文件都保留；以后修改 `.gitignore` 时应同步 `.easignore`。
+
+官方参考：[EAS 配置的 `pnpm` / `corepack`](https://docs.expo.dev/eas/json/#common-properties-for-native-platforms)、[`.easignore` 替代 `.gitignore` 的规则](https://docs.expo.dev/build-reference/easignore/)、[monorepo 中从应用目录运行 EAS](https://docs.expo.dev/build-reference/build-with-monorepos/)。
+
+Mac 已有关联项目、router 和加密声明时，从仓库根执行：
+
+```bash
+# 确认仍在 agent/agent/4b329d64789b；保留 app.json 的未提交改动。
+git status --short --branch
+git diff -- apps/playground/app.json
+git fetch origin
+git merge --ff-only origin/agent/agent/4b329d64789b
+git diff -- apps/playground/app.json
+pnpm --version   # 10.28.2
+pnpm install --frozen-lockfile
+pnpm run prepare:playground-artifacts
+cd apps/playground
+npx eas-cli@25.3.0 build:inspect --platform ios --profile development --stage archive --output /tmp/ham66-eas-archive
+# 检查输出归档：根 pnpm-lock.yaml、pnpm-workspace.yaml、patches/ 应存在，yarn.lock 不应存在。
+npx eas-cli@25.3.0 build --platform ios --profile development --clear-cache --no-wait
+```
+
+修复只更新 `.easignore`、`eas.json` 与本文；快进合并不会覆盖 `apps/playground/app.json`。合并前后核对该文件仍包含既有 `extra.eas.projectId`、`extra.router` 与用户确认的 `ios.infoPlist.ITSAppUsesNonExemptEncryption`。若不能快进或 Git 报本地改动冲突，停止并保留工作树，不使用 reset/覆盖文件。归档检查目录应选一个不存在的新路径；归档包含本地项目配置，不要上传或公开整份归档。
+
+远端复测通过的本项判据：构建环境显示 pnpm `10.28.2`，`Install dependencies` 在仓库根执行 `pnpm install --frozen-lockfile` 并成功完成，不再运行 `yarn install`。记录新 build URL、提交 SHA 与安装阶段日志；这一项通过不代表后续原生编译或 G1 真机采样已通过。
+
 ### 1A.3 安装与打开 `/pencilkit-probe`
 
 1. 在 iPad Safari 打开 EAS 构建页的安装链接（或扫码），按提示安装 ad hoc 包；
