@@ -5,7 +5,12 @@
  * 实现，Android 无原生实现（expo-module.config.json 只声明 ios），宿主
  * 路由必须按平台拆分、只在 iOS 导入本包。
  */
-export { PaintingPencilkitView, clearStrokesLog, getStrokesLog } from './PaintingPencilkitView';
+export {
+  PaintingPencilkitView,
+  clearStrokesLog,
+  getStrokesLog,
+  isPencilkitDemoAvailable,
+} from './PaintingPencilkitView';
 export type {
   PaintingPencilkitReadyEvent,
   PaintingPencilkitViewProps,

@@ -3,7 +3,7 @@ import PencilKit
 import UIKit
 
 /**
- * PaintingPencilkitView —— HAM-66 tasks 2.1 最小 PKCanvasView 封装。
+ * PencilKit canvas shared by the G1 Probe and opt-in G2/G3 Demo host.
  *
  * 配置对应 design.md D2-A / D4 的固定决策（本期不再可配）：
  *   - 透明背景、位于上层时可叠加在 DOM 之上；
@@ -12,17 +12,38 @@ import UIKit
  *   - 不挂载 PKToolPicker（不提供原生工具选择器）；
  *   - 工具固定为可映射的 pen 预览（PKInkingTool），颜色/宽度来自 prop。
  *
- * 明确不做（后续门槛增量的范围）：
- *   - 不采集 coalesced touches（G1/tasks 2.2）；
- *   - 不做 Pencil 与手指在 RN/DOM/WKWebView 组合中的分流（G2/tasks 2.3）；
- *   - 不做 raw→PF 交接与 undo 路由（G3/tasks 2.4、3.x/4.x）。
+ * Demo mode owns an isolated raw sampler and disposable, identity-scoped previews.
+ * Finger hit testing and presentation still require G2/G3 device verification.
  */
-final class PaintingPencilkitView: ExpoView {
+final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   private let canvasView = PencilkitSamplingCanvasView()
+  private let demoSampler = PencilkitG1Sampler()
+  private var demoState: DemoState?
+  private var contexts: [Int: String] = [:]
+  private var previews = PencilkitPreviewLedger()
+  private var updatingDrawing = false
+  private var collectingID: Int?
+
+  private struct DemoState: Decodable {
+    let contextKey: String
+    let enabled: Bool
+    let retireIDs: [Int]
+    let exclusions: [Exclusion]
+  }
+  private struct Exclusion: Decodable {
+    let x: Double
+    let y: Double
+    let width: Double
+    let height: Double
+    func contains(_ point: CGPoint) -> Bool {
+      CGRect(x: x, y: y, width: width, height: height).contains(point)
+    }
+  }
 
   private var pencilOnly = true
   private var inkColor: UIColor = .systemBlue
   private var inkWidth: CGFloat = 4
+  private var inkOpacity: CGFloat = 1
 
   /// 供 Module 的 Events("onReady") 绑定；只在上屏后派发一次。
   let onReady = EventDispatcher()
@@ -30,13 +51,34 @@ final class PaintingPencilkitView: ExpoView {
 
   /// 供 Module 的 Events("onStroke") 绑定；每笔完成（up/cancel）派发摘要。
   let onStroke = EventDispatcher()
+  let onBegin = EventDispatcher()
+  let onPreviewRetired = EventDispatcher()
 
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
     configureCanvas()
-    // G1 采样器为探测期单例（单 view）；3.x 生产接入时按 view 实例隔离。
+    // Probe exports remain isolated from each Demo view's transient sampling state.
     PencilkitG1Sampler.shared.onStrokeCompleted = { [weak self] summary in
       self?.onStroke(summary)
+    }
+    demoSampler.onStrokeBegan = { [weak self] begin in
+      guard let self, let id = begin["id"] as? Int, let state = self.demoState else { return }
+      self.contexts[id] = state.contextKey
+      self.previews.activeID = id
+      self.collectingID = id
+      var payload = begin
+      payload["contextKey"] = state.contextKey
+      self.onBegin(payload)
+    }
+    demoSampler.onStrokeCompleted = { [weak self] summary in
+      guard let self, let id = summary["id"] as? Int else { return }
+      var payload = summary
+      payload["contextKey"] = self.contexts[id] ?? ""
+      self.collectingID = nil
+      self.previews.finishedIDs.append(id)
+      if summary["cancelled"] as? Bool == true { self.previews.cancelledIDs.insert(id) }
+      self.onStroke(payload)
+      self.reconcilePreviews()
     }
   }
 
@@ -74,6 +116,73 @@ final class PaintingPencilkitView: ExpoView {
     applyTool()
   }
 
+  func setInkOpacity(_ opacity: Double) {
+    inkOpacity = CGFloat(min(1, max(0, opacity)))
+    applyTool()
+  }
+
+  func setDemoState(_ json: String) {
+    guard let data = json.data(using: .utf8),
+          let state = try? JSONDecoder().decode(DemoState.self, from: data) else { return }
+    demoState = state
+    canvasView.sampler = demoSampler
+    previews.retireIDs.formUnion(state.retireIDs.filter { contexts[$0] != nil })
+    if let id = collectingID, state.retireIDs.contains(id) {
+      collectingID = nil
+      demoSampler.discardActiveSessions()
+      // Cancel only the temporary PK gesture. No raw stroke or history transaction is synthesized.
+      canvasView.drawingGestureRecognizer.isEnabled = false
+      canvasView.drawingGestureRecognizer.isEnabled = true
+      previews.finishedIDs.append(id)
+      previews.cancelledIDs.insert(id)
+      previews.finishTool()
+    }
+    reconcilePreviews()
+  }
+
+  // An actual UIKit hit test, not pencilOnly (which still consumes finger touches).
+  // Missing/ambiguous touch metadata falls through to the real WKWebView.
+  override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+    if let state = demoState {
+      guard state.enabled, bounds.contains(point), !state.exclusions.contains(where: { $0.contains(point) }),
+            event?.allTouches?.contains(where: { touch in
+              let location = touch.location(in: self)
+              return touch.type == .pencil && abs(location.x - point.x) < 1 && abs(location.y - point.y) < 1
+            }) == true else { return nil }
+    }
+    return super.hitTest(point, with: event)
+  }
+
+  override var undoManager: UndoManager? { demoState == nil ? super.undoManager : nil }
+
+  func canvasViewDidBeginUsingTool(_ canvasView: PKCanvasView) { previews.usingTool = true }
+
+  func canvasViewDidFinishUsingTool(_ canvasView: PKCanvasView) {
+    previews.finishTool()
+    reconcilePreviews()
+    applyTool()
+  }
+
+  func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
+    if !updatingDrawing { reconcilePreviews() }
+  }
+
+  private func reconcilePreviews() {
+    guard demoState != nil, !updatingDrawing else { return }
+    let strokes = canvasView.drawing.strokes
+    guard let retirement = previews.reconcile(strokeCount: strokes.count) else { return }
+    if retirement.keepIndices.count != strokes.count {
+      updatingDrawing = true
+      canvasView.drawing = PKDrawing(strokes: retirement.keepIndices.map { strokes[$0] })
+      updatingDrawing = false
+    }
+    for id in retirement.ids {
+      if let context = contexts.removeValue(forKey: id) {
+        onPreviewRetired(["id": id, "contextKey": context])
+      }
+    }
+  }
+
   // MARK: - Configuration
 
   private func configureCanvas() {
@@ -87,6 +196,7 @@ final class PaintingPencilkitView: ExpoView {
     canvasView.bouncesZoom = false
 
     canvasView.isRulerActive = false
+    canvasView.delegate = self
     // 故意不挂载 PKToolPicker：design D4 non-goal「不提供原生工具选择器」。
 
     applyDrawingPolicy()
@@ -100,7 +210,8 @@ final class PaintingPencilkitView: ExpoView {
   }
 
   private func applyTool() {
-    canvasView.tool = PKInkingTool(.pen, color: inkColor, width: inkWidth)
+    guard !previews.usingTool else { return }
+    canvasView.tool = PKInkingTool(.pen, color: inkColor.withAlphaComponent(inkOpacity), width: inkWidth)
   }
 
   // MARK: - Ready event
@@ -108,6 +219,7 @@ final class PaintingPencilkitView: ExpoView {
   private func dispatchReady() {
     onReady([
       "moduleVersion": "0.1.0",
+      "demoBridgeVersion": 1,
       "osVersion": ProcessInfo.processInfo.operatingSystemVersionString,
       "deviceModel": UIDevice.current.model,
       "drawingPolicy": pencilOnly ? "pencilOnly" : "anyInput",

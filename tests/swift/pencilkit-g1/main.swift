@@ -134,6 +134,86 @@ func testRawPressureAndEstimatedUpdates() {
   check(estimated["lateEstimateEvents"] == 2, "late estimates must remain count-only")
 }
 
+func testPressureBeforeAndAfterPencilkit() {
+  let canvas = PencilkitSamplingCanvasView()
+  let sampler = PencilkitG1Sampler()
+  canvas.sampler = sampler
+  let touch = UITouch(1)
+  touch.maximumPossibleForce = 8
+  touch.force = 2
+  canvas.touchesBegan([touch], with: nil)
+  touch.timestamp = 2
+  touch.force = 4
+  canvas.forceAfterSuper = 1
+  canvas.touchesMoved([touch], with: nil)
+  touch.timestamp = 3
+  touch.force = 0
+  canvas.touchesEnded([touch], with: nil)
+  let samples = verifyCompleted(sampler)
+  check(samples[1]["fBeforePencilkit"] as? Double == 4, "pre-super snapshot must not retain a mutable UITouch")
+  check(samples[1]["f"] as? Double == 1, "diagnostics must not change accepted force")
+  check(samples[1]["p"] as? Double == 0.125, "normalization semantics changed")
+  check(samples[2]["fBeforePencilkit"] as? Double == 0, "terminal pre-super zero lost")
+  check(PencilkitG1Sampler.shared.strokesLog()["strokeCount"] as? Int == 0, "demo must not write the Probe sampler")
+}
+
+func testIdentityScopedPreviewRetirement() {
+  var ledger = PencilkitPreviewLedger()
+  ledger.activeID = 1
+  ledger.usingTool = true
+  ledger.finishedIDs = [1]
+  ledger.retireIDs = [1]
+  check(ledger.reconcile(strokeCount: 1) == nil, "must not mutate an active PKDrawing")
+  ledger.finishTool()
+  let first = ledger.reconcile(strokeCount: 1)!
+  check(first.ids == [1] && first.keepIndices.isEmpty, "retirement did not match finished ID")
+  ledger.activeID = 2
+  ledger.finishTool() // Native tool-finish can precede the raw-end callback.
+  check(ledger.reconcile(strokeCount: 1)!.ids.isEmpty, "tool-finish alone must not retire")
+  ledger.finishedIDs = [2]
+  _ = ledger.reconcile(strokeCount: 1)
+  ledger.activeID = 3
+  ledger.finishTool()
+  ledger.finishedIDs = [3]
+  _ = ledger.reconcile(strokeCount: 2)
+  ledger.retireIDs = [2]
+  let second = ledger.reconcile(strokeCount: 2)!
+  check(second.ids == [2] && second.keepIndices == [1], "old ACK cleared a subsequent stroke")
+  check(ledger.reconcile(strokeCount: 1)!.ids.isEmpty, "duplicate retirement ACK")
+}
+
+func testCancelledEmptyPreviewCannotConsumeNextStroke() {
+  var ledger = PencilkitPreviewLedger()
+  ledger.activeID = 1
+  ledger.finishTool()
+  ledger.finishedIDs = [1]
+  ledger.cancelledIDs = [1]
+  check(ledger.reconcile(strokeCount: 0)!.ids.isEmpty, "cancellation is not a retirement request")
+  ledger.retireIDs = [1]
+  check(ledger.reconcile(strokeCount: 0)!.ids == [1], "empty cancelled preview was not acknowledged")
+  ledger.activeID = 2
+  ledger.finishTool()
+  ledger.finishedIDs = [2]
+  _ = ledger.reconcile(strokeCount: 1)
+  ledger.retireIDs = [2]
+  check(ledger.reconcile(strokeCount: 1)!.ids == [2], "cancelled ID consumed the next preview")
+}
+
+func testProtocolCancellationDoesNotFabricateRawEnd() {
+  let sampler = PencilkitG1Sampler()
+  let view = UIView()
+  let touch = UITouch(1)
+  sampler.touchesBegan([touch], in: view)
+  sampler.discardActiveSessions()
+  touch.timestamp = 2
+  sampler.touchesEnded([touch], event: nil, in: view)
+  check(sampler.strokesLog()["strokeCount"] as? Int == 0, "protocol cancellation synthesized a raw stroke")
+  sampler.touchesBegan([touch], in: view)
+  touch.timestamp = 3
+  sampler.touchesEnded([touch], event: nil, in: view)
+  _ = verifyCompleted(sampler)
+}
+
 let tests: [(String, () -> Void)] = [
   ("terminal coalesced overlap and repeated finish", testTerminalCoalescedOverlap),
   ("up/cancel sharing a previously accepted timestamp", testTerminalWithPreviouslyAcceptedTimestamp),
@@ -141,6 +221,10 @@ let tests: [(String, () -> Void)] = [
   ("overlapping coalesced batches preserve identity and order", testOverlappingCoalescedBatches),
   ("overflow retains exactly one real terminal sample", testOverflowReservesTerminalSlot),
   ("raw pressure and count-only estimated updates are unchanged", testRawPressureAndEstimatedUpdates),
+  ("pre/post PencilKit force snapshots and per-view isolation", testPressureBeforeAndAfterPencilkit),
+  ("identity-scoped preview retirement and tool/end ordering", testIdentityScopedPreviewRetirement),
+  ("empty cancellation does not consume the next preview", testCancelledEmptyPreviewCannotConsumeNextStroke),
+  ("protocol cancellation never synthesizes a raw end", testProtocolCancellationDoesNotFabricateRawEnd),
 ]
 for (name, test) in tests {
   test()

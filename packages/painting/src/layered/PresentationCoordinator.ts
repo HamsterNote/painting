@@ -32,6 +32,7 @@ export class PresentationCoordinator {
     string,
     { node: HistoryPresentationNode; documentObject: boolean }
   >();
+  private readonly native = new Map<string, { ready: () => void; notified: boolean }>();
   private objects: readonly DocumentObject[];
   private repaint: () => void = () => {};
   private readonly unsubscribe: () => void;
@@ -84,6 +85,19 @@ export class PresentationCoordinator {
     });
   }
 
+  holdNative(commitId: string, ready: () => void): void {
+    this.native.set(commitId, { ready, notified: false });
+  }
+
+  hasNativePreview(commitId: string): boolean {
+    return this.native.has(commitId);
+  }
+
+  retireNative(commitId: string): void {
+    this.native.delete(commitId);
+    this.flushReady();
+  }
+
   getIdentity(objectId: string): LayeredPresentationIdentity | undefined {
     return this.pending.get(objectId)?.identity;
   }
@@ -126,11 +140,22 @@ export class PresentationCoordinator {
     if (!entry || !this.nodes.has(identity.objectId) || !matches(entry.identity, identity))
       return false;
     entry.ready = true;
+    const native = this.native.get(entry.identity.commitId);
+    if (native && !native.notified) {
+      native.notified = true;
+      native.ready();
+    }
+    this.flushReady();
+    return true;
+  }
+
+  private flushReady(): void {
     // A later ACK cannot move a newer SVG object below older Canvas ink.
     for (const object of this.objects) {
       const pending = this.pending.get(object.objectId);
       if (!pending) continue;
       if (!pending.ready) break;
+      if (this.native.has(pending.identity.commitId)) break;
       this.pending.delete(object.objectId);
       if (this.onTrace)
         traceGesture(this.onTrace, {
@@ -142,7 +167,6 @@ export class PresentationCoordinator {
     // Both operations run synchronously in one JS task before yielding to paint.
     this.updateVisibility();
     this.repaint();
-    return true;
   }
 
   private updateVisibility(): void {
@@ -157,6 +181,7 @@ export class PresentationCoordinator {
     this.unsubscribe();
     this.pending.clear();
     this.nodes.clear();
+    this.native.clear();
     this.repaint = () => {};
   }
 }

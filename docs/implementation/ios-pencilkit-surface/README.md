@@ -266,7 +266,7 @@ Swift `EventDispatcher` 发送单笔字典，Expo 将其作为 RN 事件的 `nat
 
 ### 2.3 G2（tasks 2.3）：Pencil 与手指分流
 
-前置增量（待交付）：RN host 中 PKCanvasView 与 DOM/WKWebView 的真实组合（含命中排除区上报的最小实现）。
+前置原型已交付：`/layered-editor?pencilkit=1` 的 RN host + PKCanvasView + DOM/WKWebView、控件排除区与 raw→controller 桥。重建/入口/压力定位和证据边界见 [Demo 验证说明](./demo-validation.md)。设备门槛尚未通过。
 
 执行步骤：
 
@@ -278,7 +278,7 @@ Swift `EventDispatcher` 发送单笔字典，Expo 将其作为 RN 事件的 `nat
 
 ### 2.4 G3（tasks 2.4）：墨迹交接无空窗
 
-前置增量（待交付）：最小 raw→PF 历史接入 + 按 commit 身份的 ready/retire/visible 交接 + 延迟/Web 忙碌注入开关。
+前置候选原型已交付最小 raw→PF 历史接入与按笔身份 ready/retire/visible 交接；原有 `diagnostics=1&handoffDelay=...` 仍可用于 DOM 延迟诊断。完整延迟/忙碌/乱序故障注入和设备视频验收仍待完成，不能认定 G3 通过。
 
 执行步骤：
 

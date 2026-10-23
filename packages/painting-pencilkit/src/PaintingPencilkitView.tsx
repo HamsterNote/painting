@@ -7,7 +7,7 @@
  * 本文件只会在 native bundle 中被引用：playground 路由按平台拆分，
  * Web/Android 入口不会导入本模块。
  */
-import { requireNativeModule, requireNativeViewManager } from 'expo-modules-core';
+import { requireOptionalNativeModule, requireNativeViewManager } from 'expo-modules-core';
 import type * as React from 'react';
 import type { NativeSyntheticEvent, StyleProp, ViewStyle } from 'react-native';
 
@@ -42,6 +42,8 @@ export type PencilkitSample = Readonly<{
   est: number;
   /** estimatedPropertiesExpectingUpdates rawValue */
   estUpd: number;
+  fBeforePencilkit?: number;
+  mfBeforePencilkit?: number;
 }>;
 
 /** G1 单笔摘要（onStroke 事件与导出日志共用） */
@@ -82,12 +84,19 @@ export type PencilkitStrokesLog = Readonly<{
 }>;
 
 export type PaintingPencilkitViewProps = Readonly<{
+  /** Serialized, bounded G2/G3 experimental control state. Omit for the G1 Probe. */
+  demoState?: string;
+  onBegin?: (
+    event: NativeSyntheticEvent<{ id: number; contextKey: string; sample: PencilkitSample }>
+  ) => void;
+  onPreviewRetired?: (event: NativeSyntheticEvent<{ id: number; contextKey: string }>) => void;
   /** true（默认）：仅 Apple Pencil 落墨；false：允许任意输入（诊断用） */
   pencilOnly?: boolean;
   /** 预览墨迹颜色（CSS 颜色字符串），默认系统蓝 */
   inkColor?: string;
   /** 预览墨迹宽度（pt），默认 4 */
   inkWidth?: number;
+  inkOpacity?: number;
   /** 原生 view 上屏后回调一次，携带配置事实 */
   onReady?: (event: { nativeEvent: PaintingPencilkitReadyEvent }) => void;
   /** 每笔完成的 RN 事件；在回调内提取 nativeEvent，勿在延迟 updater 中读取事件。 */
@@ -96,21 +105,28 @@ export type PaintingPencilkitViewProps = Readonly<{
   testID?: string;
 }>;
 
-const NativeModule = requireNativeModule('PaintingPencilkit');
+const NativeModule = requireOptionalNativeModule('PaintingPencilkit');
 
-const NativeView: React.ComponentType<PaintingPencilkitViewProps> =
-  requireNativeViewManager<PaintingPencilkitViewProps>('PaintingPencilkit');
+const NativeView: React.ComponentType<PaintingPencilkitViewProps> | undefined = NativeModule
+  ? requireNativeViewManager<PaintingPencilkitViewProps>('PaintingPencilkit')
+  : undefined;
+
+export function isPencilkitDemoAvailable(): boolean {
+  return NativeModule?.demoBridgeVersion === 1;
+}
 
 export function PaintingPencilkitView(props: PaintingPencilkitViewProps) {
-  return <NativeView {...props} />;
+  return NativeView ? <NativeView {...props} /> : null;
 }
 
 /** 导出 G1 采样日志（保留最近 20 笔，含样本与采样规则说明） */
 export function getStrokesLog(): Promise<PencilkitStrokesLog> {
+  if (!NativeModule) return Promise.reject(new Error('PaintingPencilkit module missing'));
   return NativeModule.getStrokesLog() as Promise<PencilkitStrokesLog>;
 }
 
 /** 清空采样器缓冲（活动笔与已保留完成笔） */
 export function clearStrokesLog(): Promise<void> {
+  if (!NativeModule) return Promise.reject(new Error('PaintingPencilkit module missing'));
   return NativeModule.clearStrokesLog() as Promise<void>;
 }

@@ -1,15 +1,10 @@
 import ExpoModulesCore
 
-/**
- * PaintingPencilkitModule —— HAM-66 tasks 2.1 的最小 Expo Module。
- *
- * 只声明一个原生 View（PKCanvasView 封装）与 probe 所需的三个 prop
- * 和一个 onReady 事件；不包含 G1 采样器、G2 分流宿主或 G3 交接逻辑，
- * 这些是后续门槛增量的范围（见 design.md D1/G1–G3）。
- */
+/** Probe diagnostics plus the opt-in G2/G3 Demo view protocol. */
 public class PaintingPencilkitModule: Module {
   public func definition() -> ModuleDefinition {
     Name("PaintingPencilkit")
+    Constants(["demoBridgeVersion": 1])
 
     // G1 诊断导出：返回采样器当前保留的完成笔与规则说明（见 PencilkitG1Sampler）。
     AsyncFunction("getStrokesLog") { () -> [String: Any] in
@@ -21,7 +16,11 @@ public class PaintingPencilkitModule: Module {
     }
 
     View(PaintingPencilkitView.self) {
-      Events("onReady", "onStroke")
+      Events("onReady", "onStroke", "onBegin", "onPreviewRetired")
+
+      Prop("demoState") { (view: PaintingPencilkitView, state: String) in
+        view.setDemoState(state)
+      }
 
       Prop("pencilOnly") { (view: PaintingPencilkitView, pencilOnly: Bool) in
         view.setPencilOnly(pencilOnly)
@@ -33,6 +32,10 @@ public class PaintingPencilkitModule: Module {
 
       Prop("inkWidth") { (view: PaintingPencilkitView, inkWidth: Double) in
         view.setInkWidth(inkWidth)
+      }
+
+      Prop("inkOpacity") { (view: PaintingPencilkitView, opacity: Double) in
+        view.setInkOpacity(opacity)
       }
     }
   }

@@ -16,6 +16,10 @@ export function PaintingPencilkitView(_props: PaintingPencilkitViewProps) {
   return null;
 }
 
+export function isPencilkitDemoAvailable(): boolean {
+  return false;
+}
+
 export function getStrokesLog(): Promise<PencilkitStrokesLog> {
   return Promise.reject(new Error('[painting-pencilkit] getStrokesLog 仅支持 iOS'));
 }

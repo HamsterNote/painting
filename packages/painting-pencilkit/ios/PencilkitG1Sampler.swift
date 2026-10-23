@@ -32,6 +32,25 @@ final class PencilkitG1Sampler {
 
   /// 单笔完成回调（主线程触发），由持有 onStroke EventDispatcher 的 view 设置
   var onStrokeCompleted: (([String: Any]) -> Void)?
+  var onStrokeBegan: (([String: Any]) -> Void)?
+
+  struct ForceSnapshot {
+    let force: Double
+    let maximum: Double
+  }
+  private var beforePencilkit: [TimeInterval: ForceSnapshot] = [:]
+
+  func captureBeforePencilkit(_ touches: Set<UITouch>, event: UIEvent?) {
+    lock.lock()
+    defer { lock.unlock() }
+    beforePencilkit.removeAll(keepingCapacity: true)
+    for touch in touches where touch.type == .pencil {
+      for extra in event?.coalescedTouches(for: touch) ?? [] {
+        beforePencilkit[extra.timestamp] = ForceSnapshot(force: extra.force, maximum: extra.maximumPossibleForce)
+      }
+      beforePencilkit[touch.timestamp] = ForceSnapshot(force: touch.force, maximum: touch.maximumPossibleForce)
+    }
+  }
 
   private let lock = NSLock()
   private var nextSessionId = 1
@@ -77,6 +96,7 @@ final class PencilkitG1Sampler {
       nextSessionId += 1
       record(&session, touch: touch, phase: "down", kind: "main", in: view)
       activeSessions[ObjectIdentifier(touch)] = session
+      onStrokeBegan?(["id": session.id, "sample": session.samples[0]])
     }
     countIgnored(touches)
   }
@@ -128,6 +148,7 @@ final class PencilkitG1Sampler {
       "osVersion": ProcessInfo.processInfo.operatingSystemVersionString,
       "deviceModel": UIDevice.current.model,
       "capturedAtUptimeMs": ProcessInfo.processInfo.systemUptime * 1000,
+      "pressureCapabilityBasis": "maximumPossibleForce > 0 permits normalization; it does not verify Pencil hardware pressure support",
       "ignoredNonPencilTouches": ignoredNonPencilTouches,
       "rules": [
         "采样: PKCanvasView 子类 touches* 重写并先调 super，公开 UIKit 接口，不抢占 PK 手势",
@@ -148,6 +169,13 @@ final class PencilkitG1Sampler {
     activeSessions.removeAll()
     completedStrokes.removeAll()
     ignoredNonPencilTouches = 0
+  }
+
+  // Demo protocol cancellation discards an unaccepted session; it is not a synthetic raw up.
+  func discardActiveSessions() {
+    lock.lock()
+    defer { lock.unlock() }
+    activeSessions.removeAll()
   }
 
   // MARK: - Internal
@@ -234,7 +262,7 @@ final class PencilkitG1Sampler {
     }
     if kind == "main" { session.mainCount += 1 } else { session.coalescedCount += 1 }
 
-    session.samples.append([
+    var sample: [String: Any] = [
       "seq": session.seq,
       "kind": kind,
       "phase": phase,
@@ -247,7 +275,12 @@ final class PencilkitG1Sampler {
       "p": pressure as Any,
       "est": touch.estimatedProperties.rawValue,
       "estUpd": touch.estimatedPropertiesExpectingUpdates.rawValue,
-    ])
+    ]
+    if let before = beforePencilkit[touch.timestamp] {
+      sample["fBeforePencilkit"] = before.force
+      sample["mfBeforePencilkit"] = before.maximum
+    }
+    session.samples.append(sample)
     session.seq += 1
   }
 
@@ -290,28 +323,37 @@ final class PencilkitG1Sampler {
  * 所有重写先调 super，PencilKit 绘制行为不变；采样不影响手势与命中。
  */
 final class PencilkitSamplingCanvasView: PKCanvasView {
+  var sampler = PencilkitG1Sampler.shared
+  override var undoManager: UndoManager? {
+    sampler === PencilkitG1Sampler.shared ? super.undoManager : nil
+  }
+
   override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+    sampler.captureBeforePencilkit(touches, event: event)
     super.touchesBegan(touches, with: event)
-    PencilkitG1Sampler.shared.touchesBegan(touches, in: self)
+    sampler.touchesBegan(touches, in: self)
   }
 
   override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+    sampler.captureBeforePencilkit(touches, event: event)
     super.touchesMoved(touches, with: event)
-    PencilkitG1Sampler.shared.touchesMoved(touches, event: event, in: self)
+    sampler.touchesMoved(touches, event: event, in: self)
   }
 
   override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+    sampler.captureBeforePencilkit(touches, event: event)
     super.touchesEnded(touches, with: event)
-    PencilkitG1Sampler.shared.touchesEnded(touches, event: event, in: self)
+    sampler.touchesEnded(touches, event: event, in: self)
   }
 
   override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+    sampler.captureBeforePencilkit(touches, event: event)
     super.touchesCancelled(touches, with: event)
-    PencilkitG1Sampler.shared.touchesCancelled(touches, event: event, in: self)
+    sampler.touchesCancelled(touches, event: event, in: self)
   }
 
   override func touchesEstimatedPropertiesUpdated(_ touches: Set<UITouch>) {
     super.touchesEstimatedPropertiesUpdated(touches)
-    PencilkitG1Sampler.shared.estimatedPropertiesUpdated(touches)
+    sampler.estimatedPropertiesUpdated(touches)
   }
 }

@@ -14,7 +14,12 @@ public struct TouchProperties: OptionSet {
   public init(rawValue: Int) { self.rawValue = rawValue }
 }
 
+#if os(Linux)
+public class UndoManager {}
+#endif
+
 open class UIView: NSObject {
+  open var undoManager: UndoManager? { nil }
   public var bounds = CGRect(x: 0, y: 0, width: 100, height: 100)
   open func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {}
   open func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {}
