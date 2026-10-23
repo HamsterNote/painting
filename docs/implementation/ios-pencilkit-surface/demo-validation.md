@@ -6,7 +6,7 @@
 
 - 新 iOS development build：打开 `painting-playground:///layered-editor?pencilkit=1`。自由笔 Pencil 在真实 RN 原生视图中预览；raw 通过 Expo DOM 的串行消息/回调送到原 DOM controller，生成 schema 3 / PF 历史和统一 undo/redo。
 - 普通 `/layered-editor` 和首页默认仍是 DOM，顶部显示 `Web / DOM`，PencilKit 开关可直接切换验证参数。旧 IPA（包括 `da1c224` / `7fafe2ae-aed2-41cb-a1a5-6922d1b6d094`）缺 `demoBridgeVersion=3`，显示构建不匹配；此次宿主层级改动需要新原生包。
-- Web/Android 使用基名路由，不导入 PencilKit 原生运行时。选择、文字、形状、尺子等工具继续走真实 Web 输入。iOS 原型将真实 Expo DOM 子视图挂载到 PKCanvasView 内，几何 hit-test 总是选择真实 DOM 后代；公开 drawingGestureRecognizer 的 delegate 在实际 UITouch 到达后过滤 Pencil、画布边界和控件排除区。手指不由原生接管。开关关闭时仍保留同一个宿主和 DOM controller，避免切换丢文档。
+- Web/Android 使用基名路由，不导入 PencilKit 原生运行时。选择、文字、形状、尺子等工具继续走真实 Web 输入。iOS 原型将真实 Expo DOM 子视图挂载到公开 `drawingGestureRecognizer.view` 下的容器中，不假设该 owner 就是 PKCanvasView 本体；几何 hit-test 总是选择真实 DOM 后代，delegate 在实际 UITouch 到达后过滤 Pencil、画布边界和控件排除区。容器按坐标转换对齐 PKCanvasView，布局时协调延迟挂载的 owner。手指不由原生接管。开关关闭时仍保留同一个宿主和 DOM controller，避免切换丢文档。
 - 原生 begin 经过同一个输入仲裁器，锁定 controller 会话、笔刷和 viewport。end 只批量追加剩余真实样本，保留原始压力与接受顺序；取消、畸形或 overflow 整笔拒绝，不合成 DOM PointerEvent、raw up 或 PK 路径点。
 - 每笔最多 50,000 样本，最多 4 笔待交接，transport 最多 12 条消息；消息/回执缓存有界。等待 5 秒仅进入可恢复故障，不按超时清屏或宣称已显示。重试查询/重用原 commitId，已提交文档保留。
 - 历史节点就绪后，按原生笔身份移除对应 PKDrawing 临时 stroke，再允许显示 PF 历史。不会因旧确认清空下一笔；这只是候选协议，跨进程可见空窗、形状收敛和半透明仍须 G3 视频评估。
@@ -14,9 +14,11 @@
 ## 运行时确认
 
 - 模块、onReady、DOM 配置、非零尺寸和 `routing=gesture-ancestor` 只表示“已配置，等待原生起笔”。`gesture-ancestor` 还会检查真实 DOM 是否是公开 drawingGestureRecognizer.view 的后代，不假设 PencilKit 的内部层级；不满足则显示“原生宿主未连接”并拒绝采样。
+- `unattached` 还会显示具体原因：`dom-not-mounted`、`recognizer-not-mounted`、`recognizer-outside-canvas` 或 `dom-outside-recognizer`。挂载或卸载改变路由时重新发布回执，不会因首次布局尚未就绪而永久停留在旧状态。
 - 起笔/完成来自真实 UIKit 的旁路手势观察器，`PK预览` 来自 PKCanvasViewDelegate 的实际 tool-begin，文档提交只在 DOM controller 回执成功后增加。起笔、PK预览与提交均增加后才显示“原生链路已验证”；此状态只证明走过该链路，不表示 G2/G3 已通过。观察器不识别、不抢占其他手势；Probe 仍使用原 UIResponder 采样路径，Demo 关闭该路径避免重复采样。
 - `hit=pencil`、`non-pencil`、`control` 现在来自收到实际 UITouch 后的过滤；不再在初始 hitTest 中查询 `allTouches`。旧二进制 `hit=no-touch-metadata` 的截图说明先前的类型命中没有得到触摸元数据，放宽坐标匹配没有解决该问题。Apple 的 [hitTest](<https://developer.apple.com/documentation/uikit/uiview/hittest(_:with:)>) 支持空 event；[手势识别器](https://developer.apple.com/documentation/uikit/uigesturerecognizer) 接收其视图及后代的真实触摸，因此本候选改为祖先手势过滤。
 - 开启实验后，如果 Web 收到自由笔、非尺子、画布区域的 `pointerType=pen`，运行时断言阻止整条 Web 笔流并报告 `dom-pencil-fallback`，不会静默画 DOM 墨迹。手指、鼠标、控件、其他工具和尺子仍走 Web。关闭实验会卸载该断言。
+- `onNativeState` / `onNativeReply` 始终作为顶层函数 props 注册给 Expo DOM，开关只控制连接。Expo 57 的 wrapper 按收到消息时的当前 props 查找 action，不能在关闭开关时移除函数；迟到消息由稳定 action 接收并在断开状态忽略。
 - PencilKit 的原 delegate 决策被保留；候选为后代 Web 手势设置 Pencil 绘制优先级，避免双向 failure 依赖。该公开 API 组合是否兼容目标系统的 PencilKit/WKWebView、能否绘制预览，必须在 Mac 和实体 iPad 验证，替身测试不能证明。
 
 ## Mac 合并与重建
@@ -35,6 +37,8 @@ pnpm run prepare:playground-artifacts
 ```
 
 不能快进或有本地冲突时保留工作树，不 reset/覆盖。此增量含 Swift、新事件与 props，Mac 先检查 Xcode 26.6/Swift 6.3.3 编译，并在本地原生 smoke 中确认实际层级回执为 `gesture-ancestor`、真实 DOM 可交互。若 `unattached`、delegate 断言或层级不成立，保留日志返回工程师，停止云构建；不要继续猜测后重提 EAS。通过本地检查后再按 README 的 Xcode/EAS 路径重建、安装新的 development build。仅 Reload 或重装旧 IPA 不会带入代码。本次 Linux 交付未提交 EAS build，未证明 UIKit 编译通过。
+
+本地 Simulator smoke 必须覆盖直接进入 `?pencilkit=1`，以及普通路由的开→关→再开。每次开启后实际回执必须为 `routing=gesture-ancestor`，本轮新增 Metro 日志不得出现 `Native action "onNativeState" is not defined` 或同类 action 错误；关闭时手指与控件正常，文档不因开关重置。回传编译 SHA、截图和本轮日志。此 smoke 通过前只做本地修复/复测，不提交 EAS 验收包；模拟器本身不证明实体 Pencil 或 G2/G3 通过。
 
 安装新包后连接既有 LAN Metro，再进入上述显式 Demo 路由，或在 Demo 顶部打开 PencilKit 开关。原生就绪后应显示等待原生起笔；画一笔确认起笔、PK预览、完成和文档提交计数。关闭再打开开关应保留原文档和同一个 DOM 连接。路由退出或刷新仍会销毁内存 controller，不会自动保存。
 
@@ -61,9 +65,17 @@ node scripts/analyze-pencilkit-pressure.mjs <导出的Probe日志.json>
 
 G2 无法可靠穿透、预览索引与 delegate 时序不匹配或 G3 不通过时，保留日志并暂停默认启用，按原设计重新评审。压力变化只在具备该能力的硬件上另行验证。
 
-## 祖先手势候选本地验证
+## Action 与 owner 挂载修复本地验证
+
+Jest 93 suites / 1188 tests、responder 9 项、Swift 6.2.3 替身 14 组、typecheck、lint（0 errors / 32 条既有 warnings）、iOS JS/DOM export 和变更 Swift 的语法解析通过。新 Jest 用例使用 Expo 57 的真实 `webview-wrapper` action 注册/派发代码，仅替换原生 WebView，覆盖初始关闭、开关切换与关闭后的迟到回调。Swift 覆盖 owner 缺失、嵌套 owner、延迟 owner 变更、坐标对齐与卸载。
+
+本环境为 Linux，无 `xcrun` / Xcode，未获得本轮真实 Simulator `routing=gesture-ancestor` 与 Metro 无 action 错误的证据。Mac 下一步仅执行本地编译/smoke 并回传，不重建验收包；取得两项实际证据后再决定重建。Probe/G1 规则与手指 Web 路径不变。
+
+## a36e8b1 祖先手势候选验证（历史记录）
 
 Jest 92 suites / 1187 tests、responder 9 项、Swift 6.2.3 替身 13 组通过；typecheck、lint（0 errors / 32 条既有 warnings）、库构建、iOS JS/DOM export 和变更 Swift 的语法解析通过。回归覆盖无元数据的几何命中、真实祖先关系检查、观察器坐标/去重、DOM Pencil 断言、手指真实绘制及开关保持 DOM 宿主。本环境没有 UIKit/Xcode，原生 delegate 组合、Fabric 嵌套与真实预览均未验证，G2/G3 保持未通过。
+
+随后 Mac 的 Xcode 26.6 / Swift 6.3.3 编译通过；iPad Pro 13-inch (M5) / iOS 26.3 Simulator smoke 得到 `unattached`，并记录 `onNativeState` action 缺失。本候选未通过 smoke，也未提交 EAS build。上述本地测试不能替代此失败证据；本次增量修复持续 action 注册及真实识别器 owner 下的 DOM 挂载，需重新执行上一节 smoke。
 
 ## da1c224 命中修复验证（历史记录）
 

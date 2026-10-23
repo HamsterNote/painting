@@ -99,6 +99,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   override func layoutSubviews() {
     super.layoutSubviews()
     canvasView.frame = bounds
+    canvasView.updateDOMHost()
     coordinateView.frame = demoState?.frame.rect ?? .zero
     publishDemoStatus()
   }
@@ -114,18 +115,16 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   // MARK: - Props
 
   override func mountChildComponentView(_ childComponentView: UIView, index: Int) {
-    canvasView.insertSubview(childComponentView, at: 0)
-    canvasView.hostedDOMView = childComponentView
+    canvasView.mountDOMView(childComponentView)
     drawingDelegate.hostedDOMView = childComponentView
     publishDemoStatus()
   }
 
   override func unmountChildComponentView(_ childComponentView: UIView, index: Int) {
-    childComponentView.removeFromSuperview()
     if canvasView.hostedDOMView === childComponentView {
-      canvasView.hostedDOMView = nil
       drawingDelegate.hostedDOMView = nil
     }
+    canvasView.unmountDOMView(childComponentView)
     publishDemoStatus()
   }
 
@@ -145,6 +144,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
     canvasView.addGestureRecognizer(touchObserver)
     canvasView.delaysContentTouches = false
     canvasView.canCancelContentTouches = false
+    canvasView.updateDOMHost()
     publishDemoStatus()
   }
 
@@ -268,6 +268,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
     applyTool()
 
     addSubview(canvasView)
+    canvasView.onRoutingChanged = { [weak self] in self?.publishDemoStatus() }
     coordinateView.isHidden = true
     coordinateView.isUserInteractionEnabled = false
     addSubview(coordinateView)
@@ -288,7 +289,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
     guard window != nil, let state = demoState else { return }
     // Do not infer routing from module availability or assume where PencilKit attaches its recognizer.
     let routed = demoHost && canvasView.hasDrawingAncestor
-    let signature = "\(state.contextKey):\(state.enabled):\(coordinateView.bounds.width):\(coordinateView.bounds.height):\(lastHit):\(routed):\(toolBegins)"
+    let signature = "\(state.contextKey):\(state.enabled):\(coordinateView.bounds.width):\(coordinateView.bounds.height):\(lastHit):\(routed):\(canvasView.routingIssue):\(toolBegins)"
     guard signature != lastDemoStatus else { return }
     lastDemoStatus = signature
     onDemoStatus([
@@ -298,6 +299,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
       "height": coordinateView.bounds.height,
       "lastHit": lastHit,
       "routing": routed ? "gesture-ancestor" : "unattached",
+      "routingIssue": canvasView.routingIssue,
       "toolBegins": toolBegins,
     ])
   }

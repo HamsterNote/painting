@@ -28,6 +28,8 @@ export default function LayeredEditorRoute() {
   }>();
   const requested = params.pencilkit === '1';
   const available = isPencilkitDemoAvailable();
+  const connected = useRef(false);
+  connected.current = requested && available;
   const [state, setState] = useState<PencilkitDemoState>();
   const [queue, setQueue] = useState<PencilkitDemoMessage[]>([]);
   const [retireIDs, setRetireIDs] = useState<number[]>([]);
@@ -40,6 +42,7 @@ export default function LayeredEditorRoute() {
     height: number;
     lastHit: string;
     routing: string;
+    routingIssue?: string;
     toolBegins: number;
   }>();
   const [counts, setCounts] = useState({ began: 0, completed: 0, committed: 0 });
@@ -72,6 +75,7 @@ export default function LayeredEditorRoute() {
     setQueue(transport.current);
   }, []);
   const onState = useCallback(async (next: PencilkitDemoState) => {
+    if (!connected.current) return;
     const nextEpoch = next.contextKey.split(':')[0];
     if (epoch.current !== nextEpoch) {
       epoch.current = nextEpoch;
@@ -86,6 +90,7 @@ export default function LayeredEditorRoute() {
     setState(next);
   }, []);
   const onReply = useCallback(async (reply: PencilkitDemoReply) => {
+    if (!connected.current) return;
     if (reply.contextKey && reply.contextKey.split(':')[0] !== epoch.current) return;
     if (reply.messageId !== undefined) {
       const message = transport.current.find((entry) => entry.messageId === reply.messageId);
@@ -132,21 +137,18 @@ export default function LayeredEditorRoute() {
   const editor = (
     <LayeredEditorDom
       dom={{ style: { flex: 1 } }}
-      {...(requested && available
-        ? {
-            nativePencilEnabled: true,
-            editorParams: {
-              diagnostics: params.diagnostics ?? '',
-              handoffDelay: params.handoffDelay ?? '',
-              fixture: params.fixture ?? '',
-              touchDraw: params.touchDraw ?? '',
-              traceGestures: params.traceGestures ?? '',
-            },
-            nativeMessage: queue[0],
-            onNativeState: onState,
-            onNativeReply: onReply,
-          }
-        : {})}
+      nativePencilEnabled={requested && available}
+      editorParams={{
+        diagnostics: params.diagnostics ?? '',
+        handoffDelay: params.handoffDelay ?? '',
+        fixture: params.fixture ?? '',
+        touchDraw: params.touchDraw ?? '',
+        traceGestures: params.traceGestures ?? '',
+      }}
+      nativeMessage={requested && available ? queue[0] : undefined}
+      // Expo DOM messages can arrive after disabling the connection. Keep action names registered.
+      onNativeState={onState}
+      onNativeReply={onReply}
     />
   );
   return (
@@ -193,7 +195,7 @@ export default function LayeredEditorRoute() {
           <Text testID="layered-native-evidence" numberOfLines={3} style={styles.evidence}>
             {`原生起笔 ${counts.began} · 完成 ${counts.completed} · 文档提交 ${counts.committed}`}
             {nativeStatus
-              ? ` · PK预览 ${nativeStatus.toolBegins} · hit=${nativeStatus.lastHit} · canvas=${Math.round(nativeStatus.width)}x${Math.round(nativeStatus.height)} · ${nativeStatus.routing}`
+              ? ` · PK预览 ${nativeStatus.toolBegins} · hit=${nativeStatus.lastHit} · canvas=${Math.round(nativeStatus.width)}x${Math.round(nativeStatus.height)} · ${nativeStatus.routing}${nativeStatus.routingIssue && nativeStatus.routingIssue !== 'none' ? `:${nativeStatus.routingIssue}` : ''}`
               : ''}
           </Text>
         ) : null}

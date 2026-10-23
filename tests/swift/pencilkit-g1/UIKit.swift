@@ -24,8 +24,22 @@ public class UndoManager {}
 #endif
 
 open class UIView: NSObject {
+  private var children: [UIView] = []
   public weak var superview: UIView?
-  public func addSubview(_ view: UIView) { view.superview = self }
+  public func addSubview(_ view: UIView) {
+    view.removeFromSuperview()
+    children.append(view)
+    view.superview = self
+  }
+  public func insertSubview(_ view: UIView, at index: Int) {
+    view.removeFromSuperview()
+    children.insert(view, at: index)
+    view.superview = self
+  }
+  public func removeFromSuperview() {
+    superview?.children.removeAll { $0 === self }
+    superview = nil
+  }
   public func isDescendant(of view: UIView) -> Bool {
     var current: UIView? = self
     while let candidate = current {
@@ -43,11 +57,23 @@ open class UIView: NSObject {
   public var isHidden = false
   public var isUserInteractionEnabled = true
   public var alpha: CGFloat = 1
+  open func layoutSubviews() {}
   open func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
     !isHidden && isUserInteractionEnabled && alpha >= 0.01 && bounds.contains(point) ? self : nil
   }
   public func convert(_ point: CGPoint, to view: UIView?) -> CGPoint {
-    CGPoint(x: point.x + frame.minX - (view?.frame.minX ?? 0), y: point.y + frame.minY - (view?.frame.minY ?? 0))
+    func origin(_ view: UIView?) -> CGPoint {
+      guard let view else { return .zero }
+      let parent = origin(view.superview)
+      return CGPoint(x: parent.x + view.frame.minX - view.bounds.minX,
+                     y: parent.y + view.frame.minY - view.bounds.minY)
+    }
+    let source = origin(self)
+    let destination = origin(view)
+    return CGPoint(x: point.x + source.x - destination.x, y: point.y + source.y - destination.y)
+  }
+  public func convert(_ rect: CGRect, to view: UIView?) -> CGRect {
+    CGRect(origin: convert(rect.origin, to: view), size: rect.size)
   }
   open func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {}
   open func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {}

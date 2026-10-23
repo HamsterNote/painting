@@ -170,18 +170,18 @@ test('old IPA reports a build mismatch and never claims native Demo input', asyn
   const result = await render(<LayeredEditorRoute />);
   expect(result.queryByTestId('layered-pencilkit-canvas')).toBeNull();
   expect(result.getByTestId('layered-native-status').props.children).toContain('构建不匹配');
-  expect(result.getByTestId('expo-dom-editor-host').props.nativePencilEnabled).toBeUndefined();
+  expect(result.getByTestId('expo-dom-editor-host').props.nativePencilEnabled).toBe(false);
 });
 
-test('native route mounts the whole DOM editor with layout-only props', async () => {
+test('native route always registers actions while leaving the experiment disabled by default', async () => {
   const setParams = jest.fn();
   jest.mocked(useRouter).mockReturnValue({ setParams } as unknown as ReturnType<typeof useRouter>);
   const result = await render(<LayeredEditorRoute />);
   const host = result.getByTestId('expo-dom-editor-host');
   expect(host.props.dom).toEqual({ style: { flex: 1 } });
-  expect(
-    Object.keys(host.props).filter((key) => !['testID', 'dom', 'children'].includes(key))
-  ).toEqual([]);
+  expect(host.props.nativePencilEnabled).toBe(false);
+  expect(host.props.onNativeState).toEqual(expect.any(Function));
+  expect(host.props.onNativeReply).toEqual(expect.any(Function));
   expect(result.getByTestId('layered-native-status').props.children).toBe('Web / DOM');
   await fireEvent(result.getByTestId('layered-pencilkit-toggle'), 'valueChange', true);
   expect(setParams).toHaveBeenCalledWith({ pencilkit: '1' });

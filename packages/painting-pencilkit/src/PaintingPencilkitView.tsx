@@ -94,6 +94,7 @@ export type PaintingPencilkitViewProps = Readonly<{
       height: number;
       lastHit: string;
       routing: 'gesture-ancestor' | 'unattached';
+      routingIssue?: string;
       toolBegins: number;
     }>
   ) => void;

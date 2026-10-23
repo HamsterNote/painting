@@ -237,8 +237,7 @@ func testDemoGeometricHitTesting() {
   let canvas = PencilkitDemoCanvasView()
   let dom = UIView()
   check(!canvas.hasDrawingAncestor, "unmounted DOM must not claim a native route")
-  canvas.addSubview(dom)
-  canvas.hostedDOMView = dom
+  canvas.mountDOMView(dom)
   check(canvas.hasDrawingAncestor, "recognizer owner must be a real DOM ancestor")
   for event in [nil, UIEvent([]), UIEvent([UITouch(1)])] as [UIEvent?] {
     check(canvas.hitTest(CGPoint(x: 50, y: 50), with: event) === dom, "real DOM descendant must be selected even before touch metadata exists")
@@ -248,7 +247,36 @@ func testDemoGeometricHitTesting() {
   check(canvas.hitTest(CGPoint(x: 50, y: 50), with: nil) == nil, "disabled DOM must not capture input")
   let unrelatedOwner = UIView()
   unrelatedOwner.addGestureRecognizer(canvas.drawingGestureRecognizer)
+  canvas.updateDOMHost()
   check(!canvas.hasDrawingAncestor, "mounted child alone must not claim drawing recognizer ancestry")
+}
+
+func testDemoNestedDrawingOwner() {
+  let canvas = PencilkitDemoCanvasView()
+  let dom = UIView()
+  var routingChanges = 0
+  canvas.onRoutingChanged = { routingChanges += 1 }
+  canvas.drawingGestureRecognizer.view = nil
+  canvas.mountDOMView(dom)
+  check(!canvas.hasDrawingAncestor && canvas.routingIssue == "recognizer-not-mounted", "early missing owner must remain explicit")
+  // Model the real failure: PencilKit owns its recognizer on a nested drawing view.
+  let drawingOwner = UIView()
+  drawingOwner.frame = CGRect(x: 10, y: 20, width: 100, height: 100)
+  canvas.addSubview(drawingOwner)
+  drawingOwner.addGestureRecognizer(canvas.drawingGestureRecognizer)
+  canvas.layoutSubviews()
+  check(dom.isDescendant(of: drawingOwner), "DOM must mount under the public recognizer's actual owner")
+  check(canvas.hasDrawingAncestor, "nested drawing owner must report gesture-ancestor")
+  check(canvas.hitTest(CGPoint(x: 50, y: 50), with: nil) === dom, "container offset must preserve DOM coordinates")
+  check(routingChanges == 1, "successful attachment must publish a new routing status")
+  let laterOwner = UIView()
+  canvas.addSubview(laterOwner)
+  laterOwner.addGestureRecognizer(canvas.drawingGestureRecognizer)
+  canvas.layoutSubviews()
+  check(dom.isDescendant(of: laterOwner), "layout must reconcile delayed owner changes")
+  canvas.unmountDOMView(dom)
+  check(!canvas.hasDrawingAncestor && dom.superview == nil, "unmount must detach DOM and clear the route")
+  check(routingChanges == 2, "unmount must publish loss of routing")
 }
 
 func testDemoPassiveTouchObserver() {
@@ -285,6 +313,7 @@ func testDemoPassiveTouchObserver() {
 let tests: [(String, () -> Void)] = [
   ("Demo policy uses actual touch and preserves finger/control routing", testDemoPencilHitTesting),
   ("Demo hit testing selects real DOM before touch metadata exists", testDemoGeometricHitTesting),
+  ("Demo mounts under nested/delayed public drawing recognizer owners", testDemoNestedDrawingOwner),
   ("Demo passive ancestor observer samples once in drawing-frame coordinates", testDemoPassiveTouchObserver),
   ("terminal coalesced overlap and repeated finish", testTerminalCoalescedOverlap),
   ("up/cancel sharing a previously accepted timestamp", testTerminalWithPreviouslyAcceptedTimestamp),
