@@ -7,10 +7,32 @@ import type {
   PencilkitDemoState,
 } from '../input/native/pencilkitDemoContract';
 
-beforeEach(() => mockLayeredDom());
+beforeEach(() => {
+  mockLayeredDom();
+  const bounds = jest.mocked(Element.prototype.getBoundingClientRect).getMockImplementation()!;
+  jest.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+    this: Element
+  ) {
+    const rect = bounds.call(this);
+    // Controls occupy a corner, not the entire surface as in the generic DOM fixture.
+    return this.matches('button,input,textarea,select,[contenteditable],[data-interactive]')
+      ? {
+          ...rect,
+          x: 700,
+          left: 700,
+          y: 500,
+          top: 500,
+          width: 50,
+          height: 30,
+          right: 750,
+          bottom: 530,
+        }
+      : rect;
+  });
+});
 afterEach(() => jest.restoreAllMocks());
 
-test('real DOM board publishes enabled native canvas state after input initialization', async () => {
+test('real DOM board commits a queued native stroke across a compatible configuration update', async () => {
   const onState = jest.fn(async (_state: PencilkitDemoState) => {});
   const onReply = jest.fn(async (_reply: PencilkitDemoReply) => {});
   const props = {
@@ -27,6 +49,9 @@ test('real DOM board publishes enabled native canvas state after input initializ
     frame: { width: 800, height: 600 },
   });
   const state = onState.mock.calls.at(-1)![0];
+  const surface = view.container.querySelector('[data-testid="layered-surface"]')!;
+  const frame = surface.getBoundingClientRect();
+  surface.getBoundingClientRect = () => ({ ...frame, height: 560, bottom: 560 });
   const sample = {
     seq: 0,
     kind: 'main' as const,
@@ -48,6 +73,7 @@ test('real DOM board publishes enabled native canvas state after input initializ
   };
   view.rerender(<LayeredEditorDom {...props} nativeMessage={begin} />);
   expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ status: 'accepted', id: 1 }));
+  expect(onState.mock.calls.at(-1)![0].contextKey).not.toBe(state.contextKey);
   const stroke: PencilkitDemoMessage = {
     type: 'stroke',
     protocolVersion: 1,

@@ -2,6 +2,21 @@
 
 本增量对应 G2/G3 的可行性原型，不代表 G1 压力、G2 分流或 G3 物理交接通过；3.x 生产桥和 iOS 默认启用仍待门槛验收。`/pencilkit-probe` 保留原 G1 回归用途。
 
+## begin/finish 时序修复与本轮复测
+
+`2dae6e8` 已在 Mac 通过 Xcode 26.6 / Swift 6.3.3 编译和 Simulator smoke，确认 `gesture-ancestor` 且没有本轮新增 action 注册错误；对应 EAS build `4f9e73d2-57d6-450b-97fa-addfbcddf386` 已安装。实体 iPad 截图已证明 `hit=pencil`、起笔 1、PK预览 1，但以 `invalid-or-stale-begin` 停止，完成/文档提交为 0。旧错误合并了多个拒绝条件，截图本身不能确定是哪一个条件。
+
+本次只改 JS/TS bridge，修复两项可复现问题：
+
+- native begin 在异步传输期间，DOM 同原点的尺寸或排除区更新会推进配置 revision，旧实现按 key 不同直接拒绝，并发出 retire 取消原生采样。现在最多保留 32 个已发布且坐标映射、笔刷、工具和输入策略相同的配置；起点必须同时位于旧/新画布内、且不在两者的控件排除区。原点、viewport、笔刷或策略变化会清除兼容配置，未知/过期配置继续拒绝。有效 resize 通知不再无条件取消采样；原点或 viewport 改变仍取消。
+- bridge 原先在 controller.beginFreehand 的同步通知之后才登记会话，通知期间发生的取消可能被覆盖。现在先预留 starting 会话，确认输入所有权与 controller 的 collecting 身份仍一致才接受；取消或 undo 后不会重新登记。finish 使用 begin 的原始 key，配置更新不改变本笔身份，重复 finish 只提交一次。
+
+拒绝原因现在区分 `invalid-begin-sample`、`native-input-disabled`、`native-session-busy`、`native-stroke-id-reused`、`stale-begin-context`、`begin-outside-canvas`，便于下一次设备证据定位。Probe/G1 和 Swift 均未修改，手指仍由 Web 处理。
+
+Mac 保留 `apps/playground/app.json` 未提交配置，快进任务分支后执行 `pnpm run prepare:playground-artifacts`，重启/清理 Metro 缓存并在现有 development build Reload；本次无需重提 EAS。先单笔、再连续快笔，确认起笔/PK预览/完成/提交均增加，文档中每笔仅一个 `source=native` 对象，undo/redo 正常；再验手指、工具栏和开关。若仍暂停，回传新具体错误、计数、布局尺寸和 Metro 日志，不能用旧 `invalid-or-stale-begin` 缓存结果验收。
+
+本地 Jest 93 suites / 1198 tests、responder 9 项、Swift 替身 14 组、typecheck、lint（0 errors / 32 条既有 warnings）、库构建和 iOS JS/DOM export 通过。尚待现有 IPA + 新 JS 的实体单笔提交复测，不能据单测宣告 G2/G3 通过。
+
 ## 入口与边界
 
 - 新 iOS development build：打开 `painting-playground:///layered-editor?pencilkit=1`。自由笔 Pencil 在真实 RN 原生视图中预览；raw 通过 Expo DOM 的串行消息/回调送到原 DOM controller，生成 schema 3 / PF 历史和统一 undo/redo。

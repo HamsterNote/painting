@@ -173,6 +173,112 @@ test('real raw goes to schema 3 and shared history; viewport mapping and zero pr
   h.destroy();
 });
 
+test('a queued begin survives a same-origin size update and commits exactly once', () => {
+  const h = setup();
+  const configuredKey = h.state().contextKey;
+  const rect = h.host.getBoundingClientRect();
+  h.host.getBoundingClientRect = () => ({ ...rect, height: 380, bottom: 420 });
+  const begin = h.begin();
+  expect(begin.contextKey).toBe(configuredKey);
+  expect(h.state().contextKey).not.toBe(configuredKey);
+  expect(h.replies).toContainEqual(expect.objectContaining({ status: 'accepted', id: 1 }));
+  window.dispatchEvent(new Event('resize'));
+  const end = h.end();
+  h.receive(end);
+  expect(h.controller.getSnapshot('document').objects).toHaveLength(1);
+  expect(h.controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
+  expect(h.replies).not.toContainEqual(expect.objectContaining({ status: 'rejected' }));
+  h.destroy();
+});
+
+test.each(['origin', 'viewport', 'brush', 'policy', 'exclusion', 'unknown'] as const)(
+  'a queued begin rejects incompatible %s state without a document commit',
+  (change) => {
+    const h = setup();
+    const key = h.state().contextKey;
+    if (change === 'origin') {
+      const rect = h.host.getBoundingClientRect();
+      h.host.getBoundingClientRect = () => ({ ...rect, y: 50, top: 50, bottom: 450 });
+    } else if (change === 'viewport') {
+      h.controller.updateViewport({
+        type: 'replace',
+        expectedRevision: 0,
+        viewport: { scale: 2, tx: 0, ty: 0 },
+      });
+    } else if (change === 'brush') {
+      h.controller.setFreehandSettings({
+        ...h.controller.getSnapshot('tools').settings.freehand,
+        color: '#123456',
+      });
+    } else if (change === 'policy') h.controller.setInputMode('finger');
+    else if (change === 'exclusion') {
+      const control = document.createElement('button');
+      control.getBoundingClientRect = () => h.host.getBoundingClientRect();
+      h.host.append(control);
+    }
+    h.receive({
+      type: 'begin',
+      protocolVersion: 1,
+      messageId: 90,
+      id: 1,
+      contextKey: change === 'unknown' ? key + '-unknown' : key,
+      sample: sample(0, 'down'),
+    });
+    expect(h.replies).toContainEqual(
+      expect.objectContaining({
+        status: 'rejected',
+        reason: change === 'exclusion' ? 'begin-outside-canvas' : 'stale-begin-context',
+      })
+    );
+    expect(h.controller.getSnapshot('document').objects).toHaveLength(0);
+    expect(h.controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
+    h.destroy();
+  }
+);
+
+test.each(['policy', 'undo'] as const)(
+  'begin notifications cannot resurrect a lease cancelled by synchronous %s',
+  (change) => {
+    const h = setup();
+    const stop = h.controller.subscribe('interaction', () => {
+      if (h.controller.getSnapshot('interaction').activeFreehand?.status === 'collecting')
+        if (change === 'policy') h.controller.setInputMode('finger');
+        else h.controller.undo();
+    });
+    h.begin();
+    h.end();
+    expect(h.controller.getSnapshot('document').objects).toHaveLength(0);
+    expect(h.controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
+    expect(h.replies).not.toContainEqual(expect.objectContaining({ status: 'accepted' }));
+    stop();
+    h.begin(2);
+    h.end(2);
+    expect(h.controller.getSnapshot('document').objects).toHaveLength(1);
+    h.destroy();
+  }
+);
+
+test('brush changes while claiming input cannot replace the configured native begin brush', () => {
+  const h = setup();
+  const stop = h.controller.subscribe('input', () => {
+    if (h.controller.getSnapshot('input').penSeen)
+      h.controller.setFreehandSettings({
+        ...h.controller.getSnapshot('tools').settings.freehand,
+        color: '#123456',
+      });
+  });
+  h.begin();
+  h.end();
+  expect(h.replies).not.toContainEqual(expect.objectContaining({ status: 'accepted' }));
+  expect(h.controller.getSnapshot('document').objects).toHaveLength(0);
+  expect(h.controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
+  stop();
+  h.begin(2);
+  h.end(2);
+  expect(h.controller.getSnapshot('document').objects).toHaveLength(1);
+  h.destroy();
+});
+
 test('Web Pencil fallback fails closed and faults explicitly instead of dispatching a tool stroke', () => {
   const h = setup();
   for (const phase of ['down', 'move', 'up'] as const) {
@@ -277,7 +383,11 @@ test.each(['text', 'mode', 'undo', 'layout'] as const)(
     if (reason === 'text') h.controller.setTool('text');
     else if (reason === 'mode') h.controller.setInputMode('finger');
     else if (reason === 'undo') h.controller.undo();
-    else window.dispatchEvent(new Event('resize'));
+    else {
+      const rect = h.host.getBoundingClientRect();
+      h.host.getBoundingClientRect = () => ({ ...rect, y: 50, top: 50, bottom: 450 });
+      window.dispatchEvent(new Event('resize'));
+    }
     h.end();
     expect(h.controller.getSnapshot('document').objects).toHaveLength(0);
     h.destroy();

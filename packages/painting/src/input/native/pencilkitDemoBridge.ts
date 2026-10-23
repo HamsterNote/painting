@@ -33,17 +33,21 @@ export function connectPencilkitDemo(options: {
   let revision = 0;
   let contextKey = '';
   let contextFingerprint = '';
+  let mappingFingerprint = '';
+  const beginContexts = new Map<string, PencilkitDemoState>();
   let destroyed = false;
   let faulted = false;
-  let active:
-    | {
-        id: number;
-        key: string;
-        commitId: string;
-        first: PencilkitDemoSample;
-        viewportRevision: number;
-      }
-    | undefined;
+  type Lease = {
+    id: number;
+    key: string;
+    commitId: string;
+    first: PencilkitDemoSample;
+    viewportRevision: number;
+    frame: PencilkitDemoState['frame'];
+    mapping: string;
+    phase: 'starting' | 'collecting';
+  };
+  let active: Lease | undefined;
   const pending = new Map<
     number,
     { key: string; commitId: string; committed: boolean; timer: ReturnType<typeof setTimeout> }
@@ -103,6 +107,21 @@ export function connectPencilkitDemo(options: {
     const input = controller.getSnapshot('input');
     const navigation = controller.getSnapshot('navigation');
     const viewport = controller.getSnapshot('viewport');
+    const mapping = JSON.stringify([
+      frame.x,
+      frame.y,
+      tools.activeTool,
+      tools.settings.freehand,
+      input.mode,
+      navigation.ruler.visible,
+      viewport,
+    ]);
+    // Native may begin against a configuration still crossing the asynchronous DOM bridge.
+    // Keep only known configurations with the same coordinate mapping, brush and input policy.
+    if (mapping !== mappingFingerprint) {
+      mappingFingerprint = mapping;
+      beginContexts.clear();
+    }
     const fingerprint = JSON.stringify([
       frame,
       exclusions,
@@ -122,7 +141,10 @@ export function connectPencilkitDemo(options: {
         old &&
         (tools.activeTool !== 'freehand' ||
           navigation.ruler.visible ||
-          viewport.revision !== active.viewportRevision)
+          (active.phase === 'starting' && active.mapping !== mapping) ||
+          viewport.revision !== active.viewportRevision ||
+          frame.x !== active.frame.x ||
+          frame.y !== active.frame.y)
       ) {
         cancel('context-invalidated');
         arbiter.releaseNativePencil();
@@ -136,7 +158,7 @@ export function connectPencilkitDemo(options: {
       rect.height > 0 &&
       pending.size < 4 &&
       host.dataset.inputReady === 'true';
-    connection.onState({
+    const state: PencilkitDemoState = {
       protocolVersion: 1,
       contextKey,
       enabled,
@@ -144,7 +166,12 @@ export function connectPencilkitDemo(options: {
       exclusions,
       brush: tools.settings.freehand,
       scale: viewport.viewport.scale,
-    });
+    };
+    if (enabled) {
+      beginContexts.set(contextKey, state);
+      if (beginContexts.size > 32) beginContexts.delete(beginContexts.keys().next().value!);
+    }
+    connection.onState(state);
   }
   function batch(
     lease: NonNullable<typeof active>,
@@ -220,26 +247,37 @@ export function connectPencilkitDemo(options: {
       status = 'visible';
     } else if (message.type === 'begin') {
       publish();
+      const configured = beginContexts.get(message.contextKey);
+      const current = beginContexts.get(contextKey);
       if (
-        !enabled ||
-        active ||
-        pending.has(message.id) ||
-        completed.has(message.id) ||
-        message.contextKey !== contextKey ||
+        !Number.isSafeInteger(message.id) ||
+        message.id <= 0 ||
         !isPencilkitDemoSample(message.sample) ||
         message.sample.phase !== 'down' ||
         message.sample.seq !== 0
       )
-        reason = 'invalid-or-stale-begin';
+        reason = 'invalid-begin-sample';
+      else if (!enabled) reason = 'native-input-disabled';
+      else if (active) reason = 'native-session-busy';
+      else if (pending.has(message.id) || completed.has(message.id) || cancelled.has(message.id))
+        reason = 'native-stroke-id-reused';
+      else if (!configured || !current) reason = 'stale-begin-context';
+      else if (!acceptsPoint(configured, message.sample) || !acceptsPoint(current, message.sample))
+        reason = 'begin-outside-canvas';
       else {
         const commitId = `${epoch}:pencil:${message.id}`;
-        const lease = {
+        const lease: Lease = {
           id: message.id,
           key: message.contextKey,
           commitId,
           first: message.sample,
           viewportRevision: controller.getSnapshot('viewport').revision,
+          frame: configured.frame,
+          mapping: mappingFingerprint,
+          phase: 'starting',
         };
+        // Reserve before controller notifications: cancellation must see this exact lease.
+        active = lease;
         const claimed = arbiter.claimNativePencil(
           {
             phase: 'down',
@@ -252,7 +290,7 @@ export function connectPencilkitDemo(options: {
           },
           () => cancel('input-cancelled')
         );
-        if (claimed) {
+        if (claimed && active === lease) {
           presentation.holdNative(commitId, () => retire(lease.id, lease.key));
           const result = controller.beginFreehand({
             type: 'begin',
@@ -260,15 +298,24 @@ export function connectPencilkitDemo(options: {
             pressureCapability: message.sample.mf > 0 ? 'available' : 'unavailable',
             batch: batch(lease, [message.sample], 0),
           });
-          if (result.ok) {
-            active = lease;
+          const snapshot = controller.getSnapshot('interaction').activeFreehand;
+          if (
+            result.ok &&
+            active === lease &&
+            snapshot?.status === 'collecting' &&
+            snapshot.commitId === commitId
+          ) {
+            lease.phase = 'collecting';
             status = 'accepted';
           } else {
             presentation.retireNative(commitId);
-            reason = result.error.code;
+            reason = result.ok ? 'cancelled-session' : result.error.code;
           }
-        } else reason = 'input-owner-conflict';
-        if (status !== 'accepted') arbiter.releaseNativePencil();
+        } else reason = claimed ? 'cancelled-session' : 'input-owner-conflict';
+        if (status !== 'accepted') {
+          cancel(reason!);
+          arbiter.releaseNativePencil();
+        }
       }
       if (status === 'rejected') retire(message.id, message.contextKey, reason);
     } else if (message.type === 'stroke') {
@@ -355,7 +402,10 @@ export function connectPencilkitDemo(options: {
   const stops = channels.map((channel) =>
     controller.subscribe(channel, () => {
       const snapshot = controller.getSnapshot('interaction').activeFreehand;
-      if (active && (snapshot?.status !== 'collecting' || snapshot.commitId !== active.commitId)) {
+      if (
+        active?.phase === 'collecting' &&
+        (snapshot?.status !== 'collecting' || snapshot.commitId !== active.commitId)
+      ) {
         cancel('controller-cancelled');
         arbiter.releaseNativePencil();
       }
@@ -374,8 +424,6 @@ export function connectPencilkitDemo(options: {
     })
   );
   const resize = () => {
-    cancel('layout-changed');
-    arbiter.releaseNativePencil();
     publish();
   };
   const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(resize);
@@ -406,6 +454,19 @@ export function connectPencilkitDemo(options: {
     });
     connection.register(undefined);
   };
+}
+
+function acceptsPoint(state: PencilkitDemoState, sample: PencilkitDemoSample): boolean {
+  const { x, y } = sample;
+  return (
+    x >= 0 &&
+    y >= 0 &&
+    x < state.frame.width &&
+    y < state.frame.height &&
+    !state.exclusions.some(
+      (rect) => x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height
+    )
+  );
 }
 
 function sameSample(a: PencilkitDemoSample, b: PencilkitDemoSample): boolean {

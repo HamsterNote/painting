@@ -111,6 +111,35 @@ test('opt-in uses the native canvas and queues pooled events until the DOM ackno
   expect(result.getByTestId('layered-native-evidence').props.children.join('')).toContain(
     '原生起笔 1'
   );
+  // Native finish retains its begin key, even if a new compatible DOM layout arrived first.
+  await act(async () =>
+    host().props.onNativeState({
+      protocolVersion: 1,
+      contextKey: 'epoch:2',
+      enabled: true,
+      frame: { x: 0, y: 70, width: 800, height: 580 },
+      exclusions: [],
+      scale: 2,
+      brush: {
+        color: '#123456',
+        nominalSize: 5,
+        opacity: 0.4,
+        pressureMode: 'auto',
+        presetRevision: 1,
+      },
+    })
+  );
+  await fireEvent(canvas(), 'demoStatus', {
+    nativeEvent: {
+      contextKey: 'epoch:2',
+      enabled: true,
+      width: 800,
+      height: 580,
+      lastHit: 'pencil',
+      routing: 'gesture-ancestor',
+      toolBegins: 1,
+    },
+  });
   const stroke = {
     id: 1,
     contextKey: 'epoch:1',
@@ -129,6 +158,7 @@ test('opt-in uses the native canvas and queues pooled events until the DOM ackno
     host().props.onNativeReply({ id: 1, contextKey: 'epoch:1', messageId: 1, status: 'accepted' })
   );
   expect(host().props.nativeMessage.type).toBe('stroke');
+  expect(host().props.nativeMessage.contextKey).toBe('epoch:1');
   await act(async () =>
     host().props.onNativeReply({ id: 1, contextKey: 'epoch:1', messageId: 2, status: 'committed' })
   );
