@@ -322,38 +322,39 @@ final class PencilkitG1Sampler {
  * PencilkitSamplingCanvasView —— 旁路采样版 PKCanvasView。
  * 所有重写先调 super，PencilKit 绘制行为不变；采样不影响手势与命中。
  */
-final class PencilkitSamplingCanvasView: PKCanvasView {
+class PencilkitSamplingCanvasView: PKCanvasView {
   var sampler = PencilkitG1Sampler.shared
+  var samplesThroughResponder = true
   override var undoManager: UndoManager? {
     sampler === PencilkitG1Sampler.shared ? super.undoManager : nil
   }
 
   override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-    sampler.captureBeforePencilkit(touches, event: event)
+    if samplesThroughResponder { sampler.captureBeforePencilkit(touches, event: event) }
     super.touchesBegan(touches, with: event)
-    sampler.touchesBegan(touches, in: self)
+    if samplesThroughResponder { sampler.touchesBegan(touches, in: self) }
   }
 
   override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-    sampler.captureBeforePencilkit(touches, event: event)
+    if samplesThroughResponder { sampler.captureBeforePencilkit(touches, event: event) }
     super.touchesMoved(touches, with: event)
-    sampler.touchesMoved(touches, event: event, in: self)
+    if samplesThroughResponder { sampler.touchesMoved(touches, event: event, in: self) }
   }
 
   override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-    sampler.captureBeforePencilkit(touches, event: event)
+    if samplesThroughResponder { sampler.captureBeforePencilkit(touches, event: event) }
     super.touchesEnded(touches, with: event)
-    sampler.touchesEnded(touches, event: event, in: self)
+    if samplesThroughResponder { sampler.touchesEnded(touches, event: event, in: self) }
   }
 
   override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-    sampler.captureBeforePencilkit(touches, event: event)
+    if samplesThroughResponder { sampler.captureBeforePencilkit(touches, event: event) }
     super.touchesCancelled(touches, with: event)
-    sampler.touchesCancelled(touches, event: event, in: self)
+    if samplesThroughResponder { sampler.touchesCancelled(touches, event: event, in: self) }
   }
 
   override func touchesEstimatedPropertiesUpdated(_ touches: Set<UITouch>) {
     super.touchesEstimatedPropertiesUpdated(touches)
-    sampler.estimatedPropertiesUpdated(touches)
+    if samplesThroughResponder { sampler.estimatedPropertiesUpdated(touches) }
   }
 }

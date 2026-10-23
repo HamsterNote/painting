@@ -16,8 +16,12 @@ import UIKit
  * Finger hit testing and presentation still require G2/G3 device verification.
  */
 final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
-  private let canvasView = PencilkitSamplingCanvasView()
+  private let canvasView = PencilkitDemoCanvasView()
   private let demoSampler = PencilkitG1Sampler()
+  private let coordinateView = UIView()
+  private let drawingDelegate = PencilkitDemoDrawingDelegate()
+  private lazy var touchObserver = PencilkitDemoTouchObserver(sampler: demoSampler, coordinateView: coordinateView)
+  private var demoHost = false
   private var demoState: DemoState?
   private var contexts: [Int: String] = [:]
   private var previews = PencilkitPreviewLedger()
@@ -25,12 +29,14 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   private var collectingID: Int?
   private var lastHit = "none"
   private var lastDemoStatus = ""
+  private var toolBegins = 0
 
   private struct DemoState: Decodable {
     let contextKey: String
     let enabled: Bool
     let retireIDs: [Int]
     let exclusions: [Exclusion]
+    let frame: Exclusion
   }
   private struct Exclusion: Decodable {
     let x: Double
@@ -93,6 +99,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   override func layoutSubviews() {
     super.layoutSubviews()
     canvasView.frame = bounds
+    coordinateView.frame = demoState?.frame.rect ?? .zero
     publishDemoStatus()
   }
 
@@ -105,6 +112,41 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   }
 
   // MARK: - Props
+
+  override func mountChildComponentView(_ childComponentView: UIView, index: Int) {
+    canvasView.insertSubview(childComponentView, at: 0)
+    canvasView.hostedDOMView = childComponentView
+    drawingDelegate.hostedDOMView = childComponentView
+    publishDemoStatus()
+  }
+
+  override func unmountChildComponentView(_ childComponentView: UIView, index: Int) {
+    childComponentView.removeFromSuperview()
+    if canvasView.hostedDOMView === childComponentView {
+      canvasView.hostedDOMView = nil
+      drawingDelegate.hostedDOMView = nil
+    }
+    publishDemoStatus()
+  }
+
+  func setDemoHost(_ enabled: Bool) {
+    guard enabled, !demoHost else { return }
+    demoHost = true
+    canvasView.samplesThroughResponder = false
+    canvasView.sampler = demoSampler
+    drawingDelegate.original = canvasView.drawingGestureRecognizer.delegate
+    drawingDelegate.accepts = { [weak self] touch in self?.acceptsDemoTouch(touch) ?? false }
+    touchObserver.accepts = { [weak self] touch in self?.acceptsDemoTouch(touch) ?? false }
+    canvasView.drawingGestureRecognizer.delegate = drawingDelegate
+    canvasView.drawingGestureRecognizer.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
+    canvasView.drawingGestureRecognizer.requiresExclusiveTouchType = false
+    canvasView.drawingGestureRecognizer.delaysTouchesBegan = true
+    canvasView.drawingGestureRecognizer.cancelsTouchesInView = true
+    canvasView.addGestureRecognizer(touchObserver)
+    canvasView.delaysContentTouches = false
+    canvasView.canCancelContentTouches = false
+    publishDemoStatus()
+  }
 
   func setPencilOnly(_ pencilOnly: Bool) {
     self.pencilOnly = pencilOnly
@@ -129,8 +171,19 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   func setDemoState(_ json: String) {
     guard let data = json.data(using: .utf8),
           let state = try? JSONDecoder().decode(DemoState.self, from: data) else { return }
+    if demoState?.contextKey.split(separator: ":").first != state.contextKey.split(separator: ":").first {
+      demoSampler.discardActiveSessions()
+      canvasView.drawingGestureRecognizer.isEnabled = false
+      canvasView.drawingGestureRecognizer.isEnabled = true
+      canvasView.drawing = PKDrawing()
+      contexts.removeAll()
+      previews = PencilkitPreviewLedger()
+      collectingID = nil
+      toolBegins = 0
+      lastHit = "none"
+    }
     demoState = state
-    canvasView.sampler = demoSampler
+    coordinateView.frame = state.frame.rect
     previews.retireIDs.formUnion(state.retireIDs.filter { contexts[$0] != nil })
     if let id = collectingID, state.retireIDs.contains(id) {
       collectingID = nil
@@ -146,22 +199,28 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
     publishDemoStatus()
   }
 
-  // Finger-only events fall through to the real WKWebView; pencilOnly alone cannot do this.
-  override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-    if let state = demoState {
-      lastHit = PencilkitDemoHitTesting.decision(
-        point: point, bounds: bounds, enabled: state.enabled,
-        exclusions: state.exclusions.map { $0.rect }, event: event
-      )
+  private func acceptsDemoTouch(_ touch: UITouch) -> Bool {
+    guard demoHost, let state = demoState else { return false }
+    guard canvasView.hasDrawingAncestor else {
+      lastHit = "drawing-recognizer-not-ancestor"
       publishDemoStatus()
-      guard lastHit == "pencil" else { return nil }
+      return false
     }
-    return super.hitTest(point, with: event)
+    lastHit = PencilkitDemoHitTesting.decision(
+      point: touch.location(in: coordinateView), bounds: coordinateView.bounds,
+      enabled: state.enabled, exclusions: state.exclusions.map { $0.rect }, touch: touch
+    )
+    publishDemoStatus()
+    return lastHit == "pencil"
   }
 
-  override var undoManager: UndoManager? { demoState == nil ? super.undoManager : nil }
+  override var undoManager: UndoManager? { demoHost ? nil : super.undoManager }
 
-  func canvasViewDidBeginUsingTool(_ canvasView: PKCanvasView) { previews.usingTool = true }
+  func canvasViewDidBeginUsingTool(_ canvasView: PKCanvasView) {
+    previews.usingTool = true
+    toolBegins += 1
+    publishDemoStatus()
+  }
 
   func canvasViewDidFinishUsingTool(_ canvasView: PKCanvasView) {
     previews.finishTool()
@@ -209,6 +268,9 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
     applyTool()
 
     addSubview(canvasView)
+    coordinateView.isHidden = true
+    coordinateView.isUserInteractionEnabled = false
+    addSubview(coordinateView)
   }
 
   private func applyDrawingPolicy() {
@@ -224,22 +286,26 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
 
   private func publishDemoStatus() {
     guard window != nil, let state = demoState else { return }
-    let signature = "\(state.contextKey):\(state.enabled):\(bounds.width):\(bounds.height):\(lastHit)"
+    // Do not infer routing from module availability or assume where PencilKit attaches its recognizer.
+    let routed = demoHost && canvasView.hasDrawingAncestor
+    let signature = "\(state.contextKey):\(state.enabled):\(coordinateView.bounds.width):\(coordinateView.bounds.height):\(lastHit):\(routed):\(toolBegins)"
     guard signature != lastDemoStatus else { return }
     lastDemoStatus = signature
     onDemoStatus([
       "contextKey": state.contextKey,
-      "enabled": state.enabled,
-      "width": bounds.width,
-      "height": bounds.height,
+      "enabled": state.enabled && routed,
+      "width": coordinateView.bounds.width,
+      "height": coordinateView.bounds.height,
       "lastHit": lastHit,
+      "routing": routed ? "gesture-ancestor" : "unattached",
+      "toolBegins": toolBegins,
     ])
   }
 
   private func dispatchReady() {
     onReady([
       "moduleVersion": "0.1.0",
-      "demoBridgeVersion": 2,
+      "demoBridgeVersion": 3,
       "osVersion": ProcessInfo.processInfo.operatingSystemVersionString,
       "deviceModel": UIDevice.current.model,
       "drawingPolicy": pencilOnly ? "pencilOnly" : "anyInput",

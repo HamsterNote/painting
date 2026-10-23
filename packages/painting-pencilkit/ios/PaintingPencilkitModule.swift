@@ -4,7 +4,7 @@ import ExpoModulesCore
 public class PaintingPencilkitModule: Module {
   public func definition() -> ModuleDefinition {
     Name("PaintingPencilkit")
-    Constants(["demoBridgeVersion": 2])
+    Constants(["demoBridgeVersion": 3])
 
     // G1 诊断导出：返回采样器当前保留的完成笔与规则说明（见 PencilkitG1Sampler）。
     AsyncFunction("getStrokesLog") { () -> [String: Any] in
@@ -17,6 +17,10 @@ public class PaintingPencilkitModule: Module {
 
     View(PaintingPencilkitView.self) {
       Events("onReady", "onStroke", "onBegin", "onPreviewRetired", "onDemoStatus")
+
+      Prop("demoHost") { (view: PaintingPencilkitView, enabled: Bool) in
+        view.setDemoHost(enabled)
+      }
 
       Prop("demoState") { (view: PaintingPencilkitView, state: String) in
         view.setDemoState(state)

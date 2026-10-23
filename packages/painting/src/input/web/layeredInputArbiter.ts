@@ -30,6 +30,8 @@ export function createLayeredInputArbiter(options: {
   let mode = controller.getSnapshot('input').mode;
   let activeTool = controller.getSnapshot('tools').activeTool;
   let native: { input: NormalizedPointerInput; cancel: () => boolean; owned: boolean } | undefined;
+  let nativePencilGuard: (() => void) | undefined;
+  const rejectedWebPencils = new Set<string | number>();
 
   function execute(intents: readonly LayeredInputIntent[]) {
     for (const intent of intents) {
@@ -113,6 +115,24 @@ export function createLayeredInputArbiter(options: {
     seen.add(event);
     const input = normalize(event);
     if (!input || (input.phase === 'down' && event.button !== 0)) return;
+    if (
+      nativePencilGuard &&
+      input.phase === 'down' &&
+      input.device === 'pen' &&
+      input.targetRole === 'paper' &&
+      controller.getSnapshot('tools').activeTool === 'freehand' &&
+      !controller.getSnapshot('navigation').ruler.visible
+    ) {
+      rejectedWebPencils.add(input.pointerId);
+      nativePencilGuard();
+    }
+    if (rejectedWebPencils.has(input.pointerId)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (input.phase === 'up' || input.phase === 'cancel')
+        rejectedWebPencils.delete(input.pointerId);
+      return;
+    }
     events.set(input.pointerId, event);
     dispatch({
       type: 'pointer',
@@ -124,6 +144,7 @@ export function createLayeredInputArbiter(options: {
   }
   const reset = (reason: LayeredInputResetReason = 'policy') => {
     events.clear();
+    rejectedWebPencils.clear();
     dispatch({ type: 'reset', reason });
   };
   const interrupt = () => reset('lifecycle');
@@ -152,6 +173,10 @@ export function createLayeredInputArbiter(options: {
   view.addEventListener('pagehide', interrupt);
   host.ownerDocument.addEventListener('visibilitychange', hidden);
   return {
+    setNativePencilGuard(guard: (() => void) | undefined) {
+      nativePencilGuard = guard;
+      if (!guard) rejectedWebPencils.clear();
+    },
     // Feed normalized ownership only; never construct or dispatch synthetic DOM events.
     claimNativePencil(input: NormalizedPointerInput, cancel: () => boolean): boolean {
       if (destroyed || native || input.phase !== 'down' || input.device !== 'pen') return false;

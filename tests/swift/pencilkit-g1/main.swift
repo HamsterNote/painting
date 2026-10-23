@@ -219,25 +219,73 @@ func testDemoPencilHitTesting() {
   pencil.location = CGPoint(x: 0, y: 0)
   let finger = UITouch(1)
   finger.type = .direct
-  func hit(_ event: UIEvent?, enabled: Bool = true, exclusions: [CGRect] = []) -> String {
+  func hit(_ touch: UITouch, enabled: Bool = true, exclusions: [CGRect] = []) -> String {
     PencilkitDemoHitTesting.decision(
       point: CGPoint(x: 50, y: 50), bounds: CGRect(x: 0, y: 0, width: 100, height: 100),
-      enabled: enabled, exclusions: exclusions, event: event
+      enabled: enabled, exclusions: exclusions, touch: touch
     )
   }
-  check(hit(UIEvent([pencil])) == "pencil", "Pencil must not require a pre-hit-test UITouch location match")
-  check(hit(UIEvent([finger])) == "non-pencil", "finger-only events must reach the real WebView")
-  check(hit(UIEvent([finger, pencil])) == "pencil", "palms must not steal an active Pencil event")
-  check(hit(nil) == "no-touch-metadata", "missing event metadata must remain observable and fall through")
-  check(hit(UIEvent([])) == "no-touch-metadata", "empty metadata must not claim native input")
-  check(hit(UIEvent([pencil]), enabled: false) == "disabled", "disabled canvas captured input")
-  check(hit(UIEvent([pencil]), exclusions: [CGRect(x: 40, y: 40, width: 20, height: 20)]) == "control", "native canvas captured an excluded control")
+  check(hit(pencil) == "pencil", "Pencil policy must use the actual touch, not a UIEvent lookup")
+  check(hit(finger) == "non-pencil", "fingers must reach the real WebView")
+  check(hit(pencil, enabled: false) == "disabled", "disabled canvas captured input")
+  check(hit(pencil, exclusions: [CGRect(x: 40, y: 40, width: 20, height: 20)]) == "control", "native canvas captured an excluded control")
   pencil.phase = .ended
-  check(hit(UIEvent([pencil, finger])) == "non-pencil", "ended Pencil must not capture a later finger")
+  check(hit(pencil) == "non-pencil", "ended Pencil must not capture a later finger")
+}
+
+func testDemoGeometricHitTesting() {
+  let canvas = PencilkitDemoCanvasView()
+  let dom = UIView()
+  check(!canvas.hasDrawingAncestor, "unmounted DOM must not claim a native route")
+  canvas.addSubview(dom)
+  canvas.hostedDOMView = dom
+  check(canvas.hasDrawingAncestor, "recognizer owner must be a real DOM ancestor")
+  for event in [nil, UIEvent([]), UIEvent([UITouch(1)])] as [UIEvent?] {
+    check(canvas.hitTest(CGPoint(x: 50, y: 50), with: event) === dom, "real DOM descendant must be selected even before touch metadata exists")
+    check(canvas.hitTest(CGPoint(x: 150, y: 50), with: event) == nil, "out-of-bounds hit")
+  }
+  dom.isUserInteractionEnabled = false
+  check(canvas.hitTest(CGPoint(x: 50, y: 50), with: nil) == nil, "disabled DOM must not capture input")
+  let unrelatedOwner = UIView()
+  unrelatedOwner.addGestureRecognizer(canvas.drawingGestureRecognizer)
+  check(!canvas.hasDrawingAncestor, "mounted child alone must not claim drawing recognizer ancestry")
+}
+
+func testDemoPassiveTouchObserver() {
+  let sampler = PencilkitG1Sampler()
+  let coordinates = UIView()
+  coordinates.frame = CGRect(x: 10, y: 20, width: 100, height: 100)
+  let observer = PencilkitDemoTouchObserver(sampler: sampler, coordinateView: coordinates)
+  observer.accepts = { $0.type == .pencil }
+  let other = UIGestureRecognizer(target: nil, action: nil)
+  check(!observer.canPrevent(other) && !observer.canBePrevented(by: other), "raw observer must not participate in gesture prevention")
+  check(!observer.cancelsTouchesInView && !observer.delaysTouchesBegan && !observer.delaysTouchesEnded, "observer must leave real Web touches alone")
+  check(observer.allowedTouchTypes == [NSNumber(value: UITouch.TouchType.pencil.rawValue)], "observer must filter Pencil")
+  let pencil = UITouch(1)
+  pencil.location = CGPoint(x: 50, y: 60)
+  let finger = UITouch(1)
+  finger.type = .direct
+  observer.touchesBegan([pencil, finger], with: UIEvent([]))
+  check(observer.ignoredTouches.contains(finger), "finger must not be sampled")
+  let canvas = PencilkitDemoCanvasView()
+  canvas.sampler = sampler
+  canvas.samplesThroughResponder = false
+  // A responder-chain delivery must not double-sample the ancestor observer's stroke.
+  canvas.touchesBegan([pencil], with: nil)
+  pencil.timestamp = 2
+  observer.touchesMoved([pencil], with: UIEvent([UITouch(1.5), UITouch(2)]))
+  canvas.touchesMoved([pencil], with: nil)
+  observer.touchesEnded([pencil], with: UIEvent([UITouch(2)]))
+  canvas.touchesEnded([pencil], with: nil)
+  let samples = verifyCompleted(sampler)
+  check(samples.count == 4, "observer lost coalesced/terminal or responder duplicated input")
+  check(samples[0]["x"] as? Double == 40 && samples[0]["y"] as? Double == 40, "observer coordinates must be local to DOM drawing frame")
 }
 
 let tests: [(String, () -> Void)] = [
-  ("Demo Pencil hit testing tolerates stale positions and preserves finger/control routing", testDemoPencilHitTesting),
+  ("Demo policy uses actual touch and preserves finger/control routing", testDemoPencilHitTesting),
+  ("Demo hit testing selects real DOM before touch metadata exists", testDemoGeometricHitTesting),
+  ("Demo passive ancestor observer samples once in drawing-frame coordinates", testDemoPassiveTouchObserver),
   ("terminal coalesced overlap and repeated finish", testTerminalCoalescedOverlap),
   ("up/cancel sharing a previously accepted timestamp", testTerminalWithPreviouslyAcceptedTimestamp),
   ("tap with equal/distinct timestamps and no coalesced event", testTapAndMissingCoalesced),

@@ -1,6 +1,6 @@
 import { act, render, waitFor } from '@testing-library/react';
 import LayeredEditorDom from '../../../../apps/playground/src/layered-editor/LayeredEditorDom';
-import { mockLayeredDom } from './fixtures/layeredDom';
+import { layeredPointer, mockLayeredDom } from './fixtures/layeredDom';
 import type {
   PencilkitDemoMessage,
   PencilkitDemoReply,
@@ -71,5 +71,32 @@ test('real DOM board publishes enabled native canvas state after input initializ
       ]),
     }),
   ]);
+  view.unmount();
+});
+
+test('real board never creates silent DOM ink when native Pencil is requested; fingers still draw', async () => {
+  const onReply = jest.fn(async (_reply: PencilkitDemoReply) => {});
+  const view = render(
+    <LayeredEditorDom
+      nativePencilEnabled
+      onNativeState={async () => {}}
+      onNativeReply={onReply}
+      editorParams={{ diagnostics: '1' }}
+    />
+  );
+  await act(async () => {});
+  const host = view.container.querySelector('[data-input-ready="true"]')!;
+  expect(host).not.toBeNull();
+  for (const phase of ['down', 'move', 'up'] as const) layeredPointer(host, phase, 100, 100);
+  expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ reason: 'dom-pencil-fallback' }));
+  const controller = window.__layeredEditor!;
+  expect(controller.getSnapshot('document').objects).toHaveLength(0);
+  expect(controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
+  for (const phase of ['down', 'move', 'up'] as const)
+    layeredPointer(host, phase, 100, 100, 'touch', 2);
+  expect(controller.getSnapshot('document').objects).toHaveLength(1);
+  expect(controller.getSnapshot('document').objects[0]).toMatchObject({
+    samples: expect.arrayContaining([expect.objectContaining({ source: 'touch' })]),
+  });
   view.unmount();
 });

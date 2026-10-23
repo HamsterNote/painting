@@ -52,6 +52,8 @@ try {
     path.join(root, 'packages/painting-pencilkit/ios/PencilkitG1Sampler.swift'),
     path.join(root, 'packages/painting-pencilkit/ios/PencilkitPreviewLedger.swift'),
     path.join(root, 'packages/painting-pencilkit/ios/PencilkitDemoHitTesting.swift'),
+    path.join(root, 'packages/painting-pencilkit/ios/PencilkitDemoCanvasView.swift'),
+    path.join(root, 'packages/painting-pencilkit/ios/PencilkitDemoTouchObserver.swift'),
     path.join(fixtures, 'main.swift'),
     '-o',
     executable,

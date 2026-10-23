@@ -9,6 +9,7 @@ import type {
   PencilkitDemoState,
 } from '../pencilkitDemoContract';
 import { serializeLayeredDocument, readLayeredDocument } from '../../../model/documentReader';
+import { layeredPointer } from '../../../__tests__/fixtures/layeredDom';
 
 function sample(seq: number, phase: PencilkitDemoSample['phase']): PencilkitDemoSample {
   return {
@@ -109,6 +110,7 @@ function setup() {
     receive,
     retired,
     state: () => state,
+    disconnect: stop,
     destroy() {
       stop();
       arbiter.destroy();
@@ -168,6 +170,45 @@ test('real raw goes to schema 3 and shared history; viewport mapping and zero pr
   expect(h.controller.getSnapshot('document').objects).toHaveLength(0);
   h.controller.redo();
   expect(h.controller.getSnapshot('document').objects).toHaveLength(1);
+  h.destroy();
+});
+
+test('Web Pencil fallback fails closed and faults explicitly instead of dispatching a tool stroke', () => {
+  const h = setup();
+  for (const phase of ['down', 'move', 'up'] as const) {
+    layeredPointer(h.host, phase, 50, 60);
+  }
+  expect(h.tool.dispatch).not.toHaveBeenCalled();
+  expect(h.controller.getSnapshot('document').objects).toHaveLength(0);
+  expect(h.replies).toContainEqual(
+    expect.objectContaining({ reason: 'dom-pencil-fallback', status: 'rejected' })
+  );
+  expect(h.state().enabled).toBe(false);
+  h.destroy();
+});
+
+test.each(['touch', 'mouse'])('native guard keeps genuine %s tool input on Web', (source) => {
+  const h = setup();
+  for (const phase of ['down', 'move', 'up'] as const) {
+    layeredPointer(h.host, phase, 50, 60, source);
+  }
+  expect(h.tool.dispatch).toHaveBeenCalledTimes(3);
+  expect(h.replies).not.toContainEqual(expect.objectContaining({ reason: 'dom-pencil-fallback' }));
+  h.destroy();
+});
+
+test('semantic tools keep Web Pencil input and disconnect removes the guard', () => {
+  const h = setup();
+  h.controller.setTool('rect');
+  layeredPointer(h.host, 'down', 50, 60);
+  layeredPointer(h.host, 'up', 60, 70);
+  expect(h.tool.dispatch).toHaveBeenCalledTimes(2);
+  h.controller.setTool('freehand');
+  h.disconnect();
+  layeredPointer(h.host, 'down', 50, 60);
+  layeredPointer(h.host, 'up', 60, 70);
+  expect(h.tool.dispatch).toHaveBeenCalledTimes(4);
+  expect(h.replies).not.toContainEqual(expect.objectContaining({ reason: 'dom-pencil-fallback' }));
   h.destroy();
 });
 

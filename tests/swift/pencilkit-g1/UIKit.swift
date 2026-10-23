@@ -5,9 +5,10 @@
 @_exported import CoreGraphics
 #endif
 
-public enum TouchType {
-  case pencil, direct
+public enum HostTouchType: Int {
+  case direct = 0, pencil = 2
 }
+public typealias TouchType = HostTouchType
 
 public enum TouchPhase {
   case began, moved, stationary, ended, cancelled
@@ -23,8 +24,31 @@ public class UndoManager {}
 #endif
 
 open class UIView: NSObject {
+  public weak var superview: UIView?
+  public func addSubview(_ view: UIView) { view.superview = self }
+  public func isDescendant(of view: UIView) -> Bool {
+    var current: UIView? = self
+    while let candidate = current {
+      if candidate === view { return true }
+      current = candidate.superview
+    }
+    return false
+  }
+  public func addGestureRecognizer(_ recognizer: UIGestureRecognizer) { recognizer.view = self }
   open var undoManager: UndoManager? { nil }
   public var bounds = CGRect(x: 0, y: 0, width: 100, height: 100)
+  public var frame = CGRect(x: 0, y: 0, width: 100, height: 100) {
+    didSet { bounds.size = frame.size }
+  }
+  public var isHidden = false
+  public var isUserInteractionEnabled = true
+  public var alpha: CGFloat = 1
+  open func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+    !isHidden && isUserInteractionEnabled && alpha >= 0.01 && bounds.contains(point) ? self : nil
+  }
+  public func convert(_ point: CGPoint, to view: UIView?) -> CGPoint {
+    CGPoint(x: point.x + frame.minX - (view?.frame.minX ?? 0), y: point.y + frame.minY - (view?.frame.minY ?? 0))
+  }
   open func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {}
   open func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {}
   open func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {}
@@ -33,6 +57,7 @@ open class UIView: NSObject {
 }
 
 public final class UITouch: NSObject {
+  public typealias TouchType = HostTouchType
   public var timestamp: TimeInterval
   public var type: TouchType = .pencil
   public var phase: TouchPhase = .began
@@ -43,7 +68,32 @@ public final class UITouch: NSObject {
   public var location = CGPoint(x: 5, y: 5)
 
   public init(_ timestamp: TimeInterval) { self.timestamp = timestamp }
-  public func preciseLocation(in view: UIView) -> CGPoint { location }
+  public func preciseLocation(in view: UIView) -> CGPoint {
+    CGPoint(x: location.x - view.frame.minX, y: location.y - view.frame.minY)
+  }
+  public func location(in view: UIView) -> CGPoint { preciseLocation(in: view) }
+}
+
+public enum GestureState { case possible, failed }
+open class UIGestureRecognizer: NSObject {
+  public weak var view: UIView?
+  public var state: GestureState = .possible
+  public var allowedTouchTypes: [NSNumber] = []
+  public var requiresExclusiveTouchType = true
+  public var cancelsTouchesInView = true
+  public var delaysTouchesBegan = true
+  public var delaysTouchesEnded = true
+  public var ignoredTouches = Set<UITouch>()
+  public init(target: Any?, action: String?) { super.init() }
+  public required init?(coder: NSCoder) { super.init() }
+  open func canPrevent(_ recognizer: UIGestureRecognizer) -> Bool { true }
+  open func canBePrevented(by recognizer: UIGestureRecognizer) -> Bool { true }
+  public func ignore(_ touch: UITouch, for event: UIEvent) { ignoredTouches.insert(touch) }
+  open func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {}
+  open func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {}
+  open func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {}
+  open func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {}
+  open func touchesEstimatedPropertiesUpdated(_ touches: Set<UITouch>) {}
 }
 
 public final class UIEvent: NSObject {

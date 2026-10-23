@@ -39,6 +39,8 @@ export default function LayeredEditorRoute() {
     width: number;
     height: number;
     lastHit: string;
+    routing: string;
+    toolBegins: number;
   }>();
   const [counts, setCounts] = useState({ began: 0, completed: 0, committed: 0 });
   const nextMessage = useRef(0);
@@ -54,7 +56,6 @@ export default function LayeredEditorRoute() {
     setState(undefined);
     setNativeStatus(undefined);
     setFault('');
-    setReady(false);
     setCounts({ began: 0, completed: 0, committed: 0 });
   }, [requested]);
   const enqueue = useCallback((message: Outgoing) => {
@@ -79,7 +80,6 @@ export default function LayeredEditorRoute() {
       setQueue([]);
       setRetireIDs([]);
       setFault('');
-      setReady(false);
       setNativeStatus(undefined);
       setCounts({ began: 0, completed: 0, committed: 0 });
     }
@@ -129,6 +129,26 @@ export default function LayeredEditorRoute() {
     const timer = setTimeout(() => setFault('bridge-stalled'), 5000);
     return () => clearTimeout(timer);
   }, [queue]);
+  const editor = (
+    <LayeredEditorDom
+      dom={{ style: { flex: 1 } }}
+      {...(requested && available
+        ? {
+            nativePencilEnabled: true,
+            editorParams: {
+              diagnostics: params.diagnostics ?? '',
+              handoffDelay: params.handoffDelay ?? '',
+              fixture: params.fixture ?? '',
+              touchDraw: params.touchDraw ?? '',
+              traceGestures: params.traceGestures ?? '',
+            },
+            nativeMessage: queue[0],
+            onNativeState: onState,
+            onNativeReply: onReply,
+          }
+        : {})}
+    />
+  );
   return (
     <View style={styles.root} testID="layered-ios-host">
       <View style={styles.status}>
@@ -139,18 +159,28 @@ export default function LayeredEditorRoute() {
               : !available
                 ? 'PencilKit 构建不匹配，请安装新 development build'
                 : fault
-                  ? `PencilKit 已暂停：${fault}`
+                  ? fault === 'dom-pencil-fallback'
+                    ? 'PencilKit 断言失败：Pencil 到达 DOM，已阻止绘制'
+                    : `PencilKit 已暂停：${fault}`
                   : !state
                     ? 'PencilKit 等待 DOM 连接'
                     : !ready
                       ? 'PencilKit 等待原生视图'
                       : !nativeStatus || nativeStatus.contextKey !== state.contextKey
                         ? 'PencilKit 等待原生配置回执'
-                        : !state.enabled || !nativeStatus.enabled
-                          ? 'PencilKit 画布已停用'
-                          : nativeStatus.width <= 0 || nativeStatus.height <= 0
-                            ? 'PencilKit 等待画布布局'
-                            : 'PencilKit 原生已启用'}
+                        : nativeStatus.routing !== 'gesture-ancestor'
+                          ? 'PencilKit 原生宿主未连接'
+                          : !state.enabled || !nativeStatus.enabled
+                            ? 'PencilKit 画布已停用'
+                            : nativeStatus.width <= 0 || nativeStatus.height <= 0
+                              ? 'PencilKit 等待画布布局'
+                              : counts.began === 0
+                                ? 'PencilKit 已配置，等待原生起笔'
+                                : nativeStatus.toolBegins === 0
+                                  ? 'PencilKit 已收到输入，等待原生预览'
+                                  : counts.committed === 0
+                                    ? 'PencilKit 已收到原生输入'
+                                    : 'PencilKit 原生链路已验证'}
           </Text>
           <Switch
             testID="layered-pencilkit-toggle"
@@ -163,7 +193,7 @@ export default function LayeredEditorRoute() {
           <Text testID="layered-native-evidence" numberOfLines={3} style={styles.evidence}>
             {`原生起笔 ${counts.began} · 完成 ${counts.completed} · 文档提交 ${counts.committed}`}
             {nativeStatus
-              ? ` · hit=${nativeStatus.lastHit} · canvas=${Math.round(nativeStatus.width)}x${Math.round(nativeStatus.height)}`
+              ? ` · PK预览 ${nativeStatus.toolBegins} · hit=${nativeStatus.lastHit} · canvas=${Math.round(nativeStatus.width)}x${Math.round(nativeStatus.height)} · ${nativeStatus.routing}`
               : ''}
           </Text>
         ) : null}
@@ -181,106 +211,88 @@ export default function LayeredEditorRoute() {
         ) : null}
       </View>
       <View style={styles.editor}>
-        <LayeredEditorDom
-          dom={{ style: { flex: 1 } }}
-          {...(requested && available
-            ? {
-                nativePencilEnabled: true,
-                editorParams: {
-                  diagnostics: params.diagnostics ?? '',
-                  handoffDelay: params.handoffDelay ?? '',
-                  fixture: params.fixture ?? '',
-                  touchDraw: params.touchDraw ?? '',
-                  traceGestures: params.traceGestures ?? '',
-                },
-                nativeMessage: queue[0],
-                onNativeState: onState,
-                onNativeReply: onReply,
+        {available ? (
+          <PaintingPencilkitView
+            demoHost
+            testID="layered-pencilkit-canvas"
+            style={styles.editor}
+            demoState={JSON.stringify({
+              contextKey: state?.contextKey ?? '',
+              enabled: requested && !!state?.enabled && !fault && pending.current.size < 4,
+              retireIDs,
+              exclusions: state?.exclusions ?? [],
+              frame: state?.frame ?? { x: 0, y: 0, width: 0, height: 0 },
+            })}
+            pencilOnly
+            inkColor={state?.brush.color ?? '#008060'}
+            inkWidth={state ? state.brush.nominalSize * state.scale : 4}
+            inkOpacity={state?.brush.opacity ?? 1}
+            onReady={(event) => {
+              if (typeof event?.nativeEvent?.moduleVersion === 'string') setReady(true);
+            }}
+            onDemoStatus={(event) => {
+              const status = event?.nativeEvent;
+              if (
+                typeof status?.contextKey !== 'string' ||
+                status.contextKey !== state?.contextKey ||
+                typeof status.enabled !== 'boolean' ||
+                !Number.isFinite(status.width) ||
+                !Number.isFinite(status.height) ||
+                typeof status.lastHit !== 'string' ||
+                typeof status.routing !== 'string' ||
+                !Number.isSafeInteger(status.toolBegins) ||
+                status.toolBegins < 0
+              )
+                return;
+              setNativeStatus({ ...status });
+            }}
+            onBegin={(event) => {
+              const begin = event?.nativeEvent;
+              if (typeof begin?.contextKey !== 'string') return;
+              if (begin?.contextKey?.split(':')[0] !== epoch.current) return;
+              if (
+                !begin ||
+                !isPencilkitDemoSample(begin.sample) ||
+                !Number.isSafeInteger(begin.id)
+              ) {
+                setFault('invalid-native-begin');
+                return;
               }
-            : {})}
-        />
-        {requested && available && state ? (
-          <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-            <PaintingPencilkitView
-              key={state.contextKey.split(':')[0]}
-              testID="layered-pencilkit-canvas"
-              style={{
-                position: 'absolute',
-                left: state.frame.x,
-                top: state.frame.y,
-                width: state.frame.width,
-                height: state.frame.height,
-              }}
-              demoState={JSON.stringify({
-                contextKey: state.contextKey,
-                enabled: state.enabled && !fault && pending.current.size < 4,
-                retireIDs,
-                exclusions: state.exclusions,
-              })}
-              pencilOnly
-              inkColor={state.brush.color}
-              inkWidth={state.brush.nominalSize * state.scale}
-              inkOpacity={state.brush.opacity}
-              onReady={(event) => {
-                if (typeof event?.nativeEvent?.moduleVersion === 'string') setReady(true);
-              }}
-              onDemoStatus={(event) => {
-                const status = event?.nativeEvent;
-                if (
-                  typeof status?.contextKey !== 'string' ||
-                  status.contextKey !== state.contextKey ||
-                  typeof status.enabled !== 'boolean' ||
-                  !Number.isFinite(status.width) ||
-                  !Number.isFinite(status.height) ||
-                  typeof status.lastHit !== 'string'
-                )
-                  return;
-                setNativeStatus({ ...status });
-              }}
-              onBegin={(event) => {
-                const begin = event?.nativeEvent;
-                if (typeof begin?.contextKey !== 'string') return;
-                if (begin?.contextKey?.split(':')[0] !== epoch.current) return;
-                if (
-                  !begin ||
-                  !isPencilkitDemoSample(begin.sample) ||
-                  !Number.isSafeInteger(begin.id)
-                ) {
-                  setFault('invalid-native-begin');
-                  return;
-                }
-                pending.current.add(begin.id);
-                setCounts((previous) => ({ ...previous, began: previous.began + 1 }));
-                enqueue({
-                  type: 'begin',
-                  id: begin.id,
-                  contextKey: begin.contextKey,
-                  sample: begin.sample,
-                });
-              }}
-              onStroke={(event) => {
-                const stroke = event?.nativeEvent;
-                const contextKey = (stroke as unknown as { contextKey?: string })?.contextKey;
-                if (typeof contextKey !== 'string') return;
-                if (contextKey?.split(':')[0] !== epoch.current) return;
-                if (!isPencilkitDemoStroke(stroke) || !contextKey) {
-                  setFault('invalid-native-stroke');
-                  return;
-                }
-                setCounts((previous) => ({ ...previous, completed: previous.completed + 1 }));
-                enqueue({ type: 'stroke', id: stroke.id, contextKey, stroke });
-              }}
-              onPreviewRetired={(event) => {
-                const retired = event?.nativeEvent;
-                if (typeof retired?.contextKey !== 'string') return;
-                if (retired?.contextKey?.split(':')[0] !== epoch.current) return;
-                if (!retired || !Number.isSafeInteger(retired.id)) return;
-                setRetireIDs((previous) => previous.filter((id) => id !== retired.id));
-                enqueue({ type: 'retired', id: retired.id, contextKey: retired.contextKey });
-              }}
-            />
-          </View>
-        ) : null}
+              pending.current.add(begin.id);
+              setCounts((previous) => ({ ...previous, began: previous.began + 1 }));
+              enqueue({
+                type: 'begin',
+                id: begin.id,
+                contextKey: begin.contextKey,
+                sample: begin.sample,
+              });
+            }}
+            onStroke={(event) => {
+              const stroke = event?.nativeEvent;
+              const contextKey = (stroke as unknown as { contextKey?: string })?.contextKey;
+              if (typeof contextKey !== 'string') return;
+              if (contextKey?.split(':')[0] !== epoch.current) return;
+              if (!isPencilkitDemoStroke(stroke) || !contextKey) {
+                setFault('invalid-native-stroke');
+                return;
+              }
+              setCounts((previous) => ({ ...previous, completed: previous.completed + 1 }));
+              enqueue({ type: 'stroke', id: stroke.id, contextKey, stroke });
+            }}
+            onPreviewRetired={(event) => {
+              const retired = event?.nativeEvent;
+              if (typeof retired?.contextKey !== 'string') return;
+              if (retired?.contextKey?.split(':')[0] !== epoch.current) return;
+              if (!retired || !Number.isSafeInteger(retired.id)) return;
+              setRetireIDs((previous) => previous.filter((id) => id !== retired.id));
+              enqueue({ type: 'retired', id: retired.id, contextKey: retired.contextKey });
+            }}
+          >
+            {editor}
+          </PaintingPencilkitView>
+        ) : (
+          editor
+        )}
       </View>
     </View>
   );

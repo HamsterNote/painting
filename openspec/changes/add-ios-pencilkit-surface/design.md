@@ -61,7 +61,9 @@
 | B：PencilKit 同时接自由笔 Pencil 与手指；其他工具留 Web | 扩大采样、掌触、双指取消与原生导航桥工作，仍不能交给 PencilKit 自行滚动 |
 | C：本期 iOS 整体只允许 Pencil 绘制 | 缩小功能但破坏现有手指输入模式，不推荐，需要明确产品变更 |
 
-按 A：PKCanvasView 使用 pencilOnly 策略，关闭自身滚动/缩放与 PKToolPicker。**pencilOnly 不等于触摸穿透**。RN host 只覆盖 DOM 报告的画布区域，工具栏、安全控件、文字编辑区和尺子等命中区域不得被挡住。
+按 A：PKCanvasView 使用 pencilOnly 策略，关闭自身滚动/缩放与 PKToolPicker。**pencilOnly 不等于触摸穿透**。原生仅接管 DOM 报告的画布区域，工具栏、安全控件、文字编辑区和尺子等命中区域不得被挡住。
+
+G2 原型修订（2026-10-23，尚待真机验证）：同级覆盖层依赖初始 hitTest 的 UIEvent.allTouches 判别类型，真机回执 `no-touch-metadata`，没有进入原生采样。候选改为 PKCanvasView 承载真实 Expo DOM 后代，hitTest 只做几何定位；公开 drawingGestureRecognizer 在实际 UITouch 到达后按类型/区域过滤，旁路观察器只采真实 Pencil。运行时检查绘制识别器是否确为 DOM 的祖先；若 Web 收到应归原生的自由笔 Pencil 则阻止落墨并报告故障。手指、其他工具与控件继续使用真实 Web 输入。此修订仅用于重测 G2/G3，不推进 3.x，也不将层级挂载或消息回执视为门槛通过；若 PencilKit 的实际识别器层级/delegate 不支持候选组合，停止构建并回到 D2 评审。
 
 输入归属仍由同一 controller 决定：native 的有效 Pencil down 具有与 DOM pen down 相同的自动检测语义；自动初始/强制手指允许手指 Web 绘制，自动检测笔后/强制笔允许手指 Web 导航；强制手指仍允许 Pencil。双指取消、掌触隔离、模式切换遵守原规格，不能两端各自检测后独立锁定。
 

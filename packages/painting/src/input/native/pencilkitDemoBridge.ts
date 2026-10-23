@@ -383,9 +383,16 @@ export function connectPencilkitDemo(options: {
   window.addEventListener('resize', resize);
   const mutations = new MutationObserver(publish);
   mutations.observe(host, { childList: true, subtree: true });
+  arbiter.setNativePencilGuard(() => {
+    faulted = true;
+    cancel('dom-pencil-fallback');
+    reply({ id: 0, contextKey, status: 'rejected', reason: 'dom-pencil-fallback' });
+    publish();
+  });
   connection.register(receive);
   publish();
   return () => {
+    arbiter.setNativePencilGuard(undefined);
     cancel('unmount');
     arbiter.releaseNativePencil();
     destroyed = true;
