@@ -7,8 +7,9 @@ import UIKit
  * 采样规则（与 design.md D1/G1 一一对应，rules 字段会随日志导出作为证据）：
  *   - 只用公开 UIKit 接口：PKCanvasView 子类重写 touchesBegan/Moved/Ended/
  *     Cancelled 并先调 super，不抢占 PencilKit 手势；coalesced 取自 UIEvent。
- *   - 去重按事件身份（同一 touch 流内相同 UIKit timestamp 视为同一实际样本），
- *     不按坐标去重；不合并、不预测、不按时间重排，seq 即接收次序。
+ *   - 主/coalesced 采样重叠按同一 touch 流内 UIKit timestamp 去重；真实
+ *     up/cancel 是独立生命周期边界，即使 timestamp 相同也保留，不按坐标去重。
+ *     不合并、不预测、不按时间重排，seq 即接收次序。
  *   - 时间基准统一为 UIKit monotonic timestamp（毫秒），不混用 JS Date.now。
  *   - pressure capability 由 maximumPossibleForce > 0 判定；pressure =
  *     force / maximumPossibleForce，不 clamp；capability 缺失时 pressure
@@ -19,7 +20,7 @@ import UIKit
  *   - tap 来自真实 down/up；仅采集 .pencil 触摸，其他类型计数后忽略。
  *
  * 工程限额（诊断用，与 design 初值同量级）：单笔最多 50,000 样本，超出置
- * overflow 并停止该笔记录；最多保留最近 20 笔完成笔供导出。
+ * overflow 并停止 move 记录，预留末个槽位给真实 up/cancel；最多保留最近 20 笔。
  */
 final class PencilkitG1Sampler {
   static let shared = PencilkitG1Sampler()
@@ -42,6 +43,7 @@ final class PencilkitG1Sampler {
     let id: Int
     let startTimestamp: TimeInterval
     var lastTimestamp: TimeInterval = -1
+    var recordedTimestamps: Set<TimeInterval> = []
     var samples: [[String: Any]] = []
     var seq = 0
     var downCount = 0
@@ -84,7 +86,7 @@ final class PencilkitG1Sampler {
     defer { lock.unlock() }
     for touch in touches where touch.type == .pencil {
       guard var session = activeSessions[ObjectIdentifier(touch)] else { continue }
-      // 主事件先记，coalesced 中时间戳等于已收末样本的视为同一实际样本跳过。
+      // 主事件先记，coalesced 中已接收过的时间戳视为同一实际样本跳过。
       record(&session, touch: touch, phase: "move", kind: "main", in: view)
       if let coalesced = event?.coalescedTouches(for: touch) {
         for extra in coalesced {
@@ -129,11 +131,11 @@ final class PencilkitG1Sampler {
       "ignoredNonPencilTouches": ignoredNonPencilTouches,
       "rules": [
         "采样: PKCanvasView 子类 touches* 重写并先调 super，公开 UIKit 接口，不抢占 PK 手势",
-        "去重: 同一 touch 流内相同 UIKit timestamp 视为同一实际样本跳过；不按坐标去重、不重排",
+        "去重: 同一 touch 流内主/coalesced 相同 UIKit timestamp 跳过；真实 up/cancel 边界独立保留；不按坐标去重、不重排",
         "时间: 统一 UIKit monotonic timestamp 毫秒；t 为相对首样本，tabs 为绝对；不混用 JS Date.now",
         "压力: capability = maximumPossibleForce > 0；p = f/mf 不 clamp；能力缺失时 p 为 null",
         "估计: 样本保留 estimatedProperties/expectingUpdates 原值；迟到更新只计 lateEstimateEvents，不改写样本",
-        "限额: 单笔最多 50000 样本（超出 overflow=true）；保留最近 20 笔",
+        "限额: 单笔最多 50000 样本（预留末个槽位给真实 up/cancel，超出 overflow=true）；保留最近 20 笔",
       ],
       "strokeCount": completedStrokes.count,
       "strokes": completedStrokes,
@@ -169,7 +171,8 @@ final class PencilkitG1Sampler {
       let key = ObjectIdentifier(touch)
       guard var session = activeSessions[key] else { continue }
       if let coalesced = event?.coalescedTouches(for: touch) {
-        for extra in coalesced {
+        // 结束事件与其 coalesced 副本共用 timestamp 时，只接收真实 main/up。
+        for extra in coalesced where extra.timestamp != touch.timestamp {
           record(&session, touch: extra, phase: "move", kind: "coalesced", in: view)
         }
       }
@@ -198,14 +201,17 @@ final class PencilkitG1Sampler {
     kind: String,
     in view: UIView
   ) {
-    // 事件身份去重：与已收末样本同 timestamp 即同一实际样本，跳过。
-    if touch.timestamp == session.lastTimestamp { return }
-    if session.overflow { return }
-    if session.samples.count >= maxSamplesPerStroke {
+    let isTerminal = phase == "up" || phase == "cancel"
+    // 生命周期结束不能被相同 timestamp 的已收 move/down 吞掉。
+    if !isTerminal && session.recordedTimestamps.contains(touch.timestamp) { return }
+    if session.overflow && !isTerminal { return }
+    let sampleLimit = isTerminal ? maxSamplesPerStroke : maxSamplesPerStroke - 1
+    if session.samples.count >= sampleLimit {
       session.overflow = true
       return
     }
     session.lastTimestamp = touch.timestamp
+    session.recordedTimestamps.insert(touch.timestamp)
 
     let maxForce = touch.maximumPossibleForce
     let capability = maxForce > 0

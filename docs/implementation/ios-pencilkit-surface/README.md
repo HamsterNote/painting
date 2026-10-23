@@ -231,7 +231,7 @@ npx eas-cli@25.3.0 build --platform ios --profile development --clear-cache --no
 通过判据（对照导出 JSON 逐笔核验）：
 
 - 每笔 `counts.down == 1` 且 `counts.up == 1`（cancel 笔除外，需说明触发原因）；tap 也有真实 down/up，非合成；
-- `samples` 按 `seq` 连续无重号；同一笔内不存在相同 `tabs`（绝对毫秒）的重复样本（事件身份去重生效，且未按坐标去重）；
+- `samples` 按 `seq` 连续无重号；主/coalesced 重叠采样按 `tabs` 去重，跨批次重叠也只接收一次，不按坐标去重。真实 `up/cancel` 是独立生命周期边界，即使与先前 down/move 的 `tabs` 相同也必须保留，不能仅凭 timestamp 把真实结束事件丢弃；结束批次内同 timestamp 的 coalesced 副本不另记；
 - 快速笔 `counts.coalesced > 0`（证明 coalesced 通道在工作）；样本只有 `kind: main/coalesced` 两类，无预测/插值样本；
 - `pressure.capability == true` 时变化压力笔的 `pressure.min/max` 有明显区间（非恒值、非 clamp 的 0/1）；`p` 恒在合理范围但不强制截断；能力缺失设备则 `p` 全为 `null` 并在回传注明；
 - 日志 `rules` 字段完整列出采样/去重/时间/压力/估计/限额六条规则；`estimated.lateEstimateEvents` 仅为计数，已收样本不被迟到估计值改写；
@@ -251,6 +251,18 @@ Swift `EventDispatcher` 发送单笔字典，Expo 将其作为 RN 事件的 `nat
 4. 导出 JSON，对照摘要与原始 `strokes` 的 id/计数/压力；再清空并重画，确认列表恢复。G1 的完整采证与通过判据仍按上节执行。
 
 最小自动回归：`pnpm exec jest --selectProjects native --runInBand --runTestsByPath tests/jest/native/pencilkit-probe.native.test.tsx`。测试模拟事件回收、空/畸形事件和有效事件交错，只证明 JS 接收与渲染安全，不替代真机采样结论。
+
+#### G1 terminal 样本与去重修复复测
+
+`finish()` 曾先写入结束批次的 coalesced，再按末个 timestamp 去重，误丢同 timestamp 的真实 main/up。现跳过结束批次中与 terminal 同 timestamp 的 coalesced 副本，并独立接收真实 main/up 或 main/cancel；不从旧样本复制、不修改已收 move，也不生成时间戳。普通主/coalesced 重叠按整笔已收 timestamp 去重（不限相邻样本）。50,000 总样本上限保留一个 terminal 槽位；超限仍标记 overflow，不作为完整采样通过。
+
+自动回归：在装有 Swift 编译器的 Mac/Linux 执行 `node scripts/test-pencilkit-g1.mjs`；也可用 `SWIFTC=/path/to/swiftc` 指定编译器。它编译生产 `PencilkitG1Sampler.swift`，仅用 host UIKit/PencilKit 替身提供输入，覆盖同 timestamp 的 coalesced/up、既有 move/up、cancel、tap、重复 finish、跨批次重复采样与超限 terminal，以及原始压力/迟到估计规则。这不是 UIKit 或真机行为验证。
+
+**本次改动含 Swift，必须重建并安装新的 custom development build；仅 Reload Metro 或重装旧 IPA 无效。** Mac 保留现有 `app.json` 配置并快进任务分支，按第 1A 节重新提交 EAS development build，记录新 build ID/SHA，再安装到目标 iPad、连接 LAN Metro。清空 Probe 后按第 2.2 节完整用例重新导出 JSON 和摘要截图，逐笔确认：
+
+- `counts.down == 1`、`counts.up == 1`；`samples` 第一项 `main/down`、最后一项 `main/up`（真实取消为 `main/cancel` 且 `cancelled=true`）。
+- `counts.main + counts.coalesced == counts.total == samples.length`，`seq` 连续，terminal 原始时间/压力如实保留；快速笔仍有真实 coalesced。
+- 保留原始失败日志作为对照，不改写旧日志或将本地确定性测试当作 G1 真机通过。
 
 ### 2.3 G2（tasks 2.3）：Pencil 与手指分流
 
