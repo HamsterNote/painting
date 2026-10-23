@@ -84,6 +84,15 @@ export type PencilkitStrokesLog = Readonly<{
 }>;
 
 export type PaintingPencilkitViewProps = Readonly<{
+  onDemoStatus?: (
+    event: NativeSyntheticEvent<{
+      contextKey: string;
+      enabled: boolean;
+      width: number;
+      height: number;
+      lastHit: string;
+    }>
+  ) => void;
   /** Serialized, bounded G2/G3 experimental control state. Omit for the G1 Probe. */
   demoState?: string;
   onBegin?: (
@@ -112,7 +121,7 @@ const NativeView: React.ComponentType<PaintingPencilkitViewProps> | undefined = 
   : undefined;
 
 export function isPencilkitDemoAvailable(): boolean {
-  return NativeModule?.demoBridgeVersion === 1;
+  return NativeModule?.demoBridgeVersion === 2;
 }
 
 export function PaintingPencilkitView(props: PaintingPencilkitViewProps) {

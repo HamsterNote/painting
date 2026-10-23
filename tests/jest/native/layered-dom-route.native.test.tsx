@@ -1,9 +1,12 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { isPencilkitDemoAvailable } from '@hamster-note/painting-pencilkit';
 import LayeredEditorRoute from '../../../apps/playground/src/layered-editor/LayeredEditorRoute';
 
-jest.mock('expo-router', () => ({ useLocalSearchParams: jest.fn(() => ({})) }));
+jest.mock('expo-router', () => ({
+  useLocalSearchParams: jest.fn(() => ({})),
+  useRouter: jest.fn(() => ({ setParams: jest.fn() })),
+}));
 jest.mock('@hamster-note/painting-pencilkit', () => {
   const React = require('react');
   const { View } = require('react-native');
@@ -51,6 +54,16 @@ test('opt-in uses the native canvas and queues pooled events until the DOM ackno
     })
   );
   const canvas = () => result.getByTestId('layered-pencilkit-canvas');
+  expect(result.getByTestId('layered-native-status').props.children).toContain('等待原生视图');
+  await fireEvent(canvas(), 'ready', { nativeEvent: { moduleVersion: '0.1.0' } });
+  expect(result.getByTestId('layered-native-status').props.children).toContain('等待原生配置回执');
+  await fireEvent(canvas(), 'demoStatus', {
+    nativeEvent: { contextKey: 'epoch:1', enabled: true, width: 800, height: 600, lastHit: 'none' },
+  });
+  expect(result.getByTestId('layered-native-status').props.children).toBe('PencilKit 原生已启用');
+  expect(result.getByTestId('layered-native-evidence').props.children.join('')).toContain(
+    '原生起笔 0'
+  );
   expect(canvas().props.inkWidth).toBe(10);
   expect(canvas().props.inkOpacity).toBe(0.4);
   expect(JSON.parse(canvas().props.demoState).exclusions).toHaveLength(1);
@@ -70,6 +83,9 @@ test('opt-in uses the native canvas and queues pooled events until the DOM ackno
   };
   await fireEvent(canvas(), 'begin', event);
   event.nativeEvent = null;
+  expect(result.getByTestId('layered-native-evidence').props.children.join('')).toContain(
+    '原生起笔 1'
+  );
   const stroke = {
     id: 1,
     contextKey: 'epoch:1',
@@ -78,12 +94,25 @@ test('opt-in uses the native canvas and queues pooled events until the DOM ackno
     samples: [sample, { ...sample, seq: 1, phase: 'up', f: 0, p: 0 }],
   };
   await fireEvent(canvas(), 'stroke', { nativeEvent: stroke });
+  expect(result.getByTestId('layered-native-evidence').props.children.join('')).toContain('完成 1');
+  expect(result.getByTestId('layered-native-evidence').props.children.join('')).toContain(
+    '文档提交 0'
+  );
   expect(host().props.nativeMessage.type).toBe('begin');
   expect(host().props.nativeMessage.sample).toEqual(sample);
   await act(async () =>
     host().props.onNativeReply({ id: 1, contextKey: 'epoch:1', messageId: 1, status: 'accepted' })
   );
   expect(host().props.nativeMessage.type).toBe('stroke');
+  await act(async () =>
+    host().props.onNativeReply({ id: 1, contextKey: 'epoch:1', messageId: 2, status: 'committed' })
+  );
+  await act(async () =>
+    host().props.onNativeReply({ id: 1, contextKey: 'epoch:1', messageId: 2, status: 'committed' })
+  );
+  expect(result.getByTestId('layered-native-evidence').props.children.join('')).toContain(
+    '文档提交 1'
+  );
   await act(async () =>
     host().props.onNativeReply({ id: 1, contextKey: 'old-epoch:1', status: 'retire' })
   );
@@ -92,6 +121,16 @@ test('opt-in uses the native canvas and queues pooled events until the DOM ackno
     host().props.onNativeReply({ id: 1, contextKey: 'epoch:1', status: 'retire' })
   );
   expect(JSON.parse(canvas().props.demoState).retireIDs).toEqual([1]);
+  jest.mocked(useLocalSearchParams).mockReturnValue({ pencilkit: '0' });
+  await result.rerender(<LayeredEditorRoute />);
+  expect(result.queryByTestId('layered-pencilkit-canvas')).toBeNull();
+  expect(result.getByTestId('layered-native-status').props.children).toBe('Web / DOM');
+  jest.mocked(useLocalSearchParams).mockReturnValue({ pencilkit: '1' });
+  await result.rerender(<LayeredEditorRoute />);
+  expect(result.getByTestId('layered-native-status').props.children).toContain('等待 DOM 连接');
+  expect(result.getByTestId('layered-native-evidence').props.children.join('')).toContain(
+    '原生起笔 0'
+  );
   await result.unmount();
 });
 
@@ -105,10 +144,76 @@ test('old IPA reports a build mismatch and never claims native Demo input', asyn
 });
 
 test('native route mounts the whole DOM editor with layout-only props', async () => {
+  const setParams = jest.fn();
+  jest.mocked(useRouter).mockReturnValue({ setParams } as unknown as ReturnType<typeof useRouter>);
   const result = await render(<LayeredEditorRoute />);
   const host = result.getByTestId('expo-dom-editor-host');
   expect(host.props.dom).toEqual({ style: { flex: 1 } });
   expect(
     Object.keys(host.props).filter((key) => !['testID', 'dom', 'children'].includes(key))
   ).toEqual([]);
+  expect(result.getByTestId('layered-native-status').props.children).toBe('Web / DOM');
+  await fireEvent(result.getByTestId('layered-pencilkit-toggle'), 'valueChange', true);
+  expect(setParams).toHaveBeenCalledWith({ pencilkit: '1' });
+});
+
+test('native status requires a current configuration acknowledgement and nonempty layout', async () => {
+  jest.mocked(useLocalSearchParams).mockReturnValue({ pencilkit: '1' });
+  const result = await render(<LayeredEditorRoute />);
+  const state = {
+    protocolVersion: 1,
+    contextKey: 'current:2',
+    enabled: false,
+    frame: { x: 0, y: 0, width: 800, height: 600 },
+    exclusions: [],
+    scale: 1,
+    brush: { color: '#000', nominalSize: 4, opacity: 1 },
+  };
+  await act(async () => result.getByTestId('expo-dom-editor-host').props.onNativeState(state));
+  const canvas = () => result.getByTestId('layered-pencilkit-canvas');
+  const status = () => result.getByTestId('layered-native-status').props.children;
+  const evidence = () => result.getByTestId('layered-native-evidence').props.children.join('');
+  await fireEvent(canvas(), 'ready', { nativeEvent: { moduleVersion: '0.1.0' } });
+  await fireEvent(canvas(), 'demoStatus', {
+    nativeEvent: {
+      contextKey: 'current:1',
+      enabled: true,
+      width: 800,
+      height: 600,
+      lastHit: 'pencil',
+    },
+  });
+  expect(status()).toContain('等待原生配置回执');
+  await fireEvent(canvas(), 'demoStatus', { nativeEvent: null });
+  await fireEvent(canvas(), 'demoStatus', {
+    nativeEvent: {
+      contextKey: 'current:2',
+      enabled: false,
+      width: 800,
+      height: 600,
+      lastHit: 'disabled',
+    },
+  });
+  expect(status()).toBe('PencilKit 画布已停用');
+  expect(evidence()).toContain('hit=disabled');
+  await act(async () =>
+    result.getByTestId('expo-dom-editor-host').props.onNativeState({ ...state, enabled: true })
+  );
+  await fireEvent(canvas(), 'demoStatus', {
+    nativeEvent: { contextKey: 'current:2', enabled: true, width: 0, height: 0, lastHit: 'none' },
+  });
+  expect(status()).toContain('等待画布布局');
+  await fireEvent(canvas(), 'demoStatus', {
+    nativeEvent: {
+      contextKey: 'current:2',
+      enabled: true,
+      width: 800,
+      height: 600,
+      lastHit: 'no-touch-metadata',
+    },
+  });
+  expect(status()).toBe('PencilKit 原生已启用');
+  expect(evidence()).toContain('hit=no-touch-metadata');
+  expect(evidence()).toContain('原生起笔 0');
+  await result.unmount();
 });

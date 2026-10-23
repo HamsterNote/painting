@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { AppState, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { PaintingPencilkitView, isPencilkitDemoAvailable } from '@hamster-note/painting-pencilkit';
 import {
   isPencilkitDemoSample,
@@ -17,6 +17,7 @@ type Outgoing<T = PencilkitDemoMessage> = T extends PencilkitDemoMessage
 
 /** Explicit G2/G3 validation only; default enablement still requires device acceptance. */
 export default function LayeredEditorRoute() {
+  const router = useRouter();
   const params = useLocalSearchParams<{
     pencilkit?: string;
     diagnostics?: string;
@@ -32,10 +33,30 @@ export default function LayeredEditorRoute() {
   const [retireIDs, setRetireIDs] = useState<number[]>([]);
   const [fault, setFault] = useState('');
   const [ready, setReady] = useState(false);
+  const [nativeStatus, setNativeStatus] = useState<{
+    contextKey: string;
+    enabled: boolean;
+    width: number;
+    height: number;
+    lastHit: string;
+  }>();
+  const [counts, setCounts] = useState({ began: 0, completed: 0, committed: 0 });
   const nextMessage = useRef(0);
   const transport = useRef<PencilkitDemoMessage[]>([]);
   const epoch = useRef('');
   const pending = useRef(new Set<number>());
+  useEffect(() => {
+    if (requested) return;
+    transport.current = [];
+    pending.current.clear();
+    setQueue([]);
+    setRetireIDs([]);
+    setState(undefined);
+    setNativeStatus(undefined);
+    setFault('');
+    setReady(false);
+    setCounts({ began: 0, completed: 0, committed: 0 });
+  }, [requested]);
   const enqueue = useCallback((message: Outgoing) => {
     if (transport.current.length >= 12) {
       setFault('transport-overflow');
@@ -59,12 +80,17 @@ export default function LayeredEditorRoute() {
       setRetireIDs([]);
       setFault('');
       setReady(false);
+      setNativeStatus(undefined);
+      setCounts({ began: 0, completed: 0, committed: 0 });
     }
     setState(next);
   }, []);
   const onReply = useCallback(async (reply: PencilkitDemoReply) => {
     if (reply.contextKey && reply.contextKey.split(':')[0] !== epoch.current) return;
     if (reply.messageId !== undefined) {
+      const message = transport.current.find((entry) => entry.messageId === reply.messageId);
+      if (message?.type === 'stroke' && reply.status === 'committed')
+        setCounts((previous) => ({ ...previous, committed: previous.committed + 1 }));
       transport.current = transport.current.filter(
         (message) => message.messageId !== reply.messageId
       );
@@ -105,31 +131,55 @@ export default function LayeredEditorRoute() {
   }, [queue]);
   return (
     <View style={styles.root} testID="layered-ios-host">
-      {requested ? (
-        <View style={styles.status}>
-          <Text testID="layered-native-status">
-            {!available
-              ? 'PencilKit 构建不匹配，请安装新 development build'
-              : fault
-                ? `PencilKit 已暂停：${fault}`
-                : ready && state
-                  ? 'PencilKit · G2/G3 验证'
-                  : 'PencilKit 等待就绪'}
+      <View style={styles.status}>
+        <View style={styles.statusRow}>
+          <Text testID="layered-native-status" numberOfLines={2} style={styles.statusTitle}>
+            {!requested
+              ? 'Web / DOM'
+              : !available
+                ? 'PencilKit 构建不匹配，请安装新 development build'
+                : fault
+                  ? `PencilKit 已暂停：${fault}`
+                  : !state
+                    ? 'PencilKit 等待 DOM 连接'
+                    : !ready
+                      ? 'PencilKit 等待原生视图'
+                      : !nativeStatus || nativeStatus.contextKey !== state.contextKey
+                        ? 'PencilKit 等待原生配置回执'
+                        : !state.enabled || !nativeStatus.enabled
+                          ? 'PencilKit 画布已停用'
+                          : nativeStatus.width <= 0 || nativeStatus.height <= 0
+                            ? 'PencilKit 等待画布布局'
+                            : 'PencilKit 原生已启用'}
           </Text>
-          {fault ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                setFault('');
-                transport.current = [];
-                enqueue({ type: 'reset', contextKey: '', id: 0 });
-              }}
-            >
-              <Text>重试</Text>
-            </Pressable>
-          ) : null}
+          <Switch
+            testID="layered-pencilkit-toggle"
+            accessibilityLabel="PencilKit"
+            value={requested}
+            onValueChange={(value) => router.setParams({ pencilkit: value ? '1' : '0' })}
+          />
         </View>
-      ) : null}
+        {requested && available ? (
+          <Text testID="layered-native-evidence" numberOfLines={3} style={styles.evidence}>
+            {`原生起笔 ${counts.began} · 完成 ${counts.completed} · 文档提交 ${counts.committed}`}
+            {nativeStatus
+              ? ` · hit=${nativeStatus.lastHit} · canvas=${Math.round(nativeStatus.width)}x${Math.round(nativeStatus.height)}`
+              : ''}
+          </Text>
+        ) : null}
+        {requested && fault ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setFault('');
+              transport.current = [];
+              enqueue({ type: 'reset', contextKey: '', id: 0 });
+            }}
+          >
+            <Text>重试</Text>
+          </Pressable>
+        ) : null}
+      </View>
       <View style={styles.editor}>
         <LayeredEditorDom
           dom={{ style: { flex: 1 } }}
@@ -171,7 +221,22 @@ export default function LayeredEditorRoute() {
               inkColor={state.brush.color}
               inkWidth={state.brush.nominalSize * state.scale}
               inkOpacity={state.brush.opacity}
-              onReady={() => setReady(true)}
+              onReady={(event) => {
+                if (typeof event?.nativeEvent?.moduleVersion === 'string') setReady(true);
+              }}
+              onDemoStatus={(event) => {
+                const status = event?.nativeEvent;
+                if (
+                  typeof status?.contextKey !== 'string' ||
+                  status.contextKey !== state.contextKey ||
+                  typeof status.enabled !== 'boolean' ||
+                  !Number.isFinite(status.width) ||
+                  !Number.isFinite(status.height) ||
+                  typeof status.lastHit !== 'string'
+                )
+                  return;
+                setNativeStatus({ ...status });
+              }}
               onBegin={(event) => {
                 const begin = event?.nativeEvent;
                 if (typeof begin?.contextKey !== 'string') return;
@@ -185,6 +250,7 @@ export default function LayeredEditorRoute() {
                   return;
                 }
                 pending.current.add(begin.id);
+                setCounts((previous) => ({ ...previous, began: previous.began + 1 }));
                 enqueue({
                   type: 'begin',
                   id: begin.id,
@@ -201,6 +267,7 @@ export default function LayeredEditorRoute() {
                   setFault('invalid-native-stroke');
                   return;
                 }
+                setCounts((previous) => ({ ...previous, completed: previous.completed + 1 }));
                 enqueue({ type: 'stroke', id: stroke.id, contextKey, stroke });
               }}
               onPreviewRetired={(event) => {
@@ -223,9 +290,17 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#fff' },
   editor: { flex: 1 },
   status: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 4,
     padding: 8,
     backgroundColor: '#e7f4ef',
   },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 40,
+    gap: 8,
+    justifyContent: 'space-between',
+  },
+  statusTitle: { flex: 1, height: 36, fontSize: 14, lineHeight: 18 },
+  evidence: { height: 48, fontSize: 12, lineHeight: 16 },
 });

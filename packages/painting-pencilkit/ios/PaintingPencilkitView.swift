@@ -23,6 +23,8 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   private var previews = PencilkitPreviewLedger()
   private var updatingDrawing = false
   private var collectingID: Int?
+  private var lastHit = "none"
+  private var lastDemoStatus = ""
 
   private struct DemoState: Decodable {
     let contextKey: String
@@ -35,8 +37,8 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
     let y: Double
     let width: Double
     let height: Double
-    func contains(_ point: CGPoint) -> Bool {
-      CGRect(x: x, y: y, width: width, height: height).contains(point)
+    var rect: CGRect {
+      CGRect(x: x, y: y, width: width, height: height)
     }
   }
 
@@ -53,6 +55,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   let onStroke = EventDispatcher()
   let onBegin = EventDispatcher()
   let onPreviewRetired = EventDispatcher()
+  let onDemoStatus = EventDispatcher()
 
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
@@ -90,6 +93,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   override func layoutSubviews() {
     super.layoutSubviews()
     canvasView.frame = bounds
+    publishDemoStatus()
   }
 
   override func didMoveToWindow() {
@@ -97,6 +101,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
     guard window != nil, !didDispatchReady else { return }
     didDispatchReady = true
     dispatchReady()
+    publishDemoStatus()
   }
 
   // MARK: - Props
@@ -138,17 +143,18 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
       previews.finishTool()
     }
     reconcilePreviews()
+    publishDemoStatus()
   }
 
-  // An actual UIKit hit test, not pencilOnly (which still consumes finger touches).
-  // Missing/ambiguous touch metadata falls through to the real WKWebView.
+  // Finger-only events fall through to the real WKWebView; pencilOnly alone cannot do this.
   override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
     if let state = demoState {
-      guard state.enabled, bounds.contains(point), !state.exclusions.contains(where: { $0.contains(point) }),
-            event?.allTouches?.contains(where: { touch in
-              let location = touch.location(in: self)
-              return touch.type == .pencil && abs(location.x - point.x) < 1 && abs(location.y - point.y) < 1
-            }) == true else { return nil }
+      lastHit = PencilkitDemoHitTesting.decision(
+        point: point, bounds: bounds, enabled: state.enabled,
+        exclusions: state.exclusions.map { $0.rect }, event: event
+      )
+      publishDemoStatus()
+      guard lastHit == "pencil" else { return nil }
     }
     return super.hitTest(point, with: event)
   }
@@ -216,10 +222,24 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
 
   // MARK: - Ready event
 
+  private func publishDemoStatus() {
+    guard window != nil, let state = demoState else { return }
+    let signature = "\(state.contextKey):\(state.enabled):\(bounds.width):\(bounds.height):\(lastHit)"
+    guard signature != lastDemoStatus else { return }
+    lastDemoStatus = signature
+    onDemoStatus([
+      "contextKey": state.contextKey,
+      "enabled": state.enabled,
+      "width": bounds.width,
+      "height": bounds.height,
+      "lastHit": lastHit,
+    ])
+  }
+
   private func dispatchReady() {
     onReady([
       "moduleVersion": "0.1.0",
-      "demoBridgeVersion": 1,
+      "demoBridgeVersion": 2,
       "osVersion": ProcessInfo.processInfo.operatingSystemVersionString,
       "deviceModel": UIDevice.current.model,
       "drawingPolicy": pencilOnly ? "pencilOnly" : "anyInput",

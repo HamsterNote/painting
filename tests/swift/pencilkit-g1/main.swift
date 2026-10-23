@@ -214,7 +214,30 @@ func testProtocolCancellationDoesNotFabricateRawEnd() {
   _ = verifyCompleted(sampler)
 }
 
+func testDemoPencilHitTesting() {
+  let pencil = UITouch(1)
+  pencil.location = CGPoint(x: 0, y: 0)
+  let finger = UITouch(1)
+  finger.type = .direct
+  func hit(_ event: UIEvent?, enabled: Bool = true, exclusions: [CGRect] = []) -> String {
+    PencilkitDemoHitTesting.decision(
+      point: CGPoint(x: 50, y: 50), bounds: CGRect(x: 0, y: 0, width: 100, height: 100),
+      enabled: enabled, exclusions: exclusions, event: event
+    )
+  }
+  check(hit(UIEvent([pencil])) == "pencil", "Pencil must not require a pre-hit-test UITouch location match")
+  check(hit(UIEvent([finger])) == "non-pencil", "finger-only events must reach the real WebView")
+  check(hit(UIEvent([finger, pencil])) == "pencil", "palms must not steal an active Pencil event")
+  check(hit(nil) == "no-touch-metadata", "missing event metadata must remain observable and fall through")
+  check(hit(UIEvent([])) == "no-touch-metadata", "empty metadata must not claim native input")
+  check(hit(UIEvent([pencil]), enabled: false) == "disabled", "disabled canvas captured input")
+  check(hit(UIEvent([pencil]), exclusions: [CGRect(x: 40, y: 40, width: 20, height: 20)]) == "control", "native canvas captured an excluded control")
+  pencil.phase = .ended
+  check(hit(UIEvent([pencil, finger])) == "non-pencil", "ended Pencil must not capture a later finger")
+}
+
 let tests: [(String, () -> Void)] = [
+  ("Demo Pencil hit testing tolerates stale positions and preserves finger/control routing", testDemoPencilHitTesting),
   ("terminal coalesced overlap and repeated finish", testTerminalCoalescedOverlap),
   ("up/cancel sharing a previously accepted timestamp", testTerminalWithPreviouslyAcceptedTimestamp),
   ("tap with equal/distinct timestamps and no coalesced event", testTapAndMissingCoalesced),

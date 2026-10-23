@@ -9,6 +9,10 @@ public enum TouchType {
   case pencil, direct
 }
 
+public enum TouchPhase {
+  case began, moved, stationary, ended, cancelled
+}
+
 public struct TouchProperties: OptionSet {
   public let rawValue: Int
   public init(rawValue: Int) { self.rawValue = rawValue }
@@ -31,6 +35,7 @@ open class UIView: NSObject {
 public final class UITouch: NSObject {
   public var timestamp: TimeInterval
   public var type: TouchType = .pencil
+  public var phase: TouchPhase = .began
   public var force = 0.0
   public var maximumPossibleForce = 1.0
   public var estimatedProperties = TouchProperties(rawValue: 0)
@@ -43,6 +48,7 @@ public final class UITouch: NSObject {
 
 public final class UIEvent: NSObject {
   private let coalesced: [UITouch]
+  public var allTouches: Set<UITouch>? { Set(coalesced) }
   public init(_ coalesced: [UITouch]) { self.coalesced = coalesced }
   public func coalescedTouches(for touch: UITouch) -> [UITouch]? { coalesced }
 }
