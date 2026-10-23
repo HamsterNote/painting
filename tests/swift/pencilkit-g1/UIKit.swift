@@ -1,6 +1,9 @@
 // Deterministic UIKit stand-ins for testing the production sampler on a host Swift toolchain.
 // These do not simulate PencilKit rendering or establish device sampling evidence.
 @_exported import Foundation
+#if canImport(CoreGraphics)
+@_exported import CoreGraphics
+#endif
 
 public enum TouchType {
   case pencil, direct
