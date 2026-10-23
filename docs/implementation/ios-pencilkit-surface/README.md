@@ -239,6 +239,19 @@ npx eas-cli@25.3.0 build --platform ios --profile development --clear-cache --no
 
 任一不满足 → 停止后续接入，带日志回 D1 评审；不允许用 PKStrokePath 枚举或私有 API 补造 raw 顶替。
 
+#### G1 Probe 的 `onStroke` 回归复测
+
+Swift `EventDispatcher` 发送单笔字典，Expo 将其作为 RN 事件的 `nativeEvent` 传入 JS。Probe 必须在回调内提取并校验摘要，不能在延迟执行的 state updater 内读取事件对象（RN 回收后 `nativeEvent` 可为 null）。空值或显示字段畸形的事件不加入摘要列表；不填造样本、不修改原生采样器或 `getStrokesLog()` 导出内容。
+
+本次修复仅改 JS/TS，可继续使用 EAS build `f4d24c50-b888-4672-8601-52f27b838d5e` 的 custom development client，无需重建 IPA：
+
+1. Mac 在原任务分支执行 `git fetch origin`、`git merge --ff-only origin/agent/agent/4b329d64789b`，保留未提交的 `apps/playground/app.json` projectId/router/加密声明；冲突时停止，不覆盖。
+2. 继续使用 `ham66-metro` 的 LAN Metro（当前 `192.168.0.105:5266`），在 iPad dev client 执行完整 Reload，重新打开 `painting-playground:///pencilkit-probe`，记录 JS SHA 与原生 build ID。
+3. 清空后连续画 tap、快速短笔、压力变化笔；每笔完成后摘要应更新，包含计数、时长、压力和迟到估计，无 `counts of null` 或 `toFixed` 红屏。
+4. 导出 JSON，对照摘要与原始 `strokes` 的 id/计数/压力；再清空并重画，确认列表恢复。G1 的完整采证与通过判据仍按上节执行。
+
+最小自动回归：`pnpm exec jest --selectProjects native --runInBand --runTestsByPath tests/jest/native/pencilkit-probe.native.test.tsx`。测试模拟事件回收、空/畸形事件和有效事件交错，只证明 JS 接收与渲染安全，不替代真机采样结论。
+
 ### 2.3 G2（tasks 2.3）：Pencil 与手指分流
 
 前置增量（待交付）：RN host 中 PKCanvasView 与 DOM/WKWebView 的真实组合（含命中排除区上报的最小实现）。

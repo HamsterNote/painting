@@ -9,7 +9,7 @@
  */
 import { requireNativeModule, requireNativeViewManager } from 'expo-modules-core';
 import type * as React from 'react';
-import type { StyleProp, ViewStyle } from 'react-native';
+import type { NativeSyntheticEvent, StyleProp, ViewStyle } from 'react-native';
 
 /** onReady 事件的 nativeEvent 载荷：证明原生侧配置已生效的可观察事实 */
 export type PaintingPencilkitReadyEvent = Readonly<{
@@ -90,8 +90,8 @@ export type PaintingPencilkitViewProps = Readonly<{
   inkWidth?: number;
   /** 原生 view 上屏后回调一次，携带配置事实 */
   onReady?: (event: { nativeEvent: PaintingPencilkitReadyEvent }) => void;
-  /** 每笔 Pencil 完成（up/cancel）回调，携带 G1 摘要与样本 */
-  onStroke?: (event: { nativeEvent: PencilkitStrokeSummary }) => void;
+  /** 每笔完成的 RN 事件；在回调内提取 nativeEvent，勿在延迟 updater 中读取事件。 */
+  onStroke?: (event: NativeSyntheticEvent<PencilkitStrokeSummary>) => void;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }>;

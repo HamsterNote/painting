@@ -21,7 +21,42 @@ export const PENCILKIT_PROBE_TEST_IDS = {
 /** 屏幕上保留的最近笔迹条数（最新在前） */
 const MAX_VISIBLE_STROKES = 12;
 
-function formatStrokeLine(stroke: PencilkitStrokeSummary): string {
+type StrokeDisplaySummary = Pick<
+  PencilkitStrokeSummary,
+  'id' | 'durationMs' | 'counts' | 'pressure' | 'estimated' | 'cancelled' | 'overflow'
+>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+// Validate only the display fields; raw samples stay in the native G1 log unchanged.
+function isStrokeDisplaySummary(value: unknown): value is StrokeDisplaySummary {
+  if (!isRecord(value)) return false;
+  const { counts, pressure, estimated } = value;
+  return (
+    isFiniteNumber(value.id) &&
+    isFiniteNumber(value.durationMs) &&
+    typeof value.cancelled === 'boolean' &&
+    typeof value.overflow === 'boolean' &&
+    isRecord(counts) &&
+    ['down', 'up', 'main', 'coalesced', 'total'].every((key) => isFiniteNumber(counts[key])) &&
+    isRecord(pressure) &&
+    (pressure.capability === null || typeof pressure.capability === 'boolean') &&
+    (pressure.min === undefined || isFiniteNumber(pressure.min)) &&
+    (pressure.max === undefined || isFiniteNumber(pressure.max)) &&
+    isRecord(estimated) &&
+    ['flagsUnion', 'expectingUnion', 'lateEstimateEvents'].every((key) =>
+      isFiniteNumber(estimated[key])
+    )
+  );
+}
+
+function formatStrokeLine(stroke: StrokeDisplaySummary): string {
   const { counts, pressure, estimated } = stroke;
   const pressureText =
     pressure.capability === true
@@ -51,15 +86,18 @@ function formatStrokeLine(stroke: PencilkitStrokeSummary): string {
  */
 export default function PencilkitProbeRoute() {
   const [ready, setReady] = useState<PaintingPencilkitReadyEvent | null>(null);
-  const [strokes, setStrokes] = useState<PencilkitStrokeSummary[]>([]);
+  const [strokes, setStrokes] = useState<StrokeDisplaySummary[]>([]);
   const [exportState, setExportState] = useState<'idle' | 'busy' | 'error'>('idle');
 
   const handleReady = useCallback((event: { nativeEvent: PaintingPencilkitReadyEvent }) => {
     setReady(event.nativeEvent);
   }, []);
 
-  const handleStroke = useCallback((event: { nativeEvent: PencilkitStrokeSummary }) => {
-    setStrokes((prev) => [event.nativeEvent, ...prev].slice(0, MAX_VISIBLE_STROKES));
+  const handleStroke = useCallback((event: unknown) => {
+    // RN may recycle the event before a deferred state updater runs.
+    const stroke = isRecord(event) ? event.nativeEvent : undefined;
+    if (!isStrokeDisplaySummary(stroke)) return;
+    setStrokes((prev) => [stroke, ...prev].slice(0, MAX_VISIBLE_STROKES));
   }, []);
 
   const handleExport = useCallback(async () => {
