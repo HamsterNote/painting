@@ -4,7 +4,7 @@ import ExpoModulesCore
 public class PaintingPencilkitModule: Module {
   public func definition() -> ModuleDefinition {
     Name("PaintingPencilkit")
-    Constants(["demoBridgeVersion": 3])
+    Constants(["demoBridgeVersion": 4])
 
     // G1 诊断导出：返回采样器当前保留的完成笔与规则说明（见 PencilkitG1Sampler）。
     AsyncFunction("getStrokesLog") { () -> [String: Any] in

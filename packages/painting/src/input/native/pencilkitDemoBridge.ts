@@ -56,6 +56,8 @@ export function connectPencilkitDemo(options: {
   const completed = new Map<number, { key: string; fingerprint: string }>();
   const cancelled = new Map<number, string>();
   let enabled = false;
+  let lastPublication = '';
+  let publicationFrame: number | undefined;
 
   function reply(value: PencilkitDemoReply) {
     if (!destroyed) connection.onReply(value);
@@ -88,6 +90,10 @@ export function connectPencilkitDemo(options: {
   }
   function publish() {
     if (destroyed) return;
+    if (publicationFrame !== undefined) {
+      window.cancelAnimationFrame(publicationFrame);
+      publicationFrame = undefined;
+    }
     const rect = host.getBoundingClientRect();
     const frame = { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
     const exclusions = Array.from(
@@ -171,7 +177,18 @@ export function connectPencilkitDemo(options: {
       beginContexts.set(contextKey, state);
       if (beginContexts.size > 32) beginContexts.delete(beginContexts.keys().next().value!);
     }
-    connection.onState(state);
+    const publication = `${contextKey}:${enabled}`;
+    if (publication !== lastPublication) {
+      lastPublication = publication;
+      connection.onState(state);
+    }
+  }
+  function schedulePublish() {
+    if (destroyed || publicationFrame !== undefined) return;
+    publicationFrame = window.requestAnimationFrame(() => {
+      publicationFrame = undefined;
+      publish();
+    });
   }
   function batch(
     lease: NonNullable<typeof active>,
@@ -319,6 +336,7 @@ export function connectPencilkitDemo(options: {
       }
       if (status === 'rejected') retire(message.id, message.contextKey, reason);
     } else if (message.type === 'stroke') {
+      publish();
       const lease = active;
       const stroke = message.stroke;
       const receipt = completed.get(message.id);
@@ -420,7 +438,8 @@ export function connectPencilkitDemo(options: {
         )
           retire(id, entry.key, 'document-removed');
       }
-      publish();
+      if (['tools', 'input', 'viewport', 'navigation'].includes(channel)) publish();
+      else schedulePublish();
     })
   );
   const resize = () => {
@@ -429,7 +448,7 @@ export function connectPencilkitDemo(options: {
   const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(resize);
   observer?.observe(host);
   window.addEventListener('resize', resize);
-  const mutations = new MutationObserver(publish);
+  const mutations = new MutationObserver(schedulePublish);
   mutations.observe(host, { childList: true, subtree: true });
   arbiter.setNativePencilGuard(() => {
     faulted = true;
@@ -444,6 +463,7 @@ export function connectPencilkitDemo(options: {
     cancel('unmount');
     arbiter.releaseNativePencil();
     destroyed = true;
+    if (publicationFrame !== undefined) window.cancelAnimationFrame(publicationFrame);
     stops.forEach((stop) => stop());
     observer?.disconnect();
     mutations.disconnect();

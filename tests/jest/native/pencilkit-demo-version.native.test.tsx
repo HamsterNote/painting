@@ -8,16 +8,19 @@ jest.mock('expo-modules-core', () => ({
 
 beforeEach(() => jest.clearAllMocks());
 
-test.each([null, { demoBridgeVersion: 1 }, { demoBridgeVersion: 2 }, { demoBridgeVersion: 3 }])(
-  'native Demo requires the ancestor-gesture binary: %j',
-  (module) => {
-    jest.mocked(requireOptionalNativeModule).mockReturnValue(module);
-    let available = false;
-    jest.isolateModules(() => {
-      const view = require('../../../packages/painting-pencilkit/src/PaintingPencilkitView');
-      available = view.isPencilkitDemoAvailable();
-    });
-    expect(available).toBe(module?.demoBridgeVersion === 3);
-    expect(requireNativeViewManager).toHaveBeenCalledTimes(module ? 1 : 0);
-  }
-);
+test.each([
+  null,
+  { demoBridgeVersion: 1 },
+  { demoBridgeVersion: 2 },
+  { demoBridgeVersion: 3 },
+  { demoBridgeVersion: 4 },
+])('native Demo requires the reentrant-safe sampler binary: %j', (module) => {
+  jest.mocked(requireOptionalNativeModule).mockReturnValue(module);
+  let available = false;
+  jest.isolateModules(() => {
+    const view = require('../../../packages/painting-pencilkit/src/PaintingPencilkitView');
+    available = view.isPencilkitDemoAvailable();
+  });
+  expect(available).toBe(module?.demoBridgeVersion === 4);
+  expect(requireNativeViewManager).toHaveBeenCalledTimes(module ? 1 : 0);
+});

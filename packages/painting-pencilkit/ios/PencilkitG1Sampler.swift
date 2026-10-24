@@ -29,6 +29,11 @@ final class PencilkitG1Sampler {
   private let maxSamplesPerStroke = 50_000
   /// 保留的完成笔上限
   private let maxCompletedStrokes = 20
+  private let retainsCompletedStrokes: Bool
+
+  init(retainsCompletedStrokes: Bool = true) {
+    self.retainsCompletedStrokes = retainsCompletedStrokes
+  }
 
   /// 单笔完成回调（主线程触发），由持有 onStroke EventDispatcher 的 view 设置
   var onStrokeCompleted: (([String: Any]) -> Void)?
@@ -58,7 +63,8 @@ final class PencilkitG1Sampler {
   private var completedStrokes: [[String: Any]] = []
   private var ignoredNonPencilTouches = 0
 
-  private struct Session {
+  // A value copied out of the dictionary would copy the entire sample buffer on every move.
+  private final class Session {
     let id: Int
     let startTimestamp: TimeInterval
     var lastTimestamp: TimeInterval = -1
@@ -79,41 +85,50 @@ final class PencilkitG1Sampler {
     var cancelled = false
     var boundsWidth = 0.0
     var boundsHeight = 0.0
+
+    init(id: Int, startTimestamp: TimeInterval, boundsWidth: Double, boundsHeight: Double) {
+      self.id = id
+      self.startTimestamp = startTimestamp
+      self.boundsWidth = boundsWidth
+      self.boundsHeight = boundsHeight
+    }
   }
 
   // MARK: - Touch entry points（主线程，由 canvas 子类在 super 之后调用）
 
   func touchesBegan(_ touches: Set<UITouch>, in view: UIView) {
+    var begins: [[String: Any]] = []
     lock.lock()
-    defer { lock.unlock() }
     for touch in touches where touch.type == .pencil {
-      var session = Session(
+      let session = Session(
         id: nextSessionId,
         startTimestamp: touch.timestamp,
         boundsWidth: Double(view.bounds.width),
         boundsHeight: Double(view.bounds.height)
       )
       nextSessionId += 1
-      record(&session, touch: touch, phase: "down", kind: "main", in: view)
+      record(session, touch: touch, phase: "down", kind: "main", in: view)
       activeSessions[ObjectIdentifier(touch)] = session
-      onStrokeBegan?(["id": session.id, "sample": session.samples[0]])
+      begins.append(["id": session.id, "sample": session.samples[0]])
     }
     countIgnored(touches)
+    lock.unlock()
+    // A host callback can synchronously cancel/reset sampling. Never call it under NSLock.
+    for begin in begins { onStrokeBegan?(begin) }
   }
 
   func touchesMoved(_ touches: Set<UITouch>, event: UIEvent?, in view: UIView) {
     lock.lock()
     defer { lock.unlock() }
     for touch in touches where touch.type == .pencil {
-      guard var session = activeSessions[ObjectIdentifier(touch)] else { continue }
+      guard let session = activeSessions[ObjectIdentifier(touch)] else { continue }
       // 主事件先记，coalesced 中已接收过的时间戳视为同一实际样本跳过。
-      record(&session, touch: touch, phase: "move", kind: "main", in: view)
+      record(session, touch: touch, phase: "move", kind: "main", in: view)
       if let coalesced = event?.coalescedTouches(for: touch) {
         for extra in coalesced {
-          record(&session, touch: extra, phase: "move", kind: "coalesced", in: view)
+          record(session, touch: extra, phase: "move", kind: "coalesced", in: view)
         }
       }
-      activeSessions[ObjectIdentifier(touch)] = session
     }
     countIgnored(touches)
   }
@@ -131,9 +146,8 @@ final class PencilkitG1Sampler {
     lock.lock()
     defer { lock.unlock() }
     for touch in touches {
-      guard var session = activeSessions[ObjectIdentifier(touch)] else { continue }
+      guard let session = activeSessions[ObjectIdentifier(touch)] else { continue }
       session.lateEstimateEvents += 1
-      activeSessions[ObjectIdentifier(touch)] = session
     }
   }
 
@@ -193,37 +207,37 @@ final class PencilkitG1Sampler {
     cancelled: Bool,
     in view: UIView
   ) {
+    var finished: [[String: Any]] = []
     lock.lock()
-    defer { lock.unlock() }
     for touch in touches where touch.type == .pencil {
       let key = ObjectIdentifier(touch)
-      guard var session = activeSessions[key] else { continue }
+      guard let session = activeSessions[key] else { continue }
       if let coalesced = event?.coalescedTouches(for: touch) {
         // 结束事件与其 coalesced 副本共用 timestamp 时，只接收真实 main/up。
         for extra in coalesced where extra.timestamp != touch.timestamp {
-          record(&session, touch: extra, phase: "move", kind: "coalesced", in: view)
+          record(session, touch: extra, phase: "move", kind: "coalesced", in: view)
         }
       }
-      record(&session, touch: touch, phase: phase, kind: "main", in: view)
+      record(session, touch: touch, phase: phase, kind: "main", in: view)
       session.cancelled = cancelled
       activeSessions.removeValue(forKey: key)
 
       let summary = strokeDictionary(session)
-      completedStrokes.append(summary)
-      if completedStrokes.count > maxCompletedStrokes {
-        completedStrokes.removeFirst(completedStrokes.count - maxCompletedStrokes)
+      if retainsCompletedStrokes {
+        completedStrokes.append(summary)
+        if completedStrokes.count > maxCompletedStrokes {
+          completedStrokes.removeFirst(completedStrokes.count - maxCompletedStrokes)
+        }
       }
-      // 回调在主线程同步触发（触摸回调本就在主线程），view 侧只做事件派发。
-      // 回调由 view 在挂载时设置，未设置时仅记录不派发。
-      if let callback = onStrokeCompleted {
-        callback(summary)
-      }
+      finished.append(summary)
     }
     countIgnored(touches)
+    lock.unlock()
+    for summary in finished { onStrokeCompleted?(summary) }
   }
 
   private func record(
-    _ session: inout Session,
+    _ session: Session,
     touch: UITouch,
     phase: String,
     kind: String,

@@ -214,6 +214,80 @@ func testProtocolCancellationDoesNotFabricateRawEnd() {
   _ = verifyCompleted(sampler)
 }
 
+func testLongStrokeAcrossMoveEvents() {
+  let sampler = PencilkitG1Sampler()
+  let view = UIView()
+  let touch = UITouch(1)
+  sampler.touchesBegan([touch], in: view)
+  let started = ProcessInfo.processInfo.systemUptime
+  for index in 1...10_000 {
+    touch.timestamp = Double(index + 1)
+    sampler.touchesMoved([touch], event: UIEvent([UITouch(touch.timestamp - 0.5)]), in: view)
+  }
+  touch.timestamp += 1
+  sampler.touchesEnded([touch], event: nil, in: view)
+  let samples = verifyCompleted(sampler)
+  check(samples.count == 20_002, "long stroke lost accepted main/coalesced samples")
+  print("Long stroke 10000 move events: \(ProcessInfo.processInfo.systemUptime - started)s")
+}
+
+func testCallbacksCanReenterSampler() {
+  let sampler = PencilkitG1Sampler()
+  let view = UIView()
+  let touch = UITouch(1)
+  var began = 0
+  var finished = 0
+  sampler.onStrokeBegan = { _ in
+    _ = sampler.strokesLog()
+    began += 1
+    // A synchronous host retirement must be able to discard this just-published session.
+    if began == 1 { sampler.discardActiveSessions() }
+  }
+  sampler.onStrokeCompleted = { _ in
+    check(sampler.strokesLog()["strokeCount"] as? Int == 1, "finish callback ran before completion")
+    sampler.clear()
+    finished += 1
+  }
+  sampler.touchesBegan([touch], in: view)
+  sampler.touchesEnded([touch], event: nil, in: view)
+  check(finished == 0, "discarded begin should not finish")
+  sampler.touchesBegan([touch], in: view)
+  touch.timestamp = 2
+  sampler.touchesEnded([touch], event: nil, in: view)
+  check(began == 2 && finished == 1, "callback reentry lost a lifecycle event")
+}
+
+func testContinuousStrokesAndDemoRetention() {
+  for retainsCompleted in [true, false] {
+    let sampler = PencilkitG1Sampler(retainsCompletedStrokes: retainsCompleted)
+    let view = UIView()
+    var callbacks = 0
+    var firstSamples: [[String: Any]] = []
+    sampler.onStrokeCompleted = { summary in
+      callbacks += 1
+      check(summary["id"] as? Int == callbacks, "continuous stroke IDs changed")
+      let counts = summary["counts"] as! [String: Int]
+      check(counts["down"] == 1 && counts["up"] == 1, "continuous stroke lost its lifecycle")
+      if callbacks == 1 { firstSamples = summary["samples"] as! [[String: Any]] }
+    }
+    for id in 1...80 {
+      let touch = UITouch(Double(id * 100))
+      sampler.touchesBegan([touch], in: view)
+      for _ in 0..<100 {
+        touch.timestamp += 1
+        sampler.touchesMoved([touch], event: UIEvent([UITouch(touch.timestamp - 0.5)]), in: view)
+      }
+      touch.timestamp += 1
+      sampler.touchesEnded([touch], event: nil, in: view)
+    }
+    check(callbacks == 80, "continuous strokes were lost or duplicated")
+    check(firstSamples.count == 202 && firstSamples[0]["tabs"] as? Double == 100_000,
+          "a later session mutated an exported raw buffer")
+    let log = sampler.strokesLog()
+    check(log["strokeCount"] as? Int == (retainsCompleted ? 20 : 0), "retained raw data is not bounded")
+  }
+}
+
 func testDemoPencilHitTesting() {
   let pencil = UITouch(1)
   pencil.location = CGPoint(x: 0, y: 0)
@@ -325,6 +399,9 @@ let tests: [(String, () -> Void)] = [
   ("identity-scoped preview retirement and tool/end ordering", testIdentityScopedPreviewRetirement),
   ("empty cancellation does not consume the next preview", testCancelledEmptyPreviewCannotConsumeNextStroke),
   ("protocol cancellation never synthesizes a raw end", testProtocolCancellationDoesNotFabricateRawEnd),
+  ("long stroke across distinct UIKit move callbacks", testLongStrokeAcrossMoveEvents),
+  ("callbacks can read/cancel/clear without deadlocking", testCallbacksCanReenterSampler),
+  ("continuous strokes and Probe/Demo retention stay bounded", testContinuousStrokesAndDemoRetention),
 ]
 for (name, test) in tests {
   test()

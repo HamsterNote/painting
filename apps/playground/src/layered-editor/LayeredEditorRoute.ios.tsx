@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { PaintingPencilkitView, isPencilkitDemoAvailable } from '@hamster-note/painting-pencilkit';
@@ -129,27 +129,43 @@ export default function LayeredEditorRoute() {
     });
     return () => sub.remove();
   }, [available, enqueue, requested]);
+  const headMessageId = queue[0]?.messageId;
   useEffect(() => {
-    if (!queue.length) return;
+    if (headMessageId === undefined) return;
     const timer = setTimeout(() => setFault('bridge-stalled'), 5000);
     return () => clearTimeout(timer);
-  }, [queue]);
-  const editor = (
-    <LayeredEditorDom
-      dom={{ style: { flex: 1 } }}
-      nativePencilEnabled={requested && available}
-      editorParams={{
-        diagnostics: params.diagnostics ?? '',
-        handoffDelay: params.handoffDelay ?? '',
-        fixture: params.fixture ?? '',
-        touchDraw: params.touchDraw ?? '',
-        traceGestures: params.traceGestures ?? '',
-      }}
-      nativeMessage={requested && available ? queue[0] : undefined}
-      // Expo DOM messages can arrive after disabling the connection. Keep action names registered.
-      onNativeState={onState}
-      onNativeReply={onReply}
-    />
+  }, [headMessageId]);
+  const editorParams = useMemo(
+    () => ({
+      diagnostics: params.diagnostics ?? '',
+      handoffDelay: params.handoffDelay ?? '',
+      fixture: params.fixture ?? '',
+      touchDraw: params.touchDraw ?? '',
+      traceGestures: params.traceGestures ?? '',
+    }),
+    [
+      params.diagnostics,
+      params.handoffDelay,
+      params.fixture,
+      params.touchDraw,
+      params.traceGestures,
+    ]
+  );
+  const outgoing = requested && available ? queue[0] : undefined;
+  // Expo serializes every prop on every wrapper render, including an unacknowledged raw stroke.
+  const editor = useMemo(
+    () => (
+      <LayeredEditorDom
+        dom={{ style: { flex: 1 } }}
+        nativePencilEnabled={requested && available}
+        editorParams={editorParams}
+        nativeMessage={outgoing}
+        // Expo DOM messages can arrive after disabling the connection. Keep action names registered.
+        onNativeState={onState}
+        onNativeReply={onReply}
+      />
+    ),
+    [requested, available, editorParams, outgoing, onState, onReply]
   );
   return (
     <View style={styles.root} testID="layered-ios-host">
@@ -194,6 +210,7 @@ export default function LayeredEditorRoute() {
         {requested && available ? (
           <Text testID="layered-native-evidence" numberOfLines={3} style={styles.evidence}>
             {`原生起笔 ${counts.began} · 完成 ${counts.completed} · 文档提交 ${counts.committed}`}
+            {` · 队列 ${queue.length} · 待交接 ${pending.current.size}`}
             {nativeStatus
               ? ` · PK预览 ${nativeStatus.toolBegins} · hit=${nativeStatus.lastHit} · canvas=${Math.round(nativeStatus.width)}x${Math.round(nativeStatus.height)} · ${nativeStatus.routing}${nativeStatus.routingIssue && nativeStatus.routingIssue !== 'none' ? `:${nativeStatus.routingIssue}` : ''}`
               : ''}

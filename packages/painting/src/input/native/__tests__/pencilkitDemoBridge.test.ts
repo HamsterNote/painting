@@ -45,6 +45,7 @@ function setup() {
   const navigation = { dispatch: jest.fn(), cancel: jest.fn(() => true), begin: jest.fn() };
   const arbiter = createLayeredInputArbiter({ host, controller, tool, navigation });
   const replies: PencilkitDemoReply[] = [];
+  const states: PencilkitDemoState[] = [];
   let state!: PencilkitDemoState;
   let receive!: (message: PencilkitDemoMessage) => void;
   const stop = connectPencilkitDemo({
@@ -55,6 +56,7 @@ function setup() {
     connection: {
       onState: (next) => {
         state = next;
+        states.push(next);
       },
       onReply: (reply) => replies.push(reply),
       register: (next) => {
@@ -105,6 +107,7 @@ function setup() {
     tool,
     navigation,
     replies,
+    states,
     begin,
     end,
     receive,
@@ -119,6 +122,41 @@ function setup() {
     },
   };
 }
+
+test('long native batches commit once and continuous strokes retire without a state message backlog', () => {
+  const h = setup();
+  const startedWith = h.states.length;
+  for (let id = 1; id <= 64; id++) {
+    h.begin(id);
+    const count = id === 1 ? 20_000 : 64;
+    const samples = Array.from({ length: count }, (_, seq) => ({
+      ...sample(seq, seq === 0 ? 'down' : seq === count - 1 ? 'up' : 'move'),
+      x: 40 + (seq % 20),
+      kind: seq > 0 && seq < count - 1 && seq % 2 ? ('coalesced' as const) : ('main' as const),
+    }));
+    const end = h.end(id, { samples });
+    h.receive(end);
+    const document = h.controller.getSnapshot('document');
+    expect(document.objects).toHaveLength(id);
+    const object = document.objects.at(-1)!;
+    if (object.kind !== 'freehand') throw new Error('expected native ink');
+    expect(object.samples).toHaveLength(count);
+    expect(object.samples[0]).toMatchObject({ phase: 'down', source: 'native' });
+    expect(object.samples.at(-1)).toMatchObject({ phase: 'up', sequence: count - 1 });
+    const identity = h.controller.getPresentationIdentity(object.commitId);
+    if (!identity.ok || !identity.value) throw new Error('missing identity');
+    const unmount = h.presentation.mount(object.objectId, { setVisible: () => {} });
+    h.presentation.acknowledge(identity.value);
+    h.retired(id);
+    expect(h.presentation.hasNativePreview(object.commitId)).toBe(false);
+    unmount();
+  }
+  expect(h.replies).not.toContainEqual(expect.objectContaining({ status: 'rejected' }));
+  expect(h.controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
+  expect(h.state().enabled).toBe(true);
+  expect(h.states).toHaveLength(startedWith);
+  h.destroy();
+});
 
 test('real raw goes to schema 3 and shared history; viewport mapping and zero pressure survive', () => {
   const h = setup();

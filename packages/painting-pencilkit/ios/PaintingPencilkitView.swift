@@ -17,7 +17,7 @@ import UIKit
  */
 final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   private let canvasView = PencilkitDemoCanvasView()
-  private let demoSampler = PencilkitG1Sampler()
+  private let demoSampler = PencilkitG1Sampler(retainsCompletedStrokes: false)
   private let coordinateView = UIView()
   private let drawingDelegate = PencilkitDemoDrawingDelegate()
   private lazy var touchObserver = PencilkitDemoTouchObserver(sampler: demoSampler, coordinateView: coordinateView)
@@ -233,7 +233,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   }
 
   private func reconcilePreviews() {
-    guard demoState != nil, !updatingDrawing else { return }
+    guard demoState != nil, !updatingDrawing, !previews.usingTool else { return }
     let strokes = canvasView.drawing.strokes
     guard let retirement = previews.reconcile(strokeCount: strokes.count) else { return }
     if retirement.keepIndices.count != strokes.count {
@@ -307,7 +307,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   private func dispatchReady() {
     onReady([
       "moduleVersion": "0.1.0",
-      "demoBridgeVersion": 3,
+      "demoBridgeVersion": 4,
       "osVersion": ProcessInfo.processInfo.operatingSystemVersionString,
       "deviceModel": UIDevice.current.model,
       "drawingPolicy": pencilOnly ? "pencilOnly" : "anyInput",

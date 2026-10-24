@@ -4,6 +4,7 @@ import { layeredPointer, mockLayeredDom } from './fixtures/layeredDom';
 import type {
   PencilkitDemoMessage,
   PencilkitDemoReply,
+  PencilkitDemoSample,
   PencilkitDemoState,
 } from '../input/native/pencilkitDemoContract';
 
@@ -124,5 +125,76 @@ test('real board never creates silent DOM ink when native Pencil is requested; f
   expect(controller.getSnapshot('document').objects[0]).toMatchObject({
     samples: expect.arrayContaining([expect.objectContaining({ source: 'touch' })]),
   });
+  view.unmount();
+});
+
+test('long and consecutive native strokes reach mounted PF history and retire individually', async () => {
+  const onState = jest.fn(async (_state: PencilkitDemoState) => {});
+  const onReply = jest.fn(async (_reply: PencilkitDemoReply) => {});
+  const props = {
+    nativePencilEnabled: true,
+    onNativeState: onState,
+    onNativeReply: onReply,
+    editorParams: { diagnostics: '1' },
+  };
+  const view = render(<LayeredEditorDom {...props} />);
+  await act(async () => {});
+  let messageId = 0;
+  for (let id = 1; id <= 24; id++) {
+    const contextKey = onState.mock.calls.at(-1)![0].contextKey;
+    const count = id === 1 ? 5000 : 16;
+    const samples: PencilkitDemoSample[] = Array.from({ length: count }, (_, seq) => ({
+      seq,
+      kind: seq > 0 && seq < count - 1 && seq % 2 ? 'coalesced' : 'main',
+      phase: seq === 0 ? 'down' : seq === count - 1 ? 'up' : 'move',
+      x: 30 + (seq % 20),
+      y: 40 + (seq % 10),
+      tabs: 1000 + seq,
+      f: 1,
+      mf: 8,
+      p: 0.125,
+    }));
+    const begin: PencilkitDemoMessage = {
+      type: 'begin',
+      protocolVersion: 1,
+      messageId: ++messageId,
+      id,
+      contextKey,
+      sample: samples[0],
+    };
+    view.rerender(<LayeredEditorDom {...props} nativeMessage={begin} />);
+    const stroke: PencilkitDemoMessage = {
+      type: 'stroke',
+      protocolVersion: 1,
+      messageId: ++messageId,
+      id,
+      contextKey,
+      stroke: { id, cancelled: false, overflow: false, samples },
+    };
+    view.rerender(<LayeredEditorDom {...props} nativeMessage={stroke} />);
+    await act(async () => {});
+    expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ status: 'committed', id }));
+    expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ status: 'retire', id }));
+    const retired: PencilkitDemoMessage = {
+      type: 'retired',
+      protocolVersion: 1,
+      messageId: ++messageId,
+      id,
+      contextKey,
+    };
+    view.rerender(<LayeredEditorDom {...props} nativeMessage={retired} />);
+    const objects = window.__layeredEditor!.getSnapshot('document').objects;
+    expect(objects).toHaveLength(id);
+    const object = objects.at(-1)!;
+    if (object.kind !== 'freehand') throw new Error('missing native ink');
+    expect(object.samples).toHaveLength(count);
+    expect(object.samples[0].source).toBe('native');
+    const node = Array.from(view.container.querySelectorAll<SVGGElement>('[data-object-id]')).at(
+      -1
+    )!;
+    expect(node.querySelector('path')?.getAttribute('d')).toBeTruthy();
+    expect(node.style.visibility).toBe('visible');
+  }
+  expect(onReply.mock.calls.some(([reply]) => reply.status === 'rejected')).toBe(false);
   view.unmount();
 });

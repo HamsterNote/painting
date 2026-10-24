@@ -11,7 +11,7 @@ const compiler = process.env.SWIFTC ?? 'swiftc';
 const extension = process.platform === 'darwin' ? 'dylib' : 'so';
 
 function run(command, args, env = process.env) {
-  const result = spawnSync(command, args, { stdio: 'inherit', env });
+  const result = spawnSync(command, args, { stdio: 'inherit', env, timeout: 120_000 });
   if (result.error) throw result.error;
   if (result.signal) throw new Error(`${command} terminated by ${result.signal}`);
   if (result.status !== 0) throw new Error(`${command} exited with ${result.status}`);

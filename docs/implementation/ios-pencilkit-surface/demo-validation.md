@@ -2,7 +2,25 @@
 
 本增量对应 G2/G3 的可行性原型，不代表 G1 压力、G2 分流或 G3 物理交接通过；3.x 生产桥和 iOS 默认启用仍待门槛验收。`/pencilkit-probe` 保留原 G1 回归用途。
 
-## begin/finish 时序修复与本轮复测
+## 持续绘制卡死修复与本轮工程复测
+
+修勾在 `810271a` 的实际复测中报告原问题仍在，持续绘制后整页卡死，因此该版本未通过、不能进入验收。当前没有该次卡死的 iPad 调用栈；下面是本地可重现的缺陷与修复，不等同于已证实目标设备的全部根因。
+
+- Swift 采样器在持有非递归 NSLock 时调用 begin/completed 回调。回调重入读取日志、取消或清理采样会死锁；旧实现的回归运行被 30 秒超时终止。回调现移至解锁后，同步主线程与样本接受顺序不变。
+- 每个 move 从字典复制值类型 Session 后追加 Array/Set，会反复复制累计数据。现在使用仅在锁内修改的引用会话；同一 Linux Swift 6.2.3 替身测试，10,000 次独立 move / 20,002 个样本从约 2.42 秒降至 0.064 秒。该数据不是 iPad 帧率或物理绘制性能。Demo 不再额外保留已发送的 20 笔 raw 诊断副本，Probe 默认仍保留最近 20 笔；G1 去重、压力、真实 terminal 和 overflow 规则不变。活动 PK 笔期间不再为预览回收读取整份 PKDrawing。
+- 64 笔的桥回归原先发送 578 条相同状态，现在只发布 1 条；非关键 DOM/controller 通知按帧合并，配置内容未变则不发。输入/工具/viewport 失效和收取 begin/finish 时仍同步校验。RN 复用实际 Expo DOM 子树，状态栏刷新不再反复序列化未确认的长笔；队首 5 秒 watchdog 不因后续入队而重置。状态栏增加队列/待交接数量。
+
+本轮必须重建原生 development build：Demo 兼容标识升为 `demoBridgeVersion=4`，旧 `4f9e73d2-57d6-450b-97fa-addfbcddf386` / 标识 3 的 IPA 会明确提示构建不匹配，不能仅 Reload 用它验证锁和采样优化。`moduleVersion=0.1.0` 和原型消息的 `protocolVersion=1` 不变，此标识不代表进入 3.x 生产桥。
+
+Mac 保留 `apps/playground/app.json` 的本地 projectId/router/加密声明，快进本分支，先运行冻结安装、`node scripts/test-pencilkit-g1.mjs`、`pnpm run prepare:playground-artifacts`，以 Xcode 26.6 / Swift 6.3.3 做本地编译和 Simulator smoke，确认标识 4、`gesture-ancestor`、控件/手指正常且无 action 错误。通过后使用新原生构建进行工程复测；本轮 Linux 未提交 EAS build，也未证明 Xcode/UIKit 编译通过。
+
+实体复测先做单笔：起笔/PK预览/完成/文档提交都增长，队列/待交接归零，文档只有一个 native 对象且 PF 历史可见。再做 30 秒长笔、至少 100 笔连续笔和 2 分钟绘制/undo/redo/手指操作，检查 UI 仍可操作、不重复提交、预览逐笔退休。记录二进制/JS SHA、具体错误、四项计数、队列/待交接和本轮 Metro 日志；如再卡死，在 Xcode 暂停抓主线程及其他线程调用栈和内存。Probe 仍作 down/up、coalesced、seq、overflow 回归。压力变化不阻塞本轮。全部是工程复测，原始真机绘制路径恢复和 G2/G3 仍待证据，不能提前宣告通过。
+
+新增覆盖：锁重入、跨 10,000 次 move 的长笔、80 笔与 Probe/Demo 保留边界、20,000 样本 + 64 笔提交/退休、真实 DOM 中长笔与 24 笔 PF 历史交接、真实 Expo wrapper 长消息不重传、队首 watchdog。测试命令沿用文档下方流程。
+
+本地结果：Jest 93 suites / 1203 tests、responder 9 项、Swift 6.2.3 替身 17 组、typecheck、lint（0 errors / 32 条既有 warnings）、库构建、iOS JS/DOM export 和改动 Swift 语法解析通过。Linux 无 Xcode/UIKit；以上测试不能替代 Mac 编译和实体复测。
+
+## 810271a begin/finish 修复（历史，真机未通过）
 
 `2dae6e8` 已在 Mac 通过 Xcode 26.6 / Swift 6.3.3 编译和 Simulator smoke，确认 `gesture-ancestor` 且没有本轮新增 action 注册错误；对应 EAS build `4f9e73d2-57d6-450b-97fa-addfbcddf386` 已安装。实体 iPad 截图已证明 `hit=pencil`、起笔 1、PK预览 1，但以 `invalid-or-stale-begin` 停止，完成/文档提交为 0。旧错误合并了多个拒绝条件，截图本身不能确定是哪一个条件。
 
@@ -20,7 +38,7 @@ Mac 保留 `apps/playground/app.json` 未提交配置，快进任务分支后执
 ## 入口与边界
 
 - 新 iOS development build：打开 `painting-playground:///layered-editor?pencilkit=1`。自由笔 Pencil 在真实 RN 原生视图中预览；raw 通过 Expo DOM 的串行消息/回调送到原 DOM controller，生成 schema 3 / PF 历史和统一 undo/redo。
-- 普通 `/layered-editor` 和首页默认仍是 DOM，顶部显示 `Web / DOM`，PencilKit 开关可直接切换验证参数。旧 IPA（包括 `da1c224` / `7fafe2ae-aed2-41cb-a1a5-6922d1b6d094`）缺 `demoBridgeVersion=3`，显示构建不匹配；此次宿主层级改动需要新原生包。
+- 普通 `/layered-editor` 和首页默认仍是 DOM，顶部显示 `Web / DOM`，PencilKit 开关可直接切换验证参数。旧 IPA（包括标识 3 的 `4f9e73d2-57d6-450b-97fa-addfbcddf386`）缺本轮 `demoBridgeVersion=4` 的锁/采样修复，显示构建不匹配；本轮需要新原生包。
 - Web/Android 使用基名路由，不导入 PencilKit 原生运行时。选择、文字、形状、尺子等工具继续走真实 Web 输入。iOS 原型将真实 Expo DOM 子视图挂载到公开 `drawingGestureRecognizer.view` 下的容器中，不假设该 owner 就是 PKCanvasView 本体；几何 hit-test 总是选择真实 DOM 后代，delegate 在实际 UITouch 到达后过滤 Pencil、画布边界和控件排除区。容器按坐标转换对齐 PKCanvasView，布局时协调延迟挂载的 owner。手指不由原生接管。开关关闭时仍保留同一个宿主和 DOM controller，避免切换丢文档。
 - 原生 begin 经过同一个输入仲裁器，锁定 controller 会话、笔刷和 viewport。end 只批量追加剩余真实样本，保留原始压力与接受顺序；取消、畸形或 overflow 整笔拒绝，不合成 DOM PointerEvent、raw up 或 PK 路径点。
 - 每笔最多 50,000 样本，最多 4 笔待交接，transport 最多 12 条消息；消息/回执缓存有界。等待 5 秒仅进入可恢复故障，不按超时清屏或宣称已显示。重试查询/重用原 commitId，已提交文档保留。

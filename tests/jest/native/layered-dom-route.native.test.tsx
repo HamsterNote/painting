@@ -312,3 +312,57 @@ test('native status requires a current configuration acknowledgement and nonempt
   expect(JSON.parse(canvas().props.demoState).enabled).toBe(false);
   await result.unmount();
 });
+
+test('later completed strokes cannot postpone a blocked begin watchdog', async () => {
+  jest.useFakeTimers();
+  jest.mocked(useLocalSearchParams).mockReturnValue({ pencilkit: '1' });
+  const result = await render(<LayeredEditorRoute />);
+  try {
+    const host = result.getByTestId('expo-dom-editor-host');
+    const canvas = () => result.getByTestId('layered-pencilkit-canvas');
+    await act(async () =>
+      host.props.onNativeState({
+        protocolVersion: 1,
+        contextKey: 'watchdog:1',
+        enabled: true,
+        frame: { x: 0, y: 0, width: 800, height: 600 },
+        exclusions: [],
+        scale: 1,
+        brush: { color: '#000', nominalSize: 4, opacity: 1 },
+      })
+    );
+    const sample = {
+      seq: 0,
+      phase: 'down',
+      kind: 'main',
+      x: 30,
+      y: 40,
+      tabs: 1000,
+      f: 1,
+      mf: 8,
+      p: 0.125,
+    };
+    await fireEvent(canvas(), 'begin', {
+      nativeEvent: { id: 1, contextKey: 'watchdog:1', sample },
+    });
+    await act(async () => jest.advanceTimersByTime(3000));
+    await fireEvent(canvas(), 'stroke', {
+      nativeEvent: {
+        id: 1,
+        contextKey: 'watchdog:1',
+        cancelled: false,
+        overflow: false,
+        samples: [sample, { ...sample, seq: 1, phase: 'up', tabs: 1001 }],
+      },
+    });
+    await act(async () => jest.advanceTimersByTime(2000));
+    expect(result.getByTestId('layered-native-status').props.children).toContain('bridge-stalled');
+    expect(JSON.parse(canvas().props.demoState).enabled).toBe(false);
+    expect(result.getByTestId('layered-native-evidence').props.children.join('')).toContain(
+      '队列 2'
+    );
+  } finally {
+    await result.unmount();
+    jest.useRealTimers();
+  }
+});
