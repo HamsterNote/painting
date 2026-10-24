@@ -2,7 +2,7 @@
 
 本增量对应 G2/G3 的可行性原型，不代表 G1 压力、G2 分流或 G3 物理交接通过；3.x 生产桥和 iOS 默认启用仍待门槛验收。`/pencilkit-probe` 保留原 G1 回归用途。
 
-## PKCanvasViewDelegate 结束入口修正（本轮，待 Mac 编译验证）
+## PKCanvasViewDelegate 结束入口修正（42314ff，Mac 已验证，待实体复测）
 
 Mac 对 `0965183` 的 Xcode 26.6 / Swift 6.3.3 编译成功，但报告 `canvasViewDidFinishUsingTool` 仅近似匹配可选协议方法；真实 SDK 要求 `canvasViewDidEndUsingTool(_:)`。因此原有工具结束计数、`previews.finishTool()`、退休协调与延迟笔刷设置不在系统结束回调中执行。已修正方法签名，保留原收尾逻辑；该缺陷足以阻塞退休，但不能据此宣告实体可见性全部恢复。
 
@@ -13,7 +13,16 @@ Mac 对 `0965183` 的 Xcode 26.6 / Swift 6.3.3 编译成功，但报告 `canvasV
 
 DOM 多笔可见性回归进一步验证：前三个乱序退休确认不能提前显示历史；四笔完成交接后，第五笔仅隐藏自身，旧四笔路径与可见性保持。
 
-本次只是待 Mac 验证修订，尚不交付为已验证候选。兼容标识仍为 5，但必须按新 Swift SHA 重编译；之前 `0965183` 的标识 5 模拟器包不能 Reload 带入签名修正。Mac 保留 `apps/playground/app.json` 的未提交配置，快进后运行 `node scripts/test-pencilkit-g1.mjs`，确认真实 SDK 契约检查和 20 组 host 测试都通过，再做 Xcode 26.6 / Swift 6.3.3 完整 app 编译与既有 Simulator smoke。回传新 SHA、契约/编译日志以及 `gesture-ancestor` 和无 action 错误的证据；若有告警/编译失败，先返回修复，不重建真机验收包或提交 EAS。取得 Mac 结果后才交付候选，实体第四笔与实际像素验收仍另行进行。
+2026-10-24 已核对 Mac 操作员的评论 `01a16d93-fa47-78e1-9bfc-936b723054b8` 及附件 `ham66-42314ff-local-evidence.zip`，可交付工程复测候选 **`42314ff3837624ca383c08ee71a58f3866086b9e`**，兼容标识 5：
+
+- Xcode 26.6（17F113）/ Swift 6.3.3：真实 iOS Simulator SDK 契约检查以 warnings-as-errors 通过，host 20 组、指定 Jest 4 suites / 61 tests 及库构建通过。
+- 按新 SHA 完整编译、安装、启动 Simulator app 成功，日志含 `BUILD SUCCEEDED`，原结束回调近似匹配警告消失。仍有模块 `Constants` 弃用与依赖警告，不将 app 构建描述为零警告。
+- iPad Pro 13-inch（M5）/ iOS 26.3 Simulator：直接入口画布 `1032x1120`，普通路由开→关→开后 `1032x1140`，均为 `gesture-ancestor`。手指落墨、矩形工具切换、undo/redo 生效，开关保留原笔迹；本轮 Metro/runtime 日志未见 Native action 缺失错误。
+- Mac 的 `apps/playground/app.json` 原有 projectId/router/加密配置保留。本轮没有提交 EAS 或重建真机验收包。
+
+模拟器原生计数均为 0，不能证明真实 Pencil 结束事件派发、第四笔实体交接、原生预览与历史像素可见性或 G2/G3 通过。候选仍须后续安排包含上述 Swift SHA 的新原生二进制才能实体复测；旧标识 4 IPA 与 `0965183` 的标识 5 模拟器包均不能通过 Reload 带入此修复。当前只交付候选，不发包，HAM-66 保持 `in_progress`。
+
+后续实体复测先确认单笔起笔/PK预览/tool结束/完成/文档提交均增长、队列/待交接/待退休归零，再检查前三笔完成后第四笔长笔可结束、四笔历史实际可见，第五笔不隐藏旧笔迹；通过后再做长笔/连续笔、undo/redo 和手指 Web 回归。若仍 `handoff-stalled`、不可见或卡死，立即停止，保留全部计数、视频/截图与线程日志；不继续在旧包反复绘制。
 
 本地结果：Swift 6.2.3 host 20 组、相关 Jest 4 suites / 61 tests、修改文件 lint/格式检查通过；真实 SDK 检查在 Linux 明确跳过，MobileBuildMCP 返回 `spawn xcrun ENOENT`。这次不引用上一修订的 Mac 编译结果作为新签名的验证。
 
