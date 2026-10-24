@@ -44,6 +44,10 @@ export default function LayeredEditorRoute() {
     routing: string;
     routingIssue?: string;
     toolBegins: number;
+    toolFinishes?: number;
+    drawingStrokes?: number;
+    retireRequested?: number;
+    retireAcknowledged?: number;
   }>();
   const [counts, setCounts] = useState({ began: 0, completed: 0, committed: 0 });
   const nextMessage = useRef(0);
@@ -198,7 +202,9 @@ export default function LayeredEditorRoute() {
                                   ? 'PencilKit 已收到输入，等待原生预览'
                                   : counts.committed === 0
                                     ? 'PencilKit 已收到原生输入'
-                                    : 'PencilKit 原生链路已验证'}
+                                    : pending.current.size > 0
+                                      ? 'PencilKit 已提交，等待历史交接'
+                                      : 'PencilKit 历史交接已确认'}
           </Text>
           <Switch
             testID="layered-pencilkit-toggle"
@@ -208,11 +214,11 @@ export default function LayeredEditorRoute() {
           />
         </View>
         {requested && available ? (
-          <Text testID="layered-native-evidence" numberOfLines={3} style={styles.evidence}>
+          <Text testID="layered-native-evidence" numberOfLines={6} style={styles.evidence}>
             {`原生起笔 ${counts.began} · 完成 ${counts.completed} · 文档提交 ${counts.committed}`}
             {` · 队列 ${queue.length} · 待交接 ${pending.current.size}`}
             {nativeStatus
-              ? ` · PK预览 ${nativeStatus.toolBegins} · hit=${nativeStatus.lastHit} · canvas=${Math.round(nativeStatus.width)}x${Math.round(nativeStatus.height)} · ${nativeStatus.routing}${nativeStatus.routingIssue && nativeStatus.routingIssue !== 'none' ? `:${nativeStatus.routingIssue}` : ''}`
+              ? ` · PK预览 ${nativeStatus.toolBegins} · tool结束 ${nativeStatus.toolFinishes ?? '?'} · PK存量 ${nativeStatus.drawingStrokes ?? '?'} · 待退休/已确认 ${nativeStatus.retireRequested ?? '?'}/${nativeStatus.retireAcknowledged ?? '?'} · hit=${nativeStatus.lastHit} · canvas=${Math.round(nativeStatus.width)}x${Math.round(nativeStatus.height)} · ${nativeStatus.routing}${nativeStatus.routingIssue && nativeStatus.routingIssue !== 'none' ? `:${nativeStatus.routingIssue}` : ''}`
               : ''}
           </Text>
         ) : null}
@@ -277,7 +283,6 @@ export default function LayeredEditorRoute() {
                 setFault('invalid-native-begin');
                 return;
               }
-              pending.current.add(begin.id);
               setCounts((previous) => ({ ...previous, began: previous.began + 1 }));
               enqueue({
                 type: 'begin',
@@ -295,6 +300,7 @@ export default function LayeredEditorRoute() {
                 setFault('invalid-native-stroke');
                 return;
               }
+              pending.current.add(stroke.id);
               setCounts((previous) => ({ ...previous, completed: previous.completed + 1 }));
               enqueue({ type: 'stroke', id: stroke.id, contextKey, stroke });
             }}
@@ -333,5 +339,5 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   statusTitle: { flex: 1, height: 36, fontSize: 14, lineHeight: 18 },
-  evidence: { height: 48, fontSize: 12, lineHeight: 16 },
+  evidence: { height: 96, fontSize: 12, lineHeight: 16 },
 });

@@ -36,6 +36,19 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
+test('native preview has a transparent DOM paper; switching off restores Web paper', async () => {
+  const props = { onNativeState: async () => {}, onNativeReply: async () => {} };
+  const view = render(<LayeredEditorDom {...props} nativePencilEnabled />);
+  await act(async () => {});
+  expect((view.getByTestId('layered-surface') as HTMLElement).style.background).toBe('transparent');
+  view.rerender(<LayeredEditorDom {...props} nativePencilEnabled={false} />);
+  await act(async () => {});
+  expect((view.getByTestId('layered-surface') as HTMLElement).style.background).toBe(
+    'rgb(255, 255, 255)'
+  );
+  view.unmount();
+});
+
 test('real DOM board commits a queued native stroke across a compatible configuration update', async () => {
   const onState = jest.fn(async (_state: PencilkitDemoState) => {});
   const onReply = jest.fn(async (_reply: PencilkitDemoReply) => {});
@@ -130,6 +143,87 @@ test('real board never creates silent DOM ink when native Pencil is requested; f
   expect(controller.getSnapshot('document').objects[0]).toMatchObject({
     samples: expect.arrayContaining([expect.objectContaining({ source: 'touch' })]),
   });
+  view.unmount();
+});
+
+test('three committed strokes and a fourth collecting stroke reveal all history after batched retirement', async () => {
+  const onState = jest.fn(async (_state: PencilkitDemoState) => {});
+  const onReply = jest.fn(async (_reply: PencilkitDemoReply) => {});
+  const props = {
+    nativePencilEnabled: true,
+    onNativeState: onState,
+    onNativeReply: onReply,
+    editorParams: { diagnostics: '1' },
+  };
+  const view = render(<LayeredEditorDom {...props} />);
+  await act(async () => {});
+  jest.useFakeTimers();
+  const key = onState.mock.calls.at(-1)![0].contextKey;
+  let messageId = 0;
+  type MessageBody<T = PencilkitDemoMessage> = T extends PencilkitDemoMessage
+    ? Omit<T, 'messageId' | 'protocolVersion'>
+    : never;
+  const send = (message: MessageBody) => {
+    view.rerender(
+      <LayeredEditorDom
+        {...props}
+        nativeMessage={{ ...message, messageId: ++messageId, protocolVersion: 1 }}
+      />
+    );
+  };
+  const begin = (id: number): PencilkitDemoSample => {
+    const sample: PencilkitDemoSample = {
+      seq: 0,
+      kind: 'main',
+      phase: 'down',
+      x: 100,
+      y: id * 50,
+      tabs: id * 1000,
+      f: 1,
+      mf: 8,
+      p: 0.125,
+    };
+    // Use the real DOM receiver/controller/display; hold native retirement receipts until after four.
+    send({ type: 'begin', id, contextKey: key, sample });
+    return sample;
+  };
+  const finish = (id: number, sample: PencilkitDemoSample) => {
+    send({
+      type: 'stroke',
+      id,
+      contextKey: key,
+      stroke: {
+        id,
+        cancelled: false,
+        overflow: false,
+        samples: [sample, { ...sample, seq: 1, phase: 'up', x: 200, tabs: sample.tabs + 100 }],
+      },
+    });
+    expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ status: 'retire', id }));
+  };
+  for (let id = 1; id <= 3; id++) {
+    finish(id, begin(id));
+  }
+  const fourth = begin(4);
+  act(() => jest.advanceTimersByTime(30000));
+  expect(onState.mock.calls.at(-1)![0].enabled).toBe(true);
+  expect(window.__layeredEditor!.getSnapshot('document').objects).toHaveLength(3);
+  expect(window.__layeredEditor!.getSnapshot('interaction').activeFreehand?.status).toBe(
+    'collecting'
+  );
+  finish(4, fourth);
+  const nodes = () => Array.from(view.container.querySelectorAll<SVGGElement>('[data-object-id]'));
+  expect(nodes()).toHaveLength(4);
+  expect(nodes().every((node) => node.style.visibility === 'hidden')).toBe(true);
+  for (const id of [4, 3, 2, 1]) send({ type: 'retired', id, contextKey: key });
+  for (const node of nodes()) {
+    expect(node.querySelector('path')?.getAttribute('d')).toBeTruthy();
+    expect(node.style.visibility).toBe('visible');
+  }
+  act(() => jest.advanceTimersByTime(5000));
+  expect(onReply.mock.calls.some(([reply]) => reply.status === 'rejected')).toBe(false);
+  expect(onState.mock.calls.at(-1)![0].enabled).toBe(true);
+  expect(window.__layeredEditor!.getSnapshot('document').objects).toHaveLength(4);
   view.unmount();
 });
 

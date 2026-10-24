@@ -565,6 +565,66 @@ test('native ownership suppresses real palms until all contacts lift, then Web n
   h.destroy();
 });
 
+test('three completed handoffs wait safely through a long fourth stroke and all four release', () => {
+  jest.useFakeTimers();
+  const h = setup();
+  for (let id = 1; id <= 3; id++) {
+    h.begin(id);
+    h.end(id);
+  }
+  h.begin(4);
+  jest.advanceTimersByTime(30000);
+  expect(h.state().enabled).toBe(true);
+  expect(h.replies).not.toContainEqual(expect.objectContaining({ reason: 'handoff-stalled' }));
+  expect(h.controller.getSnapshot('interaction').activeFreehand?.status).toBe('collecting');
+  h.end(4);
+  expect(h.state().enabled).toBe(false);
+  const objects = h.controller.getSnapshot('document').objects;
+  expect(objects).toHaveLength(4);
+  const visible = objects.map(() => jest.fn());
+  const unmount = objects.map((object, index) => {
+    if (object.kind !== 'freehand') throw new Error('missing native object');
+    const identity = h.controller.getPresentationIdentity(object.commitId);
+    if (!identity.ok || !identity.value) throw new Error('missing identity');
+    const stop = h.presentation.mount(object.objectId, { setVisible: visible[index] });
+    h.presentation.acknowledge(identity.value);
+    return stop;
+  });
+  for (const id of [4, 3, 2]) h.retired(id);
+  visible.forEach((setVisible) => expect(setVisible).toHaveBeenLastCalledWith(false));
+  h.retired(1);
+  visible.forEach((setVisible) => expect(setVisible).toHaveBeenLastCalledWith(true));
+  jest.advanceTimersByTime(5000);
+  expect(h.presentation.getPending()).toHaveLength(0);
+  expect(h.state().enabled).toBe(true);
+  expect(h.replies).not.toContainEqual(expect.objectContaining({ status: 'rejected' }));
+  unmount.forEach((stop) => stop());
+  h.destroy();
+});
+
+test.each(['end', 'cancel'] as const)(
+  'handoff deadline resumes after the fourth stroke %s',
+  (phase) => {
+    jest.useFakeTimers();
+    const h = setup();
+    for (let id = 1; id <= 3; id++) {
+      h.begin(id);
+      h.end(id);
+    }
+    h.begin(4);
+    jest.advanceTimersByTime(30000);
+    expect(h.replies).not.toContainEqual(expect.objectContaining({ reason: 'handoff-stalled' }));
+    if (phase === 'end') h.end(4);
+    else h.controller.setTool('text');
+    jest.advanceTimersByTime(4999);
+    expect(h.replies).not.toContainEqual(expect.objectContaining({ reason: 'handoff-stalled' }));
+    jest.advanceTimersByTime(1);
+    expect(h.replies.filter((reply) => reply.reason === 'handoff-stalled')).toHaveLength(1);
+    expect(h.controller.getSnapshot('document').objects).toHaveLength(phase === 'end' ? 4 : 3);
+    h.destroy();
+  }
+);
+
 test('timeout faults without clearing preview or pretending history was physically displayed', () => {
   jest.useFakeTimers();
   const h = setup();

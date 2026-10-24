@@ -96,6 +96,10 @@ export type PaintingPencilkitViewProps = Readonly<{
       routing: 'gesture-ancestor' | 'unattached';
       routingIssue?: string;
       toolBegins: number;
+      toolFinishes: number;
+      drawingStrokes: number;
+      retireRequested: number;
+      retireAcknowledged: number;
     }>
   ) => void;
   /** Serialized, bounded G2/G3 experimental control state. Omit for the G1 Probe. */
@@ -126,7 +130,7 @@ const NativeView: React.ComponentType<PaintingPencilkitViewProps> | undefined = 
   : undefined;
 
 export function isPencilkitDemoAvailable(): boolean {
-  return NativeModule?.demoBridgeVersion === 4;
+  return NativeModule?.demoBridgeVersion === 5;
 }
 
 export function PaintingPencilkitView(props: PaintingPencilkitViewProps) {

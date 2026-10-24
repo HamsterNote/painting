@@ -159,20 +159,22 @@ func testPressureBeforeAndAfterPencilkit() {
 
 func testIdentityScopedPreviewRetirement() {
   var ledger = PencilkitPreviewLedger()
-  ledger.activeID = 1
-  ledger.usingTool = true
+  ledger.beginStroke(1)
+  ledger.beginTool()
   ledger.finishedIDs = [1]
   ledger.retireIDs = [1]
   check(ledger.reconcile(strokeCount: 1) == nil, "must not mutate an active PKDrawing")
   ledger.finishTool()
   let first = ledger.reconcile(strokeCount: 1)!
   check(first.ids == [1] && first.keepIndices.isEmpty, "retirement did not match finished ID")
-  ledger.activeID = 2
+  ledger.beginStroke(2)
+  ledger.beginTool()
   ledger.finishTool() // Native tool-finish can precede the raw-end callback.
   check(ledger.reconcile(strokeCount: 1)!.ids.isEmpty, "tool-finish alone must not retire")
   ledger.finishedIDs = [2]
   _ = ledger.reconcile(strokeCount: 1)
-  ledger.activeID = 3
+  ledger.beginStroke(3)
+  ledger.beginTool()
   ledger.finishTool()
   ledger.finishedIDs = [3]
   _ = ledger.reconcile(strokeCount: 2)
@@ -184,19 +186,74 @@ func testIdentityScopedPreviewRetirement() {
 
 func testCancelledEmptyPreviewCannotConsumeNextStroke() {
   var ledger = PencilkitPreviewLedger()
-  ledger.activeID = 1
+  ledger.beginStroke(1)
+  ledger.beginTool()
   ledger.finishTool()
   ledger.finishedIDs = [1]
   ledger.cancelledIDs = [1]
   check(ledger.reconcile(strokeCount: 0)!.ids.isEmpty, "cancellation is not a retirement request")
   ledger.retireIDs = [1]
   check(ledger.reconcile(strokeCount: 0)!.ids == [1], "empty cancelled preview was not acknowledged")
-  ledger.activeID = 2
+  ledger.beginStroke(2)
+  ledger.beginTool()
   ledger.finishTool()
   ledger.finishedIDs = [2]
   _ = ledger.reconcile(strokeCount: 1)
   ledger.retireIDs = [2]
   check(ledger.reconcile(strokeCount: 1)!.ids == [2], "cancelled ID consumed the next preview")
+}
+
+func testNextRawBeginBeforePreviousToolFinish() {
+  var ledger = PencilkitPreviewLedger()
+  ledger.beginStroke(1)
+  ledger.beginTool()
+  ledger.finishedIDs = [1]
+  // The passive observer can see the next down before PK finishes the previous tool cycle.
+  ledger.beginStroke(2)
+  ledger.finishTool()
+  ledger.retireIDs = [1]
+  let retirement = ledger.reconcile(strokeCount: 1)!
+  check(retirement.ids == [1], "previous finish was assigned to the next raw stroke; handoff head is stuck")
+}
+
+func testToolCallbacksBeforeRawAndFourthStrokeRetirement() {
+  var ledger = PencilkitPreviewLedger()
+  // PK callbacks can precede the observer's raw down; closed cycles must keep their order.
+  for id in 1...3 {
+    ledger.beginTool()
+    ledger.finishTool()
+    ledger.beginStroke(id)
+    ledger.finishedIDs.append(id)
+    _ = ledger.reconcile(strokeCount: id)
+  }
+  ledger.retireIDs = [1, 2, 3]
+  ledger.beginStroke(4)
+  ledger.beginTool()
+  check(ledger.reconcile(strokeCount: 3) == nil, "cannot rewrite PKDrawing during the fourth active tool")
+  ledger.finishedIDs.append(4)
+  ledger.finishTool()
+  let firstThree = ledger.reconcile(strokeCount: 4)!
+  check(firstThree.ids == [1, 2, 3] && firstThree.keepIndices == [3], "first three blocked retirement or cleared the fourth preview")
+  ledger.retireIDs = [4]
+  let fourth = ledger.reconcile(strokeCount: 1)!
+  check(fourth.ids == [4] && fourth.keepIndices.isEmpty, "fourth completed preview leaked")
+  // Cancellation targets its own cycle and cannot finish another tool.
+  ledger.beginStroke(5)
+  ledger.beginTool()
+  ledger.beginStroke(6)
+  ledger.cancelTool(for: 6)
+  check(ledger.usingTool, "cancelling a different raw stroke finished the active PK tool")
+  ledger.finishTool()
+  check(!ledger.usingTool, "active PK tool never finished")
+  ledger.beginStroke(7)
+  ledger.beginTool()
+  ledger.cancelTool(for: 7)
+  ledger.beginStroke(8)
+  ledger.beginTool()
+  ledger.finishTool() // Delayed delegate finish for the explicitly cancelled tool.
+  check(ledger.usingTool, "late finish of a cancelled tool finished the next active tool")
+  ledger.finishTool()
+  check(!ledger.usingTool, "next tool never finished after cancellation")
 }
 
 func testProtocolCancellationDoesNotFabricateRawEnd() {
@@ -398,6 +455,8 @@ let tests: [(String, () -> Void)] = [
   ("pre/post PencilKit force snapshots and per-view isolation", testPressureBeforeAndAfterPencilkit),
   ("identity-scoped preview retirement and tool/end ordering", testIdentityScopedPreviewRetirement),
   ("empty cancellation does not consume the next preview", testCancelledEmptyPreviewCannotConsumeNextStroke),
+  ("next raw begin cannot steal previous PK tool finish", testNextRawBeginBeforePreviousToolFinish),
+  ("tool-first order and first-three/fourth preview retirement", testToolCallbacksBeforeRawAndFourthStrokeRetirement),
   ("protocol cancellation never synthesizes a raw end", testProtocolCancellationDoesNotFabricateRawEnd),
   ("long stroke across distinct UIKit move callbacks", testLongStrokeAcrossMoveEvents),
   ("callbacks can read/cancel/clear without deadlocking", testCallbacksCanReenterSampler),

@@ -176,7 +176,7 @@ export function LayeredDrawingSurface({
         flex: 1,
         minHeight: 0,
         overflow: 'hidden',
-        background: '#fff',
+        background: nativePencilExperiment ? 'transparent' : '#fff',
         touchAction: 'none',
         ...style,
         // Browser selection is separate from touch-action; editing controls opt back in.

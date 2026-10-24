@@ -4,8 +4,14 @@ struct PencilkitPreviewLedger {
     let keepIndices: [Int]
     let ids: [Int]
   }
-  var usingTool = false
-  var activeID: Int?
+  private struct ToolCycle {
+    var id: Int?
+    var finished = false
+    var cancelled = false
+  }
+  private var tools: [ToolCycle] = []
+  private var rawBegins: [Int] = []
+  var usingTool: Bool { tools.contains { !$0.finished && !$0.cancelled } }
   var finishedIDs: [Int] = []
   var cancelledIDs = Set<Int>()
   var finishedToolIDs = Set<Int>()
@@ -13,9 +19,37 @@ struct PencilkitPreviewLedger {
   private var emptyIDs = Set<Int>()
   private var slots: [Int?] = []
 
+  mutating func beginStroke(_ id: Int) {
+    rawBegins.append(id)
+    bindTools()
+  }
+
+  mutating func beginTool() {
+    tools.append(ToolCycle())
+    bindTools()
+  }
+
   mutating func finishTool() {
-    usingTool = false
-    if let id = activeID { finishedToolIDs.insert(id) }
+    guard let index = tools.firstIndex(where: { !$0.finished }) else { return }
+    tools[index].finished = true
+    bindTools()
+  }
+
+  mutating func cancelTool(for id: Int) {
+    rawBegins.removeAll { $0 == id }
+    for index in tools.indices where tools[index].id == id { tools[index].cancelled = true }
+    finishedToolIDs.insert(id)
+  }
+
+  private mutating func bindTools() {
+    // Match begin order, never the latest raw ID at finish time. Either begin source may arrive first.
+    for index in tools.indices where tools[index].id == nil && !rawBegins.isEmpty {
+      tools[index].id = rawBegins.removeFirst()
+    }
+    for tool in tools where tool.finished || tool.cancelled {
+      if let id = tool.id { finishedToolIDs.insert(id) }
+    }
+    tools.removeAll { $0.finished && $0.id != nil }
   }
 
   mutating func reconcile(strokeCount: Int) -> Retirement? {

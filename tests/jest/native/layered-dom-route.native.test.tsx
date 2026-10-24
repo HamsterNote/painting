@@ -169,7 +169,7 @@ test('opt-in uses the native canvas and queues pooled events until the DOM ackno
     '文档提交 1'
   );
   expect(result.getByTestId('layered-native-status').props.children).toBe(
-    'PencilKit 原生链路已验证'
+    'PencilKit 已提交，等待历史交接'
   );
   await act(async () =>
     host().props.onNativeReply({ id: 1, contextKey: 'old-epoch:1', status: 'retire' })
@@ -179,6 +179,18 @@ test('opt-in uses the native canvas and queues pooled events until the DOM ackno
     host().props.onNativeReply({ id: 1, contextKey: 'epoch:1', status: 'retire' })
   );
   expect(JSON.parse(canvas().props.demoState).retireIDs).toEqual([1]);
+  await fireEvent(canvas(), 'previewRetired', { nativeEvent: { id: 1, contextKey: 'epoch:1' } });
+  await act(async () =>
+    host().props.onNativeReply({
+      messageId: host().props.nativeMessage.messageId,
+      id: 1,
+      contextKey: 'epoch:1',
+      status: 'visible',
+    })
+  );
+  expect(result.getByTestId('layered-native-status').props.children).toBe(
+    'PencilKit 历史交接已确认'
+  );
   jest.mocked(useLocalSearchParams).mockReturnValue({ pencilkit: '0' });
   await result.rerender(<LayeredEditorRoute />);
   expect(JSON.parse(canvas().props.demoState).enabled).toBe(false);
@@ -192,6 +204,87 @@ test('opt-in uses the native canvas and queues pooled events until the DOM ackno
     '原生起笔 0'
   );
   await result.unmount();
+});
+
+test('three finished strokes do not disable a fourth collecting stroke; retirement releases capacity', async () => {
+  jest.mocked(useLocalSearchParams).mockReturnValue({ pencilkit: '1' });
+  const view = await render(<LayeredEditorRoute />);
+  const host = () => view.getByTestId('expo-dom-editor-host');
+  const canvas = () => view.getByTestId('layered-pencilkit-canvas');
+  const reply = async (value: object) => act(async () => host().props.onNativeReply(value));
+  await act(async () =>
+    host().props.onNativeState({
+      protocolVersion: 1,
+      contextKey: 'four:1',
+      enabled: true,
+      frame: { x: 0, y: 0, width: 800, height: 600 },
+      exclusions: [],
+      scale: 1,
+      brush: { color: '#008060', nominalSize: 4, opacity: 1 },
+    })
+  );
+  const sample = {
+    seq: 0,
+    phase: 'down',
+    kind: 'main',
+    x: 30,
+    y: 40,
+    tabs: 1000,
+    f: 1,
+    mf: 8,
+    p: 0.125,
+  };
+  const begin = async (id: number) => {
+    await fireEvent(canvas(), 'begin', { nativeEvent: { id, contextKey: 'four:1', sample } });
+    await reply({
+      messageId: host().props.nativeMessage.messageId,
+      id,
+      contextKey: 'four:1',
+      status: 'accepted',
+    });
+  };
+  const finish = async (id: number) => {
+    await fireEvent(canvas(), 'stroke', {
+      nativeEvent: {
+        id,
+        contextKey: 'four:1',
+        cancelled: false,
+        overflow: false,
+        samples: [sample, { ...sample, seq: 1, phase: 'up', tabs: 1001 }],
+      },
+    });
+    await reply({
+      messageId: host().props.nativeMessage.messageId,
+      id,
+      contextKey: 'four:1',
+      status: 'committed',
+    });
+  };
+  for (let id = 1; id <= 3; id++) {
+    await begin(id);
+    await finish(id);
+  }
+  await begin(4);
+  expect(JSON.parse(canvas().props.demoState).enabled).toBe(true);
+  expect(view.getByTestId('layered-native-evidence').props.children.join('')).toContain('待交接 3');
+  await finish(4);
+  expect(JSON.parse(canvas().props.demoState).enabled).toBe(false);
+  for (let id = 1; id <= 4; id++) {
+    await reply({ id, contextKey: 'four:1', status: 'retire' });
+    await fireEvent(canvas(), 'previewRetired', { nativeEvent: { id, contextKey: 'four:1' } });
+    await reply({
+      messageId: host().props.nativeMessage.messageId,
+      id,
+      contextKey: 'four:1',
+      status: 'visible',
+    });
+    expect(JSON.parse(canvas().props.demoState).enabled).toBe(true);
+  }
+  expect(view.getByTestId('layered-native-evidence').props.children.join('')).toContain(
+    '文档提交 4'
+  );
+  expect(view.getByTestId('layered-native-evidence').props.children.join('')).toContain('待交接 0');
+  await view.unmount();
 });
 
 test('old IPA reports a build mismatch and never claims native Demo input', async () => {

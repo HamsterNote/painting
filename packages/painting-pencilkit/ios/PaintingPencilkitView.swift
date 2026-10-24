@@ -30,6 +30,9 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   private var lastHit = "none"
   private var lastDemoStatus = ""
   private var toolBegins = 0
+  private var toolFinishes = 0
+  private var drawingStrokes = 0
+  private var retireAcknowledged = 0
 
   private struct DemoState: Decodable {
     let contextKey: String
@@ -73,7 +76,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
     demoSampler.onStrokeBegan = { [weak self] begin in
       guard let self, let id = begin["id"] as? Int, let state = self.demoState else { return }
       self.contexts[id] = state.contextKey
-      self.previews.activeID = id
+      self.previews.beginStroke(id)
       self.collectingID = id
       var payload = begin
       payload["contextKey"] = state.contextKey
@@ -180,6 +183,9 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
       previews = PencilkitPreviewLedger()
       collectingID = nil
       toolBegins = 0
+      toolFinishes = 0
+      drawingStrokes = 0
+      retireAcknowledged = 0
       lastHit = "none"
     }
     demoState = state
@@ -193,7 +199,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
       canvasView.drawingGestureRecognizer.isEnabled = true
       previews.finishedIDs.append(id)
       previews.cancelledIDs.insert(id)
-      previews.finishTool()
+      previews.cancelTool(for: id)
     }
     reconcilePreviews()
     publishDemoStatus()
@@ -217,15 +223,17 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   override var undoManager: UndoManager? { demoHost ? nil : super.undoManager }
 
   func canvasViewDidBeginUsingTool(_ canvasView: PKCanvasView) {
-    previews.usingTool = true
+    previews.beginTool()
     toolBegins += 1
     publishDemoStatus()
   }
 
   func canvasViewDidFinishUsingTool(_ canvasView: PKCanvasView) {
+    toolFinishes += 1
     previews.finishTool()
     reconcilePreviews()
     applyTool()
+    publishDemoStatus()
   }
 
   func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
@@ -235,17 +243,21 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   private func reconcilePreviews() {
     guard demoState != nil, !updatingDrawing, !previews.usingTool else { return }
     let strokes = canvasView.drawing.strokes
+    drawingStrokes = strokes.count
     guard let retirement = previews.reconcile(strokeCount: strokes.count) else { return }
     if retirement.keepIndices.count != strokes.count {
       updatingDrawing = true
       canvasView.drawing = PKDrawing(strokes: retirement.keepIndices.map { strokes[$0] })
+      drawingStrokes = retirement.keepIndices.count
       updatingDrawing = false
     }
     for id in retirement.ids {
       if let context = contexts.removeValue(forKey: id) {
+        retireAcknowledged += 1
         onPreviewRetired(["id": id, "contextKey": context])
       }
     }
+    publishDemoStatus()
   }
 
   // MARK: - Configuration
@@ -289,7 +301,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
     guard window != nil, let state = demoState else { return }
     // Do not infer routing from module availability or assume where PencilKit attaches its recognizer.
     let routed = demoHost && canvasView.hasDrawingAncestor
-    let signature = "\(state.contextKey):\(state.enabled):\(coordinateView.bounds.width):\(coordinateView.bounds.height):\(lastHit):\(routed):\(canvasView.routingIssue):\(toolBegins)"
+    let signature = "\(state.contextKey):\(state.enabled):\(coordinateView.bounds.width):\(coordinateView.bounds.height):\(lastHit):\(routed):\(canvasView.routingIssue):\(toolBegins):\(toolFinishes):\(drawingStrokes):\(previews.retireIDs.count):\(retireAcknowledged)"
     guard signature != lastDemoStatus else { return }
     lastDemoStatus = signature
     onDemoStatus([
@@ -301,13 +313,17 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
       "routing": routed ? "gesture-ancestor" : "unattached",
       "routingIssue": canvasView.routingIssue,
       "toolBegins": toolBegins,
+      "toolFinishes": toolFinishes,
+      "drawingStrokes": drawingStrokes,
+      "retireRequested": previews.retireIDs.count,
+      "retireAcknowledged": retireAcknowledged,
     ])
   }
 
   private func dispatchReady() {
     onReady([
       "moduleVersion": "0.1.0",
-      "demoBridgeVersion": 4,
+      "demoBridgeVersion": 5,
       "osVersion": ProcessInfo.processInfo.operatingSystemVersionString,
       "deviceModel": UIDevice.current.model,
       "drawingPolicy": pencilOnly ? "pencilOnly" : "anyInput",

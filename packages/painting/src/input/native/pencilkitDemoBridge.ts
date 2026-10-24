@@ -50,7 +50,7 @@ export function connectPencilkitDemo(options: {
   let active: Lease | undefined;
   const pending = new Map<
     number,
-    { key: string; commitId: string; committed: boolean; timer: ReturnType<typeof setTimeout> }
+    { key: string; commitId: string; committed: boolean; timer?: ReturnType<typeof setTimeout> }
   >();
   const responses = new Map<number, { reply: PencilkitDemoReply; fingerprint: string }>();
   const completed = new Map<number, { key: string; fingerprint: string }>();
@@ -115,6 +115,22 @@ export function connectPencilkitDemo(options: {
   function retire(id: number, key: string, reason?: string) {
     reply({ id, contextKey: key, status: 'retire', ...(reason ? { reason } : {}) });
   }
+  function updateHandoffTimers() {
+    for (const [id, entry] of pending) {
+      // Native cannot rewrite PKDrawing while another tool cycle is active.
+      if (active || faulted) {
+        clearTimeout(entry.timer);
+        entry.timer = undefined;
+      } else if (entry.timer === undefined) {
+        entry.timer = setTimeout(() => {
+          faulted = true;
+          updateHandoffTimers();
+          reply({ id, contextKey: entry.key, status: 'rejected', reason: 'handoff-stalled' });
+          publish();
+        }, 5000);
+      }
+    }
+  }
   function cancel(reason: string): boolean {
     const lease = active;
     if (!lease) return true;
@@ -136,6 +152,7 @@ export function connectPencilkitDemo(options: {
     presentation.retireNative(lease.commitId);
     retire(lease.id, lease.key, reason);
     arbiter.releaseNativePencil();
+    updateHandoffTimers();
     return true;
   }
   function publish() {
@@ -417,17 +434,7 @@ export function connectPencilkitDemo(options: {
           batch: batch(lease, stroke.samples.slice(1), 1),
         });
         if (result.ok) {
-          const timer = setTimeout(() => {
-            faulted = true;
-            reply({
-              id: lease.id,
-              contextKey: lease.key,
-              status: 'rejected',
-              reason: 'handoff-stalled',
-            });
-            publish();
-          }, 5000);
-          const entry = { key: lease.key, commitId: lease.commitId, committed: false, timer };
+          const entry = { key: lease.key, commitId: lease.commitId, committed: false };
           pending.set(lease.id, entry);
           const commit = controller.commitFreehand(lease.commitId);
           if (commit.ok) {
@@ -458,6 +465,7 @@ export function connectPencilkitDemo(options: {
     };
     responses.set(message.messageId, { reply: response, fingerprint });
     if (responses.size > 32) responses.delete(responses.keys().next().value!);
+    updateHandoffTimers();
     reply(response);
     publish();
   }
