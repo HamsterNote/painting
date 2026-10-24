@@ -1,11 +1,13 @@
 import PencilKit
 import UIKit
 
-/// The real DOM host is a descendant, so the canvas recognizers see its real touches.
+/// Native input hosts DOM below the drawing recognizer; Web input excludes that ancestor.
 /// Hit testing is geometric only; touch-type policy runs later in shouldReceive(UITouch).
 final class PencilkitDemoCanvasView: PencilkitSamplingCanvasView {
   private let domContainer = UIView()
   private(set) weak var hostedDOMView: UIView?
+  weak var webInputHost: UIView?
+  var nativeInputEnabled = true
   var onRoutingChanged: (() -> Void)?
   private var lastConnected = false
 
@@ -34,9 +36,13 @@ final class PencilkitDemoCanvasView: PencilkitSamplingCanvasView {
     // PencilKit may attach its public recognizer to a descendant, not the PKCanvasView itself.
     // Keep the recognizer in place and mount below its actual owner, without inspecting private views.
     let owner = drawingGestureRecognizer.view
-    let destination = owner.flatMap { $0.isDescendant(of: self) ? $0 : nil } ?? self
+    let destination = !nativeInputEnabled ? (webInputHost ?? self) :
+      (owner.flatMap { $0.isDescendant(of: self) ? $0 : nil } ?? self)
     guard !destination.isDescendant(of: domContainer) else { return }
-    if domContainer.superview !== destination { destination.insertSubview(domContainer, at: 0) }
+    if domContainer.superview !== destination {
+      if nativeInputEnabled { destination.insertSubview(domContainer, at: 0) }
+      else { destination.addSubview(domContainer) }
+    }
     domContainer.frame = convert(bounds, to: destination)
     reportRouting()
   }
@@ -50,11 +56,21 @@ final class PencilkitDemoCanvasView: PencilkitSamplingCanvasView {
   }
 
   var hasDrawingAncestor: Bool {
-    routingIssue == "none"
+    nativeInputEnabled && routingIssue == "none"
+  }
+
+  var routing: String {
+    guard routingIssue == "none" else { return "unattached" }
+    return nativeInputEnabled ? "gesture-ancestor" : "web-sibling"
   }
 
   var routingIssue: String {
     guard let child = hostedDOMView else { return "dom-not-mounted" }
+    if !nativeInputEnabled {
+      guard let host = webInputHost, child.isDescendant(of: host),
+            !child.isDescendant(of: self) else { return "dom-inside-native-gestures" }
+      return "none"
+    }
     guard let owner = drawingGestureRecognizer.view else { return "recognizer-not-mounted" }
     guard owner.isDescendant(of: self) else { return "recognizer-outside-canvas" }
     return child.isDescendant(of: owner) ? "none" : "dom-outside-recognizer"
@@ -62,6 +78,7 @@ final class PencilkitDemoCanvasView: PencilkitSamplingCanvasView {
 
   override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
     guard let hostedDOMView else { return super.hitTest(point, with: event) }
+    guard nativeInputEnabled else { return nil }
     guard !isHidden, isUserInteractionEnabled, alpha >= 0.01, bounds.contains(point) else { return nil }
     return hostedDOMView.hitTest(convert(point, to: hostedDOMView), with: event)
   }

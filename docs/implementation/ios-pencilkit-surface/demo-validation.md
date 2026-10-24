@@ -2,7 +2,32 @@
 
 本增量对应 G2/G3 的可行性原型，不代表 G1 压力、G2 分流或 G3 物理交接通过；3.x 生产桥和 iOS 默认启用仍待门槛验收。`/pencilkit-probe` 保留原 G1 回归用途。
 
-## 纯 Web 首笔冻结（当前阻断，尚未定位根因）
+## App 关闭 PencilKit 后的手势隔离修订（标识 7，待本轮 Mac 验证）
+
+修勾已明确复现条件：在 App 内关闭 PencilKit，冻结前没有画过原生笔；Pencil 第一笔可画，第二笔开始画布和顶部工具栏均无响应，手指没有该问题。当前实体安装版本仍为 `bc337be` / 标识 6。尚无故障时的 Safari/Xcode/WebContent 调用栈，不能把此前桌面或 Simulator 手指测试通过视为实体冻结已修复。
+
+源码确认的隔离缺陷是：关闭状态仍把 DOM 放在 PKCanvas 绘图识别器祖先下，并保持绘图识别器和 raw observer 启用，仅在接收回调中拒绝触摸。本修订将同一个 DOM 容器移到 Expo host 内 PKCanvas 的兄弟层，停用两个原生识别器；PKCanvas 不再向该兄弟视图转发 hitTest。原生模式恢复公共 drawing recognizer 的真实祖先路由。重复关闭、布局更新及 epoch 重置不能重新启用原生识别器；关闭期间的 raw 会话丢弃，不伪造完成样本。DOM/controller/history 实例保持，G1 采样器不变。
+
+运行时状态分别报告 `routing=web-sibling`（关闭/Web 工具）和 `gesture-ancestor`（原生绘图）。原生兼容标识升至 **7**，旧标识 6 IPA 仅 Reload 无法测试本修订；本轮不提交 EAS、不重建验收包。
+
+回归：Swift 生产 view 的新用例覆盖首次关闭、反复更新、开→关、活动采样取消、新 epoch、两种 prop/mount 顺序、同一 DOM 身份/坐标和卸载。该用例在旧源码上首先因 DOM 仍是 PKCanvas 后代而失败，验证的是结构隔离缺口，不是模拟真实 UIKit 卡死。浏览器两项用例改为连续两笔相同 pointerId 的 pen，再 undo/redo、切工具和鼠标绘制；DOM host 既有关闭/待退休关闭 × 自由笔/Line 的四个集成场景保留。合成 PointerEvent 不冒充实体 Pencil 系统派发。
+
+Linux 本地：Swift 6.2.3 host 22 组、指定 Jest 5 suites / 80 tests、Chromium 2/2、容器 WebKit 26.4 2/2、typecheck、变更 TS 文件 lint/格式检查通过；真实 Apple SDK 检查明确 SKIP。本轮 Mac 门槛通过前不交付实体复测候选。
+
+Mac 保留 `apps/playground/app.json` 的 projectId/router/加密配置，按文末快进方式合并本分支后依次执行：
+
+```bash
+node scripts/test-pencilkit-g1.mjs
+pnpm exec jest --runInBand packages/painting/src/__tests__/layered-pencilkit-host.test.tsx packages/painting/src/__tests__/core/layered-tools.test.ts packages/painting/src/input/native/__tests__/pencilkitDemoBridge.test.ts tests/jest/native/layered-dom-route.native.test.tsx tests/jest/native/pencilkit-demo-version.native.test.tsx
+pnpm exec playwright test --config playwright.webkit.config.ts tests/ui/layered-editor.spec.ts --grep 'plain Web' --workers 1
+pnpm run prepare:playground-artifacts
+```
+
+使用 Xcode 26.6 / Swift 6.3.3 核验真实 SDK 契约及 22 组 host，完整编译并安装本地 Simulator app（标识 7）。优先验证关闭时 `web-sibling` 且 DOM 不在 PKCanvas 祖先下、两个识别器禁用；开启为 `gesture-ancestor`，再次关闭仍保留同一 DOM 和历史。核对自由笔/Line 两笔、undo/redo、切换工具，避免用重复手指 smoke 替代这次路由检查。回传原生/JS SHA、编译日志和路由/手势状态证据。
+
+若实体旧故障页面还在，先保留页面、不 Reload、不重启，由 Mac 建立 Safari/Xcode 调试连接后取暂停栈、主线程/WebContent 状态和 gesture trace；若现场丢失，先准备调试再做一次最小定位。设备是否解锁尚未确认。取得 Mac 本轮门槛前不安排修勾在旧 IPA 上测试新 Swift；不宣告实体冻结、G2/G3 或整体验收通过。
+
+## 纯 Web 首笔冻结的早期定位（历史，测试增量）
 
 2026-10-24 修勾在原生/JS `bc337be`、兼容标识 6、已安装 build `0300fc01-7b3a-4785-879c-e0c9af6cb7fa` 上确认实体 Pencil 跨笔不串笔，但报告纯 Web 的 pen 和 Line 均在完成第一笔后冻结。该单项 Pencil 结果不代表工具切换、Web、长期绘制或 G2/G3 验收通过；此版本不能作为整体验收通过版本，不再要求在冻结路径反复绘制。
 
@@ -172,7 +197,7 @@ Mac 保留 `apps/playground/app.json` 未提交配置，快进任务分支后执
 ## 入口与边界
 
 - 新 iOS development build：打开 `painting-playground:///layered-editor?pencilkit=1`。自由笔 Pencil 在真实 RN 原生视图中预览；raw 通过 Expo DOM 的串行消息/回调送到原 DOM controller，生成 schema 3 / PF 历史和统一 undo/redo。
-- 普通 `/layered-editor` 和首页默认仍是 DOM，顶部显示 `Web / DOM`，PencilKit 开关可直接切换验证参数。当前原生兼容标识为 `demoBridgeVersion=6`，旧 IPA 会显示构建不匹配；先完成首节 Mac 本地验证，本轮不重建验收包。
+- 普通 `/layered-editor` 和首页默认仍是 DOM，顶部显示 `Web / DOM`，PencilKit 开关可直接切换验证参数。当前原生兼容标识为 `demoBridgeVersion=7`，旧 IPA 会显示构建不匹配；先完成首节 Mac 本地验证，本轮不重建验收包。
 - Web/Android 使用基名路由，不导入 PencilKit 原生运行时。选择、文字、形状、尺子等工具继续走真实 Web 输入。iOS 原型将真实 Expo DOM 子视图挂载到公开 `drawingGestureRecognizer.view` 下的容器中，不假设该 owner 就是 PKCanvasView 本体；几何 hit-test 总是选择真实 DOM 后代，delegate 在实际 UITouch 到达后过滤 Pencil、画布边界和控件排除区。容器按坐标转换对齐 PKCanvasView，布局时协调延迟挂载的 owner。手指不由原生接管。开关关闭时仍保留同一个宿主和 DOM controller，避免切换丢文档。
 - 原生 begin 经过同一个输入仲裁器，锁定 controller 会话、笔刷和 viewport。end 只批量追加剩余真实样本，保留原始压力与接受顺序；取消、畸形或 overflow 整笔拒绝，不合成 DOM PointerEvent、raw up 或 PK 路径点。
 - 每笔最多 50,000 样本，最多 4 笔完成后待交接，transport 最多 12 条消息；消息/回执缓存有界。无活动 native 会话时等待退休 5 秒仅进入可恢复故障，不按超时清屏或宣称已显示。重试查询/重用原 commitId，已提交文档保留。
@@ -190,7 +215,7 @@ Mac 保留 `apps/playground/app.json` 未提交配置，快进任务分支后执
 
 ## Mac 合并与重建（Swift 历史增量）
 
-本节记录 Swift 增量的本地编译流程。本轮须使用首节标识 6 的原生代码，先做 Simulator smoke，不重提 EAS。
+本节记录 Swift 增量的本地编译流程。本轮须使用首节标识 7 的原生代码，先做 Simulator smoke，不重提 EAS。
 
 先保留 `apps/playground/app.json` 已有未提交 projectId/router/加密声明，在任务分支执行：
 

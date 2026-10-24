@@ -148,7 +148,8 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
     canvasView.addGestureRecognizer(touchObserver)
     canvasView.delaysContentTouches = false
     canvasView.canCancelContentTouches = false
-    canvasView.updateDOMHost()
+    canvasView.webInputHost = self
+    applyDemoInputRoute()
     publishDemoStatus()
   }
 
@@ -186,7 +187,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
     if demoState?.contextKey.split(separator: ":").first != state.contextKey.split(separator: ":").first {
       demoSampler.discardActiveSessions()
       canvasView.drawingGestureRecognizer.isEnabled = false
-      canvasView.drawingGestureRecognizer.isEnabled = true
+      canvasView.drawingGestureRecognizer.isEnabled = state.enabled
       canvasView.drawing = PKDrawing()
       contexts.removeAll()
       previews = PencilkitPreviewLedger()
@@ -200,18 +201,30 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
     demoState = state
     coordinateView.frame = state.frame.rect
     previews.retireIDs.formUnion(state.retireIDs.filter { contexts[$0] != nil })
-    if let id = collectingID, state.retireIDs.contains(id) {
+    if let id = collectingID, state.retireIDs.contains(id) || !state.enabled {
       collectingID = nil
       demoSampler.discardActiveSessions()
       // Cancel only the temporary PK gesture. No raw stroke or history transaction is synthesized.
       canvasView.drawingGestureRecognizer.isEnabled = false
-      canvasView.drawingGestureRecognizer.isEnabled = true
       previews.finishedIDs.append(id)
       previews.cancelledIDs.insert(id)
       previews.cancelTool(for: id)
     }
+    applyDemoInputRoute()
     reconcilePreviews()
     publishDemoStatus()
+  }
+
+  private func applyDemoInputRoute() {
+    guard demoHost else { return }
+    let enabled = demoState?.enabled == true
+    if canvasView.drawingGestureRecognizer.isEnabled != enabled {
+      canvasView.drawingGestureRecognizer.isEnabled = enabled
+    }
+    if touchObserver.isEnabled != enabled { touchObserver.isEnabled = enabled }
+    // Move the same DOM container, preserving its controller and history.
+    canvasView.nativeInputEnabled = enabled
+    canvasView.updateDOMHost()
   }
 
   private func acceptsDemoTouch(_ touch: UITouch) -> Bool {
@@ -311,7 +324,8 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
     guard window != nil, let state = demoState else { return }
     // Do not infer routing from module availability or assume where PencilKit attaches its recognizer.
     let routed = demoHost && canvasView.hasDrawingAncestor
-    let signature = "\(state.contextKey):\(state.enabled):\(coordinateView.bounds.width):\(coordinateView.bounds.height):\(lastHit):\(routed):\(canvasView.routingIssue):\(toolBegins):\(toolFinishes):\(drawingStrokes):\(previews.retireIDs.count):\(retireAcknowledged)"
+    let routing = demoHost ? canvasView.routing : "unattached"
+    let signature = "\(state.contextKey):\(state.enabled):\(coordinateView.bounds.width):\(coordinateView.bounds.height):\(lastHit):\(routing):\(canvasView.routingIssue):\(toolBegins):\(toolFinishes):\(drawingStrokes):\(previews.retireIDs.count):\(retireAcknowledged)"
     guard signature != lastDemoStatus else { return }
     lastDemoStatus = signature
     onDemoStatus([
@@ -320,7 +334,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
       "width": coordinateView.bounds.width,
       "height": coordinateView.bounds.height,
       "lastHit": lastHit,
-      "routing": routed ? "gesture-ancestor" : "unattached",
+      "routing": routing,
       "routingIssue": canvasView.routingIssue,
       "toolBegins": toolBegins,
       "toolFinishes": toolFinishes,
@@ -333,7 +347,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   private func dispatchReady() {
     onReady([
       "moduleVersion": "0.1.0",
-      "demoBridgeVersion": 6,
+      "demoBridgeVersion": 7,
       "osVersion": ProcessInfo.processInfo.operatingSystemVersionString,
       "deviceModel": UIDevice.current.model,
       "drawingPolicy": pencilOnly ? "pencilOnly" : "anyInput",

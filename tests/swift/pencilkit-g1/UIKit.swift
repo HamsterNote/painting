@@ -25,6 +25,7 @@ public class UndoManager {}
 
 open class UIView: NSObject {
   private var children: [UIView] = []
+  public private(set) var gestureRecognizers: [UIGestureRecognizer]? = []
   public var subviews: [UIView] { children }
   public override init() { super.init() }
   public init(frame: CGRect) {
@@ -57,7 +58,10 @@ open class UIView: NSObject {
     }
     return false
   }
-  public func addGestureRecognizer(_ recognizer: UIGestureRecognizer) { recognizer.view = self }
+  public func addGestureRecognizer(_ recognizer: UIGestureRecognizer) {
+    gestureRecognizers?.append(recognizer)
+    recognizer.view = self
+  }
   open var undoManager: UndoManager? { nil }
   public var bounds = CGRect(x: 0, y: 0, width: 100, height: 100)
   public var frame = CGRect(x: 0, y: 0, width: 100, height: 100) {

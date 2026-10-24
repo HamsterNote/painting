@@ -16,13 +16,14 @@ test.each([
   { demoBridgeVersion: 4 },
   { demoBridgeVersion: 5 },
   { demoBridgeVersion: 6 },
-])('native Demo requires the identity-bound preview handoff binary: %j', (module) => {
+  { demoBridgeVersion: 7 },
+])('native Demo requires the isolated Web input host binary: %j', (module) => {
   jest.mocked(requireOptionalNativeModule).mockReturnValue(module);
   let available = false;
   jest.isolateModules(() => {
     const view = require('../../../packages/painting-pencilkit/src/PaintingPencilkitView');
     available = view.isPencilkitDemoAvailable();
   });
-  expect(available).toBe(module?.demoBridgeVersion === 6);
+  expect(available).toBe(module?.demoBridgeVersion === 7);
   expect(requireNativeViewManager).toHaveBeenCalledTimes(module ? 1 : 0);
 });

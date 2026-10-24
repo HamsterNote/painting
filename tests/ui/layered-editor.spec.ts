@@ -68,7 +68,7 @@ for (const firstTool of ['freehand', 'line'] as const) {
     await expect(objects.first()).toHaveCSS('visibility', 'visible');
     const firstPath = await objects.first().locator('path').getAttribute('d');
     expect(firstPath).toBeTruthy();
-    await mouse(150);
+    await pen(150);
     await expect(objects).toHaveCount(2);
     await page.getByRole('button', { name: '撤销', exact: true }).click();
     await expect(objects).toHaveCount(1);

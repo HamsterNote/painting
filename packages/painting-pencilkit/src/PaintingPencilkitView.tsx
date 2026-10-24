@@ -93,7 +93,7 @@ export type PaintingPencilkitViewProps = Readonly<{
       width: number;
       height: number;
       lastHit: string;
-      routing: 'gesture-ancestor' | 'unattached';
+      routing: 'gesture-ancestor' | 'web-sibling' | 'unattached';
       routingIssue?: string;
       toolBegins: number;
       toolFinishes: number;
@@ -130,7 +130,7 @@ const NativeView: React.ComponentType<PaintingPencilkitViewProps> | undefined = 
   : undefined;
 
 export function isPencilkitDemoAvailable(): boolean {
-  return NativeModule?.demoBridgeVersion === 6;
+  return NativeModule?.demoBridgeVersion === 7;
 }
 
 export function PaintingPencilkitView(props: PaintingPencilkitViewProps) {

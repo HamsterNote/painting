@@ -587,11 +587,71 @@ func testDemoPassiveTouchObserver() {
   check(samples[0]["x"] as? Double == 40 && samples[0]["y"] as? Double == 40, "observer coordinates must be local to DOM drawing frame")
 }
 
+func testDisabledDemoExcludesNativeGestureAncestors() {
+  let window = UIWindow()
+  let view = PaintingPencilkitView()
+  window.addSubview(view)
+  view.setDemoHost(true)
+  let dom = UIView()
+  view.mountChildComponentView(dom, index: 0)
+  let canvas = view.subviews.compactMap { $0 as? PencilkitDemoCanvasView }.first!
+  let observer = canvas.gestureRecognizers!.compactMap { $0 as? PencilkitDemoTouchObserver }.first!
+  func checkWebRoute() {
+    check(dom.isDescendant(of: view) && !dom.isDescendant(of: canvas), "Web DOM must not inherit PencilKit recognizers")
+    check(!canvas.drawingGestureRecognizer.isEnabled, "Web mode must disable the native drawing recognizer")
+    check(!observer.isEnabled, "Web mode must disable the raw observer")
+    check(canvas.hostedDOMView === dom, "routing must preserve the same DOM view")
+    check(canvas.hitTest(CGPoint(x: 5, y: 5), with: nil) == nil, "off canvas must not forward hits into its Web sibling")
+    check(dom.convert(CGPoint.zero, to: view) == CGPoint.zero, "reparenting changed the Web drawing origin")
+  }
+  func configure(_ enabled: Bool, _ context: String) {
+    let data = try! JSONSerialization.data(withJSONObject: [
+      "contextKey": context, "enabled": enabled, "retireIDs": [],
+      "frame": ["x": 0, "y": 0, "width": 100, "height": 100], "exclusions": [],
+    ])
+    view.setDemoState(String(data: data, encoding: .utf8)!)
+  }
+  checkWebRoute()
+  configure(false, "")
+  checkWebRoute()
+  // Repeated off props and layout updates must never re-enable the ancestor recognizers.
+  for _ in 0..<2 {
+    configure(false, "")
+    view.layoutSubviews()
+    checkWebRoute()
+  }
+  configure(true, "routing:1")
+  check(dom.isDescendant(of: canvas) && canvas.hasDrawingAncestor, "native mode must restore the public gesture ancestor")
+  check(canvas.drawingGestureRecognizer.isEnabled && observer.isEnabled, "native mode must restore both recognizers")
+  let pencil = UITouch(1)
+  observer.touchesBegan([pencil], with: UIEvent([]))
+  check(view.onBegin.events.count == 1, "re-enabled native observer failed to begin")
+  // An explicit mode change cancels collecting raw data without fabricating a stroke.
+  configure(false, "routing:2")
+  checkWebRoute()
+  check(view.onStroke.events.isEmpty, "disabling the native route fabricated a completion")
+  configure(true, "next-epoch:1")
+  check(dom.isDescendant(of: canvas), "new epoch must restore native routing")
+  configure(false, "")
+  checkWebRoute()
+  check(view.onDemoStatus.events.last!["routing"] as? String == "web-sibling", "status must report the actual Web sibling route")
+  view.unmountChildComponentView(dom, index: 0)
+  check(dom.superview == nil, "off-mode unmount leaked the Web DOM container")
+  let lateHost = PaintingPencilkitView()
+  let lateDOM = UIView()
+  lateHost.mountChildComponentView(lateDOM, index: 0)
+  lateHost.setDemoState("{\"contextKey\":\"\",\"enabled\":false,\"retireIDs\":[],\"frame\":{\"x\":0,\"y\":0,\"width\":100,\"height\":100},\"exclusions\":[]}")
+  lateHost.setDemoHost(true)
+  let lateCanvas = lateHost.subviews.compactMap { $0 as? PencilkitDemoCanvasView }.first!
+  check(lateDOM.isDescendant(of: lateHost) && !lateDOM.isDescendant(of: lateCanvas), "late Demo host prop left Web under native gestures")
+}
+
 let tests: [(String, () -> Void)] = [
   ("Demo policy uses actual touch and preserves finger/control routing", testDemoPencilHitTesting),
   ("Demo hit testing selects real DOM before touch metadata exists", testDemoGeometricHitTesting),
   ("Demo mounts under nested/delayed public drawing recognizer owners", testDemoNestedDrawingOwner),
   ("Demo passive ancestor observer samples once in drawing-frame coordinates", testDemoPassiveTouchObserver),
+  ("disabled Demo has no native gesture ancestors and preserves DOM across toggles", testDisabledDemoExcludesNativeGestureAncestors),
   ("terminal coalesced overlap and repeated finish", testTerminalCoalescedOverlap),
   ("up/cancel sharing a previously accepted timestamp", testTerminalWithPreviouslyAcceptedTimestamp),
   ("tap with equal/distinct timestamps and no coalesced event", testTapAndMissingCoalesced),
