@@ -2,7 +2,7 @@
 
 本增量对应 G2/G3 的可行性原型，不代表 G1 压力、G2 分流或 G3 物理交接通过；3.x 生产桥和 iOS 默认启用仍待门槛验收。`/pencilkit-probe` 保留原 G1 回归用途。
 
-## 32 笔后空预览退休与 Line 切换修订（待 Mac 验证，非真机候选）
+## 32 笔后空预览退休与 Line 切换修订（bc337be，Mac 已验证，待实体复测）
 
 `42314ff` / 兼容标识 5 的 EAS build `c59cb30d-841a-493f-815e-e90ea9c54ff7` 已安装到实体 iPad。修勾报告上一笔预览未退休时下一笔复用旧笔迹，以及 PencilKit 笔后绘制 Line 卡死。截图为起笔/完成/提交 32、tool 结束 32、待交接 2、待退休/已确认 2/30、PK 存量 0、`handoff-stalled`。该版本实体未通过，不再继续反复绘制；此前的 Mac 编译与 smoke 通过记录不能替代本轮验证。
 
@@ -16,7 +16,7 @@
 
 本地验证：Jest 93 suites / 1224 tests、responder 9 项、Swift 6.2.3 host 21 组、typecheck、lint（0 errors / 32 条既有 warnings）、库构建、iOS JS/DOM export、变更文件格式检查通过。生产采样器、G1、手指 Web 路由、依赖与锁文件保持不变。
 
-本轮原生兼容标识升为 **6**；旧标识 5 IPA 加载新 JS 会明确提示构建不匹配，仅 Reload 不含本次 Swift 修订。本轮不提交 EAS、不重建真机验收包。先由 Mac 保留 `apps/playground/app.json` 原有 projectId/router/加密声明，按文末快进流程合并任务分支，依次运行（避免库构建与 Jest 同时写产物）：
+本轮原生兼容标识升为 **6**；旧标识 5 IPA 加载新 JS 会明确提示构建不匹配，仅 Reload 不含本次 Swift 修订。本轮只核验并交付候选，不提交 EAS、不重建真机验收包。Mac 已保留 `apps/playground/app.json` 原有 projectId/router/加密声明，按文末快进流程合并任务分支，依次运行（避免库构建与 Jest 同时写产物）：
 
 ```bash
 pnpm install --frozen-lockfile
@@ -25,7 +25,13 @@ pnpm exec jest --runInBand packages/painting/src/__tests__/layered-pencilkit-hos
 pnpm run prepare:playground-artifacts
 ```
 
-随后以 Xcode 26.6 / Swift 6.3.3 对标识 6 完整本地编译、安装启动 Simulator app，执行直接 `?pencilkit=1` 与开→关→开路由 smoke，确认非零尺寸、`gesture-ancestor`、无 Native action 错误。保留历史笔迹，切 Line 画完后验证控件、undo/redo、再画和手指 Web 均可用，回传本轮原生/JS SHA、完整日志与截图。Simulator 没有真实 Pencil，不能验证活动原生预览跨笔或物理交接；这些仍留待 Mac 门槛通过后的实体工程复测，不能先宣告 G2/G3 或真机通过。Linux 的真实 Apple SDK 检查明确 SKIP，尚不交付真机候选，HAM-66 保持 `in_progress`。
+2026-10-24 已核对 Mac 评论 `01a16e1d-3da1-7f13-a970-d86a334997ee` 及附件 `ham66-bc337be-local-evidence.zip`，现交付实体工程复测候选 **`bc337bef9ce674af9c63b1bec94e7723d998abc6`**（原生/JS 同 SHA，兼容标识 6）：
+
+- Xcode 26.6（17F113）/ Swift 6.3.3：真实 Simulator SDK 契约检查、host 21 组、指定 Jest 5 suites / 75 tests、冻结安装和库构建通过。完整新 app 编译、安装启动成功，诊断含 `BUILD SUCCEEDED`，仍有既有 Constants 弃用和依赖警告。
+- iPad Pro 13-inch（M5）/ iOS 26.3 Simulator：直接入口 `1032x1120`、普通路由开→关→开后 `1032x1140`，均为 `gesture-ancestor`。手指 Web 笔迹经开关保留，完成 Line 后 undo 删除、redo 恢复，再切自由笔继续绘制；最终三笔均可见、控件可操作。附件的 Line 与 redo 截图一致，undo 截图不同。
+- 本轮 Metro/runtime 未见 Native action 缺失或 handoff-stalled。runtime 有一条 `kCFRunLoopCommonModes` 告警及启动/后台模式告警；smoke 未观察到界面卡住，不能将此描述为零告警或长期稳定性证明。
+
+Simulator 无真实 Pencil，原生起笔/完成/提交/tool 结束等计数全为 0；这些交互来自手指 Web，不能证明跨笔原生预览、退休与实体 PencilKit→Line 卡死已恢复，更不代表 G2/G3 通过。后续实体复测须使用包含候选 Swift SHA 的新二进制，不能在旧标识 5 IPA 上仅 Reload。优先记录两个真实 Pencil 场景：上一笔预览待退休时立即画下一笔，各笔身份与历史独立、空闲后队列/待交接/待退休归零；完成 PencilKit 笔后切 Line 并完成，随后 undo/redo、工具切换和再画均可继续。保留视频、状态计数与二进制/JS SHA；若再次串笔、`handoff-stalled` 或卡死立即停止，采集线程栈和日志，不继续重复绘制。G1 Probe 保留回归，HAM-66 继续 `in_progress`。
 
 ## PKCanvasViewDelegate 结束入口修正（42314ff，历史，实体复测未通过）
 
