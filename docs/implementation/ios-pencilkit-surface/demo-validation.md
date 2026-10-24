@@ -2,7 +2,22 @@
 
 本增量对应 G2/G3 的可行性原型，不代表 G1 压力、G2 分流或 G3 物理交接通过；3.x 生产桥和 iOS 默认启用仍待门槛验收。`/pencilkit-probe` 保留原 G1 回归用途。
 
-## 第四笔交接与多笔可见性修复（本轮，待 Mac 本地编译/smoke）
+## PKCanvasViewDelegate 结束入口修正（本轮，待 Mac 编译验证）
+
+Mac 对 `0965183` 的 Xcode 26.6 / Swift 6.3.3 编译成功，但报告 `canvasViewDidFinishUsingTool` 仅近似匹配可选协议方法；真实 SDK 要求 `canvasViewDidEndUsingTool(_:)`。因此原有工具结束计数、`previews.finishTool()`、退休协调与延迟笔刷设置不在系统结束回调中执行。已修正方法签名，保留原收尾逻辑；该缺陷足以阻塞退休，但不能据此宣告实体可见性全部恢复。
+
+此前 19 组 Swift 替身未编译实际 Expo view，只测试了账本的直接调用，未覆盖系统委托入口。本轮 `node scripts/test-pencilkit-g1.mjs` 增加两层检查：
+
+- 所有平台编译实际 `PaintingPencilkitView`，替身将三个相关 delegate 方法设为必需协议要求；旧错名代码已验证编译失败。新增视图回归通过协议分发 begin/end/drawing-change，使用生产采样器与账本，验证前三笔完成、第四笔活动时延迟退休、真实结束入口退休前三笔且保留第四笔、四笔回执逐一清理且不重复、第五笔可继续退休与笔刷解锁。
+- macOS 先用 `xcrun` 的真实 iOS Simulator SDK 编译生产 view、采样器和手势 delegate，仅替换 Expo 宿主/事件边界。`AppleDelegateContract.swift` 以 SDK 协议与生产 view 的 `#selector` 校验同一结束方法并检查可选协议调用能通过类型检查；`-warnings-as-errors` 阻止近似协议签名警告。此步骤是 SDK 类型检查，不冒充系统实际派发或物理绘制验证。Linux 明确输出 SKIP。
+
+DOM 多笔可见性回归进一步验证：前三个乱序退休确认不能提前显示历史；四笔完成交接后，第五笔仅隐藏自身，旧四笔路径与可见性保持。
+
+本次只是待 Mac 验证修订，尚不交付为已验证候选。兼容标识仍为 5，但必须按新 Swift SHA 重编译；之前 `0965183` 的标识 5 模拟器包不能 Reload 带入签名修正。Mac 保留 `apps/playground/app.json` 的未提交配置，快进后运行 `node scripts/test-pencilkit-g1.mjs`，确认真实 SDK 契约检查和 20 组 host 测试都通过，再做 Xcode 26.6 / Swift 6.3.3 完整 app 编译与既有 Simulator smoke。回传新 SHA、契约/编译日志以及 `gesture-ancestor` 和无 action 错误的证据；若有告警/编译失败，先返回修复，不重建真机验收包或提交 EAS。取得 Mac 结果后才交付候选，实体第四笔与实际像素验收仍另行进行。
+
+本地结果：Swift 6.2.3 host 20 组、相关 Jest 4 suites / 61 tests、修改文件 lint/格式检查通过；真实 SDK 检查在 Linux 明确跳过，MobileBuildMCP 返回 `spawn xcrun ENOENT`。这次不引用上一修订的 Mac 编译结果作为新签名的验证。
+
+## 0965183 第四笔交接与多笔可见性修复（历史，结束入口仍有缺陷）
 
 `6aecb3b` 的 Simulator smoke 已确认有效尺寸、`gesture-ancestor`、开关保留手指笔迹且无 action 错误，但原生计数为 0。随后实体 iPad 在第四笔停于 `handoff-stalled`：起笔 4、完成 3、提交 3、待交接 4、PK预览 4，原生预览与历史均不可见。该版本未通过，停止在旧包反复绘制；下述本地复现不能替代实体故障的完整根因证据。
 

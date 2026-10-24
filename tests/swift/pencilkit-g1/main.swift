@@ -1,4 +1,5 @@
 import UIKit
+import PencilKit
 
 func check(_ condition: @autoclosure () -> Bool, _ message: String) {
   guard condition() else { fatalError(message) }
@@ -271,6 +272,69 @@ func testProtocolCancellationDoesNotFabricateRawEnd() {
   _ = verifyCompleted(sampler)
 }
 
+func testProductionDelegateRetiresFourPreviews() {
+  let window = UIWindow()
+  let view = PaintingPencilkitView()
+  window.addSubview(view)
+  view.didMoveToWindow()
+  view.setDemoHost(true)
+  view.mountChildComponentView(UIView(), index: 0)
+  let canvas = view.subviews.compactMap { $0 as? PencilkitDemoCanvasView }.first!
+  let delegate: PKCanvasViewDelegate = canvas.delegate!
+  func configure(_ retireIDs: [Int]) {
+    let data = try! JSONSerialization.data(withJSONObject: [
+      "contextKey": "delegate:1", "enabled": true, "retireIDs": retireIDs,
+      "frame": ["x": 0, "y": 0, "width": 100, "height": 100], "exclusions": [],
+    ])
+    view.setDemoState(String(data: data, encoding: .utf8)!)
+  }
+  func begin(_ id: Int) -> UITouch {
+    let touch = UITouch(Double(id))
+    canvas.sampler.touchesBegan([touch], in: canvas)
+    delegate.canvasViewDidBeginUsingTool(canvas)
+    return touch
+  }
+  func endRaw(_ touch: UITouch, id: Int) {
+    canvas.drawing = PKDrawing(strokes: canvas.drawing.strokes + [PKStroke(id)])
+    delegate.canvasViewDrawingDidChange(canvas)
+    touch.timestamp += 0.5
+    canvas.sampler.touchesEnded([touch], event: nil, in: canvas)
+  }
+  func retired() -> [Int] { view.onPreviewRetired.events.map { $0["id"] as! Int } }
+  configure([])
+  for id in 1...3 {
+    endRaw(begin(id), id: id)
+    delegate.canvasViewDidEndUsingTool(canvas)
+  }
+  check(view.onStroke.events.count == 3, "first three raw completions were lost")
+  check(canvas.drawing.strokes.map { $0.id } == [1, 2, 3], "completed previews disappeared before retirement")
+  let fourth = begin(4)
+  configure([1, 2, 3])
+  check(retired().isEmpty, "active fourth tool must defer PKDrawing mutation")
+  endRaw(fourth, id: 4)
+  check(retired().isEmpty, "raw end alone must not replace the real PK delegate end")
+  // Dispatch through the protocol, rather than invoking the ledger's finishTool directly.
+  delegate.canvasViewDidEndUsingTool(canvas)
+  check(retired() == [1, 2, 3], "SDK end callback failed to retire the first three previews")
+  check(canvas.drawing.strokes.map { $0.id } == [4], "old retirement cleared the fourth preview")
+  configure([1, 2, 3, 4])
+  check(retired() == [1, 2, 3, 4], "fourth preview failed to retire exactly once")
+  check(canvas.drawing.strokes.isEmpty, "retired PK previews leaked")
+  configure([1, 2, 3, 4])
+  check(retired().count == 4, "duplicate retirement emitted another acknowledgment")
+  let status = view.onDemoStatus.events.last!
+  check(status["toolFinishes"] as? Int == 4, "delegate finish counter did not advance")
+  check(status["retireRequested"] as? Int == 0, "native retirement requests did not drain")
+  check(status["retireAcknowledged"] as? Int == 4, "native retirement acknowledgments were lost")
+  view.setInkWidth(9)
+  check((canvas.tool as? PKInkingTool)?.width == 9, "tool remained locked after delegate end")
+  let fifth = begin(5)
+  endRaw(fifth, id: 5)
+  delegate.canvasViewDidEndUsingTool(canvas)
+  configure([5])
+  check(retired() == [1, 2, 3, 4, 5], "fifth stroke stalled after the batch drained")
+}
+
 func testLongStrokeAcrossMoveEvents() {
   let sampler = PencilkitG1Sampler()
   let view = UIView()
@@ -457,6 +521,7 @@ let tests: [(String, () -> Void)] = [
   ("empty cancellation does not consume the next preview", testCancelledEmptyPreviewCannotConsumeNextStroke),
   ("next raw begin cannot steal previous PK tool finish", testNextRawBeginBeforePreviousToolFinish),
   ("tool-first order and first-three/fourth preview retirement", testToolCallbacksBeforeRawAndFourthStrokeRetirement),
+  ("production view protocol end retires four previews and accepts the next", testProductionDelegateRetiresFourPreviews),
   ("protocol cancellation never synthesizes a raw end", testProtocolCancellationDoesNotFabricateRawEnd),
   ("long stroke across distinct UIKit move callbacks", testLongStrokeAcrossMoveEvents),
   ("callbacks can read/cancel/clear without deadlocking", testCallbacksCanReenterSampler),

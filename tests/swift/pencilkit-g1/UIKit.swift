@@ -25,7 +25,16 @@ public class UndoManager {}
 
 open class UIView: NSObject {
   private var children: [UIView] = []
+  public var subviews: [UIView] { children }
+  public override init() { super.init() }
+  public init(frame: CGRect) {
+    super.init()
+    self.frame = frame
+  }
   public weak var superview: UIView?
+  open var window: UIWindow? { superview?.window }
+  public var backgroundColor: UIColor?
+  public var isOpaque = true
   public func addSubview(_ view: UIView) {
     view.removeFromSuperview()
     children.append(view)
@@ -58,6 +67,7 @@ open class UIView: NSObject {
   public var isUserInteractionEnabled = true
   public var alpha: CGFloat = 1
   open func layoutSubviews() {}
+  open func didMoveToWindow() {}
   open func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
     !isHidden && isUserInteractionEnabled && alpha >= 0.01 && bounds.contains(point) ? self : nil
   }
@@ -82,6 +92,16 @@ open class UIView: NSObject {
   open func touchesEstimatedPropertiesUpdated(_ touches: Set<UITouch>) {}
 }
 
+open class UIWindow: UIView {
+  open override var window: UIWindow? { self }
+}
+
+public struct UIColor {
+  public static let clear = UIColor()
+  public static let systemBlue = UIColor()
+  public func withAlphaComponent(_ alpha: CGFloat) -> UIColor { self }
+}
+
 public final class UITouch: NSObject {
   public typealias TouchType = HostTouchType
   public var timestamp: TimeInterval
@@ -103,6 +123,8 @@ public final class UITouch: NSObject {
 public enum GestureState { case possible, failed }
 open class UIGestureRecognizer: NSObject {
   public weak var view: UIView?
+  public weak var delegate: AnyObject?
+  public var isEnabled = true
   public var state: GestureState = .possible
   public var allowedTouchTypes: [NSNumber] = []
   public var requiresExclusiveTouchType = true

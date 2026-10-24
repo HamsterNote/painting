@@ -215,7 +215,9 @@ test('three committed strokes and a fourth collecting stroke reveal all history 
   const nodes = () => Array.from(view.container.querySelectorAll<SVGGElement>('[data-object-id]'));
   expect(nodes()).toHaveLength(4);
   expect(nodes().every((node) => node.style.visibility === 'hidden')).toBe(true);
-  for (const id of [4, 3, 2, 1]) send({ type: 'retired', id, contextKey: key });
+  for (const id of [4, 3, 2]) send({ type: 'retired', id, contextKey: key });
+  expect(nodes().every((node) => node.style.visibility === 'hidden')).toBe(true);
+  send({ type: 'retired', id: 1, contextKey: key });
   for (const node of nodes()) {
     expect(node.querySelector('path')?.getAttribute('d')).toBeTruthy();
     expect(node.style.visibility).toBe('visible');
@@ -224,6 +226,24 @@ test('three committed strokes and a fourth collecting stroke reveal all history 
   expect(onReply.mock.calls.some(([reply]) => reply.status === 'rejected')).toBe(false);
   expect(onState.mock.calls.at(-1)![0].enabled).toBe(true);
   expect(window.__layeredEditor!.getSnapshot('document').objects).toHaveLength(4);
+  const previousPaths = nodes().map((node) => node.querySelector('path')!.getAttribute('d'));
+  finish(5, begin(5));
+  expect(nodes()).toHaveLength(5);
+  expect(
+    nodes()
+      .slice(0, 4)
+      .every((node) => node.style.visibility === 'visible')
+  ).toBe(true);
+  expect(nodes()[4].style.visibility).toBe('hidden');
+  send({ type: 'retired', id: 5, contextKey: key });
+  expect(nodes().every((node) => node.style.visibility === 'visible')).toBe(true);
+  expect(
+    nodes()
+      .slice(0, 4)
+      .map((node) => node.querySelector('path')!.getAttribute('d'))
+  ).toEqual(previousPaths);
+  expect(nodes()[4].querySelector('path')?.getAttribute('d')).toBeTruthy();
+  expect(window.__layeredEditor!.getSnapshot('document').objects).toHaveLength(5);
   view.unmount();
 });
 

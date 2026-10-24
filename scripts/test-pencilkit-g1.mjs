@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -17,9 +17,61 @@ function run(command, args, env = process.env) {
   if (result.status !== 0) throw new Error(`${command} exited with ${result.status}`);
 }
 
+const native = path.join(root, 'packages/painting-pencilkit/ios');
+const production = [
+  'PencilkitG1Sampler.swift',
+  'PencilkitPreviewLedger.swift',
+  'PencilkitDemoHitTesting.swift',
+  'PencilkitDemoCanvasView.swift',
+  'PencilkitDemoTouchObserver.swift',
+  'PaintingPencilkitView.swift',
+].map((file) => path.join(native, file));
+
 try {
+  if (process.platform === 'darwin') {
+    const sdk = spawnSync('xcrun', ['--sdk', 'iphonesimulator', '--show-sdk-path'], {
+      encoding: 'utf8',
+    });
+    if (sdk.error) throw sdk.error;
+    if (sdk.status !== 0) throw new Error(`iOS SDK lookup failed: ${sdk.stderr}`);
+    const sdkOutput = path.join(output, 'apple-sdk');
+    mkdirSync(sdkOutput);
+    const sdkArgs = [
+      '-swift-version',
+      '5',
+      '-sdk',
+      sdk.stdout.trim(),
+      '-target',
+      `${process.arch === 'arm64' ? 'arm64' : 'x86_64'}-apple-ios15.1-simulator`,
+    ];
+    // Expo alone is stubbed here. UIKit, PencilKit, selectors and optional dispatch are Apple's.
+    run('xcrun', [
+      'swiftc',
+      ...sdkArgs,
+      '-emit-module',
+      '-module-name',
+      'ExpoModulesCore',
+      '-emit-module-path',
+      path.join(sdkOutput, 'ExpoModulesCore.swiftmodule'),
+      path.join(fixtures, 'ExpoModulesCore.swift'),
+    ]);
+    run('xcrun', [
+      'swiftc',
+      ...sdkArgs,
+      '-warnings-as-errors',
+      '-typecheck',
+      '-I',
+      sdkOutput,
+      ...production,
+      path.join(native, 'PencilkitDemoDrawingDelegate.swift'),
+      path.join(fixtures, 'AppleDelegateContract.swift'),
+    ]);
+    console.log('PASS: production view delegate contract against the real iOS Simulator SDK');
+  } else {
+    console.log('SKIP: real Apple SDK delegate contract requires macOS/Xcode');
+  }
   // Compile the production sampler unchanged against narrow host-only UIKit/PencilKit fixtures.
-  for (const module of ['UIKit', 'PencilKit']) {
+  for (const module of ['UIKit', 'PencilKit', 'ExpoModulesCore']) {
     run(compiler, [
       '-swift-version',
       '5',
@@ -33,7 +85,7 @@ try {
       output,
       '-L',
       output,
-      ...(module === 'PencilKit' ? ['-lUIKit'] : []),
+      ...(module !== 'UIKit' ? ['-lUIKit'] : []),
       path.join(fixtures, `${module}.swift`),
       '-o',
       path.join(output, `lib${module}.${extension}`),
@@ -49,11 +101,9 @@ try {
     output,
     '-lUIKit',
     '-lPencilKit',
-    path.join(root, 'packages/painting-pencilkit/ios/PencilkitG1Sampler.swift'),
-    path.join(root, 'packages/painting-pencilkit/ios/PencilkitPreviewLedger.swift'),
-    path.join(root, 'packages/painting-pencilkit/ios/PencilkitDemoHitTesting.swift'),
-    path.join(root, 'packages/painting-pencilkit/ios/PencilkitDemoCanvasView.swift'),
-    path.join(root, 'packages/painting-pencilkit/ios/PencilkitDemoTouchObserver.swift'),
+    '-lExpoModulesCore',
+    ...production,
+    path.join(fixtures, 'DrawingDelegate.swift'),
     path.join(fixtures, 'main.swift'),
     '-o',
     executable,

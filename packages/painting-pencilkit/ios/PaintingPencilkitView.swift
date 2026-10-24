@@ -228,7 +228,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
     publishDemoStatus()
   }
 
-  func canvasViewDidFinishUsingTool(_ canvasView: PKCanvasView) {
+  func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) {
     toolFinishes += 1
     previews.finishTool()
     reconcilePreviews()
