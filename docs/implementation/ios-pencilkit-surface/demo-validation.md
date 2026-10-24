@@ -2,7 +2,32 @@
 
 本增量对应 G2/G3 的可行性原型，不代表 G1 压力、G2 分流或 G3 物理交接通过；3.x 生产桥和 iOS 默认启用仍待门槛验收。`/pencilkit-probe` 保留原 G1 回归用途。
 
-## PKCanvasViewDelegate 结束入口修正（42314ff，Mac 已验证，待实体复测）
+## 32 笔后空预览退休与 Line 切换修订（待 Mac 验证，非真机候选）
+
+`42314ff` / 兼容标识 5 的 EAS build `c59cb30d-841a-493f-815e-e90ea9c54ff7` 已安装到实体 iPad。修勾报告上一笔预览未退休时下一笔复用旧笔迹，以及 PencilKit 笔后绘制 Line 卡死。截图为起笔/完成/提交 32、tool 结束 32、待交接 2、待退休/已确认 2/30、PK 存量 0、`handoff-stalled`。该版本实体未通过，不再继续反复绘制；此前的 Mac 编译与 smoke 通过记录不能替代本轮验证。
+
+本地确认并修复的缺陷：
+
+- 退休账本此前要求每个完成笔都有 PKStroke；空的已结束笔会留在队首，后续 PKStroke 可能被分配给旧 ID。此前若实际 drawing 变为 0，而账本仍有索引，则直接返回、永久无法清理。现在 raw end 与 PK tool end 均到达后，将实际没有预览的笔登记为空；实际空 drawing 清除幽灵索引，只有收到该 ID 的退休请求才发真实回执。没有待完成周期的迟到无主 PKStroke 会移除，不能复活已退休 ID；tool end 先于 raw end 时仍保留尚未绑定的预览。活动 PK 工具期间仍不改写 drawing，也不按超时伪造退休。
+- 每次 PK tool end 及相同笔刷 prop 都曾无条件重设 PKInkingTool。现在只在笔刷实际变化且工具空闲时应用一次，活动期间的变化保留到结束。避免收尾与无关状态更新重复改动原生工具；没有设备调用栈，不能据此断言这是全部实体串笔根因。
+- Line 等新增形状起笔此前会准备全文档的命中查询，重复计算所有历史自由笔轮廓/布尔几何。现在只有 selection/eraser/lasso 准备查询；新增形状不需要扫描历史。这消除了可复现的主线程多余工作，尚未证明设备报告的卡死已全部解决。
+
+新增 DOM 集成回归经过真实 controller、native bridge、输入适配器和 SVG 历史：上一笔等待退休时第二笔起笔，旧回执到达不能改写当前 samples 或历史 path；native 笔后 Line 在退休回执交错到达时完成，历史可见、undo/redo 与再画 native 笔均可操作。Swift 生产 view 协议回归覆盖 32 个交错有/无 PKStroke 的周期、活动期间延迟退休、空预览切至 Web 工具后队列清空、切回后继续绘制，以及笔刷延迟应用且不重复设置。另测迟到 drawing/raw end、空 drawing 与下一笔身份隔离。它们是本地集成测试，不是实际 PencilKit 像素或 UIKit 系统派发的端到端证据。
+
+本地验证：Jest 93 suites / 1224 tests、responder 9 项、Swift 6.2.3 host 21 组、typecheck、lint（0 errors / 32 条既有 warnings）、库构建、iOS JS/DOM export、变更文件格式检查通过。生产采样器、G1、手指 Web 路由、依赖与锁文件保持不变。
+
+本轮原生兼容标识升为 **6**；旧标识 5 IPA 加载新 JS 会明确提示构建不匹配，仅 Reload 不含本次 Swift 修订。本轮不提交 EAS、不重建真机验收包。先由 Mac 保留 `apps/playground/app.json` 原有 projectId/router/加密声明，按文末快进流程合并任务分支，依次运行（避免库构建与 Jest 同时写产物）：
+
+```bash
+pnpm install --frozen-lockfile
+node scripts/test-pencilkit-g1.mjs
+pnpm exec jest --runInBand packages/painting/src/__tests__/layered-pencilkit-host.test.tsx packages/painting/src/__tests__/core/layered-tools.test.ts packages/painting/src/input/native/__tests__/pencilkitDemoBridge.test.ts tests/jest/native/layered-dom-route.native.test.tsx tests/jest/native/pencilkit-demo-version.native.test.tsx
+pnpm run prepare:playground-artifacts
+```
+
+随后以 Xcode 26.6 / Swift 6.3.3 对标识 6 完整本地编译、安装启动 Simulator app，执行直接 `?pencilkit=1` 与开→关→开路由 smoke，确认非零尺寸、`gesture-ancestor`、无 Native action 错误。保留历史笔迹，切 Line 画完后验证控件、undo/redo、再画和手指 Web 均可用，回传本轮原生/JS SHA、完整日志与截图。Simulator 没有真实 Pencil，不能验证活动原生预览跨笔或物理交接；这些仍留待 Mac 门槛通过后的实体工程复测，不能先宣告 G2/G3 或真机通过。Linux 的真实 Apple SDK 检查明确 SKIP，尚不交付真机候选，HAM-66 保持 `in_progress`。
+
+## PKCanvasViewDelegate 结束入口修正（42314ff，历史，实体复测未通过）
 
 Mac 对 `0965183` 的 Xcode 26.6 / Swift 6.3.3 编译成功，但报告 `canvasViewDidFinishUsingTool` 仅近似匹配可选协议方法；真实 SDK 要求 `canvasViewDidEndUsingTool(_:)`。因此原有工具结束计数、`previews.finishTool()`、退休协调与延迟笔刷设置不在系统结束回调中执行。已修正方法签名，保留原收尾逻辑；该缺陷足以阻塞退休，但不能据此宣告实体可见性全部恢复。
 
@@ -108,7 +133,7 @@ Mac 保留 `apps/playground/app.json` 未提交配置，快进任务分支后执
 ## 入口与边界
 
 - 新 iOS development build：打开 `painting-playground:///layered-editor?pencilkit=1`。自由笔 Pencil 在真实 RN 原生视图中预览；raw 通过 Expo DOM 的串行消息/回调送到原 DOM controller，生成 schema 3 / PF 历史和统一 undo/redo。
-- 普通 `/layered-editor` 和首页默认仍是 DOM，顶部显示 `Web / DOM`，PencilKit 开关可直接切换验证参数。旧 IPA（包括标识 4 的 `8c46ab77-c8f8-49b4-bc00-53896f393923`）缺本轮 `demoBridgeVersion=5` 的交接修复，显示构建不匹配；本轮需要新原生包。
+- 普通 `/layered-editor` 和首页默认仍是 DOM，顶部显示 `Web / DOM`，PencilKit 开关可直接切换验证参数。当前原生兼容标识为 `demoBridgeVersion=6`，旧 IPA 会显示构建不匹配；先完成首节 Mac 本地验证，本轮不重建验收包。
 - Web/Android 使用基名路由，不导入 PencilKit 原生运行时。选择、文字、形状、尺子等工具继续走真实 Web 输入。iOS 原型将真实 Expo DOM 子视图挂载到公开 `drawingGestureRecognizer.view` 下的容器中，不假设该 owner 就是 PKCanvasView 本体；几何 hit-test 总是选择真实 DOM 后代，delegate 在实际 UITouch 到达后过滤 Pencil、画布边界和控件排除区。容器按坐标转换对齐 PKCanvasView，布局时协调延迟挂载的 owner。手指不由原生接管。开关关闭时仍保留同一个宿主和 DOM controller，避免切换丢文档。
 - 原生 begin 经过同一个输入仲裁器，锁定 controller 会话、笔刷和 viewport。end 只批量追加剩余真实样本，保留原始压力与接受顺序；取消、畸形或 overflow 整笔拒绝，不合成 DOM PointerEvent、raw up 或 PK 路径点。
 - 每笔最多 50,000 样本，最多 4 笔完成后待交接，transport 最多 12 条消息；消息/回执缓存有界。无活动 native 会话时等待退休 5 秒仅进入可恢复故障，不按超时清屏或宣称已显示。重试查询/重用原 commitId，已提交文档保留。
@@ -126,7 +151,7 @@ Mac 保留 `apps/playground/app.json` 未提交配置，快进任务分支后执
 
 ## Mac 合并与重建（Swift 历史增量）
 
-本节记录 Swift 增量的本地编译流程。本轮须使用首节标识 5 的原生代码，先做 Simulator smoke，不重提 EAS。
+本节记录 Swift 增量的本地编译流程。本轮须使用首节标识 6 的原生代码，先做 Simulator smoke，不重提 EAS。
 
 先保留 `apps/playground/app.json` 已有未提交 projectId/router/加密声明，在任务分支执行：
 

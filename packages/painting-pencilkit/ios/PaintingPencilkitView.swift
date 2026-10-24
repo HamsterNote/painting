@@ -55,6 +55,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   private var inkColor: UIColor = .systemBlue
   private var inkWidth: CGFloat = 4
   private var inkOpacity: CGFloat = 1
+  private var toolNeedsUpdate = true
 
   /// 供 Module 的 Events("onReady") 绑定；只在上屏后派发一次。
   let onReady = EventDispatcher()
@@ -157,17 +158,25 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   }
 
   func setInkColor(_ inkColor: UIColor) {
+    guard !self.inkColor.isEqual(inkColor) else { return }
     self.inkColor = inkColor
+    toolNeedsUpdate = true
     applyTool()
   }
 
   func setInkWidth(_ inkWidth: Double) {
-    self.inkWidth = CGFloat(max(inkWidth, 0.1))
+    let width = CGFloat(max(inkWidth, 0.1))
+    guard self.inkWidth != width else { return }
+    self.inkWidth = width
+    toolNeedsUpdate = true
     applyTool()
   }
 
   func setInkOpacity(_ opacity: Double) {
-    inkOpacity = CGFloat(min(1, max(0, opacity)))
+    let alpha = CGFloat(min(1, max(0, opacity)))
+    guard inkOpacity != alpha else { return }
+    inkOpacity = alpha
+    toolNeedsUpdate = true
     applyTool()
   }
 
@@ -291,7 +300,8 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   }
 
   private func applyTool() {
-    guard !previews.usingTool else { return }
+    guard toolNeedsUpdate, !previews.usingTool else { return }
+    toolNeedsUpdate = false
     canvasView.tool = PKInkingTool(.pen, color: inkColor.withAlphaComponent(inkOpacity), width: inkWidth)
   }
 
@@ -323,7 +333,7 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
   private func dispatchReady() {
     onReady([
       "moduleVersion": "0.1.0",
-      "demoBridgeVersion": 5,
+      "demoBridgeVersion": 6,
       "osVersion": ProcessInfo.processInfo.operatingSystemVersionString,
       "deviceModel": UIDevice.current.model,
       "drawingPolicy": pencilOnly ? "pencilOnly" : "anyInput",

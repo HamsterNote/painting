@@ -97,9 +97,14 @@ open class UIWindow: UIView {
 }
 
 public struct UIColor {
-  public static let clear = UIColor()
-  public static let systemBlue = UIColor()
-  public func withAlphaComponent(_ alpha: CGFloat) -> UIColor { self }
+  private var token = 0
+  private var alpha: CGFloat = 1
+  public static let clear = UIColor(token: 0, alpha: 0)
+  public static let systemBlue = UIColor(token: 1, alpha: 1)
+  public func withAlphaComponent(_ alpha: CGFloat) -> UIColor {
+    UIColor(token: token, alpha: alpha)
+  }
+  public func isEqual(_ other: UIColor) -> Bool { token == other.token && alpha == other.alpha }
 }
 
 public final class UITouch: NSObject {

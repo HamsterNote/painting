@@ -217,6 +217,41 @@ func testNextRawBeginBeforePreviousToolFinish() {
   check(retirement.ids == [1], "previous finish was assigned to the next raw stroke; handoff head is stuck")
 }
 
+func testCompletedEmptyPreviewCannotStealNextStroke() {
+  var ledger = PencilkitPreviewLedger()
+  ledger.beginStroke(1)
+  ledger.beginTool()
+  ledger.finishedIDs = [1]
+  ledger.finishTool()
+  ledger.retireIDs = [1]
+  check(ledger.reconcile(strokeCount: 0)!.ids == [1], "ended empty preview blocked retirement")
+  let late = ledger.reconcile(strokeCount: 1)!
+  check(late.ids.isEmpty && late.keepIndices.isEmpty, "late orphan ink resurrected the retired empty preview")
+  ledger.beginStroke(2)
+  ledger.beginTool()
+  ledger.finishedIDs = [2]
+  ledger.finishTool()
+  let next = ledger.reconcile(strokeCount: 1)!
+  check(next.ids.isEmpty && next.keepIndices == [0], "previous empty preview consumed the next stroke")
+  ledger.retireIDs = [2]
+  check(ledger.reconcile(strokeCount: 1)!.ids == [2], "next preview never acquired its own identity")
+  ledger.beginStroke(3)
+  ledger.beginTool()
+  ledger.finishedIDs = [3]
+  ledger.finishTool()
+  _ = ledger.reconcile(strokeCount: 1)
+  ledger.retireIDs = [3]
+  check(ledger.reconcile(strokeCount: 0)!.ids == [3], "actual empty PKDrawing retained a phantom slot")
+  ledger.beginStroke(4)
+  ledger.beginTool()
+  ledger.finishTool()
+  check(ledger.reconcile(strokeCount: 0)!.ids.isEmpty, "tool end fabricated a raw end")
+  check(ledger.reconcile(strokeCount: 1)!.keepIndices == [0], "drawing before raw end was removed")
+  ledger.finishedIDs = [4]
+  ledger.retireIDs = [4]
+  check(ledger.reconcile(strokeCount: 1)!.ids == [4], "delayed raw end lost its preview")
+}
+
 func testToolCallbacksBeforeRawAndFourthStrokeRetirement() {
   var ledger = PencilkitPreviewLedger()
   // PK callbacks can precede the observer's raw down; closed cycles must keep their order.
@@ -302,19 +337,24 @@ func testProductionDelegateRetiresFourPreviews() {
   }
   func retired() -> [Int] { view.onPreviewRetired.events.map { $0["id"] as! Int } }
   configure([])
+  let initialToolAssignments = canvas.toolAssignments
   for id in 1...3 {
     endRaw(begin(id), id: id)
     delegate.canvasViewDidEndUsingTool(canvas)
   }
   check(view.onStroke.events.count == 3, "first three raw completions were lost")
   check(canvas.drawing.strokes.map { $0.id } == [1, 2, 3], "completed previews disappeared before retirement")
+  check(canvas.toolAssignments == initialToolAssignments, "unchanged tool was replaced at every stroke end")
   let fourth = begin(4)
+  view.setInkWidth(9)
+  check(canvas.toolAssignments == initialToolAssignments, "brush change replaced an active tool")
   configure([1, 2, 3])
   check(retired().isEmpty, "active fourth tool must defer PKDrawing mutation")
   endRaw(fourth, id: 4)
   check(retired().isEmpty, "raw end alone must not replace the real PK delegate end")
   // Dispatch through the protocol, rather than invoking the ledger's finishTool directly.
   delegate.canvasViewDidEndUsingTool(canvas)
+  check(canvas.toolAssignments == initialToolAssignments + 1, "deferred brush update was not applied once")
   check(retired() == [1, 2, 3], "SDK end callback failed to retire the first three previews")
   check(canvas.drawing.strokes.map { $0.id } == [4], "old retirement cleared the fourth preview")
   configure([1, 2, 3, 4])
@@ -327,12 +367,54 @@ func testProductionDelegateRetiresFourPreviews() {
   check(status["retireRequested"] as? Int == 0, "native retirement requests did not drain")
   check(status["retireAcknowledged"] as? Int == 4, "native retirement acknowledgments were lost")
   view.setInkWidth(9)
+  check(canvas.toolAssignments == initialToolAssignments + 1, "identical brush prop replaced the PK tool")
   check((canvas.tool as? PKInkingTool)?.width == 9, "tool remained locked after delegate end")
+  view.setInkColor(.systemBlue)
+  view.setInkOpacity(1)
+  check(canvas.toolAssignments == initialToolAssignments + 1, "identical color/opacity props replaced the PK tool")
+  view.setInkColor(.clear)
+  check(canvas.toolAssignments == initialToolAssignments + 2, "a real color change was ignored")
   let fifth = begin(5)
   endRaw(fifth, id: 5)
   delegate.canvasViewDidEndUsingTool(canvas)
   configure([5])
   check(retired() == [1, 2, 3, 4, 5], "fifth stroke stalled after the batch drained")
+  // A completed raw/tool cycle can have no retained PKStroke. Switching to a
+  // Web tool must still drain it without waiting for the next native stroke.
+  let sixth = begin(6)
+  sixth.timestamp += 0.5
+  canvas.sampler.touchesEnded([sixth], event: nil, in: canvas)
+  delegate.canvasViewDidEndUsingTool(canvas)
+  let disabled = try! JSONSerialization.data(withJSONObject: [
+    "contextKey": "delegate:2", "enabled": false, "retireIDs": [6],
+    "frame": ["x": 0, "y": 0, "width": 100, "height": 100], "exclusions": [],
+  ])
+  view.setDemoState(String(data: disabled, encoding: .utf8)!)
+  check(retired() == [1, 2, 3, 4, 5, 6], "switching to Line stranded a completed empty native preview")
+  check(view.onDemoStatus.events.last!["retireRequested"] as? Int == 0, "Line retained a native retirement request")
+  configure([])
+  endRaw(begin(7), id: 7)
+  delegate.canvasViewDidEndUsingTool(canvas)
+  configure([7])
+  check(retired() == [1, 2, 3, 4, 5, 6, 7], "native input remained blocked after switching back from Line")
+  for id in 8...32 {
+    let touch = begin(id)
+    // Odd strokes have retained ink; even ones have a real raw/tool completion
+    // but no PKStroke. Deliver retirement in pairs, including during a live tool.
+    if id % 2 == 0 {
+      touch.timestamp += 0.5
+      canvas.sampler.touchesEnded([touch], event: nil, in: canvas)
+    } else {
+      configure([id - 1])
+      endRaw(touch, id: id)
+    }
+    delegate.canvasViewDidEndUsingTool(canvas)
+    if id % 2 == 1 { configure([id]) }
+  }
+  configure([32])
+  check(Set(retired()) == Set(1...32) && retired().count == 32, "32 cycles leaked, reused or duplicated a retirement identity")
+  check(canvas.drawing.strokes.isEmpty, "32-cycle history left stale PK previews")
+  check(view.onDemoStatus.events.last!["retireRequested"] as? Int == 0, "32-cycle retirement queue did not drain")
 }
 
 func testLongStrokeAcrossMoveEvents() {
@@ -520,6 +602,7 @@ let tests: [(String, () -> Void)] = [
   ("identity-scoped preview retirement and tool/end ordering", testIdentityScopedPreviewRetirement),
   ("empty cancellation does not consume the next preview", testCancelledEmptyPreviewCannotConsumeNextStroke),
   ("next raw begin cannot steal previous PK tool finish", testNextRawBeginBeforePreviousToolFinish),
+  ("completed empty preview cannot consume the next stroke or retain phantom ink", testCompletedEmptyPreviewCannotStealNextStroke),
   ("tool-first order and first-three/fourth preview retirement", testToolCallbacksBeforeRawAndFourthStrokeRetirement),
   ("production view protocol end retires four previews and accepts the next", testProductionDelegateRetiresFourPreviews),
   ("protocol cancellation never synthesizes a raw end", testProtocolCancellationDoesNotFabricateRawEnd),

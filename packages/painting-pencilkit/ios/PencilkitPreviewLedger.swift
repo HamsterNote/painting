@@ -53,12 +53,18 @@ struct PencilkitPreviewLedger {
   }
 
   mutating func reconcile(strokeCount: Int) -> Retirement? {
-    guard !usingTool, strokeCount >= slots.count else { return nil }
+    guard !usingTool else { return nil }
+    // An observed empty drawing has no preview to retain, even if PencilKit removed
+    // it independently. Never leave phantom indices blocking document handoff.
+    if strokeCount == 0 {
+      emptyIDs.formUnion(slots.compactMap { $0 })
+      slots.removeAll()
+    }
+    guard strokeCount >= slots.count else { return nil }
     slots.append(contentsOf: Array(repeating: nil, count: strokeCount - slots.count))
     while let id = finishedIDs.first, finishedToolIDs.contains(id) {
       if let index = slots.firstIndex(where: { $0 == nil }) { slots[index] = id }
-      else if cancelledIDs.contains(id) { emptyIDs.insert(id) }
-      else { break }
+      else { emptyIDs.insert(id) }
       finishedIDs.removeFirst()
       finishedToolIDs.remove(id)
       cancelledIDs.remove(id)
@@ -67,7 +73,11 @@ struct PencilkitPreviewLedger {
     let empty = emptyIDs.filter { retireIDs.contains($0) }
     let ids = removed + empty
     let keep = slots.indices.filter { index in
-      guard let id = slots[index] else { return true }
+      // A delayed drawing callback after both ends cannot resurrect an already
+      // completed empty cycle. Preserve unbound ink only while a raw/tool end is pending.
+      guard let id = slots[index] else {
+        return !finishedToolIDs.isEmpty || !rawBegins.isEmpty || !tools.isEmpty
+      }
       return !retireIDs.contains(id)
     }
     slots = keep.map { slots[$0] }

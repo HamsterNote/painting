@@ -30,7 +30,10 @@ open class PKCanvasView: UIView {
   public var drawingPolicy: DrawingPolicy = .pencilOnly
   public weak var delegate: PKCanvasViewDelegate?
   public var drawing = PKDrawing()
-  public var tool: PKTool = PKInkingTool(.pen, color: .systemBlue, width: 4)
+  public private(set) var toolAssignments = 0
+  public var tool: PKTool = PKInkingTool(.pen, color: .systemBlue, width: 4) {
+    didSet { toolAssignments += 1 }
+  }
   public var isScrollEnabled = true
   public var minimumZoomScale: CGFloat = 1
   public var maximumZoomScale: CGFloat = 1

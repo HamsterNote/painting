@@ -15,6 +15,7 @@ test.each([
   { demoBridgeVersion: 3 },
   { demoBridgeVersion: 4 },
   { demoBridgeVersion: 5 },
+  { demoBridgeVersion: 6 },
 ])('native Demo requires the identity-bound preview handoff binary: %j', (module) => {
   jest.mocked(requireOptionalNativeModule).mockReturnValue(module);
   let available = false;
@@ -22,6 +23,6 @@ test.each([
     const view = require('../../../packages/painting-pencilkit/src/PaintingPencilkitView');
     available = view.isPencilkitDemoAvailable();
   });
-  expect(available).toBe(module?.demoBridgeVersion === 5);
+  expect(available).toBe(module?.demoBridgeVersion === 6);
   expect(requireNativeViewManager).toHaveBeenCalledTimes(module ? 1 : 0);
 });

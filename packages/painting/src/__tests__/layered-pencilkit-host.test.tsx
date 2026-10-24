@@ -1,6 +1,7 @@
 import { act, render, waitFor } from '@testing-library/react';
 import LayeredEditorDom from '../../../../apps/playground/src/layered-editor/LayeredEditorDom';
 import { layeredPointer, mockLayeredDom } from './fixtures/layeredDom';
+import * as objectQueries from '../core/layeredObjectQuery';
 import type {
   PencilkitDemoMessage,
   PencilkitDemoReply,
@@ -34,6 +35,139 @@ beforeEach(() => {
 afterEach(() => {
   jest.useRealTimers();
   jest.restoreAllMocks();
+});
+
+async function nativeDemo() {
+  const onState = jest.fn(async (_state: PencilkitDemoState) => {});
+  const onReply = jest.fn(async (_reply: PencilkitDemoReply) => {});
+  const props = {
+    nativePencilEnabled: true,
+    onNativeState: onState,
+    onNativeReply: onReply,
+    editorParams: { diagnostics: '1' },
+  };
+  const view = render(<LayeredEditorDom {...props} />);
+  await act(async () => {});
+  let messageId = 0;
+  type Body<T = PencilkitDemoMessage> = T extends PencilkitDemoMessage
+    ? Omit<T, 'protocolVersion' | 'messageId'>
+    : never;
+  const send = (message: Body) =>
+    view.rerender(
+      <LayeredEditorDom
+        {...props}
+        nativeMessage={{ ...message, messageId: ++messageId, protocolVersion: 1 }}
+      />
+    );
+  const samples = new Map<number, { sample: PencilkitDemoSample; contextKey: string }>();
+  const begin = (id: number) => {
+    const contextKey = onState.mock.calls.at(-1)![0].contextKey;
+    const sample: PencilkitDemoSample = {
+      seq: 0,
+      kind: 'main',
+      phase: 'down',
+      x: 30,
+      y: id * 20,
+      tabs: id * 1000,
+      f: 1,
+      mf: 8,
+      p: 0.125,
+    };
+    samples.set(id, { sample, contextKey });
+    send({ type: 'begin', id, contextKey, sample });
+  };
+  const end = (id: number) => {
+    const { sample, contextKey } = samples.get(id)!;
+    send({
+      type: 'stroke',
+      id,
+      contextKey,
+      stroke: {
+        id,
+        cancelled: false,
+        overflow: false,
+        samples: [
+          sample,
+          { ...sample, seq: 1, phase: 'up', x: 120 + id * 20, tabs: sample.tabs + 100 },
+        ],
+      },
+    });
+  };
+  const retired = (id: number) =>
+    send({ type: 'retired', id, contextKey: samples.get(id)!.contextKey });
+  const nodes = () => Array.from(view.container.querySelectorAll<SVGGElement>('[data-object-id]'));
+  return {
+    view,
+    onState,
+    onReply,
+    begin,
+    end,
+    retired,
+    nodes,
+    controller: window.__layeredEditor!,
+  };
+}
+
+test('a second native pen starts before previous retirement without reusing its raw or history path', async () => {
+  const h = await nativeDemo();
+  jest.useFakeTimers();
+  h.begin(1);
+  h.end(1);
+  const first = h.controller.getSnapshot('document').objects[0];
+  const firstPath = h.nodes()[0].querySelector('path')!.getAttribute('d');
+  h.begin(2);
+  h.retired(1);
+  expect(h.controller.getSnapshot('interaction').activeFreehand).toMatchObject({
+    status: 'collecting',
+    samples: [expect.objectContaining({ y: 40 })],
+  });
+  expect(h.nodes()[0].style.visibility).toBe('visible');
+  h.end(2);
+  expect(h.controller.getSnapshot('document').objects[0]).toBe(first);
+  expect(h.nodes()[0].querySelector('path')!.getAttribute('d')).toBe(firstPath);
+  expect(h.nodes()[1].querySelector('path')!.getAttribute('d')).not.toBe(firstPath);
+  h.retired(2);
+  expect(h.nodes().every((node) => node.style.visibility === 'visible')).toBe(true);
+  act(() => jest.advanceTimersByTime(5000));
+  expect(h.onReply.mock.calls.some(([reply]) => reply.status === 'rejected')).toBe(false);
+  h.view.unmount();
+});
+
+test('native pen handoff during Line completion preserves history and leaves the UI usable', async () => {
+  const h = await nativeDemo();
+  jest.useFakeTimers();
+  h.begin(1);
+  h.end(1);
+  const first = h.controller.getSnapshot('document').objects[0];
+  const query = jest.spyOn(objectQueries, 'prepareLayeredObjectQuery');
+  act(() => {
+    h.controller.setTool('line');
+  });
+  const host = h.view.container.querySelector('[data-input-ready="true"]')!;
+  layeredPointer(host, 'down', 100, 200, 'pen', 20);
+  layeredPointer(host, 'move', 300, 250, 'pen', 20);
+  h.retired(1);
+  layeredPointer(host, 'up', 350, 280, 'pen', 20);
+  expect(h.controller.getSnapshot('document').objects).toEqual([
+    first,
+    expect.objectContaining({ kind: 'shape', shapeType: 'line' }),
+  ]);
+  expect(query).not.toHaveBeenCalled();
+  expect(h.nodes().every((node) => node.style.visibility === 'visible')).toBe(true);
+  act(() => {
+    h.controller.undo();
+    h.controller.redo();
+    h.controller.setTool('freehand');
+  });
+  h.begin(2);
+  h.end(2);
+  h.retired(2);
+  act(() => jest.advanceTimersByTime(5000));
+  expect(h.controller.getSnapshot('document').objects).toHaveLength(3);
+  expect(h.controller.getSnapshot('preview')).toEqual({ objects: [], hiddenIds: [], path: [] });
+  expect(h.onReply.mock.calls.some(([reply]) => reply.status === 'rejected')).toBe(false);
+  expect(h.onState.mock.calls.at(-1)![0].enabled).toBe(true);
+  h.view.unmount();
 });
 
 test('native preview has a transparent DOM paper; switching off restores Web paper', async () => {

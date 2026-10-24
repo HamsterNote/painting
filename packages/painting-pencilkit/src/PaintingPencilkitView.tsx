@@ -130,7 +130,7 @@ const NativeView: React.ComponentType<PaintingPencilkitViewProps> | undefined = 
   : undefined;
 
 export function isPencilkitDemoAvailable(): boolean {
-  return NativeModule?.demoBridgeVersion === 5;
+  return NativeModule?.demoBridgeVersion === 6;
 }
 
 export function PaintingPencilkitView(props: PaintingPencilkitViewProps) {
