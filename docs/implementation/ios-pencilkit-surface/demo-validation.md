@@ -2,7 +2,31 @@
 
 本增量对应 G2/G3 的可行性原型，不代表 G1 压力、G2 分流或 G3 物理交接通过；3.x 生产桥和 iOS 默认启用仍待门槛验收。`/pencilkit-probe` 保留原 G1 回归用途。
 
-## 32 笔后空预览退休与 Line 切换修订（bc337be，Mac 已验证，待实体复测）
+## 纯 Web 首笔冻结（当前阻断，尚未定位根因）
+
+2026-10-24 修勾在原生/JS `bc337be`、兼容标识 6、已安装 build `0300fc01-7b3a-4785-879c-e0c9af6cb7fa` 上确认实体 Pencil 跨笔不串笔，但报告纯 Web 的 pen 和 Line 均在完成第一笔后冻结。该单项 Pencil 结果不代表工具切换、Web、长期绘制或 G2/G3 验收通过；此版本不能作为整体验收通过版本，不再要求在冻结路径反复绘制。
+
+本轮没有生产代码修复，新增的是定位用回归：
+
+- `tests/ui/layered-editor.spec.ts`：普通 `/layered-editor`，无 diagnostics、fixture、native connection 或交接延迟。自由笔与 Line 分别首笔提交后再画、undo/redo、切换工具画第三笔、切回画第四笔；检查四笔可见、首笔 path 保持、无 pageerror/alert。使用合成 pen PointerEvent 和真实浏览器鼠标流，不代表实体 Pencil 输入。
+- `packages/painting/src/__tests__/layered-pencilkit-host.test.tsx`：默认关闭，以及 native 已提交但尚未退休时关闭，两种状态各覆盖自由笔和 Line。使用实际 DOM board/controller/bridge，验证首笔后续画、undo/redo、双向工具切换和迟到 native 消息，检查历史、可见性及会话已清空。Canvas/布局为测试替身，不验证 UIKit 派发。
+
+结果：Chromium 新用例 2/2、WebKit 26.4 新用例 2/2、DOM 集成文件 11/11 通过；新增四个集成场景也在原生产代码上通过，**未复现设备冻结，不能据此声称已修复**。WebKit 在 rootless Podman 的既有 `localhost/ham40-webkit:noble` 镜像运行，使用 Playwright 1.59.1 / WebKit 2272；Ubuntu 26 宿主直接启动因缺系统库失败，不计作应用失败。已有 Chromium 活动/交接与工具回归 2/2 通过。变更测试 lint/格式检查通过。生产 Swift、原生兼容标识、G1、依赖和锁文件未改。
+
+还缺设备故障的准确入口、输入来源和冻结调用栈：基名 Web 路由完全不挂载原生模块；iOS App 关闭 PencilKit 后仍保留 PK 宿主及同一 DOM controller。两者不能混为一条路径。现有代码中关闭开关会卸载 DOM native connection/guard，待退休的 presentation 和输入资源也会清理；上述集成测试未发现 controller 被污染，但不能排除 UIKit/WKWebView 手势状态的问题。
+
+Mac 下一轮先保留 `apps/playground/app.json` 改动，快进任务分支并执行：
+
+```bash
+pnpm exec playwright test --config playwright.webkit.config.ts tests/ui/layered-editor.spec.ts --grep 'plain Web' --workers 1
+pnpm exec jest --runInBand packages/painting/src/__tests__/layered-pencilkit-host.test.tsx
+```
+
+再区分 Safari 网页与当前 development client 的 `/layered-editor?pencilkit=0`：记录是全新进入关闭状态，还是原生绘制后关闭，以及 Pencil/手指/鼠标来源。Simulator 先验证关闭状态与开→关后，自由笔和 Line 首笔后续画、undo/redo 和工具切换；原生计数为 0 的手指 smoke 不能排除实体 Pencil 专属故障。
+
+对能复现的环境只做一次最小定位并停止：使用 `diagnostics=1&traceGestures=1`，导出 `window.__layeredGestureTrace.snapshot()`，保留首次 pointerup/end/commit/presentation 之前后的最后记录、文档数和活动会话。若 JS 已无响应，优先 Safari Web Inspector 暂停取调用栈，并在可调试时记录 Xcode 主线程/相关线程与 WebContent 状态；截图不能区分 JS 忙循环、WebKit 渲染或 UIKit 手势等待。记录本轮原生 SHA、JS SHA、URL、系统版本和日志。未取得复现或调用栈前，此测试增量只供定位，不是修复候选，不重建验收包或提交 EAS。
+
+## 32 笔后空预览退休与 Line 切换修订（bc337be，历史 Mac 验证）
 
 `42314ff` / 兼容标识 5 的 EAS build `c59cb30d-841a-493f-815e-e90ea9c54ff7` 已安装到实体 iPad。修勾报告上一笔预览未退休时下一笔复用旧笔迹，以及 PencilKit 笔后绘制 Line 卡死。截图为起笔/完成/提交 32、tool 结束 32、待交接 2、待退休/已确认 2/30、PK 存量 0、`handoff-stalled`。该版本实体未通过，不再继续反复绘制；此前的 Mac 编译与 smoke 通过记录不能替代本轮验证。
 

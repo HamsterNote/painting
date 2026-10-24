@@ -1,4 +1,4 @@
-import { act, render, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import LayeredEditorDom from '../../../../apps/playground/src/layered-editor/LayeredEditorDom';
 import { layeredPointer, mockLayeredDom } from './fixtures/layeredDom';
 import * as objectQueries from '../core/layeredObjectQuery';
@@ -182,6 +182,82 @@ test('native preview has a transparent DOM paper; switching off restores Web pap
   );
   view.unmount();
 });
+
+test.each([
+  ['initial-off', 'freehand'],
+  ['initial-off', 'line'],
+  ['pending-native-off', 'freehand'],
+  ['pending-native-off', 'line'],
+] as const)(
+  '%s: Web %s continues after the first commit, history and tool switches',
+  async (mode, tool) => {
+    const h = mode === 'pending-native-off' ? await nativeDemo() : undefined;
+    h?.begin(1);
+    h?.end(1);
+    const onState = h?.onState ?? jest.fn(async (_state: PencilkitDemoState) => {});
+    const onReply = h?.onReply ?? jest.fn(async (_reply: PencilkitDemoReply) => {});
+    const props = {
+      nativePencilEnabled: false,
+      onNativeState: onState,
+      onNativeReply: onReply,
+      editorParams: { diagnostics: '1' },
+    };
+    const view = h?.view ?? render(<LayeredEditorDom {...props} />);
+    const originalController = window.__layeredEditor!;
+    const previous = originalController.getSnapshot('document').objects;
+    view.rerender(<LayeredEditorDom {...props} />);
+    await act(async () => {});
+    const controller = window.__layeredEditor!;
+    expect(controller).toBe(originalController);
+    const host = view.getByTestId('layered-surface');
+    const draw = (id: number) => {
+      layeredPointer(host, 'down', 60, id * 30, 'pen', id);
+      layeredPointer(host, 'move', 150, id * 30 + 10, 'pen', id);
+      layeredPointer(host, 'up', 240, id * 30 + 20, 'pen', id);
+    };
+    const select = (next: 'freehand' | 'line') =>
+      fireEvent.click(view.getByRole('button', { name: next === 'freehand' ? '自由笔' : '直线' }));
+    select(tool);
+    draw(2);
+    const first = controller.getSnapshot('document').objects.at(-1)!;
+    expect(controller.getSnapshot('document').objects).toHaveLength(previous.length + 1);
+    // A pooled event from the disconnected native epoch must not reopen its session.
+    const calls = { states: onState.mock.calls.length, replies: onReply.mock.calls.length };
+    view.rerender(
+      <LayeredEditorDom
+        {...props}
+        nativeMessage={{
+          protocolVersion: 1,
+          messageId: 100,
+          type: 'retired',
+          id: 1,
+          contextKey: onState.mock.calls.at(-1)?.[0].contextKey ?? 'disconnected:1',
+        }}
+      />
+    );
+    draw(3);
+    const committed = controller.getSnapshot('document').objects;
+    expect(committed).toHaveLength(previous.length + 2);
+    fireEvent.click(view.getByRole('button', { name: '撤销', exact: true }));
+    expect(controller.getSnapshot('document').objects).toEqual([...previous, first]);
+    fireEvent.click(view.getByRole('button', { name: '重做', exact: true }));
+    expect(controller.getSnapshot('document').objects).toEqual(committed);
+    select(tool === 'freehand' ? 'line' : 'freehand');
+    draw(4);
+    select(tool);
+    draw(5);
+    expect(controller.getSnapshot('document').objects).toHaveLength(previous.length + 4);
+    expect(controller.getSnapshot('document').objects.slice(0, previous.length)).toEqual(previous);
+    expect(controller.getSnapshot('interaction')).toEqual({ pendingCandidates: [] });
+    expect(controller.getSnapshot('preview')).toEqual({ objects: [], hiddenIds: [], path: [] });
+    expect(onState).toHaveBeenCalledTimes(calls.states);
+    expect(onReply).toHaveBeenCalledTimes(calls.replies);
+    expect(view.queryByRole('alert')).toBeNull();
+    for (const node of view.container.querySelectorAll<SVGGElement>('[data-object-id]'))
+      expect(node.style.visibility).toBe('visible');
+    view.unmount();
+  }
+);
 
 test('real DOM board commits a queued native stroke across a compatible configuration update', async () => {
   const onState = jest.fn(async (_state: PencilkitDemoState) => {});
