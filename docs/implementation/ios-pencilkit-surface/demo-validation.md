@@ -15,7 +15,7 @@
 
 还缺设备故障的准确入口、输入来源和冻结调用栈：基名 Web 路由完全不挂载原生模块；iOS App 关闭 PencilKit 后仍保留 PK 宿主及同一 DOM controller。两者不能混为一条路径。现有代码中关闭开关会卸载 DOM native connection/guard，待退休的 presentation 和输入资源也会清理；上述集成测试未发现 controller 被污染，但不能排除 UIKit/WKWebView 手势状态的问题。
 
-Mac 下一轮先保留 `apps/playground/app.json` 改动，快进任务分支并执行：
+Mac 本轮保留 `apps/playground/app.json` 改动，快进任务分支并执行：
 
 ```bash
 pnpm exec playwright test --config playwright.webkit.config.ts tests/ui/layered-editor.spec.ts --grep 'plain Web' --workers 1
@@ -25,6 +25,15 @@ pnpm exec jest --runInBand packages/painting/src/__tests__/layered-pencilkit-hos
 再区分 Safari 网页与当前 development client 的 `/layered-editor?pencilkit=0`：记录是全新进入关闭状态，还是原生绘制后关闭，以及 Pencil/手指/鼠标来源。Simulator 先验证关闭状态与开→关后，自由笔和 Line 首笔后续画、undo/redo 和工具切换；原生计数为 0 的手指 smoke 不能排除实体 Pencil 专属故障。
 
 对能复现的环境只做一次最小定位并停止：使用 `diagnostics=1&traceGestures=1`，导出 `window.__layeredGestureTrace.snapshot()`，保留首次 pointerup/end/commit/presentation 之前后的最后记录、文档数和活动会话。若 JS 已无响应，优先 Safari Web Inspector 暂停取调用栈，并在可调试时记录 Xcode 主线程/相关线程与 WebContent 状态；截图不能区分 JS 忙循环、WebKit 渲染或 UIKit 手势等待。记录本轮原生 SHA、JS SHA、URL、系统版本和日志。未取得复现或调用栈前，此测试增量只供定位，不是修复候选，不重建验收包或提交 EAS。
+
+2026-10-24 已核对 Mac 评论 `01a16e4c-3b30-74af-a8ff-d78412b7c11f` 及附件 `ham66-eb9d72f-local-evidence.zip` 的日志、两份完整 trace 和最终截图：
+
+- JS checkout `eb9d72f`，Simulator 原生 `bc337be` / 标识 6；macOS 26.3.1 arm64，iPad Pro 13-inch（M5）/ iOS 26.3。Mac WebKit 26.4 两项 2/2、DOM 集成 11/11 通过；首次因缺少 WebKit 包在启动前失败，安装浏览器后的原命令重跑通过。
+- 初始关闭与开→关后的自由笔/Line 可续画、undo/redo、切换工具。两份 trace 分别为 4/9 个对象、445/934 条记录、`dropped=0`、`active=null`、`pendingCommits=[]`；所有事件来源均为 `touch`，最终为 `presentation/visible`。最终截图有九笔可见。该结果没有实体 Pencil，也没有真实待退休原生笔后关闭；不能覆盖用户报告的全部条件。
+- 本轮运行日志未见 action 缺失或 handoff 故障，仍有既有 `kCFRunLoopCommonModes` 告警。早期横向手指操作曾退回旧页面，随后纵向操作完成上述验证；导航手势是否导致该现象未诊断，不能写成首笔冻结根因。
+- 实体 iPad（iPadOS 18.7.10）进程查询返回 CoreDevice.ActionError 3 / StreamingAction 无法读取设备，锁状态 `passcodeRequired=true`。没有重启/Reload 实体 App，没有取得故障时的 Web Inspector/Xcode/WebContent 栈。Simulator iOS 26.3 的通过也不能替代目标 iPadOS 18.7.10 的结果。
+
+当前等待修勾确认入口（Safari 网页或 App 内关闭）、输入来源（Pencil 或手指）、是否先画过原生笔，以及解锁目标设备以继续抓栈。若故障页面还在，保留页面，不 Reload、不重画；若现场已丢失，先由 Mac 准备调试连接再安排一次最小复现。未定位/修复首笔冻结，不交付候选。该次 Mac 结果唤醒已自动停用，后续按用户补充信息恢复定位。
 
 ## 32 笔后空预览退休与 Line 切换修订（bc337be，历史 Mac 验证）
 
