@@ -58,6 +58,56 @@ export function connectPencilkitDemo(options: {
   let enabled = false;
   let lastPublication = '';
   let publicationFrame: number | undefined;
+  type PencilStart = {
+    source: 'native' | 'dom';
+    point: { x: number; y: number };
+    timer: ReturnType<typeof setTimeout>;
+  };
+  const unmatchedStarts = new Set<PencilStart>();
+
+  function clearPencilStarts() {
+    unmatchedStarts.forEach((entry) => clearTimeout(entry.timer));
+    unmatchedStarts.clear();
+  }
+  function rejectDOMPencil() {
+    clearPencilStarts();
+    faulted = true;
+    cancel('dom-pencil-fallback');
+    reply({ id: 0, contextKey, status: 'rejected', reason: 'dom-pencil-fallback' });
+    publish();
+  }
+  function observePencilStart(source: PencilStart['source'], point: PencilStart['point']) {
+    if (faulted) return;
+    // WKWebView can mirror a down before or after the asynchronous native begin ACK.
+    // Correlate once by local position; UIKit tabs and DOM timestamps have different origins.
+    const matched = Array.from(unmatchedStarts).find(
+      (entry) =>
+        entry.source !== source && Math.hypot(entry.point.x - point.x, entry.point.y - point.y) <= 8
+    );
+    if (matched) {
+      clearTimeout(matched.timer);
+      unmatchedStarts.delete(matched);
+      return;
+    }
+    if (unmatchedStarts.size >= 32) {
+      const oldestNative = Array.from(unmatchedStarts).find((entry) => entry.source === 'native');
+      if (!oldestNative) {
+        if (source === 'dom') rejectDOMPencil();
+        return;
+      }
+      clearTimeout(oldestNative.timer);
+      unmatchedStarts.delete(oldestNative);
+    }
+    const entry: PencilStart = {
+      source,
+      point,
+      timer: setTimeout(() => {
+        unmatchedStarts.delete(entry);
+        if (source === 'dom') rejectDOMPencil();
+      }, 5000),
+    };
+    unmatchedStarts.add(entry);
+  }
 
   function reply(value: PencilkitDemoReply) {
     if (!destroyed) connection.onReply(value);
@@ -125,6 +175,7 @@ export function connectPencilkitDemo(options: {
     // Native may begin against a configuration still crossing the asynchronous DOM bridge.
     // Keep only known configurations with the same coordinate mapping, brush and input policy.
     if (mapping !== mappingFingerprint) {
+      clearPencilStarts();
       mappingFingerprint = mapping;
       beginContexts.clear();
     }
@@ -239,6 +290,7 @@ export function connectPencilkitDemo(options: {
     let status: PencilkitDemoReply['status'] = 'rejected';
     let reason: string | undefined;
     if (message.type === 'reset') {
+      clearPencilStarts();
       cancel('host-reset');
       arbiter.releaseNativePencil();
       faulted = false;
@@ -324,6 +376,7 @@ export function connectPencilkitDemo(options: {
           ) {
             lease.phase = 'collecting';
             status = 'accepted';
+            observePencilStart('native', message.sample);
           } else {
             presentation.retireNative(commitId);
             reason = result.ok ? 'cancelled-session' : result.error.code;
@@ -450,16 +503,12 @@ export function connectPencilkitDemo(options: {
   window.addEventListener('resize', resize);
   const mutations = new MutationObserver(schedulePublish);
   mutations.observe(host, { childList: true, subtree: true });
-  arbiter.setNativePencilGuard(() => {
-    faulted = true;
-    cancel('dom-pencil-fallback');
-    reply({ id: 0, contextKey, status: 'rejected', reason: 'dom-pencil-fallback' });
-    publish();
-  });
+  arbiter.setNativePencilGuard((input) => observePencilStart('dom', input.screen));
   connection.register(receive);
   publish();
   return () => {
     arbiter.setNativePencilGuard(undefined);
+    clearPencilStarts();
     cancel('unmount');
     arbiter.releaseNativePencil();
     destroyed = true;

@@ -11,6 +11,8 @@ import type {
 import { serializeLayeredDocument, readLayeredDocument } from '../../../model/documentReader';
 import { layeredPointer } from '../../../__tests__/fixtures/layeredDom';
 
+afterEach(() => jest.useRealTimers());
+
 function sample(seq: number, phase: PencilkitDemoSample['phase']): PencilkitDemoSample {
   return {
     seq,
@@ -317,17 +319,119 @@ test('brush changes while claiming input cannot replace the configured native be
   h.destroy();
 });
 
+test.each(['native-first', 'dom-first', 'native-complete-first', 'dom-complete-first'] as const)(
+  '%s Pencil begin blocks mirrored DOM input without cancelling native commit',
+  (order) => {
+    jest.useFakeTimers();
+    const h = setup();
+    if (order === 'native-first' || order === 'native-complete-first') h.begin();
+    if (order === 'native-complete-first') h.end();
+    jest.advanceTimersByTime(500);
+    layeredPointer(h.host, 'down', 41, 101);
+    if (order === 'dom-first') {
+      jest.advanceTimersByTime(500);
+      h.begin();
+    }
+    layeredPointer(h.host, 'move', 50, 100);
+    layeredPointer(h.host, 'up', 60, 100);
+    if (order === 'dom-complete-first') {
+      jest.advanceTimersByTime(500);
+      h.begin();
+    }
+    if (order !== 'native-complete-first') {
+      jest.advanceTimersByTime(30000);
+      h.end();
+    }
+    h.retired();
+    jest.advanceTimersByTime(5000);
+    expect(h.tool.dispatch).not.toHaveBeenCalled();
+    expect(h.replies).not.toContainEqual(expect.objectContaining({ status: 'rejected' }));
+    expect(h.replies).toContainEqual(expect.objectContaining({ status: 'committed', id: 1 }));
+    expect(h.controller.getSnapshot('document').objects).toHaveLength(1);
+    expect(h.controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
+    expect(h.state().enabled).toBe(true);
+    h.destroy();
+  }
+);
+
 test('Web Pencil fallback fails closed and faults explicitly instead of dispatching a tool stroke', () => {
+  jest.useFakeTimers();
   const h = setup();
   for (const phase of ['down', 'move', 'up'] as const) {
     layeredPointer(h.host, phase, 50, 60);
   }
   expect(h.tool.dispatch).not.toHaveBeenCalled();
   expect(h.controller.getSnapshot('document').objects).toHaveLength(0);
+  jest.advanceTimersByTime(4999);
+  expect(h.state().enabled).toBe(true);
+  expect(h.replies).not.toContainEqual(expect.objectContaining({ status: 'rejected' }));
+  jest.advanceTimersByTime(1);
   expect(h.replies).toContainEqual(
     expect.objectContaining({ reason: 'dom-pencil-fallback', status: 'rejected' })
   );
   expect(h.state().enabled).toBe(false);
+  h.destroy();
+});
+
+test.each(['consumed', 'expired', 'different-point'] as const)(
+  'a %s native begin cannot hide another missing native stroke',
+  (kind) => {
+    jest.useFakeTimers();
+    const h = setup();
+    h.begin();
+    if (kind === 'consumed') {
+      layeredPointer(h.host, 'down', 40, 100);
+      layeredPointer(h.host, 'up', 60, 100);
+    }
+    h.end();
+    h.retired();
+    if (kind === 'expired') jest.advanceTimersByTime(5000);
+    layeredPointer(h.host, 'down', kind === 'different-point' ? 150 : 40, 100);
+    layeredPointer(h.host, 'up', 160, 100);
+    jest.advanceTimersByTime(5000);
+    expect(h.replies.filter((reply) => reply.reason === 'dom-pencil-fallback')).toHaveLength(1);
+    expect(h.state().enabled).toBe(false);
+    expect(h.tool.dispatch).not.toHaveBeenCalled();
+    expect(h.controller.getSnapshot('document').objects).toHaveLength(1);
+    h.destroy();
+  }
+);
+
+test.each(['reset', 'disconnect', 'tool-change'] as const)(
+  '%s clears pending DOM assertions instead of faulting the next route',
+  (kind) => {
+    jest.useFakeTimers();
+    const h = setup();
+    layeredPointer(h.host, 'down', 40, 100);
+    layeredPointer(h.host, 'up', 40, 100);
+    if (kind === 'reset')
+      h.receive({ type: 'reset', protocolVersion: 1, messageId: 90, id: 0, contextKey: '' });
+    else if (kind === 'disconnect') h.disconnect();
+    else h.controller.setTool('rect');
+    jest.advanceTimersByTime(5000);
+    expect(h.replies).not.toContainEqual(
+      expect.objectContaining({ reason: 'dom-pencil-fallback' })
+    );
+    h.destroy();
+  }
+);
+
+test('unmatched native evidence stays bounded and cannot mask missing DOM-side native input', () => {
+  jest.useFakeTimers();
+  const h = setup();
+  for (let id = 1; id <= 80; id++) {
+    h.begin(id);
+    h.end(id);
+    h.retired(id);
+  }
+  expect(h.replies).not.toContainEqual(expect.objectContaining({ status: 'rejected' }));
+  for (let id = 1; id <= 33; id++) {
+    layeredPointer(h.host, 'down', 200, 100, 'pen', id);
+    layeredPointer(h.host, 'up', 200, 100, 'pen', id);
+  }
+  expect(h.replies.filter((reply) => reply.reason === 'dom-pencil-fallback')).toHaveLength(1);
+  expect(h.state().enabled).toBe(false);
+  expect(h.tool.dispatch).not.toHaveBeenCalled();
   h.destroy();
 });
 

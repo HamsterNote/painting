@@ -308,7 +308,7 @@ test('native status requires a current configuration acknowledgement and nonempt
       reason: 'dom-pencil-fallback',
     })
   );
-  expect(status()).toBe('PencilKit 断言失败：Pencil 到达 DOM，已阻止绘制');
+  expect(status()).toBe('PencilKit 断言失败：DOM Pencil 未收到原生起笔确认');
   expect(JSON.parse(canvas().props.demoState).enabled).toBe(false);
   await result.unmount();
 });

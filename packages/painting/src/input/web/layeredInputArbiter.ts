@@ -30,7 +30,7 @@ export function createLayeredInputArbiter(options: {
   let mode = controller.getSnapshot('input').mode;
   let activeTool = controller.getSnapshot('tools').activeTool;
   let native: { input: NormalizedPointerInput; cancel: () => boolean; owned: boolean } | undefined;
-  let nativePencilGuard: (() => void) | undefined;
+  let nativePencilGuard: ((input: NormalizedPointerInput) => void) | undefined;
   const rejectedWebPencils = new Set<string | number>();
 
   function execute(intents: readonly LayeredInputIntent[]) {
@@ -124,7 +124,7 @@ export function createLayeredInputArbiter(options: {
       !controller.getSnapshot('navigation').ruler.visible
     ) {
       rejectedWebPencils.add(input.pointerId);
-      nativePencilGuard();
+      nativePencilGuard(input);
     }
     if (rejectedWebPencils.has(input.pointerId)) {
       event.preventDefault();
@@ -173,7 +173,7 @@ export function createLayeredInputArbiter(options: {
   view.addEventListener('pagehide', interrupt);
   host.ownerDocument.addEventListener('visibilitychange', hidden);
   return {
-    setNativePencilGuard(guard: (() => void) | undefined) {
+    setNativePencilGuard(guard: ((input: NormalizedPointerInput) => void) | undefined) {
       nativePencilGuard = guard;
       if (!guard) rejectedWebPencils.clear();
     },

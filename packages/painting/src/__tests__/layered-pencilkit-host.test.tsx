@@ -31,7 +31,10 @@ beforeEach(() => {
       : rect;
   });
 });
-afterEach(() => jest.restoreAllMocks());
+afterEach(() => {
+  jest.useRealTimers();
+  jest.restoreAllMocks();
+});
 
 test('real DOM board commits a queued native stroke across a compatible configuration update', async () => {
   const onState = jest.fn(async (_state: PencilkitDemoState) => {});
@@ -112,9 +115,11 @@ test('real board never creates silent DOM ink when native Pencil is requested; f
     />
   );
   await act(async () => {});
+  jest.useFakeTimers();
   const host = view.container.querySelector('[data-input-ready="true"]')!;
   expect(host).not.toBeNull();
   for (const phase of ['down', 'move', 'up'] as const) layeredPointer(host, phase, 100, 100);
+  act(() => jest.advanceTimersByTime(5000));
   expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ reason: 'dom-pencil-fallback' }));
   const controller = window.__layeredEditor!;
   expect(controller.getSnapshot('document').objects).toHaveLength(0);
@@ -162,7 +167,12 @@ test('long and consecutive native strokes reach mounted PF history and retire in
       contextKey,
       sample: samples[0],
     };
+    const host = view.container.querySelector('[data-input-ready="true"]')!;
+    if (id % 2) layeredPointer(host, 'down', 30, 40);
     view.rerender(<LayeredEditorDom {...props} nativeMessage={begin} />);
+    if (!(id % 2)) layeredPointer(host, 'down', 30, 40);
+    layeredPointer(host, 'move', 35, 45);
+    layeredPointer(host, 'up', 40, 50);
     const stroke: PencilkitDemoMessage = {
       type: 'stroke',
       protocolVersion: 1,

@@ -2,7 +2,27 @@
 
 本增量对应 G2/G3 的可行性原型，不代表 G1 压力、G2 分流或 G3 物理交接通过；3.x 生产桥和 iOS 默认启用仍待门槛验收。`/pencilkit-probe` 保留原 G1 回归用途。
 
-## 持续绘制卡死修复与本轮工程复测
+## DOM Pencil 镜像事件误取消修复（本轮，待 Mac smoke）
+
+`0d633d3` 对应的原生标识 4 / EAS build `8c46ab77-c8f8-49b4-bc00-53896f393923` 已安装到目标 iPad。最新截图显示起笔 1、PK预览 1、完成/提交 0、`gesture-ancestor`，故障为 `dom-pencil-fallback`，随后 `hit=disabled`。这不是旧 IPA，也不证明原始绘制路径或持续绘制卡死已修复。
+
+本地复现：DOM 的 pen pointerdown 原先无条件 fault，native begin 先到时会发送 retire 取消有效会话；DOM 先到时会停用 native，异步 begin 随后被拒绝。`hit=disabled` 可以由这条取消链产生，不能仅凭该值判断最初未命中原生宿主。本轮不修改已得到 `gesture-ancestor` 回执的 Swift 宿主层级。
+
+现在仲裁器仍立即阻止整条 DOM 自由笔 Pencil 流，禁止 Web 落墨；bridge 将其起点与已接受的 native begin 一次性关联，允许任一侧先到。关联仅作诊断，容差 8 个画布局部 CSS 像素、接收窗口 5 秒，最多保存 32 项证据；不比较 UIKit 与 DOM 的不同时间原点，不修改 raw 坐标、时间、G1 去重或 down/up。超时仍没有对应 native begin 才报告 `dom-pencil-fallback`；已消费、过期、不同起点的证据不能重复确认。reset、策略/映射变更和断开连接清理计时器。诊断关联不是 G2/G3 通过的证据，提交仍必须来自有效完整的 native raw。手指、鼠标、其他工具及尺子仍走 Web。
+
+新增回归覆盖 native-first、DOM-first、native 已完成后 DOM 才到、DOM 已完成后 native 才到；30 秒时钟跨度、单笔只提交一次、真正缺失 native begin、证据消费/过期/位置不匹配、80 笔证据容量与清理。真实 DOM 测试在 24 笔（首笔 5,000 样本）中交替两侧起笔顺序，检查 PF 节点可见、每笔只产生一个 native 文档对象并逐笔退休。原有 20,000 样本与 64 笔测试保留。可复测命令：
+
+```bash
+pnpm exec jest --runInBand packages/painting/src/input/native/__tests__/pencilkitDemoBridge.test.ts packages/painting/src/__tests__/layered-pencilkit-host.test.tsx tests/jest/native/layered-dom-route.native.test.tsx tests/jest/native/layered-dom-actions.native.test.tsx
+```
+
+本轮只有 JS/TS 变更，兼容标识仍为 4，无需新 IPA，也不提交 EAS。Mac 保留本地 `apps/playground/app.json` 配置，快进分支后执行 `pnpm run prepare:playground-artifacts` 并重启/清理 Metro 缓存。先用已有标识 4 的本地 Simulator app 做路由 smoke：直接进入 `?pencilkit=1`、普通路由开→关→开，确认非零画布、`routing=gesture-ancestor`、无新增 Native action 错误、手指/工具栏可用、文档不被开关清空。回传 JS SHA、截图及本轮 Metro 日志；原生计数为 0 的模拟器截图不能证明 Pencil 输入。Linux 的 MobileBuildMCP `list_sims` 返回 `spawn xcrun ENOENT`，本轮未完成实际 Simulator 检查，不能先交付真机可验收结论。
+
+上述 smoke 通过后，才在已安装的 `8c46ab77` IPA + 新 JS 上继续工程复测：先单笔确认起笔/PK预览/完成/提交均增长、队列与待交接归零、无误报停用，再做长笔/连续笔与 undo/redo/手指操作。持续绘制卡死和 G2/G3 保持未通过，压力变化不阻塞本轮。
+
+本地结果：Jest 93 suites / 1214 tests、responder 9 项、typecheck、lint（0 errors / 32 条既有 warnings）、库构建、iOS JS/DOM export 与改动文件格式检查通过。未修改 Swift，因此本轮没有重跑 Swift 替身；之前 Mac 的 `0d633d3` smoke 不计为本次 JS 修复的 Simulator 证据。
+
+## 0d633d3 持续绘制卡死修复（历史，真机未通过）
 
 修勾在 `810271a` 的实际复测中报告原问题仍在，持续绘制后整页卡死，因此该版本未通过、不能进入验收。当前没有该次卡死的 iPad 调用栈；下面是本地可重现的缺陷与修复，不等同于已证实目标设备的全部根因。
 
@@ -50,11 +70,13 @@ Mac 保留 `apps/playground/app.json` 未提交配置，快进任务分支后执
 - `unattached` 还会显示具体原因：`dom-not-mounted`、`recognizer-not-mounted`、`recognizer-outside-canvas` 或 `dom-outside-recognizer`。挂载或卸载改变路由时重新发布回执，不会因首次布局尚未就绪而永久停留在旧状态。
 - 起笔/完成来自真实 UIKit 的旁路手势观察器，`PK预览` 来自 PKCanvasViewDelegate 的实际 tool-begin，文档提交只在 DOM controller 回执成功后增加。起笔、PK预览与提交均增加后才显示“原生链路已验证”；此状态只证明走过该链路，不表示 G2/G3 已通过。观察器不识别、不抢占其他手势；Probe 仍使用原 UIResponder 采样路径，Demo 关闭该路径避免重复采样。
 - `hit=pencil`、`non-pencil`、`control` 现在来自收到实际 UITouch 后的过滤；不再在初始 hitTest 中查询 `allTouches`。旧二进制 `hit=no-touch-metadata` 的截图说明先前的类型命中没有得到触摸元数据，放宽坐标匹配没有解决该问题。Apple 的 [hitTest](<https://developer.apple.com/documentation/uikit/uiview/hittest(_:with:)>) 支持空 event；[手势识别器](https://developer.apple.com/documentation/uikit/uigesturerecognizer) 接收其视图及后代的真实触摸，因此本候选改为祖先手势过滤。
-- 开启实验后，如果 Web 收到自由笔、非尺子、画布区域的 `pointerType=pen`，运行时断言阻止整条 Web 笔流并报告 `dom-pencil-fallback`，不会静默画 DOM 墨迹。手指、鼠标、控件、其他工具和尺子仍走 Web。关闭实验会卸载该断言。
+- 开启实验后，如果 Web 收到自由笔、非尺子、画布区域的 `pointerType=pen`，立即阻止整条 Web 笔流；诊断允许与异步 native begin 一次性关联，5 秒无对应起笔才报告 `dom-pencil-fallback`，不会因重复 DOM 事件取消有效原生会话，也不会静默画 DOM 墨迹。手指、鼠标、控件、其他工具和尺子仍走 Web。关闭实验会卸载该断言并清理待确认项。
 - `onNativeState` / `onNativeReply` 始终作为顶层函数 props 注册给 Expo DOM，开关只控制连接。Expo 57 的 wrapper 按收到消息时的当前 props 查找 action，不能在关闭开关时移除函数；迟到消息由稳定 action 接收并在断开状态忽略。
 - PencilKit 的原 delegate 决策被保留；候选为后代 Web 手势设置 Pencil 绘制优先级，避免双向 failure 依赖。该公开 API 组合是否兼容目标系统的 PencilKit/WKWebView、能否绘制预览，必须在 Mac 和实体 iPad 验证，替身测试不能证明。
 
-## Mac 合并与重建
+## Mac 合并与重建（Swift 历史增量）
+
+本节记录既有 Swift 增量的重建流程。本轮仅 JS 修复按首节复用标识 4 的包，先做 Simulator smoke，不重提 EAS。
 
 先保留 `apps/playground/app.json` 已有未提交 projectId/router/加密声明，在任务分支执行：
 

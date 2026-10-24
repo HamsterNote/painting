@@ -178,7 +178,7 @@ export default function LayeredEditorRoute() {
                 ? 'PencilKit 构建不匹配，请安装新 development build'
                 : fault
                   ? fault === 'dom-pencil-fallback'
-                    ? 'PencilKit 断言失败：Pencil 到达 DOM，已阻止绘制'
+                    ? 'PencilKit 断言失败：DOM Pencil 未收到原生起笔确认'
                     : `PencilKit 已暂停：${fault}`
                   : !state
                     ? 'PencilKit 等待 DOM 连接'
