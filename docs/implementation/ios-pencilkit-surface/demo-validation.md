@@ -2,7 +2,20 @@
 
 本增量对应 G2/G3 的可行性原型，不代表 G1 压力、G2 分流或 G3 物理交接通过；3.x 生产桥和 iOS 默认启用仍待门槛验收。`/pencilkit-probe` 保留原 G1 回归用途。
 
-## 笔刷设置后恢复手势隔离（标识 7 新 SHA，待本轮 Mac 验证）
+## 笔刷设置后恢复手势隔离（db07021，Mac 本地通过，实体未验）
+
+已核对 Mac 评论 `01a16ea3-03ae-7dab-8c54-f48ca8440939` 及附件 `ham66-db07021-local-evidence.zip` 的编译日志、UIKit 状态/调用栈、完整 trace 与截图，交付工程复测候选 **`db07021ddaca5fe052e6e6cf9303d4cf06cbfc93`**（原生/JS 同 SHA，兼容标识 **7**）。本轮仅记录验证结果，未提交 EAS、重建真机验收包或安装实体二进制，未更改生产代码或 G1。
+
+- Xcode 26.6（17F113）/ Swift 6.3.3：真实 Simulator SDK 契约、host 23 组、指定 Jest 5 suites / 80 tests、WebKit 2/2、冻结安装与库构建均通过。完整 Debug app 重新编译、安装、启动成功，构建日志为 `SUCCEEDED`，耗时 41.45 秒；既有 Constants/依赖、启动和 run-loop 告警仍在。
+- 实际 UIKit 初始关闭、开→关、颜色/宽度/不透明度及工具/布局变化后的最终状态均为 DOM 兄弟层、drawing/raw 两识别器禁用；开启时为 `gesture-ancestor`，两者启用，画布 `1032x1006`。DOM/WKWebView 地址全程相同，没有在调试器中手动改值。
+- 尺子策略先关闭原生输入、保持 bridge 连接，再经真实 DOM 控件和 Expo RN props 更新笔刷；三个 setter 的 `applyTool` 返回断点均读到两个识别器禁用、DOM 不在 PKCanvas 祖先下。开→关事务内若 setter 先于关闭 prop 执行，中间快照仍为旧开启状态；完整事务结束后禁用。不能混淆 setter 返回时的配置状态与事务最终状态。
+- iPad Pro 13-inch（M5）/ iOS 26.3 Simulator 的两笔自由笔、两笔 Line、首笔后改笔刷、undo/redo、工具切换和再次开关后四条历史路径可见。最终 trace 为 361 条、丢弃 0、`objectCount=4`、`active=null`、`pendingCommits=[]`，输入来源均为 `touch`；原生绘制计数为 0。本轮日志未见 Native action 缺失或 `handoff-stalled`。
+
+已知诊断文案问题：开关请求开启但被尺子等策略停用时，实际 `web-sibling` 被状态标题显示为“PencilKit 原生宿主未连接”。这是待修正文案，当前应结合 `routing` 和实际识别器状态辨认；不能把标题当作原生绘图通过或实际宿主断连的证据。该候选没有声称所有 UI 文案均正确。
+
+旧实体在更新 checkout/Metro 前仍需密码解锁，进程查询失败，没有实体 Safari/Xcode/WebContent 冻结栈；Mac 未主动 Reload、重启或安装。实体 Pencil 两笔、真实预览像素、活动 PK 工具期间的延迟笔刷应用、冻结恢复以及 G2/G3 仍未验证。后续须先解锁并保留旧现场取证；若现场丢失，先准备调试再最小复现。测试本修订需要包含上述 Swift SHA 的新原生二进制，不能在旧标识 6 IPA 上仅 Reload；本轮候选交付不授权发包。
+
+以下记录修订依据及重跑方法；Mac 门槛已按上述证据核验通过，不能将其扩大为实体通过。
 
 已核对 Mac 评论 `01a16e87-e42c-7938-9f25-4656a35766d8` 和附件 `ham66-ba9aadb-local-evidence.zip`。`ba9aadb` 的真实 SDK 契约、Swift host 22 组、Jest 80 项、WebKit 2/2 及 Xcode 26.6 / Swift 6.3.3 完整 Simulator 编译均通过，但实际关闭状态的 drawing recognizer 仍为 `isEnabled=true`，**该修订未达到本地交付门槛**。
 
