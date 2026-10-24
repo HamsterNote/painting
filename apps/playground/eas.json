@@ -1,6 +1,8 @@
 {
   "build": {
     "development": {
+      "corepack": true,
+      "pnpm": "10.28.2",
       "developmentClient": true,
       "distribution": "internal"
     },

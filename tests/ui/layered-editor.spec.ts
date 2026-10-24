@@ -34,6 +34,64 @@ function expectCompositedPixel(actual: number[], expected: number[]) {
   }
 }
 
+for (const firstTool of ['freehand', 'line'] as const) {
+  test(`plain Web ${firstTool} first commit allows more ink, undo/redo and tool switching`, async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(45000);
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    // No diagnostic globals, native connection, fixture or delayed handoff.
+    await page.goto('/layered-editor');
+    const surface = page.getByTestId('layered-surface');
+    await expect(surface).toHaveAttribute('data-input-arbiter', 'ready');
+    const select = async (tool: 'freehand' | 'line') =>
+      page
+        .getByRole('button', { name: tool === 'freehand' ? '自由笔' : '直线', exact: true })
+        .click();
+    const pen = async (y: number) => {
+      await pointer(page, 'down', 80, y);
+      await pointer(page, 'move', 220, y + 20);
+      await pointer(page, 'up', 280, y + 30, 0);
+    };
+    const mouse = async (y: number) => {
+      const box = (await surface.boundingBox())!;
+      await page.mouse.move(box.x + 100, box.y + y);
+      await page.mouse.down();
+      await page.mouse.move(box.x + 300, box.y + y + 30, { steps: 8 });
+      await page.mouse.up();
+    };
+    const objects = page.locator('[data-object-id]');
+    await select(firstTool);
+    await pen(80);
+    await expect(objects).toHaveCount(1);
+    await expect(objects.first()).toHaveCSS('visibility', 'visible');
+    const firstPath = await objects.first().locator('path').getAttribute('d');
+    expect(firstPath).toBeTruthy();
+    await page.getByLabel('颜色', { exact: true }).fill('#df2468');
+    await pen(150);
+    await expect(objects).toHaveCount(2);
+    await page.getByRole('button', { name: '撤销', exact: true }).click();
+    await expect(objects).toHaveCount(1);
+    await page.getByRole('button', { name: '重做', exact: true }).click();
+    await expect(objects).toHaveCount(2);
+    await select(firstTool === 'freehand' ? 'line' : 'freehand');
+    await pen(220);
+    await expect(objects).toHaveCount(3);
+    await select(firstTool);
+    await mouse(290);
+    await expect(objects).toHaveCount(4);
+    for (const node of await objects.all()) await expect(node).toHaveCSS('visibility', 'visible');
+    await expect(objects.first().locator('path')).toHaveAttribute('d', firstPath!);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    expect(errors).toEqual([]);
+    await testInfo.attach(`plain-web-${firstTool}-continues`, {
+      body: await page.screenshot(),
+      contentType: 'image/png',
+    });
+  });
+}
+
 test('mixed SVG document order equals actual pixel order', async ({ page }, testInfo) => {
   await openEditor(page, '&fixture=mixed');
   await expect(page.locator('[data-object-id]')).toHaveCount(5);

@@ -2084,11 +2084,18 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
   }
 
   private undoInternal(): MutationOutcome<EditorDocument> {
+    const cancelled = this.cancelNativeBeforeHistory();
+    if (!cancelled.result.ok)
+      return { result: cancelled.result, notifications: cancelled.notifications };
     const result = this.kernel.undo();
     if (!result.ok) {
-      return { result, notifications: [] };
+      return { result, notifications: cancelled.notifications };
     }
-    const notifications: LayeredEditorChannel[] = ['document', 'history'];
+    const notifications: LayeredEditorChannel[] = [
+      ...cancelled.notifications,
+      'document',
+      'history',
+    ];
     if (this.reconcileSelection()) {
       notifications.push('selection');
     }
@@ -2102,15 +2109,36 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
   }
 
   private redoInternal(): MutationOutcome<EditorDocument> {
+    const cancelled = this.cancelNativeBeforeHistory();
+    if (!cancelled.result.ok)
+      return { result: cancelled.result, notifications: cancelled.notifications };
     const result = this.kernel.redo();
     if (!result.ok) {
-      return { result, notifications: [] };
+      return { result, notifications: cancelled.notifications };
     }
-    const notifications: LayeredEditorChannel[] = ['document', 'history'];
+    const notifications: LayeredEditorChannel[] = [
+      ...cancelled.notifications,
+      'document',
+      'history',
+    ];
     if (this.reconcileSelection()) {
       notifications.push('selection');
     }
     return { result, notifications };
+  }
+
+  private cancelNativeBeforeHistory(): MutationOutcome<void> {
+    const snapshot = this.activeSession?.getSnapshot();
+    if (snapshot?.status !== 'collecting' || snapshot.source !== 'native')
+      return { result: okResult(undefined), notifications: [] };
+    return this.cancelInternal({
+      type: 'cancel',
+      sessionId: snapshot.sessionId,
+      pointerId: snapshot.pointerId,
+      source: 'native',
+      batchSequence: snapshot.nextBatchSequence,
+      reason: 'explicit',
+    });
   }
 
   /** 四字段 identity 查询（docrev 供 future 4.5 队列重建）；本期无 ACK。 */

@@ -235,8 +235,10 @@ export function createLayeredToolSession(
       }
       if (['freehand', 'text', 'image', 'pan'].includes(tool)) return false;
       const document = controller.getSnapshot('document');
-      prepared = prepareLayeredObjectQuery(document, cache);
-      requireValue(prepared);
+      if (['selection', 'eraser', 'lasso'].includes(tool)) {
+        prepared = prepareLayeredObjectQuery(document, cache);
+        requireValue(prepared);
+      }
       if (tool === 'selection') {
         const hits = pointHits(point);
         const id =

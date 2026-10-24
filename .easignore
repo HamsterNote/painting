@@ -1,0 +1,40 @@
+# Keep the exclusions below in sync with .gitignore; EAS replaces it with this file.
+
+# Dependencies
+node_modules/
+
+# Expo
+.expo/
+.metro-health-check*
+apps/playground/ios/
+apps/playground/android/
+
+# Build outputs
+dist/
+build/
+*.log
+yarn-error.log
+
+# Test outputs
+coverage/
+playwright-report/
+test-results/
+artifacts/research/
+
+# IDE
+.idea/
+.vscode/
+
+# Package output
+packages/painting/lib/
+
+# OpenCode
+.omo/
+.slim/deepwork/
+
+# Misc
+.DS_Store
+
+# EAS detects Yarn before pnpm when both lockfiles are uploaded.
+# Keep yarn.lock in Git, but use only the root pnpm-lock.yaml in cloud builds.
+/yarn.lock

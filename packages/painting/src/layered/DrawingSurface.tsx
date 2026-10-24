@@ -22,6 +22,10 @@ import type { DrawingSurfaceVirtualPaperOptions } from '../virtualPaperOptions';
 import { observeGestureEvents, type GestureTraceObserver } from '../input/web/gestureTrace';
 import { useInputInitialization } from './useInputInitialization';
 import { createLayeredInputArbiter } from '../input/web/layeredInputArbiter';
+import {
+  connectPencilkitDemo,
+  type PencilkitDemoConnection,
+} from '../input/native/pencilkitDemoBridge';
 
 export type LayeredDrawingSurfaceProps = {
   controller: LayeredEditorController;
@@ -31,6 +35,7 @@ export type LayeredDrawingSurfaceProps = {
   historyReadyDelayMs?: number;
   virtualPaper?: boolean | DrawingSurfaceVirtualPaperOptions;
   onGestureTrace?: GestureTraceObserver;
+  nativePencilExperiment?: PencilkitDemoConnection;
 };
 
 let nextSurface = 0;
@@ -44,6 +49,7 @@ export function LayeredDrawingSurface({
   historyReadyDelayMs,
   virtualPaper,
   onGestureTrace,
+  nativePencilExperiment,
 }: LayeredDrawingSurfaceProps) {
   const inputReady = useInputInitialization(controller, inputPolicy, true);
   const subscribeInput = useCallback(
@@ -135,12 +141,22 @@ export function LayeredDrawingSurface({
     });
     const surface = host.current!;
     surface.dataset.inputArbiter = 'ready';
+    const stopNative = nativePencilExperiment
+      ? connectPencilkitDemo({
+          host: surface,
+          controller,
+          presentation: queue,
+          arbiter,
+          connection: nativePencilExperiment,
+        })
+      : undefined;
     retry.current = (commitId) => {
       const result = adapter.retryCommit(commitId);
       setFailure(result.ok ? undefined : { commitId, message: result.error.code });
     };
     return () => {
       delete surface.dataset.inputArbiter;
+      stopNative?.();
       arbiter?.destroy();
       navigation.destroy();
       semantic.destroy();
@@ -148,7 +164,7 @@ export function LayeredDrawingSurface({
       queue.destroy();
       stopTrace?.();
     };
-  }, [controller, inputReady, allocateId, openImage, onGestureTrace]);
+  }, [controller, inputReady, allocateId, openImage, onGestureTrace, nativePencilExperiment]);
   return (
     <div
       ref={host}
@@ -160,7 +176,7 @@ export function LayeredDrawingSurface({
         flex: 1,
         minHeight: 0,
         overflow: 'hidden',
-        background: '#fff',
+        background: nativePencilExperiment ? 'transparent' : '#fff',
         touchAction: 'none',
         ...style,
         // Browser selection is separate from touch-action; editing controls opt back in.

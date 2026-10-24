@@ -1,0 +1,724 @@
+import UIKit
+import PencilKit
+
+func check(_ condition: @autoclosure () -> Bool, _ message: String) {
+  guard condition() else { fatalError(message) }
+}
+
+func verifyCompleted(_ sampler: PencilkitG1Sampler, phase: String = "up") -> [[String: Any]] {
+  let log = sampler.strokesLog()
+  let strokes = log["strokes"] as! [[String: Any]]
+  check(strokes.count == 1, "expected exactly one completed stroke")
+  let stroke = strokes[0]
+  let counts = stroke["counts"] as! [String: Int]
+  let samples = stroke["samples"] as! [[String: Any]]
+  check(counts["down"] == 1 && counts["up"] == 1, "down/up must each be exactly one")
+  check(counts["total"] == samples.count, "sample count mismatch")
+  check(counts["main"]! + counts["coalesced"]! == samples.count, "kind count mismatch")
+  check(samples.first?["phase"] as? String == "down", "first sample must be down")
+  check(samples.last?["phase"] as? String == phase, "missing terminal phase")
+  check(samples.last?["kind"] as? String == "main", "terminal must come from main touch")
+  check(stroke["cancelled"] as? Bool == (phase == "cancel"), "cancelled flag mismatch")
+  for (seq, sample) in samples.enumerated() {
+    check(sample["seq"] as? Int == seq, "sequence is not contiguous")
+  }
+  return samples
+}
+
+func testTerminalCoalescedOverlap() {
+  let sampler = PencilkitG1Sampler()
+  let view = UIView()
+  let touch = UITouch(1)
+  var callbacks = 0
+  sampler.onStrokeCompleted = { _ in callbacks += 1 }
+  sampler.touchesBegan([touch], in: view)
+  touch.timestamp = 2
+  let terminalCopy = UITouch(2)
+  terminalCopy.force = 99
+  sampler.touchesEnded([touch], event: UIEvent([UITouch(1.5), terminalCopy]), in: view)
+  sampler.touchesEnded([touch], event: UIEvent([UITouch(2)]), in: view)
+  let samples = verifyCompleted(sampler)
+  check(samples.count == 3, "terminal coalesced copy should not add another sample")
+  check(samples.map { $0["tabs"] as! Double } == [1000, 1500, 2000], "timestamps changed")
+  check(samples.last?["p"] as? Double == 0, "terminal must use real main values")
+  check(callbacks == 1, "duplicate finish must not dispatch twice")
+}
+
+func testTerminalWithPreviouslyAcceptedTimestamp() {
+  for cancelled in [false, true] {
+    let sampler = PencilkitG1Sampler()
+    let view = UIView()
+    let touch = UITouch(1)
+    sampler.touchesBegan([touch], in: view)
+    touch.timestamp = 2
+    touch.force = 0.75
+    sampler.touchesMoved([touch], event: UIEvent([UITouch(1.5), UITouch(2)]), in: view)
+    touch.force = 0 // Real terminal pressure must not be copied from an earlier move.
+    if cancelled {
+      sampler.touchesCancelled([touch], event: UIEvent([UITouch(2)]), in: view)
+    } else {
+      sampler.touchesEnded([touch], event: UIEvent([UITouch(2)]), in: view)
+    }
+    let samples = verifyCompleted(sampler, phase: cancelled ? "cancel" : "up")
+    check(samples.count == 4, "main/coalesced overlap was not deduplicated")
+    check(samples.last?["p"] as? Double == 0, "real terminal zero pressure was lost")
+    check(samples[1]["p"] as? Double == 0.75, "accepted move was modified")
+  }
+}
+
+func testTapAndMissingCoalesced() {
+  for endTimestamp in [1.0, 2.0] {
+    let sampler = PencilkitG1Sampler()
+    let view = UIView()
+    let touch = UITouch(1)
+    sampler.touchesBegan([touch], in: view)
+    touch.timestamp = endTimestamp
+    sampler.touchesEnded([touch], event: nil, in: view)
+    let samples = verifyCompleted(sampler)
+    check(samples.count == 2, "tap must keep real down and up, even at the same timestamp")
+  }
+}
+
+func testOverlappingCoalescedBatches() {
+  let sampler = PencilkitG1Sampler()
+  let view = UIView()
+  let touch = UITouch(1)
+  sampler.touchesBegan([touch], in: view)
+  touch.timestamp = 3
+  sampler.touchesMoved([touch], event: UIEvent([UITouch(2), UITouch(3)]), in: view)
+  touch.timestamp = 4
+  sampler.touchesMoved([touch], event: UIEvent([UITouch(2), UITouch(3), UITouch(4)]), in: view)
+  touch.timestamp = 5
+  sampler.touchesEnded([touch], event: UIEvent([UITouch(4), UITouch(4.5), UITouch(5)]), in: view)
+  let samples = verifyCompleted(sampler)
+  let timestamps = samples.map { $0["tabs"] as! Double }
+  check(Set(timestamps).count == samples.count, "main/coalesced samples are duplicated")
+  check(timestamps == [1000, 3000, 2000, 4000, 4500, 5000], "accepted order was changed")
+}
+
+func testOverflowReservesTerminalSlot() {
+  let sampler = PencilkitG1Sampler()
+  let view = UIView()
+  let touch = UITouch(1)
+  sampler.touchesBegan([touch], in: view)
+  touch.timestamp = 2
+  sampler.touchesMoved(
+    [touch], event: UIEvent((3...50_002).map { UITouch(Double($0)) }), in: view
+  )
+  touch.timestamp = 50_003
+  sampler.touchesEnded([touch], event: nil, in: view)
+  let samples = verifyCompleted(sampler)
+  check(samples.count == 50_000, "sample cap changed or terminal slot was lost")
+  let stroke = (sampler.strokesLog()["strokes"] as! [[String: Any]])[0]
+  check(stroke["overflow"] as? Bool == true, "overflow must remain explicit")
+}
+
+func testRawPressureAndEstimatedUpdates() {
+  let sampler = PencilkitG1Sampler()
+  let view = UIView()
+  let touch = UITouch(1)
+  touch.force = 2
+  touch.estimatedProperties = TouchProperties(rawValue: 3)
+  touch.estimatedPropertiesExpectingUpdates = TouchProperties(rawValue: 4)
+  sampler.touchesBegan([touch], in: view)
+  sampler.estimatedPropertiesUpdated([touch])
+  touch.force = 0
+  sampler.estimatedPropertiesUpdated([touch])
+  touch.timestamp = 2
+  sampler.touchesEnded([touch], event: nil, in: view)
+  let samples = verifyCompleted(sampler)
+  check(samples[0]["p"] as? Double == 2, "pressure was clamped or rewritten by late update")
+  check(samples[0]["est"] as? Int == 3, "estimated flags changed")
+  check(samples[0]["estUpd"] as? Int == 4, "expecting-update flags changed")
+  let stroke = (sampler.strokesLog()["strokes"] as! [[String: Any]])[0]
+  let estimated = stroke["estimated"] as! [String: Int]
+  check(estimated["lateEstimateEvents"] == 2, "late estimates must remain count-only")
+}
+
+func testPressureBeforeAndAfterPencilkit() {
+  let canvas = PencilkitSamplingCanvasView()
+  let sampler = PencilkitG1Sampler()
+  canvas.sampler = sampler
+  let touch = UITouch(1)
+  touch.maximumPossibleForce = 8
+  touch.force = 2
+  canvas.touchesBegan([touch], with: nil)
+  touch.timestamp = 2
+  touch.force = 4
+  canvas.forceAfterSuper = 1
+  canvas.touchesMoved([touch], with: nil)
+  touch.timestamp = 3
+  touch.force = 0
+  canvas.touchesEnded([touch], with: nil)
+  let samples = verifyCompleted(sampler)
+  check(samples[1]["fBeforePencilkit"] as? Double == 4, "pre-super snapshot must not retain a mutable UITouch")
+  check(samples[1]["f"] as? Double == 1, "diagnostics must not change accepted force")
+  check(samples[1]["p"] as? Double == 0.125, "normalization semantics changed")
+  check(samples[2]["fBeforePencilkit"] as? Double == 0, "terminal pre-super zero lost")
+  check(PencilkitG1Sampler.shared.strokesLog()["strokeCount"] as? Int == 0, "demo must not write the Probe sampler")
+}
+
+func testIdentityScopedPreviewRetirement() {
+  var ledger = PencilkitPreviewLedger()
+  ledger.beginStroke(1)
+  ledger.beginTool()
+  ledger.finishedIDs = [1]
+  ledger.retireIDs = [1]
+  check(ledger.reconcile(strokeCount: 1) == nil, "must not mutate an active PKDrawing")
+  ledger.finishTool()
+  let first = ledger.reconcile(strokeCount: 1)!
+  check(first.ids == [1] && first.keepIndices.isEmpty, "retirement did not match finished ID")
+  ledger.beginStroke(2)
+  ledger.beginTool()
+  ledger.finishTool() // Native tool-finish can precede the raw-end callback.
+  check(ledger.reconcile(strokeCount: 1)!.ids.isEmpty, "tool-finish alone must not retire")
+  ledger.finishedIDs = [2]
+  _ = ledger.reconcile(strokeCount: 1)
+  ledger.beginStroke(3)
+  ledger.beginTool()
+  ledger.finishTool()
+  ledger.finishedIDs = [3]
+  _ = ledger.reconcile(strokeCount: 2)
+  ledger.retireIDs = [2]
+  let second = ledger.reconcile(strokeCount: 2)!
+  check(second.ids == [2] && second.keepIndices == [1], "old ACK cleared a subsequent stroke")
+  check(ledger.reconcile(strokeCount: 1)!.ids.isEmpty, "duplicate retirement ACK")
+}
+
+func testCancelledEmptyPreviewCannotConsumeNextStroke() {
+  var ledger = PencilkitPreviewLedger()
+  ledger.beginStroke(1)
+  ledger.beginTool()
+  ledger.finishTool()
+  ledger.finishedIDs = [1]
+  ledger.cancelledIDs = [1]
+  check(ledger.reconcile(strokeCount: 0)!.ids.isEmpty, "cancellation is not a retirement request")
+  ledger.retireIDs = [1]
+  check(ledger.reconcile(strokeCount: 0)!.ids == [1], "empty cancelled preview was not acknowledged")
+  ledger.beginStroke(2)
+  ledger.beginTool()
+  ledger.finishTool()
+  ledger.finishedIDs = [2]
+  _ = ledger.reconcile(strokeCount: 1)
+  ledger.retireIDs = [2]
+  check(ledger.reconcile(strokeCount: 1)!.ids == [2], "cancelled ID consumed the next preview")
+}
+
+func testNextRawBeginBeforePreviousToolFinish() {
+  var ledger = PencilkitPreviewLedger()
+  ledger.beginStroke(1)
+  ledger.beginTool()
+  ledger.finishedIDs = [1]
+  // The passive observer can see the next down before PK finishes the previous tool cycle.
+  ledger.beginStroke(2)
+  ledger.finishTool()
+  ledger.retireIDs = [1]
+  let retirement = ledger.reconcile(strokeCount: 1)!
+  check(retirement.ids == [1], "previous finish was assigned to the next raw stroke; handoff head is stuck")
+}
+
+func testCompletedEmptyPreviewCannotStealNextStroke() {
+  var ledger = PencilkitPreviewLedger()
+  ledger.beginStroke(1)
+  ledger.beginTool()
+  ledger.finishedIDs = [1]
+  ledger.finishTool()
+  ledger.retireIDs = [1]
+  check(ledger.reconcile(strokeCount: 0)!.ids == [1], "ended empty preview blocked retirement")
+  let late = ledger.reconcile(strokeCount: 1)!
+  check(late.ids.isEmpty && late.keepIndices.isEmpty, "late orphan ink resurrected the retired empty preview")
+  ledger.beginStroke(2)
+  ledger.beginTool()
+  ledger.finishedIDs = [2]
+  ledger.finishTool()
+  let next = ledger.reconcile(strokeCount: 1)!
+  check(next.ids.isEmpty && next.keepIndices == [0], "previous empty preview consumed the next stroke")
+  ledger.retireIDs = [2]
+  check(ledger.reconcile(strokeCount: 1)!.ids == [2], "next preview never acquired its own identity")
+  ledger.beginStroke(3)
+  ledger.beginTool()
+  ledger.finishedIDs = [3]
+  ledger.finishTool()
+  _ = ledger.reconcile(strokeCount: 1)
+  ledger.retireIDs = [3]
+  check(ledger.reconcile(strokeCount: 0)!.ids == [3], "actual empty PKDrawing retained a phantom slot")
+  ledger.beginStroke(4)
+  ledger.beginTool()
+  ledger.finishTool()
+  check(ledger.reconcile(strokeCount: 0)!.ids.isEmpty, "tool end fabricated a raw end")
+  check(ledger.reconcile(strokeCount: 1)!.keepIndices == [0], "drawing before raw end was removed")
+  ledger.finishedIDs = [4]
+  ledger.retireIDs = [4]
+  check(ledger.reconcile(strokeCount: 1)!.ids == [4], "delayed raw end lost its preview")
+}
+
+func testToolCallbacksBeforeRawAndFourthStrokeRetirement() {
+  var ledger = PencilkitPreviewLedger()
+  // PK callbacks can precede the observer's raw down; closed cycles must keep their order.
+  for id in 1...3 {
+    ledger.beginTool()
+    ledger.finishTool()
+    ledger.beginStroke(id)
+    ledger.finishedIDs.append(id)
+    _ = ledger.reconcile(strokeCount: id)
+  }
+  ledger.retireIDs = [1, 2, 3]
+  ledger.beginStroke(4)
+  ledger.beginTool()
+  check(ledger.reconcile(strokeCount: 3) == nil, "cannot rewrite PKDrawing during the fourth active tool")
+  ledger.finishedIDs.append(4)
+  ledger.finishTool()
+  let firstThree = ledger.reconcile(strokeCount: 4)!
+  check(firstThree.ids == [1, 2, 3] && firstThree.keepIndices == [3], "first three blocked retirement or cleared the fourth preview")
+  ledger.retireIDs = [4]
+  let fourth = ledger.reconcile(strokeCount: 1)!
+  check(fourth.ids == [4] && fourth.keepIndices.isEmpty, "fourth completed preview leaked")
+  // Cancellation targets its own cycle and cannot finish another tool.
+  ledger.beginStroke(5)
+  ledger.beginTool()
+  ledger.beginStroke(6)
+  ledger.cancelTool(for: 6)
+  check(ledger.usingTool, "cancelling a different raw stroke finished the active PK tool")
+  ledger.finishTool()
+  check(!ledger.usingTool, "active PK tool never finished")
+  ledger.beginStroke(7)
+  ledger.beginTool()
+  ledger.cancelTool(for: 7)
+  ledger.beginStroke(8)
+  ledger.beginTool()
+  ledger.finishTool() // Delayed delegate finish for the explicitly cancelled tool.
+  check(ledger.usingTool, "late finish of a cancelled tool finished the next active tool")
+  ledger.finishTool()
+  check(!ledger.usingTool, "next tool never finished after cancellation")
+}
+
+func testProtocolCancellationDoesNotFabricateRawEnd() {
+  let sampler = PencilkitG1Sampler()
+  let view = UIView()
+  let touch = UITouch(1)
+  sampler.touchesBegan([touch], in: view)
+  sampler.discardActiveSessions()
+  touch.timestamp = 2
+  sampler.touchesEnded([touch], event: nil, in: view)
+  check(sampler.strokesLog()["strokeCount"] as? Int == 0, "protocol cancellation synthesized a raw stroke")
+  sampler.touchesBegan([touch], in: view)
+  touch.timestamp = 3
+  sampler.touchesEnded([touch], event: nil, in: view)
+  _ = verifyCompleted(sampler)
+}
+
+func testProductionDelegateRetiresFourPreviews() {
+  let window = UIWindow()
+  let view = PaintingPencilkitView()
+  window.addSubview(view)
+  view.didMoveToWindow()
+  view.setDemoHost(true)
+  view.mountChildComponentView(UIView(), index: 0)
+  let canvas = view.subviews.compactMap { $0 as? PencilkitDemoCanvasView }.first!
+  let delegate: PKCanvasViewDelegate = canvas.delegate!
+  func configure(_ retireIDs: [Int]) {
+    let data = try! JSONSerialization.data(withJSONObject: [
+      "contextKey": "delegate:1", "enabled": true, "retireIDs": retireIDs,
+      "frame": ["x": 0, "y": 0, "width": 100, "height": 100], "exclusions": [],
+    ])
+    view.setDemoState(String(data: data, encoding: .utf8)!)
+  }
+  func begin(_ id: Int) -> UITouch {
+    let touch = UITouch(Double(id))
+    canvas.sampler.touchesBegan([touch], in: canvas)
+    delegate.canvasViewDidBeginUsingTool(canvas)
+    return touch
+  }
+  func endRaw(_ touch: UITouch, id: Int) {
+    canvas.drawing = PKDrawing(strokes: canvas.drawing.strokes + [PKStroke(id)])
+    delegate.canvasViewDrawingDidChange(canvas)
+    touch.timestamp += 0.5
+    canvas.sampler.touchesEnded([touch], event: nil, in: canvas)
+  }
+  func retired() -> [Int] { view.onPreviewRetired.events.map { $0["id"] as! Int } }
+  configure([])
+  let initialToolAssignments = canvas.toolAssignments
+  for id in 1...3 {
+    endRaw(begin(id), id: id)
+    delegate.canvasViewDidEndUsingTool(canvas)
+  }
+  check(view.onStroke.events.count == 3, "first three raw completions were lost")
+  check(canvas.drawing.strokes.map { $0.id } == [1, 2, 3], "completed previews disappeared before retirement")
+  check(canvas.toolAssignments == initialToolAssignments, "unchanged tool was replaced at every stroke end")
+  let fourth = begin(4)
+  view.setInkWidth(9)
+  check(canvas.toolAssignments == initialToolAssignments, "brush change replaced an active tool")
+  configure([1, 2, 3])
+  check(retired().isEmpty, "active fourth tool must defer PKDrawing mutation")
+  endRaw(fourth, id: 4)
+  check(retired().isEmpty, "raw end alone must not replace the real PK delegate end")
+  // Dispatch through the protocol, rather than invoking the ledger's finishTool directly.
+  delegate.canvasViewDidEndUsingTool(canvas)
+  check(canvas.toolAssignments == initialToolAssignments + 1, "deferred brush update was not applied once")
+  check(retired() == [1, 2, 3], "SDK end callback failed to retire the first three previews")
+  check(canvas.drawing.strokes.map { $0.id } == [4], "old retirement cleared the fourth preview")
+  configure([1, 2, 3, 4])
+  check(retired() == [1, 2, 3, 4], "fourth preview failed to retire exactly once")
+  check(canvas.drawing.strokes.isEmpty, "retired PK previews leaked")
+  configure([1, 2, 3, 4])
+  check(retired().count == 4, "duplicate retirement emitted another acknowledgment")
+  let status = view.onDemoStatus.events.last!
+  check(status["toolFinishes"] as? Int == 4, "delegate finish counter did not advance")
+  check(status["retireRequested"] as? Int == 0, "native retirement requests did not drain")
+  check(status["retireAcknowledged"] as? Int == 4, "native retirement acknowledgments were lost")
+  view.setInkWidth(9)
+  check(canvas.toolAssignments == initialToolAssignments + 1, "identical brush prop replaced the PK tool")
+  check((canvas.tool as? PKInkingTool)?.width == 9, "tool remained locked after delegate end")
+  view.setInkColor(.systemBlue)
+  view.setInkOpacity(1)
+  check(canvas.toolAssignments == initialToolAssignments + 1, "identical color/opacity props replaced the PK tool")
+  view.setInkColor(.clear)
+  check(canvas.toolAssignments == initialToolAssignments + 2, "a real color change was ignored")
+  let fifth = begin(5)
+  endRaw(fifth, id: 5)
+  delegate.canvasViewDidEndUsingTool(canvas)
+  configure([5])
+  check(retired() == [1, 2, 3, 4, 5], "fifth stroke stalled after the batch drained")
+  // A completed raw/tool cycle can have no retained PKStroke. Switching to a
+  // Web tool must still drain it without waiting for the next native stroke.
+  let sixth = begin(6)
+  sixth.timestamp += 0.5
+  canvas.sampler.touchesEnded([sixth], event: nil, in: canvas)
+  delegate.canvasViewDidEndUsingTool(canvas)
+  let disabled = try! JSONSerialization.data(withJSONObject: [
+    "contextKey": "delegate:2", "enabled": false, "retireIDs": [6],
+    "frame": ["x": 0, "y": 0, "width": 100, "height": 100], "exclusions": [],
+  ])
+  view.setDemoState(String(data: disabled, encoding: .utf8)!)
+  check(retired() == [1, 2, 3, 4, 5, 6], "switching to Line stranded a completed empty native preview")
+  check(view.onDemoStatus.events.last!["retireRequested"] as? Int == 0, "Line retained a native retirement request")
+  configure([])
+  endRaw(begin(7), id: 7)
+  delegate.canvasViewDidEndUsingTool(canvas)
+  configure([7])
+  check(retired() == [1, 2, 3, 4, 5, 6, 7], "native input remained blocked after switching back from Line")
+  for id in 8...32 {
+    let touch = begin(id)
+    // Odd strokes have retained ink; even ones have a real raw/tool completion
+    // but no PKStroke. Deliver retirement in pairs, including during a live tool.
+    if id % 2 == 0 {
+      touch.timestamp += 0.5
+      canvas.sampler.touchesEnded([touch], event: nil, in: canvas)
+    } else {
+      configure([id - 1])
+      endRaw(touch, id: id)
+    }
+    delegate.canvasViewDidEndUsingTool(canvas)
+    if id % 2 == 1 { configure([id]) }
+  }
+  configure([32])
+  check(Set(retired()) == Set(1...32) && retired().count == 32, "32 cycles leaked, reused or duplicated a retirement identity")
+  check(canvas.drawing.strokes.isEmpty, "32-cycle history left stale PK previews")
+  check(view.onDemoStatus.events.last!["retireRequested"] as? Int == 0, "32-cycle retirement queue did not drain")
+}
+
+func testLongStrokeAcrossMoveEvents() {
+  let sampler = PencilkitG1Sampler()
+  let view = UIView()
+  let touch = UITouch(1)
+  sampler.touchesBegan([touch], in: view)
+  let started = ProcessInfo.processInfo.systemUptime
+  for index in 1...10_000 {
+    touch.timestamp = Double(index + 1)
+    sampler.touchesMoved([touch], event: UIEvent([UITouch(touch.timestamp - 0.5)]), in: view)
+  }
+  touch.timestamp += 1
+  sampler.touchesEnded([touch], event: nil, in: view)
+  let samples = verifyCompleted(sampler)
+  check(samples.count == 20_002, "long stroke lost accepted main/coalesced samples")
+  print("Long stroke 10000 move events: \(ProcessInfo.processInfo.systemUptime - started)s")
+}
+
+func testCallbacksCanReenterSampler() {
+  let sampler = PencilkitG1Sampler()
+  let view = UIView()
+  let touch = UITouch(1)
+  var began = 0
+  var finished = 0
+  sampler.onStrokeBegan = { _ in
+    _ = sampler.strokesLog()
+    began += 1
+    // A synchronous host retirement must be able to discard this just-published session.
+    if began == 1 { sampler.discardActiveSessions() }
+  }
+  sampler.onStrokeCompleted = { _ in
+    check(sampler.strokesLog()["strokeCount"] as? Int == 1, "finish callback ran before completion")
+    sampler.clear()
+    finished += 1
+  }
+  sampler.touchesBegan([touch], in: view)
+  sampler.touchesEnded([touch], event: nil, in: view)
+  check(finished == 0, "discarded begin should not finish")
+  sampler.touchesBegan([touch], in: view)
+  touch.timestamp = 2
+  sampler.touchesEnded([touch], event: nil, in: view)
+  check(began == 2 && finished == 1, "callback reentry lost a lifecycle event")
+}
+
+func testContinuousStrokesAndDemoRetention() {
+  for retainsCompleted in [true, false] {
+    let sampler = PencilkitG1Sampler(retainsCompletedStrokes: retainsCompleted)
+    let view = UIView()
+    var callbacks = 0
+    var firstSamples: [[String: Any]] = []
+    sampler.onStrokeCompleted = { summary in
+      callbacks += 1
+      check(summary["id"] as? Int == callbacks, "continuous stroke IDs changed")
+      let counts = summary["counts"] as! [String: Int]
+      check(counts["down"] == 1 && counts["up"] == 1, "continuous stroke lost its lifecycle")
+      if callbacks == 1 { firstSamples = summary["samples"] as! [[String: Any]] }
+    }
+    for id in 1...80 {
+      let touch = UITouch(Double(id * 100))
+      sampler.touchesBegan([touch], in: view)
+      for _ in 0..<100 {
+        touch.timestamp += 1
+        sampler.touchesMoved([touch], event: UIEvent([UITouch(touch.timestamp - 0.5)]), in: view)
+      }
+      touch.timestamp += 1
+      sampler.touchesEnded([touch], event: nil, in: view)
+    }
+    check(callbacks == 80, "continuous strokes were lost or duplicated")
+    check(firstSamples.count == 202 && firstSamples[0]["tabs"] as? Double == 100_000,
+          "a later session mutated an exported raw buffer")
+    let log = sampler.strokesLog()
+    check(log["strokeCount"] as? Int == (retainsCompleted ? 20 : 0), "retained raw data is not bounded")
+  }
+}
+
+func testDemoPencilHitTesting() {
+  let pencil = UITouch(1)
+  pencil.location = CGPoint(x: 0, y: 0)
+  let finger = UITouch(1)
+  finger.type = .direct
+  func hit(_ touch: UITouch, enabled: Bool = true, exclusions: [CGRect] = []) -> String {
+    PencilkitDemoHitTesting.decision(
+      point: CGPoint(x: 50, y: 50), bounds: CGRect(x: 0, y: 0, width: 100, height: 100),
+      enabled: enabled, exclusions: exclusions, touch: touch
+    )
+  }
+  check(hit(pencil) == "pencil", "Pencil policy must use the actual touch, not a UIEvent lookup")
+  check(hit(finger) == "non-pencil", "fingers must reach the real WebView")
+  check(hit(pencil, enabled: false) == "disabled", "disabled canvas captured input")
+  check(hit(pencil, exclusions: [CGRect(x: 40, y: 40, width: 20, height: 20)]) == "control", "native canvas captured an excluded control")
+  pencil.phase = .ended
+  check(hit(pencil) == "non-pencil", "ended Pencil must not capture a later finger")
+}
+
+func testDemoGeometricHitTesting() {
+  let canvas = PencilkitDemoCanvasView()
+  let dom = UIView()
+  check(!canvas.hasDrawingAncestor, "unmounted DOM must not claim a native route")
+  canvas.mountDOMView(dom)
+  check(canvas.hasDrawingAncestor, "recognizer owner must be a real DOM ancestor")
+  for event in [nil, UIEvent([]), UIEvent([UITouch(1)])] as [UIEvent?] {
+    check(canvas.hitTest(CGPoint(x: 50, y: 50), with: event) === dom, "real DOM descendant must be selected even before touch metadata exists")
+    check(canvas.hitTest(CGPoint(x: 150, y: 50), with: event) == nil, "out-of-bounds hit")
+  }
+  dom.isUserInteractionEnabled = false
+  check(canvas.hitTest(CGPoint(x: 50, y: 50), with: nil) == nil, "disabled DOM must not capture input")
+  let unrelatedOwner = UIView()
+  unrelatedOwner.addGestureRecognizer(canvas.drawingGestureRecognizer)
+  canvas.updateDOMHost()
+  check(!canvas.hasDrawingAncestor, "mounted child alone must not claim drawing recognizer ancestry")
+}
+
+func testDemoNestedDrawingOwner() {
+  let canvas = PencilkitDemoCanvasView()
+  let dom = UIView()
+  var routingChanges = 0
+  canvas.onRoutingChanged = { routingChanges += 1 }
+  canvas.drawingGestureRecognizer.view = nil
+  canvas.mountDOMView(dom)
+  check(!canvas.hasDrawingAncestor && canvas.routingIssue == "recognizer-not-mounted", "early missing owner must remain explicit")
+  // Model the real failure: PencilKit owns its recognizer on a nested drawing view.
+  let drawingOwner = UIView()
+  drawingOwner.frame = CGRect(x: 10, y: 20, width: 100, height: 100)
+  canvas.addSubview(drawingOwner)
+  drawingOwner.addGestureRecognizer(canvas.drawingGestureRecognizer)
+  canvas.layoutSubviews()
+  check(dom.isDescendant(of: drawingOwner), "DOM must mount under the public recognizer's actual owner")
+  check(canvas.hasDrawingAncestor, "nested drawing owner must report gesture-ancestor")
+  check(canvas.hitTest(CGPoint(x: 50, y: 50), with: nil) === dom, "container offset must preserve DOM coordinates")
+  check(routingChanges == 1, "successful attachment must publish a new routing status")
+  let laterOwner = UIView()
+  canvas.addSubview(laterOwner)
+  laterOwner.addGestureRecognizer(canvas.drawingGestureRecognizer)
+  canvas.layoutSubviews()
+  check(dom.isDescendant(of: laterOwner), "layout must reconcile delayed owner changes")
+  canvas.unmountDOMView(dom)
+  check(!canvas.hasDrawingAncestor && dom.superview == nil, "unmount must detach DOM and clear the route")
+  check(routingChanges == 2, "unmount must publish loss of routing")
+}
+
+func testDemoPassiveTouchObserver() {
+  let sampler = PencilkitG1Sampler()
+  let coordinates = UIView()
+  coordinates.frame = CGRect(x: 10, y: 20, width: 100, height: 100)
+  let observer = PencilkitDemoTouchObserver(sampler: sampler, coordinateView: coordinates)
+  observer.accepts = { $0.type == .pencil }
+  let other = UIGestureRecognizer(target: nil, action: nil)
+  check(!observer.canPrevent(other) && !observer.canBePrevented(by: other), "raw observer must not participate in gesture prevention")
+  check(!observer.cancelsTouchesInView && !observer.delaysTouchesBegan && !observer.delaysTouchesEnded, "observer must leave real Web touches alone")
+  check(observer.allowedTouchTypes == [NSNumber(value: UITouch.TouchType.pencil.rawValue)], "observer must filter Pencil")
+  let pencil = UITouch(1)
+  pencil.location = CGPoint(x: 50, y: 60)
+  let finger = UITouch(1)
+  finger.type = .direct
+  observer.touchesBegan([pencil, finger], with: UIEvent([]))
+  check(observer.ignoredTouches.contains(finger), "finger must not be sampled")
+  let canvas = PencilkitDemoCanvasView()
+  canvas.sampler = sampler
+  canvas.samplesThroughResponder = false
+  // A responder-chain delivery must not double-sample the ancestor observer's stroke.
+  canvas.touchesBegan([pencil], with: nil)
+  pencil.timestamp = 2
+  observer.touchesMoved([pencil], with: UIEvent([UITouch(1.5), UITouch(2)]))
+  canvas.touchesMoved([pencil], with: nil)
+  observer.touchesEnded([pencil], with: UIEvent([UITouch(2)]))
+  canvas.touchesEnded([pencil], with: nil)
+  let samples = verifyCompleted(sampler)
+  check(samples.count == 4, "observer lost coalesced/terminal or responder duplicated input")
+  check(samples[0]["x"] as? Double == 40 && samples[0]["y"] as? Double == 40, "observer coordinates must be local to DOM drawing frame")
+}
+
+func testDisabledDemoExcludesNativeGestureAncestors() {
+  let window = UIWindow()
+  let view = PaintingPencilkitView()
+  window.addSubview(view)
+  view.setDemoHost(true)
+  let dom = UIView()
+  view.mountChildComponentView(dom, index: 0)
+  let canvas = view.subviews.compactMap { $0 as? PencilkitDemoCanvasView }.first!
+  let observer = canvas.gestureRecognizers!.compactMap { $0 as? PencilkitDemoTouchObserver }.first!
+  func checkWebRoute() {
+    check(dom.isDescendant(of: view) && !dom.isDescendant(of: canvas), "Web DOM must not inherit PencilKit recognizers")
+    check(!canvas.drawingGestureRecognizer.isEnabled, "Web mode must disable the native drawing recognizer")
+    check(!observer.isEnabled, "Web mode must disable the raw observer")
+    check(canvas.hostedDOMView === dom, "routing must preserve the same DOM view")
+    check(canvas.hitTest(CGPoint(x: 5, y: 5), with: nil) == nil, "off canvas must not forward hits into its Web sibling")
+    check(dom.convert(CGPoint.zero, to: view) == CGPoint.zero, "reparenting changed the Web drawing origin")
+  }
+  func configure(_ enabled: Bool, _ context: String) {
+    let data = try! JSONSerialization.data(withJSONObject: [
+      "contextKey": context, "enabled": enabled, "retireIDs": [],
+      "frame": ["x": 0, "y": 0, "width": 100, "height": 100], "exclusions": [],
+    ])
+    view.setDemoState(String(data: data, encoding: .utf8)!)
+  }
+  checkWebRoute()
+  configure(false, "")
+  checkWebRoute()
+  // Repeated off props and layout updates must never re-enable the ancestor recognizers.
+  for _ in 0..<2 {
+    configure(false, "")
+    view.layoutSubviews()
+    checkWebRoute()
+  }
+  configure(true, "routing:1")
+  check(dom.isDescendant(of: canvas) && canvas.hasDrawingAncestor, "native mode must restore the public gesture ancestor")
+  check(canvas.drawingGestureRecognizer.isEnabled && observer.isEnabled, "native mode must restore both recognizers")
+  let pencil = UITouch(1)
+  observer.touchesBegan([pencil], with: UIEvent([]))
+  check(view.onBegin.events.count == 1, "re-enabled native observer failed to begin")
+  // An explicit mode change cancels collecting raw data without fabricating a stroke.
+  configure(false, "routing:2")
+  checkWebRoute()
+  check(view.onStroke.events.isEmpty, "disabling the native route fabricated a completion")
+  configure(true, "next-epoch:1")
+  check(dom.isDescendant(of: canvas), "new epoch must restore native routing")
+  configure(false, "")
+  checkWebRoute()
+  check(view.onDemoStatus.events.last!["routing"] as? String == "web-sibling", "status must report the actual Web sibling route")
+  view.unmountChildComponentView(dom, index: 0)
+  check(dom.superview == nil, "off-mode unmount leaked the Web DOM container")
+  let lateHost = PaintingPencilkitView()
+  let lateDOM = UIView()
+  lateHost.mountChildComponentView(lateDOM, index: 0)
+  lateHost.setDemoState("{\"contextKey\":\"\",\"enabled\":false,\"retireIDs\":[],\"frame\":{\"x\":0,\"y\":0,\"width\":100,\"height\":100},\"exclusions\":[]}")
+  lateHost.setDemoHost(true)
+  let lateCanvas = lateHost.subviews.compactMap { $0 as? PencilkitDemoCanvasView }.first!
+  check(lateDOM.isDescendant(of: lateHost) && !lateDOM.isDescendant(of: lateCanvas), "late Demo host prop left Web under native gestures")
+}
+
+func testToolUpdatesPreserveDemoInputIsolation() {
+  let view = PaintingPencilkitView()
+  view.setDemoHost(true)
+  let dom = UIView()
+  view.mountChildComponentView(dom, index: 0)
+  let canvas = view.subviews.compactMap { $0 as? PencilkitDemoCanvasView }.first!
+  let observer = canvas.gestureRecognizers!.compactMap { $0 as? PencilkitDemoTouchObserver }.first!
+  func configure(_ enabled: Bool) {
+    let data = try! JSONSerialization.data(withJSONObject: [
+      "contextKey": "tool-update:1", "enabled": enabled, "retireIDs": [],
+      "frame": ["x": 0, "y": 0, "width": 100, "height": 100], "exclusions": [],
+    ])
+    view.setDemoState(String(data: data, encoding: .utf8)!)
+  }
+  func checkRoute(_ enabled: Bool) {
+    check(canvas.drawingGestureRecognizer.isEnabled == enabled, "setTool must not override the Demo input mode")
+    check(observer.isEnabled == enabled, "tool updates changed the raw observer input mode")
+    check(canvas.routing == (enabled ? "gesture-ancestor" : "web-sibling"), "tool update moved DOM to the wrong route")
+    check(canvas.hostedDOMView === dom, "tool update replaced DOM/history")
+  }
+  for cycle in 0..<2 {
+    configure(false)
+    let assignments = canvas.toolAssignments
+    view.setInkColor(cycle == 0 ? .clear : .systemBlue)
+    checkRoute(false)
+    view.setInkWidth(Double(6 + cycle))
+    checkRoute(false)
+    view.setInkOpacity(0.3 + Double(cycle) * 0.1)
+    checkRoute(false)
+    check(canvas.toolAssignments == assignments + 3, "off-mode test did not apply all three brush changes")
+    configure(true)
+    view.setInkWidth(Double(10 + cycle))
+    checkRoute(true)
+    // Brush changes during a native tool cycle are applied only on the real end callback.
+    view.canvasViewDidBeginUsingTool(canvas)
+    let beforeDeferred = canvas.toolAssignments
+    view.setInkWidth(Double(20 + cycle))
+    check(canvas.toolAssignments == beforeDeferred, "brush was replaced during an active tool cycle")
+    view.canvasViewDidEndUsingTool(canvas)
+    check(canvas.toolAssignments == beforeDeferred + 1, "tool end did not apply the deferred brush")
+    checkRoute(true)
+  }
+  configure(false)
+  view.setInkWidth(30)
+  checkRoute(false)
+}
+
+let tests: [(String, () -> Void)] = [
+  ("Demo policy uses actual touch and preserves finger/control routing", testDemoPencilHitTesting),
+  ("Demo hit testing selects real DOM before touch metadata exists", testDemoGeometricHitTesting),
+  ("Demo mounts under nested/delayed public drawing recognizer owners", testDemoNestedDrawingOwner),
+  ("Demo passive ancestor observer samples once in drawing-frame coordinates", testDemoPassiveTouchObserver),
+  ("disabled Demo has no native gesture ancestors and preserves DOM across toggles", testDisabledDemoExcludesNativeGestureAncestors),
+  ("PencilKit tool re-enable cannot override off/on routing or deferred brush updates", testToolUpdatesPreserveDemoInputIsolation),
+  ("terminal coalesced overlap and repeated finish", testTerminalCoalescedOverlap),
+  ("up/cancel sharing a previously accepted timestamp", testTerminalWithPreviouslyAcceptedTimestamp),
+  ("tap with equal/distinct timestamps and no coalesced event", testTapAndMissingCoalesced),
+  ("overlapping coalesced batches preserve identity and order", testOverlappingCoalescedBatches),
+  ("overflow retains exactly one real terminal sample", testOverflowReservesTerminalSlot),
+  ("raw pressure and count-only estimated updates are unchanged", testRawPressureAndEstimatedUpdates),
+  ("pre/post PencilKit force snapshots and per-view isolation", testPressureBeforeAndAfterPencilkit),
+  ("identity-scoped preview retirement and tool/end ordering", testIdentityScopedPreviewRetirement),
+  ("empty cancellation does not consume the next preview", testCancelledEmptyPreviewCannotConsumeNextStroke),
+  ("next raw begin cannot steal previous PK tool finish", testNextRawBeginBeforePreviousToolFinish),
+  ("completed empty preview cannot consume the next stroke or retain phantom ink", testCompletedEmptyPreviewCannotStealNextStroke),
+  ("tool-first order and first-three/fourth preview retirement", testToolCallbacksBeforeRawAndFourthStrokeRetirement),
+  ("production view protocol end retires four previews and accepts the next", testProductionDelegateRetiresFourPreviews),
+  ("protocol cancellation never synthesizes a raw end", testProtocolCancellationDoesNotFabricateRawEnd),
+  ("long stroke across distinct UIKit move callbacks", testLongStrokeAcrossMoveEvents),
+  ("callbacks can read/cancel/clear without deadlocking", testCallbacksCanReenterSampler),
+  ("continuous strokes and Probe/Demo retention stay bounded", testContinuousStrokesAndDemoRetention),
+]
+for (name, test) in tests {
+  test()
+  print("PASS: \(name)")
+}
