@@ -646,12 +646,60 @@ func testDisabledDemoExcludesNativeGestureAncestors() {
   check(lateDOM.isDescendant(of: lateHost) && !lateDOM.isDescendant(of: lateCanvas), "late Demo host prop left Web under native gestures")
 }
 
+func testToolUpdatesPreserveDemoInputIsolation() {
+  let view = PaintingPencilkitView()
+  view.setDemoHost(true)
+  let dom = UIView()
+  view.mountChildComponentView(dom, index: 0)
+  let canvas = view.subviews.compactMap { $0 as? PencilkitDemoCanvasView }.first!
+  let observer = canvas.gestureRecognizers!.compactMap { $0 as? PencilkitDemoTouchObserver }.first!
+  func configure(_ enabled: Bool) {
+    let data = try! JSONSerialization.data(withJSONObject: [
+      "contextKey": "tool-update:1", "enabled": enabled, "retireIDs": [],
+      "frame": ["x": 0, "y": 0, "width": 100, "height": 100], "exclusions": [],
+    ])
+    view.setDemoState(String(data: data, encoding: .utf8)!)
+  }
+  func checkRoute(_ enabled: Bool) {
+    check(canvas.drawingGestureRecognizer.isEnabled == enabled, "setTool must not override the Demo input mode")
+    check(observer.isEnabled == enabled, "tool updates changed the raw observer input mode")
+    check(canvas.routing == (enabled ? "gesture-ancestor" : "web-sibling"), "tool update moved DOM to the wrong route")
+    check(canvas.hostedDOMView === dom, "tool update replaced DOM/history")
+  }
+  for cycle in 0..<2 {
+    configure(false)
+    let assignments = canvas.toolAssignments
+    view.setInkColor(cycle == 0 ? .clear : .systemBlue)
+    checkRoute(false)
+    view.setInkWidth(Double(6 + cycle))
+    checkRoute(false)
+    view.setInkOpacity(0.3 + Double(cycle) * 0.1)
+    checkRoute(false)
+    check(canvas.toolAssignments == assignments + 3, "off-mode test did not apply all three brush changes")
+    configure(true)
+    view.setInkWidth(Double(10 + cycle))
+    checkRoute(true)
+    // Brush changes during a native tool cycle are applied only on the real end callback.
+    view.canvasViewDidBeginUsingTool(canvas)
+    let beforeDeferred = canvas.toolAssignments
+    view.setInkWidth(Double(20 + cycle))
+    check(canvas.toolAssignments == beforeDeferred, "brush was replaced during an active tool cycle")
+    view.canvasViewDidEndUsingTool(canvas)
+    check(canvas.toolAssignments == beforeDeferred + 1, "tool end did not apply the deferred brush")
+    checkRoute(true)
+  }
+  configure(false)
+  view.setInkWidth(30)
+  checkRoute(false)
+}
+
 let tests: [(String, () -> Void)] = [
   ("Demo policy uses actual touch and preserves finger/control routing", testDemoPencilHitTesting),
   ("Demo hit testing selects real DOM before touch metadata exists", testDemoGeometricHitTesting),
   ("Demo mounts under nested/delayed public drawing recognizer owners", testDemoNestedDrawingOwner),
   ("Demo passive ancestor observer samples once in drawing-frame coordinates", testDemoPassiveTouchObserver),
   ("disabled Demo has no native gesture ancestors and preserves DOM across toggles", testDisabledDemoExcludesNativeGestureAncestors),
+  ("PencilKit tool re-enable cannot override off/on routing or deferred brush updates", testToolUpdatesPreserveDemoInputIsolation),
   ("terminal coalesced overlap and repeated finish", testTerminalCoalescedOverlap),
   ("up/cancel sharing a previously accepted timestamp", testTerminalWithPreviouslyAcceptedTimestamp),
   ("tap with equal/distinct timestamps and no coalesced event", testTapAndMissingCoalesced),

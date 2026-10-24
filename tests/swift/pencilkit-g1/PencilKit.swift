@@ -32,7 +32,11 @@ open class PKCanvasView: UIView {
   public var drawing = PKDrawing()
   public private(set) var toolAssignments = 0
   public var tool: PKTool = PKInkingTool(.pen, color: .systemBlue, width: 4) {
-    didSet { toolAssignments += 1 }
+    didSet {
+      toolAssignments += 1
+      // Observed with the real SDK: setTool updates drawing gesture enablement.
+      drawingGestureRecognizer.isEnabled = true
+    }
   }
   public var isScrollEnabled = true
   public var minimumZoomScale: CGFloat = 1

@@ -316,6 +316,8 @@ final class PaintingPencilkitView: ExpoView, PKCanvasViewDelegate {
     guard toolNeedsUpdate, !previews.usingTool else { return }
     toolNeedsUpdate = false
     canvasView.tool = PKInkingTool(.pen, color: inkColor.withAlphaComponent(inkOpacity), width: inkWidth)
+    // PencilKit's setTool can re-enable its drawing recognizer even in Web mode.
+    applyDemoInputRoute()
   }
 
   // MARK: - Ready event

@@ -2,7 +2,21 @@
 
 本增量对应 G2/G3 的可行性原型，不代表 G1 压力、G2 分流或 G3 物理交接通过；3.x 生产桥和 iOS 默认启用仍待门槛验收。`/pencilkit-probe` 保留原 G1 回归用途。
 
-## App 关闭 PencilKit 后的手势隔离修订（标识 7，待本轮 Mac 验证）
+## 笔刷设置后恢复手势隔离（标识 7 新 SHA，待本轮 Mac 验证）
+
+已核对 Mac 评论 `01a16e87-e42c-7938-9f25-4656a35766d8` 和附件 `ham66-ba9aadb-local-evidence.zip`。`ba9aadb` 的真实 SDK 契约、Swift host 22 组、Jest 80 项、WebKit 2/2 及 Xcode 26.6 / Swift 6.3.3 完整 Simulator 编译均通过，但实际关闭状态的 drawing recognizer 仍为 `isEnabled=true`，**该修订未达到本地交付门槛**。
+
+真实主线程条件断点确认同一个识别器由 `setInkColor → applyTool → PKCanvasView.setTool → PKTiledView._updateDrawingGestureEnablementWithInk → UIGestureRecognizer.setEnabled(true)` 重新启用；DOM 的确在 PKCanvas 兄弟层，raw observer 已禁用，同一 DOM/WKWebView 地址保持。Simulator 的自由笔两笔、Line 两笔、undo/redo、切工具及开关后四笔可见，trace 为 434 条、无丢失、`active=null`、`pendingCommits=[]`；输入全为手指，不能证明实体 Pencil 冻结已修复。日志还有既有 Constants/依赖、Inspector websocket reset 和 run-loop 告警。
+
+本修订在 `canvasView.tool` 设置返回后立即重新执行 `applyDemoInputRoute()`，覆盖颜色、宽度、不透明度以及活动原生工具结束后的延迟笔刷应用。没有增加定时器、全局手势观察或改动采样器。Swift 替身现在模拟真实 SDK 的 `setTool` 自动启用副作用，新增第 23 组回归覆盖初始关闭、开→关、多次笔刷变更及开启模式的延迟应用/路由；新测试在加修复前明确失败。DOM 四个关闭场景和浏览器两项连续 pen 用例增加首笔后改颜色再画第二笔、undo/redo、工具切换和历史保留。
+
+本轮 Linux 本地通过：Swift 6.2.3 host 23 组、指定 Jest 5 suites / 80 tests、Chromium 2/2、容器 WebKit 26.4 2/2、修改 TS 文件 lint/格式检查。真实 Apple SDK 检查明确 SKIP；不沿用 `ba9aadb` 的 Mac 编译成功作为新 SHA 的验证结论。
+
+仍使用未发布的兼容标识 **7**，但必须按本轮新 SHA 重新编译，不能复用 `ba9aadb` Simulator 二进制或 Reload 旧标识 6 IPA。Mac 需重跑 `node scripts/test-pencilkit-g1.mjs`（真实 SDK + host **23 组**）及下节 Jest/WebKit/库构建命令，完成 Xcode 26.6 / Swift 6.3.3 本地编译；用 LLDB 读取实际关闭→开启→关闭时两个识别器、DOM/WKWebView 身份和祖先关系，尤其记录颜色/宽度/不透明度修改后及工具切换、重新布局后的关闭状态。不得在调试器中手动改写识别器状态充当成功；短暂的 SDK setter 内启用不是最终状态，须检查 `applyTool` 返回后仍禁用、开启时恢复 `gesture-ancestor`。
+
+旧实体设备在更新前仍 `passcodeRequired=true`，进程查询失败，没有取得实体 Safari/Xcode/WebContent 故障栈，也没有主动 Reload 或重启。若现场仍在，继续保留；设备解锁并建立调试连接后优先取证。Mac 本轮门槛通过前不交付实体复测候选，不提交 EAS、不重建验收包、不改 G1、不宣告实体冻结或 G2/G3 通过。
+
+## App 关闭 PencilKit 后的手势隔离修订（ba9aadb，Mac 门槛未全通过）
 
 修勾已明确复现条件：在 App 内关闭 PencilKit，冻结前没有画过原生笔；Pencil 第一笔可画，第二笔开始画布和顶部工具栏均无响应，手指没有该问题。当前实体安装版本仍为 `bc337be` / 标识 6。尚无故障时的 Safari/Xcode/WebContent 调用栈，不能把此前桌面或 Simulator 手指测试通过视为实体冻结已修复。
 

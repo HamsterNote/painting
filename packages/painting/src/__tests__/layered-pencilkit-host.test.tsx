@@ -189,7 +189,7 @@ test.each([
   ['pending-native-off', 'freehand'],
   ['pending-native-off', 'line'],
 ] as const)(
-  '%s: Web %s continues after the first commit, history and tool switches',
+  '%s: Web %s continues after the first commit, color, history and tool switches',
   async (mode, tool) => {
     const h = mode === 'pending-native-off' ? await nativeDemo() : undefined;
     h?.begin(1);
@@ -221,6 +221,9 @@ test.each([
     draw(2);
     const first = controller.getSnapshot('document').objects.at(-1)!;
     expect(controller.getSnapshot('document').objects).toHaveLength(previous.length + 1);
+    fireEvent.change(view.getByLabelText('颜色', { exact: true }), {
+      target: { value: '#df2468' },
+    });
     // A pooled event from the disconnected native epoch must not reopen its session.
     const calls = { states: onState.mock.calls.length, replies: onReply.mock.calls.length };
     view.rerender(
