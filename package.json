@@ -8,7 +8,7 @@
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
-    "typecheck": "pnpm --filter @hamster-note/painting typecheck && pnpm --filter @hamster-note/painting-board typecheck && pnpm --filter @hamster-note/painting-playground exec tsc --noEmit",
+    "typecheck": "pnpm --filter @hamster-note/painting typecheck && pnpm --filter @hamster-note/painting-board typecheck && pnpm --filter @hamster-note/painting-android-ink typecheck && pnpm --filter @hamster-note/painting-playground exec tsc --noEmit",
     "build:lib": "pnpm --filter @hamster-note/painting build && pnpm --filter @hamster-note/painting-board build",
     "build:demo": "pnpm --filter @hamster-note/painting-playground build",
     "build:all": "pnpm run build:lib && pnpm run build:demo",
