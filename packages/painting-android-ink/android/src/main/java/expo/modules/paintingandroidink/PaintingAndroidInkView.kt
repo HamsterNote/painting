@@ -128,7 +128,7 @@ class PaintingAndroidInkView(context: Context, appContext: AppContext) :
     ink.cancelStroke(strokeId)
     active = null
     owner = -1
-    onCancelled(mapOf("id" to id, "reason" to reason))
+    if (id != null) onCancelled(mapOf("id" to id, "reason" to reason))
   }
 
   override fun onWindowVisibilityChanged(visibility: Int) {
