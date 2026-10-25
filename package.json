@@ -1,6 +1,6 @@
 {
   "name": "@hamster-note/painting-workspace",
-  "version": "0.6.0",
+  "version": "0.6.1-dev.ham66.20261025.0",
   "private": true,
   "type": "module",
   "description": "HamsterNote Painting - React component library with React Native Web",
