@@ -190,21 +190,23 @@ export default function LayeredEditorRoute() {
                       ? 'PencilKit 等待原生视图'
                       : !nativeStatus || nativeStatus.contextKey !== state.contextKey
                         ? 'PencilKit 等待原生配置回执'
-                        : nativeStatus.routing !== 'gesture-ancestor'
-                          ? 'PencilKit 原生宿主未连接'
-                          : !state.enabled || !nativeStatus.enabled
-                            ? 'PencilKit 画布已停用'
-                            : nativeStatus.width <= 0 || nativeStatus.height <= 0
-                              ? 'PencilKit 等待画布布局'
-                              : counts.began === 0
-                                ? 'PencilKit 已配置，等待原生起笔'
-                                : nativeStatus.toolBegins === 0
-                                  ? 'PencilKit 已收到输入，等待原生预览'
-                                  : counts.committed === 0
-                                    ? 'PencilKit 已收到原生输入'
-                                    : pending.current.size > 0
-                                      ? 'PencilKit 已提交，等待历史交接'
-                                      : 'PencilKit 历史交接已确认'}
+                        : !state.enabled
+                          ? 'PencilKit 画布已停用'
+                          : nativeStatus.routing !== 'gesture-ancestor'
+                            ? 'PencilKit 原生宿主未连接'
+                            : !nativeStatus.enabled
+                              ? 'PencilKit 画布已停用'
+                              : nativeStatus.width <= 0 || nativeStatus.height <= 0
+                                ? 'PencilKit 等待画布布局'
+                                : counts.began === 0
+                                  ? 'PencilKit 已配置，等待原生起笔'
+                                  : nativeStatus.toolBegins === 0
+                                    ? 'PencilKit 已收到输入，等待原生预览'
+                                    : counts.committed === 0
+                                      ? 'PencilKit 已收到原生输入'
+                                      : pending.current.size > 0
+                                        ? 'PencilKit 已提交，等待历史交接'
+                                        : 'PencilKit 历史交接已确认'}
           </Text>
           <Switch
             testID="layered-pencilkit-toggle"

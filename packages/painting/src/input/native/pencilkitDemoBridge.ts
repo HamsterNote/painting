@@ -421,11 +421,15 @@ export function connectPencilkitDemo(options: {
         !isPencilkitDemoStroke(stroke) ||
         stroke.id !== message.id ||
         stroke.overflow ||
-        stroke.cancelled ||
         !sameSample(stroke.samples[0], lease.first)
       ) {
         reason = 'invalid-or-incomplete-stroke';
         cancel(reason);
+      } else if (stroke.cancelled) {
+        // A validated UIKit cancellation discards this lease without faulting the host.
+        reason = 'input-cancelled';
+        if (cancel(reason)) status = 'cancelled';
+        else reason = 'cancel-failed';
       } else {
         // Full validation precedes end; the first down was already accepted at begin.
         active = undefined;

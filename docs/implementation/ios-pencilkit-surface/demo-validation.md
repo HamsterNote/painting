@@ -2,6 +2,14 @@
 
 本增量对应 G2/G3 的可行性原型，不代表 G1 压力、G2 分流或 G3 物理交接通过；3.x 生产桥和 iOS 默认启用仍待门槛验收。`/pencilkit-probe` 保留原 G1 回归用途。
 
+## 2026-10-25 评审修正：系统取消恢复与停用状态文案
+
+审核指出合法 `touchesCancelled` 批次被 DOM bridge 归为 `invalid-or-incomplete-stroke`，宿主因此持续暂停。本修正先完整校验样本、身份、首样本和 overflow，再把合法系统取消作为正常生命周期处理：回复 `cancelled` / `input-cancelled`，丢弃当前 controller 会话、退休该 ID 的预览并释放输入所有权，不提交文档或锁定 fault。原有退休确认继续清理宿主待交接集合；下一笔不需要点击重试或重新开关。坏数据和 overflow 仍拒绝，不能借取消标记绕过校验。
+
+状态标题先判断 DOM 策略是否已停用，再检查原生路由；Line/尺子等正常 `web-sibling` 不再显示“原生宿主未连接”。DOM 仍预期启用且实际 `unattached` 时仍报告断连，即使原生回执同时为 disabled。这更新了下文历史记录中的已知诊断文案限制。
+
+回归覆盖合法 down→move→cancel、重复取消消息、退休确认、下一笔提交/可见性/undo/redo，以及 RN 宿主取消后的传输队列、待交接清理和故障保护；合法取消不进入历史，畸形/overflow 取消仍失败。新增测试在修复前复现两个问题，修复后相关 Jest 5 suites / 84 tests、工作区 typecheck、变更文件 lint/格式和 `git diff --check` 通过；本轮只改 JS/TS 和文档，不改 Swift、兼容标识 7 或 G1。本轮未运行 Mac/实体取消事件验证，不能把这些集成回归当作 UIKit 系统派发证据。
+
 ## 2026-10-25 实体复测反馈与评审交付
 
 Mac 已完成并安装来源为 **`db07021ddaca5fe052e6e6cf9303d4cf06cbfc93`**、兼容标识 **7** 的 development/internal build：[`3a34fe88-99f7-4889-8543-0e64efb98b4d`](https://expo.dev/accounts/wszxdhr/projects/painting-playground/builds/3a34fe88-99f7-4889-8543-0e64efb98b4d)。EAS 为 `FINISHED`，IPA 签名校验返回 0，目标 iPad 安装回执为 `SUCCEEDED`（Mac 评论 `01a170b7-4de7-7290-9856-c4e28ca2b565`）；Mac 本地 `app.json` 配置保留。

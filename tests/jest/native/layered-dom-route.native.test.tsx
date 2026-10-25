@@ -287,6 +287,106 @@ test('three finished strokes do not disable a fourth collecting stroke; retireme
   await view.unmount();
 });
 
+test('system cancellation drains transport and retirement without pausing the next native stroke', async () => {
+  jest.mocked(useLocalSearchParams).mockReturnValue({ pencilkit: '1' });
+  const view = await render(<LayeredEditorRoute />);
+  const host = () => view.getByTestId('expo-dom-editor-host');
+  const canvas = () => view.getByTestId('layered-pencilkit-canvas');
+  const reply = async (value: object) => act(async () => host().props.onNativeReply(value));
+  await act(async () =>
+    host().props.onNativeState({
+      protocolVersion: 1,
+      contextKey: 'cancel:1',
+      enabled: true,
+      frame: { x: 0, y: 0, width: 800, height: 600 },
+      exclusions: [],
+      scale: 1,
+      brush: { color: '#000', nominalSize: 4, opacity: 1 },
+    })
+  );
+  await fireEvent(canvas(), 'ready', { nativeEvent: { moduleVersion: '0.1.0' } });
+  await fireEvent(canvas(), 'demoStatus', {
+    nativeEvent: {
+      contextKey: 'cancel:1',
+      enabled: true,
+      width: 800,
+      height: 600,
+      lastHit: 'pencil',
+      routing: 'gesture-ancestor',
+      toolBegins: 1,
+    },
+  });
+  const sample = {
+    seq: 0,
+    kind: 'main',
+    phase: 'down',
+    x: 30,
+    y: 40,
+    tabs: 1000,
+    f: 1,
+    mf: 8,
+    p: 0.125,
+  };
+  for (const id of [1, 2]) {
+    await fireEvent(canvas(), 'begin', {
+      nativeEvent: { id, contextKey: 'cancel:1', sample },
+    });
+    await reply({
+      id,
+      contextKey: 'cancel:1',
+      messageId: host().props.nativeMessage.messageId,
+      status: 'accepted',
+    });
+    await fireEvent(canvas(), 'stroke', {
+      nativeEvent: {
+        id,
+        contextKey: 'cancel:1',
+        cancelled: id === 1,
+        overflow: false,
+        samples: [sample, { ...sample, seq: 1, phase: id === 1 ? 'cancel' : 'up' }],
+      },
+    });
+    await reply({
+      id,
+      contextKey: 'cancel:1',
+      status: 'retire',
+      reason: id === 1 ? 'input-cancelled' : undefined,
+    });
+    await reply({
+      id,
+      contextKey: 'cancel:1',
+      messageId: host().props.nativeMessage.messageId,
+      status: id === 1 ? 'cancelled' : 'committed',
+      reason: id === 1 ? 'input-cancelled' : undefined,
+    });
+    await fireEvent(canvas(), 'previewRetired', { nativeEvent: { id, contextKey: 'cancel:1' } });
+    await reply({
+      id,
+      contextKey: 'cancel:1',
+      messageId: host().props.nativeMessage.messageId,
+      status: 'visible',
+    });
+    expect(host().props.nativeMessage).toBeUndefined();
+    expect(JSON.parse(canvas().props.demoState)).toMatchObject({ enabled: true, retireIDs: [] });
+    expect(view.getByTestId('layered-native-evidence').props.children.join('')).toContain(
+      '待交接 0'
+    );
+    expect(view.getByTestId('layered-native-evidence').props.children.join('')).toContain(
+      `文档提交 ${id - 1}`
+    );
+    expect(view.getByTestId('layered-native-status').props.children).not.toContain('暂停');
+  }
+  await reply({
+    id: 2,
+    contextKey: 'cancel:1',
+    status: 'rejected',
+    reason: 'invalid-or-incomplete-stroke',
+  });
+  expect(JSON.parse(canvas().props.demoState).enabled).toBe(false);
+  expect(view.getByTestId('layered-native-status').props.children).toContain('已暂停');
+  await view.unmount();
+});
+
 test('old IPA reports a build mismatch and never claims native Demo input', async () => {
   jest.mocked(useLocalSearchParams).mockReturnValue({ pencilkit: '1' });
   jest.mocked(isPencilkitDemoAvailable).mockReturnValue(false);
@@ -347,7 +447,7 @@ test('native status requires a current configuration acknowledgement and nonempt
       width: 800,
       height: 600,
       lastHit: 'disabled',
-      routing: 'gesture-ancestor',
+      routing: 'web-sibling',
       toolBegins: 0,
     },
   });
@@ -371,11 +471,11 @@ test('native status requires a current configuration acknowledgement and nonempt
   await fireEvent(canvas(), 'demoStatus', {
     nativeEvent: {
       contextKey: 'current:2',
-      enabled: true,
       width: 800,
       height: 600,
       lastHit: 'none',
       routing: 'unattached',
+      enabled: false,
       toolBegins: 0,
     },
   });

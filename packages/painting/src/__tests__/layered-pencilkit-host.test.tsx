@@ -76,7 +76,7 @@ async function nativeDemo() {
     samples.set(id, { sample, contextKey });
     send({ type: 'begin', id, contextKey, sample });
   };
-  const end = (id: number) => {
+  const end = (id: number, cancelled = false) => {
     const { sample, contextKey } = samples.get(id)!;
     send({
       type: 'stroke',
@@ -84,11 +84,17 @@ async function nativeDemo() {
       contextKey,
       stroke: {
         id,
-        cancelled: false,
+        cancelled,
         overflow: false,
         samples: [
           sample,
-          { ...sample, seq: 1, phase: 'up', x: 120 + id * 20, tabs: sample.tabs + 100 },
+          {
+            ...sample,
+            seq: 1,
+            phase: cancelled ? 'cancel' : 'up',
+            x: 120 + id * 20,
+            tabs: sample.tabs + 100,
+          },
         ],
       },
     });
@@ -107,6 +113,33 @@ async function nativeDemo() {
     controller: window.__layeredEditor!,
   };
 }
+
+test('cancelled native ink retires without history, then the next stroke is visible and undoable', async () => {
+  const h = await nativeDemo();
+  jest.useFakeTimers();
+  h.begin(1);
+  h.end(1, true);
+  expect(h.controller.getSnapshot('document').objects).toHaveLength(0);
+  expect(h.controller.getSnapshot('history').canUndo).toBe(false);
+  expect(h.controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
+  expect(h.onReply).toHaveBeenCalledWith(expect.objectContaining({ id: 1, status: 'cancelled' }));
+  expect(h.onReply).toHaveBeenCalledWith(expect.objectContaining({ id: 1, status: 'retire' }));
+  h.retired(1);
+  h.begin(2);
+  h.end(2);
+  h.retired(2);
+  expect(h.nodes()).toHaveLength(1);
+  expect(h.nodes()[0].style.visibility).toBe('visible');
+  act(() => h.controller.undo());
+  expect(h.nodes()).toHaveLength(0);
+  act(() => h.controller.redo());
+  expect(h.nodes()).toHaveLength(1);
+  expect(h.nodes()[0].style.visibility).toBe('visible');
+  act(() => jest.advanceTimersByTime(5000));
+  expect(h.onReply.mock.calls.some(([reply]) => reply.status === 'rejected')).toBe(false);
+  expect(h.onState.mock.calls.at(-1)![0].enabled).toBe(true);
+  h.view.unmount();
+});
 
 test('a second native pen starts before previous retirement without reusing its raw or history path', async () => {
   const h = await nativeDemo();

@@ -482,15 +482,51 @@ test('history readiness never retires a different preview or reveals native ink 
   h.destroy();
 });
 
+test('system cancellation retires only that preview and permits the next stroke without reset', () => {
+  jest.useFakeTimers();
+  const h = setup();
+  h.begin();
+  const cancelled = h.end(1, {
+    cancelled: true,
+    samples: [sample(0, 'down'), sample(1, 'move'), sample(2, 'cancel')],
+  });
+  h.receive(cancelled);
+  expect(h.replies).toContainEqual(expect.objectContaining({ status: 'cancelled', id: 1 }));
+  expect(h.replies).toContainEqual(expect.objectContaining({ status: 'retire', id: 1 }));
+  expect(h.controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
+  expect(h.controller.getSnapshot('document').objects).toHaveLength(0);
+  expect(h.controller.getSnapshot('history').canUndo).toBe(false);
+  h.retired();
+  h.begin(2);
+  h.end(2);
+  const object = h.controller.getSnapshot('document').objects[0];
+  if (object.kind !== 'freehand') throw new Error('expected next native stroke');
+  expect(object.commitId).toMatch(/:pencil:2$/);
+  const identity = h.controller.getPresentationIdentity(object.commitId);
+  if (!identity.ok || !identity.value) throw new Error('missing identity');
+  h.presentation.mount(object.objectId, { setVisible: () => {} });
+  h.presentation.acknowledge(identity.value);
+  h.retired(2);
+  jest.advanceTimersByTime(5000);
+  expect(h.presentation.hasNativePreview(object.commitId)).toBe(false);
+  expect(h.state().enabled).toBe(true);
+  expect(h.replies).not.toContainEqual(expect.objectContaining({ status: 'rejected' }));
+  h.destroy();
+});
+
 test.each([
   { cancelled: true },
   { overflow: true },
+  { cancelled: true, overflow: true, samples: [sample(0, 'down'), sample(1, 'cancel')] },
   { samples: [sample(0, 'down'), sample(1, 'move')] },
   { samples: [sample(0, 'down'), { ...sample(2, 'up'), seq: 7 }] },
 ])('rejects the whole invalid batch without history: %j', (change) => {
   const h = setup();
   h.begin();
   h.end(1, change);
+  expect(h.replies).toContainEqual(
+    expect.objectContaining({ status: 'rejected', reason: 'invalid-or-incomplete-stroke' })
+  );
   expect(h.controller.getSnapshot('document').objects).toHaveLength(0);
   expect(h.controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
   expect(h.controller.getSnapshot('history').canUndo).toBe(false);

@@ -30,7 +30,7 @@ export type PencilkitDemoReply = Readonly<{
   messageId?: number;
   id: number;
   contextKey: string;
-  status: 'accepted' | 'committed' | 'retire' | 'visible' | 'rejected' | 'reset';
+  status: 'accepted' | 'cancelled' | 'committed' | 'retire' | 'visible' | 'rejected' | 'reset';
   reason?: string;
 }>;
 export type PencilkitDemoState = Readonly<{
