@@ -1,6 +1,8 @@
 # iOS PencilKit Surface 验收 Runbook（HAM-66）
 
-本文对应 OpenSpec change `add-ios-pencilkit-surface` 的 tasks 2.1–2.5。当前已交付 **tasks 2.1 的代码**（最小 Expo Module + RN host 原型），设备验证结论**待修勾回传**；G1–G3（tasks 2.2–2.4）各自需要后续原生代码增量，本文先固定执行步骤、证据清单与失败判据，每进入一道门槛前先由工程师交付对应增量并更新本文命令细节。
+2026-10-25 收尾状态：默认关闭的 PencilKit opt-in 原型已获用户验收，代码随 PR #29 合并；OpenSpec 归档及证据边界见 [归档验收记录](./archive-verification.md)，最新功能复测见 [Demo 验证记录](./demo-validation.md)。完整 G1–G3 和生产集成仍未全部通过，不能据此默认启用。Android 原生接入已取消。
+
+下文保留 `add-ios-pencilkit-surface` 原 tasks 2.1–2.5 的构建与采证 Runbook；其中旧任务分支、准备表和阶段性状态属于当时记录，不能替代上述收尾结论。复现已合并版本时使用包含 `b605e2d` 的 `main`，并按 Demo 记录核对二进制兼容标识与 JS 版本。
 
 执行约定：不使用模拟器代替实体 Pencil 结论；不用 mock、固定等待或 Web ACK 充当设备证据；任一门槛失败即停止，按 design.md 修订方案再评审。
 
