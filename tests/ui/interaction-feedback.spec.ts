@@ -18,6 +18,98 @@ async function expectUserSelect(locator: Locator, value: 'text' | 'none') {
     .toBe(value);
 }
 
+test('toolbar static labels reject browser selection while controls keep editing and focus', async ({
+  page,
+}, testInfo) => {
+  await openLayeredEditor(page);
+  const toolbar = page.getByRole('toolbar');
+  await expectUserSelect(toolbar, 'none');
+  for (const label of await toolbar.locator('label').all()) {
+    await expectUserSelect(label, 'none');
+  }
+  await expectUserSelect(toolbar.getByRole('button', { name: '自由笔', exact: true }), 'none');
+  const callout = await toolbar.evaluate((node) => ({
+    supported: CSS.supports('-webkit-touch-callout', 'none'),
+    value: getComputedStyle(node).getPropertyValue('-webkit-touch-callout'),
+  }));
+  if (callout.supported) expect(callout.value).toBe('none');
+  await page.evaluate(() => {
+    const outside = document.createElement('p');
+    outside.id = 'toolbar-outside-selection';
+    outside.textContent = 'outside selectable text';
+    outside.style.cssText =
+      'position:fixed;bottom:0;right:0;z-index:10000;background:white;user-select:text';
+    document.body.append(outside);
+  });
+  const outside = page.locator('#toolbar-outside-selection');
+  await outside.dblclick({ position: { x: 24, y: 8 } });
+  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('outside');
+  const label = toolbar.locator('label').filter({ hasText: '笔宽' });
+  await label.dblclick({ position: { x: 3, y: 8 } });
+  const bounds = (await label.boundingBox())!;
+  await page.mouse.move(bounds.x + 2, bounds.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + 25, bounds.y + 8, { steps: 5 });
+  await page.mouse.up();
+  expect(await page.evaluate(() => window.getSelection()?.toString())).not.toContain('笔宽');
+  // A synthetic pen sequence must not actively clear an existing legitimate selection.
+  await outside.dblclick({ position: { x: 24, y: 8 } });
+  await pointer(page, 'down', { x: 80, y: 8 });
+  await pointer(page, 'up', { x: 81, y: 8 });
+  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('outside');
+
+  const width = page.getByLabel('笔宽', { exact: true });
+  const zoom = page.getByLabel('缩放', { exact: true });
+  await expectUserSelect(width, 'text');
+  await expectUserSelect(zoom, 'text');
+  await width.click();
+  await width.press('ControlOrMeta+A');
+  await width.press('2');
+  await width.press('4');
+  await expect(width).toHaveValue('24');
+  await expect(width).toBeFocused();
+  expect((await layeredState(page)).tools.settings.freehand.nominalSize).toBe(24);
+  await width.press('Tab');
+  const opacity = page.getByLabel('不透明度');
+  await expect(opacity).toBeFocused();
+  await opacity.press('Home');
+  await opacity.press('ArrowRight');
+  expect((await layeredState(page)).tools.settings.freehand.opacity).toBe(0.05);
+  await opacity.press('Tab');
+  const pressure = page.getByLabel('压力模式');
+  await expect(pressure).toBeFocused();
+  await pressure.selectOption('constant');
+  await page.getByLabel('输入模式').selectOption('pen');
+  const color = page.getByLabel('颜色', { exact: true });
+  await color.focus();
+  await expect(color).toBeFocused();
+  // Updating the native value verifies React's change path; the OS picker is manual QA.
+  await color.evaluate((node: HTMLInputElement) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+      node,
+      '#123456'
+    );
+    node.dispatchEvent(new Event('input', { bubbles: true }));
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const after = await layeredState(page);
+  expect(after.tools.settings.freehand).toMatchObject({
+    color: '#123456',
+    nominalSize: 24,
+    opacity: 0.05,
+    pressureMode: 'constant',
+  });
+  expect(after.input.mode).toBe('pen');
+  expect(after.document.objects).toHaveLength(1);
+  await page.getByRole('button', { name: '矩形', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  expect((await layeredState(page)).tools.activeTool).toBe('rect');
+  await testInfo.attach('toolbar-selection-boundary', {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  });
+});
+
 test('wheel feedback shows actual zoom above the pointer, clears, and never writes history', async ({
   page,
 }) => {
@@ -58,6 +150,7 @@ test('touch zoom feedback follows the live midpoint inside the host', async ({ p
 
 test('text permits native selection and replacement while the drawing host owns gestures', async ({
   page,
+  browserName,
 }) => {
   await openLayeredEditor(page);
   await page.getByRole('button', { name: '文字', exact: true }).click();
@@ -68,10 +161,19 @@ test('text permits native selection and replacement while the drawing host owns 
   await input.press('Backspace');
   await input.pressSequentially('replacement');
   await expect(input).toHaveValue('replacement');
+  let content = 'replacement';
+  if (browserName === 'chromium') {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.evaluate(() => navigator.clipboard.writeText('pasted 中文'));
+    await input.press('ControlOrMeta+A');
+    await input.press('ControlOrMeta+V');
+    content = 'pasted 中文';
+    await expect(input).toHaveValue(content);
+  }
   await input.press('Control+Enter');
   expect((await layeredState(page)).document.objects[0]).toMatchObject({
     kind: 'text',
-    content: 'replacement',
+    content,
   });
 });
 
@@ -187,13 +289,12 @@ for (const fixture of ['', '&fixture=mixed']) {
     const trusted = await page.getByTestId('layered-surface').evaluate((host) => {
       const box = host.getBoundingClientRect();
       const events: boolean[] = [];
-      for (let stroke = 0; stroke < 12; stroke++) {
-        const y = box.y + 140 + stroke * 3;
-        for (const [phase, x] of [
-          ['down', 80],
-          ['move', stroke % 2 ? 85 : 220],
-          ['up', stroke % 2 ? 90 : 240],
-        ] as const) {
+      for (let stroke = 0; stroke < 30; stroke++) {
+        const y = box.y + 8 + (stroke % 3);
+        const samples: ['down' | 'move' | 'up', number][] = [['down', 80]];
+        if (stroke % 2 === 0) samples.push(['move', 81]);
+        samples.push(['up', 80 + (stroke % 2)]);
+        for (const [phase, x] of samples) {
           const event = new PointerEvent(`pointer${phase}`, {
             bubbles: true,
             cancelable: true,
@@ -213,7 +314,7 @@ for (const fixture of ['', '&fixture=mixed']) {
     });
     expect(trusted).toEqual([false]);
     const after = await layeredState(page);
-    expect(after.document.objects).toHaveLength(initial.document.objects.length + 12);
+    expect(after.document.objects).toHaveLength(initial.document.objects.length + 30);
     expect(after.document.objects.slice(0, initial.document.objects.length)).toEqual(
       initial.document.objects
     );
@@ -222,17 +323,18 @@ for (const fixture of ['', '&fixture=mixed']) {
         .slice(initial.document.objects.length)
         .every((object) => object.kind === 'freehand')
     ).toBe(true);
-    expect(after.document.documentRevision).toBe(initial.document.documentRevision + 12);
+    expect(after.document.documentRevision).toBe(initial.document.documentRevision + 30);
+    expect(after.tools).toEqual(initial.tools);
     await expect(page.getByLabel('文字内容')).toHaveCount(0);
     expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('');
-    for (let count = 11; count >= 0; count--) {
+    for (let count = 29; count >= 0; count--) {
       await page.getByRole('button', { name: '撤销', exact: true }).click();
       expect((await layeredState(page)).document.objects).toHaveLength(
         initial.document.objects.length + count
       );
     }
     await expect(page.getByRole('button', { name: '撤销', exact: true })).toBeDisabled();
-    for (let count = 1; count <= 12; count++) {
+    for (let count = 1; count <= 30; count++) {
       await page.getByRole('button', { name: '重做', exact: true }).click();
       expect((await layeredState(page)).document.objects).toHaveLength(
         initial.document.objects.length + count
@@ -279,4 +381,36 @@ test('composition commit and cancel preserve editing and return to protected dra
   await pointer(page, 'up', { x: 240, y: 110 });
   expect((await layeredState(page)).document.objects).toHaveLength(2);
   await expectUserSelect(page.getByTestId('layered-surface'), 'none');
+});
+
+test('crossing into the toolbar and interrupted pen sessions leave the first command available', async ({
+  page,
+}) => {
+  await openLayeredEditor(page);
+  const surface = page.getByTestId('layered-surface');
+  const box = (await surface.boundingBox())!;
+  const button = page.getByRole('button', { name: '矩形', exact: true });
+  const target = (await button.boundingBox())!;
+  // Trusted mouse input exercises native capture and hit testing across the sibling boundary.
+  await page.mouse.move(box.x + 80, box.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(target.x + 15, target.y + 15, { steps: 5 });
+  await page.mouse.up();
+  const crossed = await layeredState(page);
+  expect(crossed.document.objects).toHaveLength(1);
+  expect(crossed.tools.activeTool).toBe('freehand');
+  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('');
+  await button.click();
+  expect((await layeredState(page)).tools.activeTool).toBe('rect');
+  for (const interruption of ['cancel', 'blur', 'lostpointercapture'] as const) {
+    await page.getByRole('button', { name: '自由笔', exact: true }).click();
+    await pointer(page, 'down', { x: 80, y: 8 });
+    if (interruption === 'cancel') await pointer(page, 'cancel', { x: 80, y: 8 });
+    else if (interruption === 'blur')
+      await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+    else await surface.dispatchEvent('lostpointercapture', { pointerId: 41, pointerType: 'pen' });
+    await button.click();
+    expect((await layeredState(page)).tools.activeTool).toBe('rect');
+    expect((await layeredState(page)).document.objects).toEqual(crossed.document.objects);
+  }
 });

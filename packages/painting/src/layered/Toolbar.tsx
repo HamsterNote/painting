@@ -34,6 +34,12 @@ const buttonStyle: CSSProperties = {
   color: '#20262d',
 };
 
+const editableStyle: CSSProperties = {
+  userSelect: 'text',
+  WebkitUserSelect: 'text',
+  WebkitTouchCallout: 'default',
+};
+
 /** Low-frequency channels only; raw input never renders the toolbar. */
 export function Toolbar({ controller }: { controller: LayeredEditorController }) {
   const inputReady = useInputInitialization(controller);
@@ -74,6 +80,9 @@ export function Toolbar({ controller }: { controller: LayeredEditorController })
         background: '#f9fafb',
         color: '#20262d',
         fontSize: 13,
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        WebkitTouchCallout: 'none',
       }}
     >
       {TOOLS.map(([tool, label, icon]) => (
@@ -141,7 +150,7 @@ export function Toolbar({ controller }: { controller: LayeredEditorController })
               min={0.5}
               max={200}
               step={0.5}
-              style={{ width: 56 }}
+              style={{ ...editableStyle, width: 56 }}
               value={freehand ? settings.freehand.nominalSize : settings.shape.width}
               onChange={(event) => updateStyle({ width: event.target.valueAsNumber })}
             />
@@ -236,7 +245,7 @@ export function Toolbar({ controller }: { controller: LayeredEditorController })
           max={800}
           step={25}
           value={Math.round(viewport.scale * 100)}
-          style={{ width: 60 }}
+          style={{ ...editableStyle, width: 60 }}
           onChange={(event) =>
             controller.updateViewport({
               type: 'replace',
