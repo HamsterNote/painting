@@ -2,7 +2,15 @@
 
 本增量对应 G2/G3 的可行性原型，不代表 G1 压力、G2 分流或 G3 物理交接通过；3.x 生产桥和 iOS 默认启用仍待门槛验收。`/pencilkit-probe` 保留原 G1 回归用途。
 
-## 笔刷设置后恢复手势隔离（db07021，Mac 本地通过，实体未验）
+## 2026-10-25 实体复测反馈与评审交付
+
+Mac 已完成并安装来源为 **`db07021ddaca5fe052e6e6cf9303d4cf06cbfc93`**、兼容标识 **7** 的 development/internal build：[`3a34fe88-99f7-4889-8543-0e64efb98b4d`](https://expo.dev/accounts/wszxdhr/projects/painting-playground/builds/3a34fe88-99f7-4889-8543-0e64efb98b4d)。EAS 为 `FINISHED`，IPA 签名校验返回 0，目标 iPad 安装回执为 `SUCCEEDED`（Mac 评论 `01a170b7-4de7-7290-9856-c4e28ca2b565`）；Mac 本地 `app.json` 配置保留。
+
+本轮要求的实体复测为：App 内关闭 PencilKit，用 Apple Pencil 画两笔自由笔、两笔 Line，期间改变颜色或笔宽，验证顶部工具、undo/redo 和继续绘制，再开启 PencilKit 验证原生起笔。修勾于 **2026-10-25 01:45:28 UTC** 回复“没有问题了”（评论 `01a170bb-f4da-7b49-8675-e4c47029a7c4`）；协调员据此确认本轮路由、跨笔和工具交互阻断通过复测，HAM-66 转为 `in_review`（评论 `01a170bc-715c-7cba-874d-799d9c081bd8`）。
+
+这是用户对指定复测的反馈，没有附逐项 trace、截图或旧冻结现场调用栈；不能扩大为 G1 压力、G3 120fps、长期稳定性或 3.x 生产桥门槛全部通过。下文“实体未验”、设备锁定及不发包要求均保留为当时的历史记录，由本节的新包安装和用户反馈更新。尺子策略停用时误报宿主未连接的诊断文案仍是已知限制。本次仅补录验证结果，不改生产实现。
+
+## 笔刷设置后恢复手势隔离（db07021，历史 Mac 本地验证）
 
 已核对 Mac 评论 `01a16ea3-03ae-7dab-8c54-f48ca8440939` 及附件 `ham66-db07021-local-evidence.zip` 的编译日志、UIKit 状态/调用栈、完整 trace 与截图，交付工程复测候选 **`db07021ddaca5fe052e6e6cf9303d4cf06cbfc93`**（原生/JS 同 SHA，兼容标识 **7**）。本轮仅记录验证结果，未提交 EAS、重建真机验收包或安装实体二进制，未更改生产代码或 G1。
 
