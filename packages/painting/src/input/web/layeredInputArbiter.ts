@@ -29,17 +29,29 @@ export function createLayeredInputArbiter(options: {
   let destroyed = false;
   let mode = controller.getSnapshot('input').mode;
   let activeTool = controller.getSnapshot('tools').activeTool;
+  let native: { input: NormalizedPointerInput; cancel: () => boolean; owned: boolean } | undefined;
+  let nativePencilGuard: ((input: NormalizedPointerInput) => void) | undefined;
+  const rejectedWebPencils = new Set<string | number>();
 
   function execute(intents: readonly LayeredInputIntent[]) {
     for (const intent of intents) {
-      if (intent.type === 'detect-pen') controller.recordPenDown();
-      else if (intent.type === 'cancel') {
-        const ok = (intent.target === 'tool' ? tool : navigation).cancel(intent.reason);
+      if (intent.type === 'detect-pen') {
+        if (!native || native.owned) controller.recordPenDown();
+      } else if (intent.type === 'cancel') {
+        const ok =
+          intent.target === 'tool' && native?.owned
+            ? native.cancel()
+            : (intent.target === 'tool' ? tool : navigation).cancel(intent.reason);
+        if (intent.target === 'tool' && native) native.owned = false;
         if (!ok) options.onDiagnostic?.('Input cancellation failed; navigation refused');
         dispatch({ type: 'cancel-result', ok });
       } else if (intent.type === 'begin-navigation') {
         navigation.begin(intent.pointers.map((p) => events.get(p.pointerId)!));
       } else {
+        if (intent.target === 'tool' && intent.input.pointerId === native?.input.pointerId) {
+          native.owned = intent.input.phase === 'down';
+          continue;
+        }
         const event = events.get(intent.input.pointerId);
         if (event) (intent.target === 'tool' ? tool : navigation).dispatch(event);
       }
@@ -103,6 +115,24 @@ export function createLayeredInputArbiter(options: {
     seen.add(event);
     const input = normalize(event);
     if (!input || (input.phase === 'down' && event.button !== 0)) return;
+    if (
+      nativePencilGuard &&
+      input.phase === 'down' &&
+      input.device === 'pen' &&
+      input.targetRole === 'paper' &&
+      controller.getSnapshot('tools').activeTool === 'freehand' &&
+      !controller.getSnapshot('navigation').ruler.visible
+    ) {
+      rejectedWebPencils.add(input.pointerId);
+      nativePencilGuard(input);
+    }
+    if (rejectedWebPencils.has(input.pointerId)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (input.phase === 'up' || input.phase === 'cancel')
+        rejectedWebPencils.delete(input.pointerId);
+      return;
+    }
     events.set(input.pointerId, event);
     dispatch({
       type: 'pointer',
@@ -114,6 +144,7 @@ export function createLayeredInputArbiter(options: {
   }
   const reset = (reason: LayeredInputResetReason = 'policy') => {
     events.clear();
+    rejectedWebPencils.clear();
     dispatch({ type: 'reset', reason });
   };
   const interrupt = () => reset('lifecycle');
@@ -142,6 +173,24 @@ export function createLayeredInputArbiter(options: {
   view.addEventListener('pagehide', interrupt);
   host.ownerDocument.addEventListener('visibilitychange', hidden);
   return {
+    setNativePencilGuard(guard: ((input: NormalizedPointerInput) => void) | undefined) {
+      nativePencilGuard = guard;
+      if (!guard) rejectedWebPencils.clear();
+    },
+    // Feed normalized ownership only; never construct or dispatch synthetic DOM events.
+    claimNativePencil(input: NormalizedPointerInput, cancel: () => boolean): boolean {
+      if (destroyed || native || input.phase !== 'down' || input.device !== 'pen') return false;
+      native = { input, cancel, owned: false };
+      dispatch({ type: 'pointer', input, policy: controller.getSnapshot('input'), panTool: false });
+      if (native?.owned) controller.recordPenDown();
+      return native?.owned === true;
+    },
+    releaseNativePencil() {
+      if (!native) return;
+      const input = { ...native.input, phase: 'up' as const };
+      dispatch({ type: 'pointer', input, policy: controller.getSnapshot('input'), panTool: false });
+      native = undefined;
+    },
     isWriting: () => state.gesture?.kind === 'single-tool' || state.gesture?.kind === 'pen-tool',
     destroy() {
       if (destroyed) return;

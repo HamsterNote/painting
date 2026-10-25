@@ -78,12 +78,15 @@ export function createDrawingCanvas(
       context!.restore();
     }
 
-    for (const object of pending) draw(object, true, true);
+    for (const object of pending)
+      if (!presentation.hasNativePreview(object.commitId)) draw(object, true, true);
     for (const candidate of interaction.pendingCandidates) {
-      if (!owned.has(candidate.commitId)) draw(asObject(candidate), true, false);
+      if (!owned.has(candidate.commitId) && !presentation.hasNativePreview(candidate.commitId))
+        draw(asObject(candidate), true, false);
     }
     const active = interaction.activeFreehand;
-    if (active?.status === 'collecting') draw(asObject(active), false, false);
+    if (active?.status === 'collecting' && !presentation.hasNativePreview(active.commitId))
+      draw(asObject(active), false, false);
     cache.syncDocument({ schemaVersion: 3, documentRevision: 0, objects: pending });
   }
 
