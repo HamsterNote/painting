@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
 const retired = [
@@ -63,6 +64,16 @@ for (const directory of [
     );
   }
 }
+// Source tests transpile imports; load both published formats to catch packaging failures.
+const esmCore = await import('../packages/painting/lib/module/core/index.js');
+const cjsCore = createRequire(import.meta.url)('../packages/painting/lib/commonjs/core/index.js');
+for (const core of [esmCore, cjsCore]) {
+  assert.equal(typeof core.createLayeredEditorController, 'function');
+  const document = { schemaVersion: 3, documentRevision: 0, objects: [] };
+  const result = core.readLayeredDocument(document);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.value, document);
+}
 console.log(
-  'Layered delivery: exports exist; source, lockfile and both packages/Expo artifacts contain no retired Skia runtime.'
+  'Layered delivery: exports exist; ESM/CJS core imports work; source, lockfile and both packages/Expo artifacts contain no retired Skia runtime.'
 );

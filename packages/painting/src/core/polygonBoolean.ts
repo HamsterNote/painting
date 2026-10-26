@@ -1,12 +1,8 @@
-import { intersection, union } from 'polyclip-ts';
-import type { GeometryPoint } from './geometry';
+/// <reference path="../types/robust-predicates.d.ts" />
 
-// robust-predicates@2.0.4 错误地发布了不存在的 index.d.ts；UMD 入口本身是稳定的 CJS
-// 导出。把最小的运行时契约限制在此封装内，避免把这个依赖细节泄漏到 core 的其他模块。
-declare const require: (name: string) => unknown;
-const { orient2d } = require('robust-predicates') as Readonly<{
-  orient2d: (ax: number, ay: number, bx: number, by: number, cx: number, cy: number) => number;
-}>;
+import { intersection, union } from 'polyclip-ts';
+import { orient2d } from 'robust-predicates';
+import type { GeometryPoint } from './geometry';
 
 export type PolygonRing = readonly GeometryPoint[];
 export type PolygonBooleanPolygon = Readonly<{
