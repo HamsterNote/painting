@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-26
+
+`@hamster-note/painting` 与 `@hamster-note/painting-board` 同步发布。0.x 的破坏性 API 变更以次版本升级，消费方需要迁移到 schema 3 controller API。
+
 ### BREAKING
 
 - 公共入口切换到 schema 3 分层编辑器，`PaintingBoard` / `DrawingSurface` 必须传入稳定的 controller。旧 `PaintingController`、V1/V2 受控 props/ref API、旧中心线和 Skia 入口退出；已有文档由消费方显式转换，不承诺自动迁移。
@@ -21,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 验收反馈修复
 
 验收反馈修复：区分子节点向宿主转交 pen capture 与宿主真正丢失 capture，保护快速笔的有效 up 收尾；恢复贝塞尔「拖线 + 两次控制点点击」与多边形「逐点 + 双击闭合」；关闭纸张时小地图不再绘制纸张背景。新增真实分层入口的自动化回归，硬件快速书写仍需设备复验。
+
+- 修复 iPad 快速书写后工具栏文字被原生选中的问题；工具栏禁用原生文本选择，文字编辑区仍允许选择。
+- 增加 iOS PencilKit 输入原型及桥接、取消恢复和工具隔离验证；`painting-pencilkit` 仍为私有工作区包，不在本次 npm 发布范围。
 
 ### 待人工验收
 
