@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 验收反馈修复：区分子节点向宿主转交 pen capture 与宿主真正丢失 capture，保护快速笔的有效 up 收尾；恢复贝塞尔「拖线 + 两次控制点点击」与多边形「逐点 + 双击闭合」；关闭纸张时小地图不再绘制纸张背景。新增真实分层入口的自动化回归，硬件快速书写仍需设备复验。
 
 - 修复 iPad 快速书写后工具栏文字被原生选中的问题；工具栏禁用原生文本选择，文字编辑区仍允许选择。
+- 修复 `/core` 的 ESM 产物保留裸 `require` 导致直接导入失败的问题，并增加 ESM/CommonJS 构建产物加载检查。
 - 增加 iOS PencilKit 输入原型及桥接、取消恢复和工具隔离验证；`painting-pencilkit` 仍为私有工作区包，不在本次 npm 发布范围。
 
 ### 待人工验收
