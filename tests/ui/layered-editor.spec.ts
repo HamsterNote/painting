@@ -34,6 +34,295 @@ function expectCompositedPixel(actual: number[], expected: number[]) {
   }
 }
 
+test.describe('rapid stroke evidence matrix', () => {
+  test.describe.configure({ mode: 'parallel' });
+  for (const length of [0, 8, 160]) {
+    for (const hz of [2, 5, 8]) {
+      for (const contactMs of [20, 80]) {
+        test(`${length}px ${hz}Hz ${contactMs}ms: 100 independent pen strokes`, async ({
+          page,
+        }, testInfo) => {
+          test.setTimeout(120000);
+          await page.setViewportSize({ width: 1500, height: 1100 });
+          await openEditor(page, '&traceGestures=1');
+          await expect(page.getByTestId('layered-surface')).toHaveAttribute(
+            'data-input-arbiter',
+            'ready'
+          );
+          await page.waitForFunction(() => Boolean(window.__layeredGestureTrace));
+          const evidence = await page.evaluate(
+            async ({ length, hz, contactMs }) => {
+              const editor = window.__layeredEditor!;
+              editor.setNavigation({ paper: false, minimap: false });
+              const surface = document.querySelector<HTMLElement>(
+                '[data-testid="layered-surface"]'
+              )!;
+              const bounds = surface.getBoundingClientRect();
+              const waitUntil = async (deadline: number) => {
+                while (performance.now() < deadline)
+                  await new Promise((resolve) => setTimeout(resolve, deadline - performance.now()));
+              };
+              const attempts = [];
+              const batches = [];
+              const start = performance.now();
+              for (let i = 0; i < 100; i++) {
+                await waitUntil(start + (i * 1000) / hz);
+                const x = 40 + (i % 5) * 270;
+                const y = 30 + Math.floor(i / 5) * 28;
+                const pointerId = i < 50 ? 41 : i + 100;
+                const send = (phase: 'down' | 'up', px: number) => {
+                  const target = document.elementFromPoint(bounds.left + px, bounds.top + y)!;
+                  target.dispatchEvent(
+                    new PointerEvent(`pointer${phase}`, {
+                      bubbles: true,
+                      cancelable: true,
+                      pointerId,
+                      pointerType: 'pen',
+                      clientX: bounds.left + px,
+                      clientY: bounds.top + y,
+                      button: 0,
+                      buttons: phase === 'up' ? 0 : 1,
+                      pressure: phase === 'up' ? 0 : 0.5,
+                    })
+                  );
+                };
+                const down = performance.now();
+                send('down', x);
+                await waitUntil(down + contactMs);
+                send('up', x + length);
+                attempts.push({
+                  x,
+                  y,
+                  pointerId,
+                  down,
+                  up: performance.now(),
+                  objects: editor.getSnapshot('document').objects.length,
+                });
+                if ((i + 1) % 10 === 0) {
+                  const trace = window.__layeredGestureTrace!.snapshot();
+                  const previous = batches.at(-1)?.total ?? 0;
+                  batches.push({
+                    total: trace.total,
+                    counts: trace.counts,
+                    entries: trace.entries.filter((entry) => entry.sequence > previous),
+                  });
+                }
+              }
+              return {
+                input: 'synthetic PointerEvent, isTrusted=false, actual DOM hit testing',
+                length,
+                hz,
+                contactMs,
+                attempts,
+                batches,
+                environment: window.__layeredGestureTrace!.snapshot().environment,
+                objects: editor.getSnapshot('document').objects,
+                interaction: editor.getSnapshot('interaction'),
+                viewport: editor.getSnapshot('viewport'),
+              };
+            },
+            { length, hz, contactMs }
+          );
+          await testInfo.attach('input-trace.json', {
+            body: JSON.stringify(evidence, null, 2),
+            contentType: 'application/json',
+          });
+          expect(evidence.attempts.map((attempt) => attempt.objects)).toEqual(
+            Array.from({ length: 100 }, (_, i) => i + 1)
+          );
+          const counts = evidence.batches.at(-1)!.counts;
+          for (const key of [
+            'event:pointerdown:',
+            'event:pointerup:',
+            'freehand:begin:accepted',
+            'freehand:end:accepted',
+            'freehand:commit:accepted',
+          ])
+            expect(counts[key], key).toBe(100);
+          expect(evidence.interaction.activeFreehand).toBeUndefined();
+          expect(evidence.interaction.pendingCandidates).toHaveLength(0);
+          for (const object of evidence.objects) {
+            expect(object.kind).toBe('freehand');
+            if (object.kind !== 'freehand') continue;
+            expect(object.samples).toHaveLength(2);
+            expect(object.samples[0].phase).toBe('down');
+            expect(object.samples[1]).toMatchObject({ phase: 'up', pressure: 0 });
+          }
+          const nodes = page.locator('[data-testid="layered-display"] [data-object-id]');
+          await expect(nodes).toHaveCount(100);
+          await expect
+            .poll(() =>
+              nodes.evaluateAll((entries) =>
+                entries.every((node) => getComputedStyle(node).visibility === 'visible')
+              )
+            )
+            .toBe(true);
+          const surfaceImage = await page.getByTestId('layered-surface').screenshot();
+          const png = await decodeRgbaPng(surfaceImage);
+          const visible = evidence.attempts.filter(({ x, y }) => {
+            for (let dy = -4; dy <= 4; dy++)
+              for (let dx = -4; dx <= 4; dx++) {
+                const [r, g, b] = pixel(png, x + dx, y + dy);
+                if (g > r + 20 && g > b + 10) return true;
+              }
+            return false;
+          }).length;
+          await testInfo.attach('100-final-strokes.png', {
+            body: surfaceImage,
+            contentType: 'image/png',
+          });
+          expect(visible).toBe(100);
+          const history = await page.evaluate(() => {
+            const editor = window.__layeredEditor!;
+            const original = editor.getSnapshot('document').objects;
+            const undo = [];
+            const redo = [];
+            for (let i = 0; i < 100; i++) {
+              const result = editor.undo();
+              undo.push(result.ok ? result.value.objects.length : result.error.code);
+            }
+            const baseline = editor.getSnapshot('history');
+            for (let i = 0; i < 100; i++) {
+              const result = editor.redo();
+              redo.push(result.ok ? result.value.objects.length : result.error.code);
+            }
+            return {
+              undo,
+              redo,
+              baseline,
+              original,
+              restored: editor.getSnapshot('document').objects,
+            };
+          });
+          expect(history.undo).toEqual(Array.from({ length: 100 }, (_, i) => 99 - i));
+          expect(history.baseline.canUndo).toBe(false);
+          expect(history.redo).toEqual(Array.from({ length: 100 }, (_, i) => i + 1));
+          expect(history.restored).toEqual(history.original);
+          await pointer(page, 'down', 50, 610);
+          await pointer(page, 'up', 58, 610, 0);
+          await expect(nodes).toHaveCount(101);
+          await testInfo.attach('counts.json', {
+            body: JSON.stringify(
+              {
+                attempts: 100,
+                counts,
+                objects: evidence.objects.length,
+                visible,
+                undo: history.undo,
+                redo: history.redo,
+              },
+              null,
+              2
+            ),
+            contentType: 'application/json',
+          });
+        });
+      }
+    }
+  }
+});
+
+for (const diagnostics of [true, false]) {
+  for (const length of [8, 160]) {
+    test(`browser pen ${length}px at 5Hz, diagnostics=${diagnostics}`, async ({
+      page,
+      browserName,
+    }, testInfo) => {
+      test.skip(browserName !== 'chromium', 'CDP pen injection is Chromium-only');
+      await page.setViewportSize({ width: 1500, height: 1100 });
+      await page.goto(`/layered-editor${diagnostics ? '?diagnostics=1&traceGestures=1' : ''}`);
+      const surface = page.getByTestId('layered-surface');
+      await expect(surface).toHaveAttribute('data-input-arbiter', 'ready');
+      await page.evaluate(() => {
+        const events: { phase: string; trusted: boolean; source: string; at: number }[] = [];
+        Object.assign(window, { rapidBrowserEvents: events });
+        for (const phase of ['pointerdown', 'pointerup'])
+          document.querySelector('[data-testid="layered-surface"]')!.addEventListener(
+            phase,
+            (event) => {
+              const pointer = event as PointerEvent;
+              events.push({
+                phase,
+                trusted: pointer.isTrusted,
+                source: pointer.pointerType,
+                at: performance.now(),
+              });
+            },
+            true
+          );
+      });
+      const cdp = await page.context().newCDPSession(page);
+      const bounds = (await surface.boundingBox())!;
+      const start = performance.now();
+      for (let i = 0; i < 100; i++) {
+        const remaining = start + i * 200 - performance.now();
+        if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+        const x = bounds.x + 40 + (i % 5) * 260;
+        const y = bounds.y + 30 + Math.floor(i / 5) * 28;
+        await cdp.send('Input.dispatchMouseEvent', {
+          type: 'mousePressed',
+          x,
+          y,
+          button: 'left',
+          buttons: 1,
+          pointerType: 'pen',
+          force: 0.5,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        await cdp.send('Input.dispatchMouseEvent', {
+          type: 'mouseReleased',
+          x: x + length,
+          y,
+          button: 'left',
+          buttons: 0,
+          pointerType: 'pen',
+          force: 0,
+        });
+      }
+      await cdp.detach();
+      const evidence = await page.evaluate(() => ({
+        events: (
+          window as unknown as {
+            rapidBrowserEvents: { phase: string; trusted: boolean; source: string; at: number }[];
+          }
+        ).rapidBrowserEvents,
+        trace: window.__layeredGestureTrace?.snapshot(),
+        objects: window.__layeredEditor?.getSnapshot('document').objects,
+      }));
+      await testInfo.attach('browser-pen.json', {
+        body: JSON.stringify(evidence, null, 2),
+        contentType: 'application/json',
+      });
+      expect(evidence.events).toHaveLength(200);
+      expect(evidence.events.every((event) => event.trusted && event.source === 'pen')).toBe(true);
+      const nodes = page.locator('[data-testid="layered-display"] [data-object-id]');
+      await expect(nodes).toHaveCount(100);
+      await expect
+        .poll(() =>
+          nodes.evaluateAll((entries) =>
+            entries.every((node) => getComputedStyle(node).visibility === 'visible')
+          )
+        )
+        .toBe(true);
+      const screenshot = await surface.screenshot();
+      const png = await decodeRgbaPng(screenshot);
+      for (let i = 0; i < 100; i++) {
+        const x = 40 + (i % 5) * 260;
+        const y = 30 + Math.floor(i / 5) * 28;
+        expect(
+          Array.from({ length: 9 }, (_, dy) => pixel(png, x + 2, y - 4 + dy)).some(
+            ([r, g, b]) => g > r + 20 && g > b + 10
+          )
+        ).toBe(true);
+      }
+      await testInfo.attach('browser-100-strokes.png', {
+        body: screenshot,
+        contentType: 'image/png',
+      });
+    });
+  }
+}
+
 for (const firstTool of ['freehand', 'line'] as const) {
   test(`plain Web ${firstTool} first commit allows more ink, undo/redo and tool switching`, async ({
     page,

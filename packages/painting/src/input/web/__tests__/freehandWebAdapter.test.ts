@@ -286,6 +286,90 @@ const noticesOf = (h: Harness, phase: FreehandWebAdapterNotice['phase']) =>
 
 const lastNotice = (h: Harness) => h.notices[h.notices.length - 1];
 
+describe.each(['pen', 'mouse', 'touch'] as const)('rapid %s stroke completion', (source) => {
+  for (const length of [0, 8, 160]) {
+    test.each(['none', 'single', 'coalesced', 'empty-fallback'] as const)(
+      `${length}px, %s moves: reused pointer commits every same-frame stroke`,
+      (moves) => {
+        const h = setup({ listen: false });
+        h.controller.setInputMode('finger');
+        const navigation = { dispatch: jest.fn(), cancel: () => true, begin: jest.fn() };
+        const arbiter = createLayeredInputArbiter({
+          host: h.host,
+          controller: h.controller,
+          tool: h.adapter,
+          navigation,
+        });
+        liveAdapters.push(arbiter);
+        for (let i = 0; i < 100; i++) {
+          const base = {
+            pointerId: 41,
+            pointerType: source,
+            clientX: 20,
+            clientY: 30,
+            timeStamp: i * 125,
+          };
+          fireHost(h.host, pointer('pointerdown', base));
+          if (moves !== 'none') {
+            const midpoint = { ...base, clientX: 20 + length / 2 };
+            fireWindow(
+              pointer('pointermove', {
+                ...midpoint,
+                coalescedEvents:
+                  moves === 'coalesced'
+                    ? [
+                        pointer('pointermove', { ...base, clientX: 20 + length / 4 }),
+                        pointer('pointermove', midpoint),
+                      ]
+                    : [],
+              })
+            );
+          }
+          fireWindow(
+            pointer('pointerup', { ...base, clientX: 20 + length, pressure: 0, buttons: 0 })
+          );
+          expect(h.controller.getSnapshot('document').objects).toHaveLength(i + 1);
+          expect(h.adapter.getActivePointerIds()).toEqual([]);
+          expect(arbiter.isWriting()).toBe(false);
+        }
+        for (const phase of ['begin', 'end', 'commit'] as const) {
+          expect(noticesOf(h, phase)).toHaveLength(100);
+          expect(noticesOf(h, phase).every((notice) => notice.result.ok)).toBe(true);
+        }
+        const objects = h.controller.getSnapshot('document').objects;
+        expect(new Set(h.commitIds).size).toBe(100);
+        for (const object of objects) {
+          if (object.kind !== 'freehand') throw new Error('expected freehand');
+          expect(object.samples).toHaveLength(moves === 'none' ? 2 : moves === 'coalesced' ? 4 : 3);
+          expect(object.samples[0]).toMatchObject({ phase: 'down', source, x: 5, y: 17.5 });
+          expect(object.samples.at(-1)).toMatchObject({
+            phase: 'up',
+            source,
+            x: 5 + length / 2,
+            y: 17.5,
+            pressure: 0,
+          });
+          expect(object.samples.map((sample) => sample.sequence)).toEqual(
+            object.samples.map((_, index) => index)
+          );
+        }
+        expect(h.controller.getSnapshot('interaction')).toMatchObject({ pendingCandidates: [] });
+        expect(h.controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
+        for (let count = 99; count >= 0; count--) {
+          expect(h.controller.undo()).toMatchObject({ ok: true });
+          expect(h.controller.getSnapshot('document').objects).toHaveLength(count);
+        }
+        expect(h.controller.getSnapshot('history').canUndo).toBe(false);
+        for (let count = 1; count <= 100; count++) {
+          expect(h.controller.redo()).toMatchObject({ ok: true });
+          expect(h.controller.getSnapshot('document').objects).toHaveLength(count);
+        }
+        expect(h.controller.getSnapshot('document').objects).toEqual(objects);
+      }
+    );
+  }
+});
+
 test.each(['pen', 'touch'] as const)(
   'arbiter accepts signed %s IDs for ink and cancels before real pair navigation',
   (source) => {
