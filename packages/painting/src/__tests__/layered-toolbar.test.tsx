@@ -45,3 +45,28 @@ test('input menu is available for every tool, restores preferences and writes no
   expect(controller.getSnapshot('history')).toBe(history);
   localStorage.clear();
 });
+
+test('standalone toolbar protects static text and preserves editing after remount', () => {
+  const controller = makeLayeredController();
+  const first = render(<Toolbar controller={controller} />);
+  const toolbar = screen.getByRole('toolbar');
+  expect(toolbar.style.userSelect).toBe('none');
+  for (const name of ['笔宽', '缩放']) {
+    const input = screen.getByLabelText<HTMLInputElement>(name);
+    expect(input.style.userSelect).toBe('text');
+    expect(input.parentElement!.style.userSelect).toBe('');
+    input.focus();
+    expect(document.activeElement).toBe(input);
+  }
+  first.unmount();
+  render(<Toolbar controller={controller} />);
+  fireEvent.click(screen.getByRole('button', { name: '矩形' }));
+  expect(controller.getSnapshot('tools').activeTool).toBe('rect');
+  fireEvent.change(screen.getByLabelText('笔宽'), { target: { value: '12' } });
+  fireEvent.change(screen.getByLabelText('颜色'), { target: { value: '#123456' } });
+  expect(controller.getSnapshot('tools').settings.shape).toMatchObject({
+    width: 12,
+    color: '#123456',
+  });
+  expect(controller.getSnapshot('history').canUndo).toBe(false);
+});
