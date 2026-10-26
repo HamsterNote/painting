@@ -4,6 +4,20 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing release tag version, without v
+        required: true
+        type: string
+      mode:
+        description: Stage for maintainer approval or publish directly
+        required: true
+        default: stage
+        type: choice
+        options:
+          - stage
+          - publish
 
 permissions:
   contents: write
@@ -13,15 +27,36 @@ jobs:
   publish:
     name: Build and Publish
     runs-on: ubuntu-latest
+    env:
+      RELEASE_MODE: ${{ inputs.mode || 'publish' }}
     steps:
+      - name: Resolve release tag
+        id: release
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="v$REQUESTED_VERSION"
+          else
+            TAG="$GITHUB_REF_NAME"
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Expected an existing semver release tag."
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: refs/tags/${{ steps.release.outputs.tag }}
 
       - name: Classify tag and prepare env
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
-          TAG="${GITHUB_REF#refs/tags/v}"
+          TAG="${RELEASE_TAG#v}"
           echo "Detected tag: v$TAG"
 
           VERSION="$TAG"
@@ -71,9 +106,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22.13
+          node-version: 24.15.0
           registry-url: https://registry.npmjs.org
           cache: pnpm
+
+      - name: Install npm with staged publishing support
+        run: npm install --global npm@12.2.1
 
       - name: Install dependencies
         run: |
@@ -114,9 +152,32 @@ jobs:
         if: steps.version.outputs.should_publish == 'true'
         run: |
           pnpm build
+          pnpm verify:layered
+
+      - name: Stage painting for maintainer approval
+        if: steps.version.outputs.should_publish == 'true' && env.RELEASE_MODE == 'stage'
+        working-directory: packages/painting
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm stage publish --provenance --tag "$PUBLISH_TAG" --access public
+
+      - name: Stage painting-board for maintainer approval
+        if: steps.version.outputs.should_publish == 'true' && env.RELEASE_MODE == 'stage'
+        working-directory: packages/painting-board
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm stage publish --provenance --tag "$PUBLISH_TAG" --access public
+
+      - name: Report pending approval
+        if: steps.version.outputs.should_publish == 'true' && env.RELEASE_MODE == 'stage'
+        run: |
+          echo "## npm approval required" >> "$GITHUB_STEP_SUMMARY"
+          echo "Both packages at $VERSION were staged. See the staging steps for their stage IDs." >> "$GITHUB_STEP_SUMMARY"
+          echo 'A maintainer must approve painting, then painting-board, using `npm stage approve <stage-id>`.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Staging is not a public npm release. After approval, rerun this workflow in publish mode to verify and create the GitHub Release.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish to npm
-        if: steps.version.outputs.should_publish == 'true'
+        if: steps.version.outputs.should_publish == 'true' && env.RELEASE_MODE == 'publish'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
@@ -127,7 +188,7 @@ jobs:
           npm publish --provenance --tag "$PUBLISH_TAG" --access public
 
       - name: Ensure pre-release dist-tag
-        if: (env.PUBLISH_TAG == 'dev' || env.PUBLISH_TAG == 'beta') && steps.version.outputs.should_publish == 'true'
+        if: (env.PUBLISH_TAG == 'dev' || env.PUBLISH_TAG == 'beta') && steps.version.outputs.should_publish == 'true' && env.RELEASE_MODE == 'publish'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
@@ -141,8 +202,9 @@ jobs:
           npm dist-tag ls "$BOARD_NAME"
 
       - name: Create GitHub Release
+        if: env.RELEASE_MODE == 'publish'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: ${{ steps.release.outputs.tag }}
           generate_release_notes: true
