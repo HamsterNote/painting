@@ -185,12 +185,16 @@ jobs:
       - name: Publish painting with npm trusted publishing
         if: steps.version.outputs.painting_exists == 'false' && env.RELEASE_MODE == 'publish'
         working-directory: packages/painting
-        run: npm publish --provenance --tag "$PUBLISH_TAG" --access public
+        env:
+          NODE_AUTH_TOKEN: ''
+        run: npm publish --provenance --tag "$PUBLISH_TAG" --access public --loglevel=verbose
 
       - name: Publish painting-board with npm trusted publishing
         if: steps.version.outputs.board_exists == 'false' && env.RELEASE_MODE == 'publish'
         working-directory: packages/painting-board
-        run: npm publish --provenance --tag "$PUBLISH_TAG" --access public
+        env:
+          NODE_AUTH_TOKEN: ''
+        run: npm publish --provenance --tag "$PUBLISH_TAG" --access public --loglevel=verbose
 
       - name: Verify public release before creating GitHub Release
         if: env.RELEASE_MODE == 'publish'
