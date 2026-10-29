@@ -11,17 +11,21 @@ on:
         required: true
         type: string
       mode:
-        description: Stage for maintainer approval or publish directly
+        description: Publish the release tag (stage only when explicitly requested)
         required: true
-        default: stage
+        default: publish
         type: choice
         options:
-          - stage
           - publish
+          - stage
 
 permissions:
   contents: write
   id-token: write
+
+concurrency:
+  group: npm-release-${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -110,7 +114,7 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: pnpm
 
-      - name: Install npm with staged publishing support
+      - name: Install npm with trusted publishing support
         run: npm install --global npm@12.2.1
 
       - name: Install dependencies
@@ -120,33 +124,34 @@ jobs:
 
       - name: Check if version already published
         id: version
-        shell: bash
         run: |
-          PKG_NAME=$(node -e "console.log(JSON.parse(require('fs').readFileSync('packages/painting/package.json','utf8')).name)")
-          BOARD_NAME=$(node -e "console.log(JSON.parse(require('fs').readFileSync('packages/painting-board/package.json','utf8')).name)")
-          VERSION=$(node -e "console.log(JSON.parse(require('fs').readFileSync('packages/painting/package.json','utf8')).version)")
-          echo "Packages: $PKG_NAME, $BOARD_NAME"
-          echo "Version: $VERSION"
-
-          PKG_EXISTS=false
-          BOARD_EXISTS=false
-          if npm view "$PKG_NAME@$VERSION" version > /dev/null 2>&1; then
-            PKG_EXISTS=true
-          fi
-          if npm view "$BOARD_NAME@$VERSION" version > /dev/null 2>&1; then
-            BOARD_EXISTS=true
-          fi
-
-          if [ "$PKG_EXISTS" = "true" ] && [ "$BOARD_EXISTS" = "true" ]; then
-            echo "should_publish=false" >> "$GITHUB_OUTPUT"
-            echo "Version $VERSION of both packages already exists on npm, skip publishing."
-          elif [ "$PKG_EXISTS" = "false" ] && [ "$BOARD_EXISTS" = "false" ]; then
-            echo "should_publish=true" >> "$GITHUB_OUTPUT"
-            echo "Version $VERSION not found on npm for either package, will publish both."
-          else
-            echo "::error::Partial publish state: $PKG_NAME@$VERSION exists=$PKG_EXISTS, $BOARD_NAME@$VERSION exists=$BOARD_EXISTS. Resolve manually before re-tagging."
-            exit 1
-          fi
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import { appendFileSync, readFileSync } from 'node:fs';
+          const states = [];
+          for (const [directory, output] of [['painting', 'painting_exists'], ['painting-board', 'board_exists']]) {
+            const pkg = JSON.parse(readFileSync(`packages/${directory}/package.json`, 'utf8'));
+            let exists;
+            try {
+              const version = JSON.parse(execFileSync('npm', [
+                'view', `${pkg.name}@${process.env.VERSION}`, 'version',
+                '--registry=https://registry.npmjs.org', '--json', '--prefer-online',
+              ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));
+              assert.equal(version, process.env.VERSION, `${pkg.name} public version`);
+              exists = true;
+            } catch (error) {
+              if (!error.stdout || JSON.parse(error.stdout).error?.code !== 'E404') {
+                throw error;
+              }
+              exists = false;
+            }
+            console.log(`${pkg.name}@${process.env.VERSION}: exists=${exists}`);
+            appendFileSync(process.env.GITHUB_OUTPUT, `${output}=${exists}\n`);
+            states.push(exists);
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `should_publish=${states.some((exists) => !exists)}\n`);
+          NODE
 
       - name: Build project
         if: steps.version.outputs.should_publish == 'true'
@@ -155,14 +160,14 @@ jobs:
           pnpm verify:layered
 
       - name: Stage painting for maintainer approval
-        if: steps.version.outputs.should_publish == 'true' && env.RELEASE_MODE == 'stage'
+        if: steps.version.outputs.painting_exists == 'false' && env.RELEASE_MODE == 'stage'
         working-directory: packages/painting
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm stage publish --provenance --tag "$PUBLISH_TAG" --access public
 
       - name: Stage painting-board for maintainer approval
-        if: steps.version.outputs.should_publish == 'true' && env.RELEASE_MODE == 'stage'
+        if: steps.version.outputs.board_exists == 'false' && env.RELEASE_MODE == 'stage'
         working-directory: packages/painting-board
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -172,34 +177,44 @@ jobs:
         if: steps.version.outputs.should_publish == 'true' && env.RELEASE_MODE == 'stage'
         run: |
           echo "## npm approval required" >> "$GITHUB_STEP_SUMMARY"
-          echo "Both packages at $VERSION were staged. See the staging steps for their stage IDs." >> "$GITHUB_STEP_SUMMARY"
+          echo "Missing packages at $VERSION were staged. See the staging steps for their stage IDs." >> "$GITHUB_STEP_SUMMARY"
           echo 'A maintainer must approve painting, then painting-board, using `npm stage approve <stage-id>`.' >> "$GITHUB_STEP_SUMMARY"
           echo 'Staging is not a public npm release. After approval, rerun this workflow in publish mode to verify and create the GitHub Release.' >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Publish to npm
-        if: steps.version.outputs.should_publish == 'true' && env.RELEASE_MODE == 'publish'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          # 依赖序：painting-board 依赖 painting，必须先发布 painting
-          cd packages/painting
-          npm publish --provenance --tag "$PUBLISH_TAG" --access public
-          cd ../painting-board
-          npm publish --provenance --tag "$PUBLISH_TAG" --access public
+      # Direct publishing uses the package's trusted publisher, not the stage-only NPM_TOKEN.
+      - name: Publish painting with npm trusted publishing
+        if: steps.version.outputs.painting_exists == 'false' && env.RELEASE_MODE == 'publish'
+        working-directory: packages/painting
+        run: npm publish --provenance --tag "$PUBLISH_TAG" --access public
 
-      - name: Ensure pre-release dist-tag
-        if: (env.PUBLISH_TAG == 'dev' || env.PUBLISH_TAG == 'beta') && steps.version.outputs.should_publish == 'true' && env.RELEASE_MODE == 'publish'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish painting-board with npm trusted publishing
+        if: steps.version.outputs.board_exists == 'false' && env.RELEASE_MODE == 'publish'
+        working-directory: packages/painting-board
+        run: npm publish --provenance --tag "$PUBLISH_TAG" --access public
+
+      - name: Verify public release before creating GitHub Release
+        if: env.RELEASE_MODE == 'publish'
         run: |
-          PKG_NAME=$(node -e "console.log(JSON.parse(require('fs').readFileSync('packages/painting/package.json','utf8')).name)")
-          BOARD_NAME=$(node -e "console.log(JSON.parse(require('fs').readFileSync('packages/painting-board/package.json','utf8')).name)")
-          VERSION=$(node -e "console.log(JSON.parse(require('fs').readFileSync('packages/painting/package.json','utf8')).version)")
-          echo "Ensure dist-tag: ${PUBLISH_TAG} -> $VERSION"
-          npm dist-tag add "$PKG_NAME@$VERSION" "$PUBLISH_TAG" || true
-          npm dist-tag add "$BOARD_NAME@$VERSION" "$PUBLISH_TAG" || true
-          npm dist-tag ls "$PKG_NAME"
-          npm dist-tag ls "$BOARD_NAME"
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import { readFileSync } from 'node:fs';
+          const readPackage = (name) => JSON.parse(readFileSync(`packages/${name}/package.json`, 'utf8'));
+          const painting = readPackage('painting');
+          const board = readPackage('painting-board');
+          for (const pkg of [painting, board]) {
+            const published = JSON.parse(execFileSync('npm', [
+              'view', `${pkg.name}@${process.env.VERSION}`, 'version', 'dependencies', 'dist-tags',
+              '--registry=https://registry.npmjs.org', '--json', '--prefer-online',
+            ], { encoding: 'utf8' }));
+            assert.equal(published.version, process.env.VERSION, `${pkg.name} public version`);
+            assert.equal(published['dist-tags'][process.env.PUBLISH_TAG], process.env.VERSION, `${pkg.name} dist-tag`);
+            if (pkg.name === board.name) {
+              assert.equal(published.dependencies[painting.name], process.env.VERSION, 'painting-board dependency');
+            }
+            console.log(JSON.stringify({ name: pkg.name, ...published }));
+          }
+          NODE
 
       - name: Create GitHub Release
         if: env.RELEASE_MODE == 'publish'
@@ -208,3 +223,17 @@ jobs:
           tag_name: ${{ steps.release.outputs.tag }}
           name: ${{ steps.release.outputs.tag }}
           generate_release_notes: true
+
+      - name: Explain trusted publishing requirements on failure
+        if: failure() && env.RELEASE_MODE == 'publish'
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          ## Release was not completed
+          Inspect the failed step above. Direct publishing uses GitHub OIDC, not NPM_TOKEN.
+          For OIDC authentication or permission errors, check BOTH npm package settings:
+          - Trusted publisher: GitHub Actions, owner HamsterNote, repository painting, workflow publish.yml.
+          - The trusted publisher must allow npm publish (stage-only permissions cannot publish directly).
+          npm permissions must be configured by a package maintainer; the workflow cannot grant itself access.
+          After resolving the error, rerun this workflow in publish mode for the existing version. Do not move its tag.
+          No GitHub Release is created until both public versions, dist-tags, and the board dependency are verified.
+          SUMMARY
