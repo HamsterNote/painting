@@ -134,11 +134,11 @@ jobs:
             const pkg = JSON.parse(readFileSync(`packages/${directory}/package.json`, 'utf8'));
             let exists;
             try {
-              const version = JSON.parse(execFileSync('npm', [
+              const reported = [].concat(JSON.parse(execFileSync('npm', [
                 'view', `${pkg.name}@${process.env.VERSION}`, 'version',
                 '--registry=https://registry.npmjs.org', '--json', '--prefer-online',
-              ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));
-              assert.equal(version, process.env.VERSION, `${pkg.name} public version`);
+              ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })));
+              assert.ok(reported.includes(process.env.VERSION), `${pkg.name} public version`);
               exists = true;
             } catch (error) {
               if (!error.stdout || JSON.parse(error.stdout).error?.code !== 'E404') {
