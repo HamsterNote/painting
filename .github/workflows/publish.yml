@@ -207,10 +207,10 @@ jobs:
           const painting = readPackage('painting');
           const board = readPackage('painting-board');
           for (const pkg of [painting, board]) {
-            const published = JSON.parse(execFileSync('npm', [
+            const published = [].concat(JSON.parse(execFileSync('npm', [
               'view', `${pkg.name}@${process.env.VERSION}`, 'version', 'dependencies', 'dist-tags',
               '--registry=https://registry.npmjs.org', '--json', '--prefer-online',
-            ], { encoding: 'utf8' }));
+            ], { encoding: 'utf8' })))[0];
             assert.equal(published.version, process.env.VERSION, `${pkg.name} public version`);
             assert.equal(published['dist-tags'][process.env.PUBLISH_TAG], process.env.VERSION, `${pkg.name} dist-tag`);
             if (pkg.name === board.name) {
