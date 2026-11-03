@@ -1,3 +1,4 @@
+import type { GetClientToLocal } from '../../geometry/pageCoordinates';
 import type { LayeredEditorController } from '../../core/layeredEditorController';
 import type { NormalizedPointerInput, TargetRole } from '../../core/input';
 import {
@@ -19,6 +20,7 @@ export function createLayeredInputArbiter(options: {
   tool: LayeredInputPort;
   navigation: LayeredInputPort & { begin(events: readonly PointerEvent[]): void };
   targetRole?: (event: PointerEvent) => TargetRole | undefined;
+  getClientToLocal?: GetClientToLocal;
   onDiagnostic?: (message: string) => void;
 }) {
   const { host, controller, tool, navigation } = options;
@@ -73,9 +75,12 @@ export function createLayeredInputArbiter(options: {
       (event.pressure !== undefined && !Number.isFinite(event.pressure))
     )
       return;
-    const rect = host.getBoundingClientRect();
-    const x = event.clientX - rect.left - host.clientLeft;
-    const y = event.clientY - rect.top - host.clientTop;
+    const map = options.getClientToLocal?.();
+    const rect = map ? undefined : host.getBoundingClientRect();
+    const point = map?.({ x: event.clientX, y: event.clientY });
+    if (map && !point) return;
+    const x = point ? point.x : event.clientX - rect!.left - host.clientLeft;
+    const y = point ? point.y : event.clientY - rect!.top - host.clientTop;
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     const control =
       event.target instanceof Element &&

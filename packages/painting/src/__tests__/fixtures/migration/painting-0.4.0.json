@@ -1,0 +1,214 @@
+{
+  "strokes": [
+    {
+      "schemaVersion": 2,
+      "id": "pen-040",
+      "points": [
+        {
+          "x": 10,
+          "y": 20,
+          "pressure": 0.2
+        },
+        {
+          "x": 40,
+          "y": 50,
+          "pressure": 0.8
+        }
+      ],
+      "strokeColor": "#123abc",
+      "strokeWidth": 5,
+      "tool": "pen"
+    },
+    {
+      "schemaVersion": 2,
+      "id": "line-040",
+      "points": [
+        {
+          "x": 10,
+          "y": 20
+        },
+        {
+          "x": 30,
+          "y": 40
+        }
+      ],
+      "strokeColor": "#aabbcc",
+      "strokeWidth": 3,
+      "dashArray": [
+        2,
+        4
+      ],
+      "dashOffset": 2,
+      "fillColor": "#112233",
+      "fillOpacity": 0.4,
+      "rotationRad": 0.2,
+      "tool": "line"
+    },
+    {
+      "schemaVersion": 2,
+      "id": "rect-040",
+      "points": [
+        {
+          "x": 10,
+          "y": 20
+        },
+        {
+          "x": 30,
+          "y": 40
+        }
+      ],
+      "strokeColor": "#aabbcc",
+      "strokeWidth": 3,
+      "dashArray": [
+        2,
+        4
+      ],
+      "dashOffset": 2,
+      "fillColor": "#112233",
+      "fillOpacity": 0.4,
+      "rotationRad": 0.2,
+      "tool": "rect"
+    },
+    {
+      "schemaVersion": 2,
+      "id": "ellipse-040",
+      "points": [
+        {
+          "x": 10,
+          "y": 20
+        },
+        {
+          "x": 30,
+          "y": 40
+        }
+      ],
+      "strokeColor": "#aabbcc",
+      "strokeWidth": 3,
+      "dashArray": [
+        2,
+        4
+      ],
+      "dashOffset": 2,
+      "fillColor": "#112233",
+      "fillOpacity": 0.4,
+      "rotationRad": 0.2,
+      "tool": "ellipse"
+    },
+    {
+      "schemaVersion": 2,
+      "id": "polygon-040",
+      "points": [
+        {
+          "x": 10,
+          "y": 20
+        },
+        {
+          "x": 30,
+          "y": 40
+        },
+        {
+          "x": 50,
+          "y": 20
+        }
+      ],
+      "strokeColor": "#aabbcc",
+      "strokeWidth": 3,
+      "dashArray": [
+        2,
+        4
+      ],
+      "dashOffset": 2,
+      "fillColor": "#112233",
+      "fillOpacity": 0.4,
+      "rotationRad": 0.2,
+      "tool": "polygon"
+    },
+    {
+      "schemaVersion": 2,
+      "id": "bezier-040",
+      "points": [
+        {
+          "x": 10,
+          "y": 20
+        },
+        {
+          "x": 30,
+          "y": 40
+        },
+        {
+          "x": 40,
+          "y": 10
+        },
+        {
+          "x": 50,
+          "y": 20
+        }
+      ],
+      "strokeColor": "#aabbcc",
+      "strokeWidth": 3,
+      "dashArray": [
+        2,
+        4
+      ],
+      "dashOffset": 2,
+      "fillColor": "#112233",
+      "fillOpacity": 0.4,
+      "rotationRad": 0.2,
+      "tool": "bezier"
+    },
+    {
+      "schemaVersion": 2,
+      "id": "text-040",
+      "points": [
+        {
+          "x": 10,
+          "y": 20
+        },
+        {
+          "x": 30,
+          "y": 40
+        }
+      ],
+      "strokeColor": "#aabbcc",
+      "strokeWidth": 3,
+      "dashArray": [
+        2,
+        4
+      ],
+      "dashOffset": 2,
+      "fillColor": "#112233",
+      "fillOpacity": 0.4,
+      "rotationRad": 0.2,
+      "tool": "text",
+      "text": "仓鼠\nPDF",
+      "fontSize": 20
+    },
+    {
+      "schemaVersion": 2,
+      "id": "image-040",
+      "points": [
+        {
+          "x": 10,
+          "y": 20
+        },
+        {
+          "x": 30,
+          "y": 40
+        }
+      ],
+      "strokeColor": "#aabbcc",
+      "strokeWidth": 3,
+      "dashArray": [
+        2,
+        4
+      ],
+      "dashOffset": 2,
+      "fillColor": "#112233",
+      "fillOpacity": 0.4,
+      "rotationRad": 0.2,
+      "tool": "image",
+      "src": "data:image/png;base64,a"
+    }
+  ],
+  "schemaVersion": 2
+}

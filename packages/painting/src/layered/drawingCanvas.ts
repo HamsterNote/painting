@@ -44,8 +44,12 @@ export function createDrawingCanvas(
     const dpr = view.devicePixelRatio || 1;
     const width = Math.max(1, Math.round(bounds.width * dpr));
     const height = Math.max(1, Math.round(bounds.height * dpr));
-    const pixelScaleX = width / (bounds.width || 1);
-    const pixelScaleY = height / (bounds.height || 1);
+    // clientWidth/Height round fractional page sizes, which amplifies drift under zoom.
+    const computed = view.getComputedStyle(canvas);
+    const layoutWidth = computed.width.endsWith('px') ? parseFloat(computed.width) : 0;
+    const layoutHeight = computed.height.endsWith('px') ? parseFloat(computed.height) : 0;
+    const pixelScaleX = width / (layoutWidth || canvas.clientWidth || bounds.width || 1);
+    const pixelScaleY = height / (layoutHeight || canvas.clientHeight || bounds.height || 1);
     if (canvas.width !== width) canvas.width = width;
     if (canvas.height !== height) canvas.height = height;
     context.setTransform(1, 0, 0, 1, 0, 0);

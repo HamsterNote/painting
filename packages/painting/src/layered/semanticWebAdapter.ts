@@ -1,3 +1,4 @@
+import type { GetClientToLocal } from '../geometry/pageCoordinates';
 import type { LayeredEditorController } from '../core/layeredEditorController';
 import { createLayeredToolSession, type SelectionOperation } from '../core/layeredToolSession';
 import type { Point } from '../model/document';
@@ -23,6 +24,7 @@ export function createSemanticWebAdapter(options: {
   beforeGesture?: () => void;
   onTrace?: GestureTraceObserver;
   listen?: boolean;
+  getClientToLocal?: GetClientToLocal;
   canNavigate?: () => boolean;
 }) {
   const { host, controller } = options;
@@ -32,6 +34,11 @@ export function createSemanticWebAdapter(options: {
   let owner: { id: number; source: string; start: Point; pan: boolean } | undefined;
   let snapshot = controller.getSnapshot('viewport');
   const screen = (event: PointerEvent): Point => {
+    if (options.getClientToLocal) {
+      const point = options.getClientToLocal()({ x: event.clientX, y: event.clientY });
+      if (!point) throw new Error('Invalid page coordinates');
+      return point;
+    }
     const rect = host.getBoundingClientRect();
     return {
       x: event.clientX - rect.left - host.clientLeft,
@@ -55,7 +62,14 @@ export function createSemanticWebAdapter(options: {
   }
   function down(event: PointerEvent) {
     const tool = controller.getSnapshot('tools').activeTool;
-    if (owner || tool === 'freehand' || event.button !== 0 || control(event.target)) return;
+    if (
+      owner ||
+      tool === 'freehand' ||
+      (tool === 'pan' && options.canNavigate?.() === false) ||
+      event.button !== 0 ||
+      control(event.target)
+    )
+      return;
     if (
       !['pen', 'touch', 'mouse'].includes(event.pointerType) ||
       options.policy?.[event.pointerType as keyof WebFreehandPolicy] === 'none'

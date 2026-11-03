@@ -129,6 +129,22 @@ test('a delayed history mount keeps final ink through resize then hands off once
     0,
     0
   );
+  canvas.style.width = '300.25px';
+  canvas.style.height = '200.25px';
+  document.body.appendChild(canvas);
+  Object.defineProperties(canvas, { clientWidth: { value: 300 }, clientHeight: { value: 200 } });
+  jest
+    .spyOn(canvas, 'getBoundingClientRect')
+    .mockReturnValue({ width: 750.625, height: 500.625 } as DOMRect);
+  driver.paintNow();
+  expect(context.setTransform).toHaveBeenLastCalledWith(
+    canvas.width / 300.25,
+    0,
+    0,
+    canvas.height / 200.25,
+    0,
+    0
+  );
   const history = render(<DisplayLayer controller={controller} presentation={queue} />);
   expect(queue.getPending()).toHaveLength(0);
   context.fill.mockClear();
@@ -138,6 +154,7 @@ test('a delayed history mount keeps final ink through resize then hands off once
     'visible'
   );
   driver.destroy();
+  canvas.remove();
   history.unmount();
   queue.destroy();
 });

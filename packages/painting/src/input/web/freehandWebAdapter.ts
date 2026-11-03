@@ -1,3 +1,4 @@
+import type { GetClientToLocal, ClientToLocal } from '../../geometry/pageCoordinates';
 /**
  * Web 自由笔输入 adapter（Task 4.1 / 4.2 / 4.3 集成边界）。
  *
@@ -51,6 +52,7 @@ export type CreateFreehandWebAdapterOptions = Readonly<{
   createCommitId: () => string;
   policy?: WebFreehandPolicy;
   listen?: boolean;
+  getClientToLocal?: GetClientToLocal;
   pressureCapabilityForSource?: (
     source: WebFreehandSource,
     event: PointerEvent
@@ -86,6 +88,7 @@ const PRESSURE_CAPABILITIES: readonly PressureCapability[] = [
 
 /** screen 坐标原点：host 边界矩形左上 + border 偏移。 */
 type ScreenOrigin = Readonly<{
+  map?: ClientToLocal;
   rectLeft: number;
   rectTop: number;
   offsetX: number;
@@ -142,8 +145,10 @@ function toSample(
     return null;
   }
   // 本地坐标：屏幕 - host 边界 - border；减法可能溢出为 ±Infinity，必须再查 finite。
-  const localX = event.clientX - origin.rectLeft - origin.offsetX;
-  const localY = event.clientY - origin.rectTop - origin.offsetY;
+  const mapped = origin.map?.({ x: event.clientX, y: event.clientY });
+  if (origin.map && !mapped) return null;
+  const localX = mapped ? mapped.x : event.clientX - origin.rectLeft - origin.offsetX;
+  const localY = mapped ? mapped.y : event.clientY - origin.rectTop - origin.offsetY;
   if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
     return null;
   }
@@ -352,6 +357,14 @@ export function createFreehandWebAdapter(
 
   /** 每 batch 读取一次当前 host 边界与 border 偏移；coalesced 共享此 origin，不逐 entry 读 layout。 */
   function readOrigin(): ScreenOrigin {
+    if (options.getClientToLocal)
+      return {
+        map: options.getClientToLocal(),
+        rectLeft: 0,
+        rectTop: 0,
+        offsetX: 0,
+        offsetY: 0,
+      };
     const rect = host.getBoundingClientRect();
     return {
       rectLeft: rect.left,

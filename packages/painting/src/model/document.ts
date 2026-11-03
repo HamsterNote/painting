@@ -157,6 +157,8 @@ export type ShapeStyle = Readonly<{
   opacity: number;
   dash?: readonly number[];
   fill?: string;
+  fillOpacity?: number;
+  dashOffset?: number;
 }>;
 
 /** 首期形状类型集合。 */
@@ -178,6 +180,7 @@ export type ImageObject = Readonly<
     kind: 'image';
     src: string;
     resourceId?: string;
+    preserveAspectRatio?: 'none' | 'xMidYMid meet';
     localBounds: Bounds;
   }
 >;
@@ -188,6 +191,7 @@ export type TextObject = Readonly<
     kind: 'text';
     content: string;
     fontSize: number;
+    lineHeight?: number;
     color: string;
     localBounds: Bounds;
   }

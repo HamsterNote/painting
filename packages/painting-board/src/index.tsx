@@ -7,3 +7,19 @@ export type { LayeredPaintingBoardProps as PaintingBoardProps } from '@hamster-n
 export { createEditor } from '@hamster-note/painting/layered';
 export type { LayeredEditorController, EditorDocument } from '@hamster-note/painting/layered';
 export type { LayeredInputMode, LayeredInputSnapshot } from '@hamster-note/painting/layered';
+
+export {
+  PageDrawingSurface,
+  migrateLegacyDocument,
+  createPageGeometry,
+  createPageCoordinateSpace,
+  readLayeredDocument,
+  serializeLayeredDocument,
+} from '@hamster-note/painting/layered';
+export type {
+  PageDrawingSurfaceProps,
+  PageGeometry,
+  PageCoordinateSpace,
+  PageViewportTransform,
+  DocumentReadResult,
+} from '@hamster-note/painting/layered';

@@ -98,6 +98,8 @@ function readStyle(value: unknown): ShapeStyle | null {
     opacity: number;
     dash?: readonly number[];
     fill?: string;
+    fillOpacity?: number;
+    dashOffset?: number;
   } = {
     color: style.color,
     width: style.width,
@@ -108,6 +110,15 @@ function readStyle(value: unknown): ShapeStyle | null {
   }
   if (style.fill !== undefined) {
     result.fill = style.fill as string;
+  }
+  if (style.fillOpacity !== undefined) {
+    if (!isFiniteNumber(style.fillOpacity) || style.fillOpacity < 0 || style.fillOpacity > 1)
+      return null;
+    result.fillOpacity = style.fillOpacity;
+  }
+  if (style.dashOffset !== undefined) {
+    if (!isFiniteNumber(style.dashOffset)) return null;
+    result.dashOffset = style.dashOffset;
   }
   return Object.freeze(result);
 }
