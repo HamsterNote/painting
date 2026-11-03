@@ -1,3 +1,4 @@
+import { selectToolbarTool } from './layered-helpers';
 import { expect, test } from '@playwright/test';
 import {
   dispatchLayeredPointer as pointer,
@@ -78,8 +79,11 @@ test('all retained tool modes route to the one controller', async ({ page }) => 
     ['橡皮擦', 'eraser'],
     ['平移', 'pan'],
   ]) {
-    const button = page.getByRole('button', { name, exact: true });
-    await button.click();
+    await selectToolbarTool(page, name);
+    const button = page.getByRole('button', {
+      name: name === '自由笔' ? '绘图（自由笔）' : name,
+      exact: true,
+    });
     await expect(button).toHaveAttribute('aria-pressed', 'true');
     expect((await layeredState(page)).tools.activeTool).toBe(tool);
   }
@@ -91,7 +95,7 @@ test('eraser misses and cancelled sweeps add no history; a fast crossing is reve
 }) => {
   await drawLayeredStroke(page);
   const saved = (await layeredState(page)).document.objects;
-  await page.getByRole('button', { name: '橡皮擦', exact: true }).click();
+  await selectToolbarTool(page, '橡皮擦');
   await pointer(page, 'down', { x: 400, y: 400 });
   await pointer(page, 'up', { x: 450, y: 400 });
   expect((await layeredState(page)).document.objects).toEqual(saved);

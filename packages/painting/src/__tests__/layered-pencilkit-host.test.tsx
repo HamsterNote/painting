@@ -248,12 +248,20 @@ test.each([
       layeredPointer(host, 'move', 150, id * 30 + 10, 'pen', id);
       layeredPointer(host, 'up', 240, id * 30 + 20, 'pen', id);
     };
-    const select = (next: 'freehand' | 'line') =>
-      fireEvent.click(view.getByRole('button', { name: next === 'freehand' ? '自由笔' : '直线' }));
+    const select = (next: 'freehand' | 'line') => {
+      fireEvent.click(
+        view.getByRole('button', { name: next === 'freehand' ? '绘图菜单' : '形状和对象菜单' })
+      );
+      fireEvent.click(
+        view.getByRole('menuitemradio', { name: next === 'freehand' ? '自由笔' : '直线' })
+      );
+    };
     select(tool);
     draw(2);
     const first = controller.getSnapshot('document').objects.at(-1)!;
     expect(controller.getSnapshot('document').objects).toHaveLength(previous.length + 1);
+    fireEvent.click(view.getByRole('button', { name: '绘图菜单' }));
+    fireEvent.click(view.getByRole('menuitem', { name: '设置' }));
     fireEvent.change(view.getByLabelText('颜色', { exact: true }), {
       target: { value: '#df2468' },
     });

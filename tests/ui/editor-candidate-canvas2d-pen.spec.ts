@@ -1,3 +1,4 @@
+import { openToolbarSettings } from './layered-helpers';
 import { expect, test } from '@playwright/test';
 import { decodeRgbaPng } from './canvas2d-pen-pixel-helpers';
 import {
@@ -13,6 +14,7 @@ for (const dpr of [1, 2]) {
       page,
     }, testInfo) => {
       await openLayeredEditor(page, '&handoffDelay=300');
+      await openToolbarSettings(page);
       await page.getByLabel('压力模式', { exact: true }).selectOption('constant');
       const baseline = await page.evaluate(() => ({ ...window.__layeredRenders! }));
       await pointer(page, 'down', { x: 100, y: 120 });

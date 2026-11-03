@@ -1,3 +1,4 @@
+import { openToolbarSettings, selectToolbarTool } from './layered-helpers';
 import { expect, test } from '@playwright/test';
 import { drawLayeredStroke, layeredState, openLayeredEditor } from './layered-helpers';
 
@@ -12,6 +13,7 @@ test('six colors and a custom color reach filled paths through the toolbar', asy
     '#a855f7',
     '#123456',
   ].entries()) {
+    await openToolbarSettings(page);
     await page.getByLabel('颜色', { exact: true }).evaluate((input, value) => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
       input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -23,6 +25,7 @@ test('six colors and a custom color reach filled paths through the toolbar', asy
     ).toHaveAttribute('fill', color);
   }
   expect((await layeredState(page)).document.objects).toHaveLength(7);
-  await page.getByRole('button', { name: '套索', exact: true }).click();
+  await selectToolbarTool(page, '套索');
+  await openToolbarSettings(page);
   await expect(page.getByLabel('颜色', { exact: true })).toHaveCount(0);
 });

@@ -1,3 +1,4 @@
+import { openToolbarZoom, selectToolbarTool } from './layered-helpers';
 import { expect, test } from '@playwright/test';
 import {
   dispatchLayeredPointer as pointer,
@@ -13,8 +14,9 @@ test('default editor keeps one Canvas mounted across drawing, tools and viewport
   const canvas = await page.getByTestId('layered-drawing').elementHandle();
   await drawLayeredStroke(page);
   const document = (await layeredState(page)).document;
+  await openToolbarZoom(page);
   await page.getByLabel('缩放', { exact: true }).fill('200');
-  await page.getByRole('button', { name: '选择', exact: true }).click();
+  await selectToolbarTool(page, '选择');
   expect((await layeredState(page)).document).toEqual(document);
   expect(await canvas!.evaluate((node) => node.isConnected)).toBe(true);
   await expect(page.locator('canvas')).toHaveCount(1);
@@ -54,7 +56,7 @@ test('mixed Unicode and newline composition commits once and is editable verbati
 
 test('selection preview cancel and no-op handles do not write history', async ({ page }) => {
   await openLayeredEditor(page, '&fixture=mixed');
-  await page.getByRole('button', { name: '选择', exact: true }).click();
+  await selectToolbarTool(page, '选择');
   await pointer(page, 'down', { x: 230, y: 180 });
   await pointer(page, 'up', { x: 230, y: 180 });
   const original = await layeredState(page);
@@ -78,7 +80,7 @@ test('selection preview cancel and no-op handles do not write history', async ({
 
 test('deleting selected text removes stale selection through undo and redo', async ({ page }) => {
   await openLayeredEditor(page, '&fixture=resources');
-  await page.getByRole('button', { name: '选择', exact: true }).click();
+  await selectToolbarTool(page, '选择');
   await pointer(page, 'down', { x: 70, y: 70 });
   await pointer(page, 'up', { x: 70, y: 70 });
   expect((await layeredState(page)).selection).toEqual(['resource-text']);
@@ -102,7 +104,7 @@ test('empty and cancelled file selection and invalid MIME never mutate the docum
   page,
 }) => {
   await openLayeredEditor(page);
-  await page.getByRole('button', { name: '图片', exact: true }).click();
+  await selectToolbarTool(page, '图片');
   const chooser = page.waitForEvent('filechooser');
   await pointer(page, 'down', { x: 100, y: 100 });
   await (await chooser).setFiles([]);
@@ -128,7 +130,7 @@ test('actual 8193x1 decoded image is rejected without a history entry', async ({
     canvas.height = 1;
     return canvas.toDataURL().split(',')[1];
   });
-  await page.getByRole('button', { name: '图片', exact: true }).click();
+  await selectToolbarTool(page, '图片');
   const chooser = page.waitForEvent('filechooser');
   await pointer(page, 'down', { x: 100, y: 100 });
   await (

@@ -24,6 +24,16 @@ export function Board() {
 
 新文档为 `schemaVersion: 3`，保存真实 raw samples、不可变笔刷快照及对象变换；PF outline 和呈现缓存不进入保存数据。`readLayeredDocument` / `serializeLayeredDocument` 返回带 `ok` 的结果，调用方应处理校验失败。V1/V2 文档与旧 `value/onChange`、`PaintingController`、ref handle API 已退役；没有旧渲染 fallback，普通 reader 仍不自动迁移。0.8.0 新增显式 `migrateLegacyDocument`，消费方只调用库内迁移 API 并迁移到 controller API。旧 props 中未进入新公开类型的选项也应由消费方审核迁移。
 
+## 工具栏
+
+`PaintingBoard` 默认在所属画板底部显示悬浮胶囊工具栏，`toolbar={false}` 隐藏。独立使用 `Toolbar` 时默认 `placement="inline"`；指定 `placement="floating"` 时请放在有 `position: relative` 和明确尺寸的父容器中。工具栏定位不修改 controller 的 viewport。
+
+文字在首层；矩形右侧箭头打开形状/图片菜单，绘图右侧箭头打开自由笔、选择、套索、橡皮擦、平移及「设置」。输入模式、尺子/虚拟纸张/小地图、笔刷和形状参数在设置中。六色调色板只影响后续自由笔或形状，其他工具下禁用；自定义色仍可在设置中修改。缩放比例按钮打开 25–800% 数值面板。OCR 暂未接入，入口禁用。
+
+窄屏可在胶囊内横向滚动；Tab 会将焦点控件滚入视野。菜单支持上下方向键、Enter/空格选择和 Escape 返回入口。收起后保留展开按钮，固定时不能收起；这些状态不进入文档、历史或持久化。
+
+工具栏可在 Web 和 Expo DOM/WebView 中使用，不能直接作为原生 RN View。`@hamster-note/components` 的原生转换不属于本次改动。[验证记录与实机待验项](docs/implementation/polish-painting-toolbar/validation.md)。
+
 ## 自由笔
 
 | 压力模式    | 行为                                                                         |

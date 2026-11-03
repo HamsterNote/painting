@@ -1,6 +1,6 @@
 import { createEditor, PaintingBoard, LayeredPaintingBoard } from '@hamster-note/painting-board';
 import { IDENTITY_TRANSFORM } from '@hamster-note/painting/layered';
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 
 beforeEach(() => {
   const context = Object.fromEntries(
@@ -75,4 +75,27 @@ test('controller owns initial document, selection and history instead of a secon
     controller.undo();
   });
   expect(screen.getByText('初始文档')).toBeTruthy();
+});
+
+test('two boards keep floating toolbars within their own controller and positioning boundary', () => {
+  const left = createEditor();
+  const right = createEditor();
+  const { container } = render(
+    <>
+      <PaintingBoard controller={left} />
+      <PaintingBoard controller={right} />
+    </>
+  );
+  const boards = container.querySelectorAll<HTMLElement>('[data-painting-board]');
+  expect(boards).toHaveLength(2);
+  for (const board of boards) {
+    expect(board.style.position).toBe('relative');
+    const overlay = board.querySelector<HTMLElement>('[data-toolbar-placement]')!;
+    expect(overlay.style.position).toBe('absolute');
+    expect(overlay.style.pointerEvents).toBe('none');
+    expect(within(board).getByRole('toolbar').style.pointerEvents).toBe('auto');
+  }
+  fireEvent.click(within(boards[0]).getByRole('button', { name: '文字' }));
+  expect(left.getSnapshot('tools').activeTool).toBe('text');
+  expect(right.getSnapshot('tools').activeTool).toBe('freehand');
 });

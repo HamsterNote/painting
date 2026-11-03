@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import * as painting from '@hamster-note/painting';
 import * as headless from '../core';
 import { mockLayeredDom } from './fixtures/layeredDom';
@@ -11,6 +11,8 @@ test('public root mounts the controller based board and surface aliases', () => 
   const board = render(<painting.PaintingBoard controller={controller} />);
   expect(screen.getByTestId('layered-surface')).toBeTruthy();
   expect(screen.getByRole('toolbar')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '绘图菜单' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: '设置' }));
   expect(screen.getByLabelText('输入模式')).toHaveProperty('value', 'auto');
   board.unmount();
   render(<painting.DrawingSurface controller={controller} />);

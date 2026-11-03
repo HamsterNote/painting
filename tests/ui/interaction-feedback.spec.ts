@@ -1,3 +1,9 @@
+import {
+  openToolbarSettings,
+  openToolbarZoom,
+  selectToolbarTool,
+  setToolbarInputMode,
+} from './layered-helpers';
 import { expect, test, type Locator } from '@playwright/test';
 import {
   dispatchLayeredPointer as pointer,
@@ -24,10 +30,10 @@ test('toolbar static labels reject browser selection while controls keep editing
   await openLayeredEditor(page);
   const toolbar = page.getByRole('toolbar');
   await expectUserSelect(toolbar, 'none');
-  for (const label of await toolbar.locator('label').all()) {
-    await expectUserSelect(label, 'none');
-  }
-  await expectUserSelect(toolbar.getByRole('button', { name: '自由笔', exact: true }), 'none');
+  await expectUserSelect(
+    toolbar.getByRole('button', { name: '绘图（自由笔）', exact: true }),
+    'none'
+  );
   const callout = await toolbar.evaluate((node) => ({
     supported: CSS.supports('-webkit-touch-callout', 'none'),
     value: getComputedStyle(node).getPropertyValue('-webkit-touch-callout'),
@@ -44,7 +50,10 @@ test('toolbar static labels reject browser selection while controls keep editing
   const outside = page.locator('#toolbar-outside-selection');
   await outside.dblclick({ position: { x: 24, y: 8 } });
   expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('outside');
-  const label = toolbar.locator('label').filter({ hasText: '笔宽' });
+  await openToolbarSettings(page);
+  const panel = page.getByRole('dialog', { name: '绘图设置' });
+  for (const label of await panel.locator('label').all()) await expectUserSelect(label, 'none');
+  const label = panel.locator('label').filter({ hasText: '笔宽' });
   await label.dblclick({ position: { x: 3, y: 8 } });
   const bounds = (await label.boundingBox())!;
   await page.mouse.move(bounds.x + 2, bounds.y + 8);
@@ -58,10 +67,9 @@ test('toolbar static labels reject browser selection while controls keep editing
   await pointer(page, 'up', { x: 81, y: 8 });
   expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('outside');
 
+  await openToolbarSettings(page);
   const width = page.getByLabel('笔宽', { exact: true });
-  const zoom = page.getByLabel('缩放', { exact: true });
   await expectUserSelect(width, 'text');
-  await expectUserSelect(zoom, 'text');
   await width.click();
   await width.press('ControlOrMeta+A');
   await width.press('2');
@@ -70,16 +78,19 @@ test('toolbar static labels reject browser selection while controls keep editing
   await expect(width).toBeFocused();
   expect((await layeredState(page)).tools.settings.freehand.nominalSize).toBe(24);
   await width.press('Tab');
+  await openToolbarSettings(page);
   const opacity = page.getByLabel('不透明度');
   await expect(opacity).toBeFocused();
   await opacity.press('Home');
   await opacity.press('ArrowRight');
   expect((await layeredState(page)).tools.settings.freehand.opacity).toBe(0.05);
   await opacity.press('Tab');
+  await openToolbarSettings(page);
   const pressure = page.getByLabel('压力模式');
   await expect(pressure).toBeFocused();
   await pressure.selectOption('constant');
-  await page.getByLabel('输入模式').selectOption('pen');
+  await setToolbarInputMode(page, 'pen');
+  await openToolbarSettings(page);
   const color = page.getByLabel('颜色', { exact: true });
   await color.focus();
   await expect(color).toBeFocused();
@@ -101,6 +112,13 @@ test('toolbar static labels reject browser selection while controls keep editing
   });
   expect(after.input.mode).toBe('pen');
   expect(after.document.objects).toHaveLength(1);
+  await openToolbarZoom(page);
+  const zoom = page.getByLabel('缩放', { exact: true });
+  await expectUserSelect(zoom, 'text');
+  await zoom.selectText();
+  await page.keyboard.type('125');
+  expect((await layeredState(page)).viewport.viewport.scale).toBe(1.25);
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '矩形', exact: true }).focus();
   await page.keyboard.press('Enter');
   expect((await layeredState(page)).tools.activeTool).toBe('rect');
@@ -255,7 +273,7 @@ test('native selection stays outside non-editing paper and inside editing contro
 
 test('native double click still completes a polygon as one transaction', async ({ page }) => {
   await openLayeredEditor(page);
-  await page.getByRole('button', { name: '多边形', exact: true }).click();
+  await selectToolbarTool(page, '多边形');
   const box = (await page.getByTestId('layered-surface').boundingBox())!;
   await page.mouse.click(box.x + 100, box.y + 100);
   await page.mouse.click(box.x + 220, box.y + 100);
@@ -375,7 +393,7 @@ test('composition commit and cancel preserve editing and return to protected dra
   await expect(input).toHaveCount(0);
   expect((await layeredState(page)).document).toEqual(committed.document);
   expect((await layeredState(page)).history).toEqual(committed.history);
-  await page.getByRole('button', { name: '自由笔', exact: true }).click();
+  await selectToolbarTool(page, '自由笔');
   await pointer(page, 'down', { x: 110, y: 110 });
   await pointer(page, 'move', { x: 220, y: 110 });
   await pointer(page, 'up', { x: 240, y: 110 });
@@ -403,7 +421,7 @@ test('crossing into the toolbar and interrupted pen sessions leave the first com
   await button.click();
   expect((await layeredState(page)).tools.activeTool).toBe('rect');
   for (const interruption of ['cancel', 'blur', 'lostpointercapture'] as const) {
-    await page.getByRole('button', { name: '自由笔', exact: true }).click();
+    await selectToolbarTool(page, '自由笔');
     await pointer(page, 'down', { x: 80, y: 8 });
     if (interruption === 'cancel') await pointer(page, 'cancel', { x: 80, y: 8 });
     else if (interruption === 'blur')

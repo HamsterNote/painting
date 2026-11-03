@@ -1,3 +1,4 @@
+import { setToolbarInputMode } from './layered-helpers';
 import { expect, test } from '@playwright/test';
 import {
   dispatchLayeredPointer as pointer,
@@ -31,7 +32,7 @@ test('forced finger commits normally, then cancels partial ink before second-fin
   page,
 }) => {
   await openLayeredEditor(page);
-  await page.getByLabel('输入模式').selectOption('finger');
+  await setToolbarInputMode(page, 'finger');
   await pointer(page, 'down', { x: 100, y: 80 }, { source: 'touch', id: 1 });
   await pointer(page, 'move', { x: 180, y: 80 }, { source: 'touch', id: 1 });
   await pointer(page, 'up', { x: 220, y: 80 }, { source: 'touch', id: 1 });
@@ -58,7 +59,7 @@ test('touch cancellation and page blur recover input without committing partial 
   page,
 }) => {
   await openLayeredEditor(page);
-  await page.getByLabel('输入模式').selectOption('finger');
+  await setToolbarInputMode(page, 'finger');
   await pointer(page, 'down', { x: 100, y: 100 }, { source: 'touch' });
   await pointer(page, 'move', { x: 200, y: 100 }, { source: 'touch' });
   await pointer(page, 'cancel', { x: 200, y: 100 }, { source: 'touch' });

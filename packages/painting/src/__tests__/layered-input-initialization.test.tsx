@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { renderToString } from 'react-dom/server.node';
 import { createEditor } from '../layered/createEditor';
 import { LayeredPaintingBoard } from '../layered/PaintingBoard';
@@ -22,6 +22,10 @@ test.each([
   const policy = touch ? ({ mouse: 'draw', pen: 'draw', touch } as const) : undefined;
   const { rerender } = render(<LayeredPaintingBoard controller={editor} inputPolicy={policy} />);
   expect(screen.getByRole('toolbar').getAttribute('data-input-mode')).toBe(expected);
+  fireEvent.click(screen.getByRole('button', { name: '绘图菜单' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: '设置' }));
+  expect(screen.getByLabelText('输入模式')).toHaveProperty('value', expected);
+  fireEvent.keyDown(document, { key: 'Escape' });
   expect(screen.getByTestId('layered-surface').getAttribute('data-input-mode')).toBe(expected);
   expect(screen.getByTestId('layered-surface').getAttribute('data-input-ready')).toBe('true');
   act(() => {

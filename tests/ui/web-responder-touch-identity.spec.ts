@@ -1,3 +1,4 @@
+import { setToolbarInputMode, selectToolbarTool } from './layered-helpers';
 import { devices, expect, test, type Page } from '@playwright/test';
 import { layeredState } from './layered-helpers';
 
@@ -72,7 +73,7 @@ async function open(page: Page, diagnostics: boolean, mode: string, query = '') 
   await page.goto(`/layered-editor${diagnostics ? '?diagnostics=1&traceGestures=1' : '?'}${query}`);
   const surface = page.getByTestId('layered-surface');
   await expect(surface).toHaveAttribute('data-input-arbiter', 'ready');
-  await page.getByLabel('输入模式').selectOption(mode);
+  await setToolbarInputMode(page, mode);
   const box = (await surface.boundingBox())!;
   const cdp = await page.context().newCDPSession(page);
   let activePoints: Contact[] = [];
@@ -209,7 +210,7 @@ for (const mode of ['auto', 'finger']) {
   for (const tool of ['矩形', '套索', '橡皮擦', '选择', '贝塞尔', '多边形']) {
     test(`identity preview: ${mode} ${tool} cancels without history`, async ({ page }) => {
       const { send } = await open(page, true, mode, '&fixture=mixed');
-      await page.getByRole('button', { name: tool, exact: true }).click();
+      await selectToolbarTool(page, tool);
       const before = await layeredState(page);
       const a = { id: -1, x: 100, y: 160 };
       const b = { id: -2, x: 320, y: 200 };

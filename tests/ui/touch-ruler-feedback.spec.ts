@@ -1,3 +1,4 @@
+import { openToolbarSettings } from './layered-helpers';
 import { expect, test } from '@playwright/test';
 import {
   dispatchLayeredPointer as pointer,
@@ -9,6 +10,7 @@ test('touch ruler feedback projects live midpoint onto ruler and leaves paper hi
   page,
 }) => {
   await openLayeredEditor(page);
+  await openToolbarSettings(page);
   await page.getByLabel('尺子', { exact: true }).check();
   const initial = await layeredState(page);
   const center = initial.navigation.ruler.center;

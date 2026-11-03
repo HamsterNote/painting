@@ -52,3 +52,35 @@ export async function drawLayeredStroke(page: Page, y = 120) {
   await dispatchLayeredPointer(page, 'move', { x: 180, y });
   await dispatchLayeredPointer(page, 'up', { x: 220, y }, { pressure: 0 });
 }
+
+export async function openToolbarSettings(page: Page) {
+  if (await page.getByRole('dialog', { name: '绘图设置' }).isVisible()) return;
+  const menu = page.getByRole('button', { name: '绘图菜单', exact: true });
+  await menu.scrollIntoViewIfNeeded();
+  if (!(await page.getByRole('menuitem', { name: '设置', exact: true }).isVisible()))
+    await menu.click();
+  await page.getByRole('menuitem', { name: '设置', exact: true }).click();
+}
+
+export async function selectToolbarTool(page: Page, label: string) {
+  if (label === '文字') {
+    await page.getByRole('button', { name: label, exact: true }).click();
+    return;
+  }
+  const drawing = ['自由笔', '选择', '套索', '橡皮擦', '平移'].includes(label);
+  const trigger = page.getByRole('button', { name: drawing ? '绘图菜单' : '形状和对象菜单' });
+  await trigger.scrollIntoViewIfNeeded();
+  await trigger.click();
+  await page.getByRole('menuitemradio', { name: label, exact: true }).click();
+}
+
+export async function setToolbarInputMode(page: Page, mode: string) {
+  await openToolbarSettings(page);
+  await page.getByLabel('输入模式', { exact: true }).selectOption(mode);
+  await page.keyboard.press('Escape');
+}
+
+export async function openToolbarZoom(page: Page) {
+  if (await page.getByRole('dialog', { name: '缩放设置' }).isVisible()) return;
+  await page.getByRole('button', { name: '缩放比例' }).click();
+}

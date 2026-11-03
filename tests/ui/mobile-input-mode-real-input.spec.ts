@@ -1,3 +1,4 @@
+import { openToolbarSettings, setToolbarInputMode } from './layered-helpers';
 import { devices, expect, test } from '@playwright/test';
 import { layeredState, openLayeredEditor } from './layered-helpers';
 import type { Locator } from '@playwright/test';
@@ -68,21 +69,27 @@ for (const source of ['pen', 'touch'] as const) {
     expect((await layeredState(page)).document.objects).toHaveLength(2);
     await tap(page.getByRole('button', { name: '矩形', exact: true }));
     expect((await layeredState(page)).tools.activeTool).toBe('rect');
-    await tap(page.getByRole('button', { name: '自由笔', exact: true }));
+    await tap(page.getByRole('button', { name: '绘图（自由笔）', exact: true }));
+    await tap(page.getByRole('button', { name: '绘图菜单' }));
+    await tap(page.getByRole('menuitem', { name: '设置' }));
+    await openToolbarSettings(page);
     const width = page.getByLabel('笔宽', { exact: true });
     await tap(width);
     await expect(width).toBeFocused();
     await width.press('ControlOrMeta+A');
     await width.press('1');
     await width.press('6');
+    await openToolbarSettings(page);
     const opacity = page.getByLabel('不透明度');
     await tap(opacity, 0.75);
     if (source === 'pen') await expect(opacity).toBeFocused();
+    await openToolbarSettings(page);
     const pressure = page.getByLabel('压力模式');
     await tap(pressure);
     await page.keyboard.press('Escape');
     await expect(pressure).toBeFocused();
     await pressure.selectOption('constant');
+    await openToolbarSettings(page);
     const mode = page.getByLabel('输入模式');
     await tap(mode);
     await page.keyboard.press('Escape');
@@ -110,7 +117,7 @@ for (const mode of ['auto', 'finger', 'pen']) {
     await expect(surface).toHaveAttribute('data-input-ready', 'true');
     await expect(surface).toHaveAttribute('data-input-arbiter', 'ready');
     await expect(surface).toHaveCSS('pointer-events', 'auto');
-    await page.getByLabel('输入模式').selectOption(mode);
+    await setToolbarInputMode(page, mode);
     const box = (await surface.boundingBox())!;
     const cdp = await page.context().newCDPSession(page);
     const touchStroke = async (id: number) => {

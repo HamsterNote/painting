@@ -1,6 +1,7 @@
 export { createEditor } from './createEditor';
 export type { LayeredInputMode, LayeredInputSnapshot } from '../core/layeredInputMode';
 export { Toolbar } from './Toolbar';
+export type { ToolbarProps } from './Toolbar';
 export { LayeredPaintingBoard } from './PaintingBoard';
 export type { LayeredPaintingBoardProps } from './PaintingBoard';
 export { LayeredDrawingSurface } from './DrawingSurface';
