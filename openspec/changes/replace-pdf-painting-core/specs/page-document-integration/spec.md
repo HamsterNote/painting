@@ -38,6 +38,11 @@ painting SHALL 提供页面几何 API 与页面绘图表面，页面坐标长期
 - **WHEN** 页面以 `enabled=false` 首次挂载、重新挂载或接收 controller 文档更新
 - **THEN** 展示完整的已保存对象，输入监听保持禁用、事件可穿透到底层页面；切换 enabled 不销毁展示订阅，禁用仍取消未完成输入
 
+#### Scenario: Disabled text drafts cannot commit
+
+- **WHEN** 文字编辑中禁用输入、页面几何失效、替换 controller 或重挂载表面
+- **THEN** 取消并卸载编辑会话，不写入草稿，不拦截底层事件；迟到键盘、按钮或 IME 提交不能修改文档，重新启用后可开始全新编辑
+
 ### Requirement: Additive public release
 
 painting SHALL 保持既有 controller/board/read API，通过 minor 正式版本导出新增能力；库不得读写 v4 blob 或提供降级投影。新增形状样式 SHALL 在 reader、controller、几何与显示路径一致保留。

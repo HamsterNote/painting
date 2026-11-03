@@ -1,10 +1,46 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { LayeredEditorController } from '../core/layeredEditorController';
 import { beginLayeredTextEditSession } from '../core/layeredTextEditSession';
 import { prepareLayeredObjectQuery, queryObjectPoint } from '../core/layeredObjectQuery';
 import { FreehandGeometryCache } from '../geometry/freehandCache';
 import { IDENTITY_TRANSFORM, type Point, type TextObject } from '../model/document';
 import { useEditorSnapshot } from './useEditorSnapshot';
+
+function createEditing(
+  controller: LayeredEditorController,
+  point: Point,
+  allocateId: () => string
+) {
+  const document = controller.getSnapshot('document');
+  const prepared = prepareLayeredObjectQuery(document, new FreehandGeometryCache());
+  const hits = prepared.ok ? queryObjectPoint(prepared.value, point, 0) : undefined;
+  const id = hits?.ok ? hits.value[hits.value.length - 1]?.objectId : undefined;
+  const object = document.objects.find(
+    (entry): entry is TextObject => entry.objectId === id && entry.kind === 'text'
+  );
+  const result = beginLayeredTextEditSession(
+    object
+      ? {
+          kind: 'existing',
+          expectedDocumentRevision: document.documentRevision,
+          objectId: object.objectId,
+          expectedObjectRevision: object.objectRevision,
+        }
+      : {
+          kind: 'new',
+          expectedDocumentRevision: document.documentRevision,
+          transform: IDENTITY_TRANSFORM,
+        },
+    object ?? {
+      content: '',
+      fontSize: 24,
+      color: '#20262d',
+      localBounds: { minX: point.x, minY: point.y, maxX: point.x + 240, maxY: point.y + 120 },
+    }
+  );
+  if (!result.ok) throw new Error(result.error.code);
+  return { session: result.value, object, newId: allocateId() };
+}
 
 export function TextEditor({
   controller,
@@ -17,45 +53,24 @@ export function TextEditor({
   allocateId: () => string;
   close: () => void;
 }) {
-  const [editing] = useState(() => {
-    const document = controller.getSnapshot('document');
-    const prepared = prepareLayeredObjectQuery(document, new FreehandGeometryCache());
-    const hits = prepared.ok ? queryObjectPoint(prepared.value, point, 0) : undefined;
-    const id = hits?.ok ? hits.value[hits.value.length - 1]?.objectId : undefined;
-    const object = document.objects.find(
-      (entry): entry is TextObject => entry.objectId === id && entry.kind === 'text'
-    );
-    const result = beginLayeredTextEditSession(
-      object
-        ? {
-            kind: 'existing',
-            expectedDocumentRevision: document.documentRevision,
-            objectId: object.objectId,
-            expectedObjectRevision: object.objectRevision,
-          }
-        : {
-            kind: 'new',
-            expectedDocumentRevision: document.documentRevision,
-            transform: IDENTITY_TRANSFORM,
-          },
-      object ?? {
-        content: '',
-        fontSize: 24,
-        color: '#20262d',
-        localBounds: { minX: point.x, minY: point.y, maxX: point.x + 240, maxY: point.y + 120 },
-      }
-    );
-    if (!result.ok) throw new Error(result.error.code);
-    return { session: result.value, object, newId: allocateId() };
-  });
+  const [editing, setEditing] = useState<ReturnType<typeof createEditing>>();
+  const currentEditing = useRef<ReturnType<typeof createEditing> | undefined>(undefined);
+  useLayoutEffect(() => {
+    // A setup owns one session, including StrictMode's setup/cleanup replay.
+    const next = createEditing(controller, point, allocateId);
+    currentEditing.current = next;
+    setEditing(next);
+    return () => {
+      currentEditing.current = undefined;
+      next.session.cancel();
+    };
+  }, [controller, point, allocateId]);
   const [, refresh] = useState(0);
   const [error, setError] = useState('');
   const input = useRef<HTMLTextAreaElement>(null);
   const { viewport } = useEditorSnapshot(controller, 'viewport');
-  const { draft } = editing.session.getSnapshot();
-  const transform = editing.object?.transform ?? IDENTITY_TRANSFORM;
-  const bounds = draft.localBounds;
   useEffect(() => {
+    if (!editing) return;
     input.current?.focus();
     const unsubscribe = controller.subscribe('tools', () => {
       editing.session.cancel();
@@ -63,10 +78,15 @@ export function TextEditor({
     });
     return () => {
       unsubscribe();
-      editing.session.cancel();
     };
   }, [controller, editing, close]);
+  if (!editing) return null;
+  const { draft } = editing.session.getSnapshot();
+  const transform = editing.object?.transform ?? IDENTITY_TRANSFORM;
+  const bounds = draft.localBounds;
   function persist() {
+    // Late keyboard/button/IME callbacks cannot write through a replaced or unmounted editor.
+    if (!editing || currentEditing.current !== editing) return;
     const candidate = editing.session.getCandidate();
     if (!candidate.ok) return;
     const { value } = candidate;
@@ -116,6 +136,7 @@ export function TextEditor({
     close();
   }
   function finish() {
+    if (!editing || currentEditing.current !== editing) return;
     editing.session.requestCommit();
     persist();
   }

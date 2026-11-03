@@ -3,6 +3,85 @@ import { test, expect } from '@playwright/test';
 for (const dpr of [1, 2, 3]) {
   test.describe(`page coordinate contract at DPR ${dpr}`, () => {
     test.use({ deviceScaleFactor: dpr });
+    test('disabled text drafts cannot commit or intercept the page; new edits work after enabling', async ({
+      page,
+    }) => {
+      for (const submit of ['keyboard', 'button', 'composition']) {
+        await page.goto('/?fixture=pages');
+        await expect(page.getByTestId('layered-surface')).toHaveAttribute(
+          'data-input-arbiter',
+          'ready'
+        );
+        await page.evaluate(() => window.__pageEditors![0]!.setTool('text'));
+        const box = await page.getByTestId('pdf-page').boundingBox();
+        if (!box) throw new Error('Missing page');
+        await page.mouse.click(box.x + 40, box.y + 50);
+        const input = page.getByLabel('文字内容');
+        await expect(input).toBeFocused();
+        const oldInput = await input.elementHandle();
+        const oldDone = await page
+          .getByRole('button', { name: '完成', exact: true })
+          .elementHandle();
+        if (!oldInput || !oldDone) throw new Error('Missing editor');
+        if (submit === 'composition') await input.dispatchEvent('compositionstart');
+        await input.fill('discard this draft');
+        if (submit === 'composition')
+          await page.getByRole('button', { name: '完成', exact: true }).click();
+        await page.getByRole('button', { name: 'Disable input' }).click();
+        if (submit === 'keyboard') {
+          await page.keyboard.press('Control+Enter');
+          await oldInput.evaluate((node) =>
+            node.dispatchEvent(
+              new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true })
+            )
+          );
+        } else if (submit === 'button') await oldDone.evaluate((node) => node.click());
+        else
+          await oldInput.evaluate((node) =>
+            node.dispatchEvent(
+              new CompositionEvent('compositionend', { data: '未完成', bubbles: true })
+            )
+          );
+        await expect(input).toHaveCount(0);
+        await expect(page.locator('foreignObject')).toHaveCount(0);
+        expect(
+          await page.evaluate(() => window.__pageEditors![0]!.getSnapshot('document').objects)
+        ).toEqual([]);
+        await page.getByTestId('pdf-page').evaluate((node) => {
+          node.addEventListener(
+            'click',
+            () => {
+              (node as HTMLElement).dataset.clicked = 'yes';
+            },
+            { once: true }
+          );
+        });
+        const point = { x: box.x + 80, y: box.y + 90 };
+        expect(
+          await page.evaluate(
+            ({ x, y }) =>
+              Boolean(
+                document.elementFromPoint(x, y)?.closest('[data-testid="page-drawing-surface"]')
+              ),
+            point
+          )
+        ).toBe(false);
+        await page.mouse.click(point.x, point.y);
+        await expect(page.getByTestId('pdf-page')).toHaveAttribute('data-clicked', 'yes');
+        await page.getByRole('button', { name: 'Enable input' }).click();
+        await expect(input).toHaveCount(0);
+        await page.mouse.click(box.x + 40, box.y + 50);
+        await expect(input).toHaveValue('');
+        await input.fill('fresh text');
+        await page.getByRole('button', { name: '完成', exact: true }).click();
+        const objects = await page.evaluate(
+          () => window.__pageEditors![0]!.getSnapshot('document').objects
+        );
+        expect(objects).toHaveLength(1);
+        expect(objects[0]).toMatchObject({ kind: 'text', content: 'fresh text' });
+      }
+    });
+
     test('read-only pages show the complete archive on first mount and remount and pass events through', async ({
       page,
     }) => {

@@ -126,9 +126,15 @@ export function LayeredDrawingSurface({
       : undefined;
   const inputEnabled = enabled && inputReady && (!pageMode || Boolean(pageSpace));
   const [failure, setFailure] = useState<{ commitId: string; message: string }>();
-  const [textPoint, setTextPoint] = useState<Point>();
+  const [textRequest, setTextRequest] = useState<{
+    controller: LayeredEditorController;
+    point: Point;
+  }>();
   const [toolError, setToolError] = useState('');
-  const closeText = useCallback(() => setTextPoint(undefined), []);
+  const closeText = useCallback(() => setTextRequest(undefined), []);
+  useLayoutEffect(() => {
+    if (textRequest && (!inputEnabled || textRequest.controller !== controller)) closeText();
+  }, [controller, inputEnabled, textRequest, closeText]);
   const allocateId = useCallback(() => `object-${Date.now()}-${++nextSurface}`, []);
   const imageImport = useImageImport(controller, allocateId);
   const openImage = imageImport.openAt;
@@ -200,7 +206,7 @@ export function LayeredDrawingSurface({
       canNavigate,
       allocateId,
       beforeGesture: () => queue.confirmMounted(),
-      onText: setTextPoint,
+      onText: (point) => setTextRequest({ controller, point }),
       onImage: openImage,
       onError: (error) => setToolError(String(error)),
       onTrace: onGestureTrace,
@@ -308,10 +314,10 @@ export function LayeredDrawingSurface({
           {inputEnabled && !pageMode ? <NavigationOverlay controller={controller} /> : null}
         </>
       ) : null}
-      {textPoint ? (
+      {inputEnabled && textRequest?.controller === controller ? (
         <TextEditor
           controller={controller}
-          point={textPoint}
+          point={textRequest.point}
           allocateId={allocateId}
           close={closeText}
         />
