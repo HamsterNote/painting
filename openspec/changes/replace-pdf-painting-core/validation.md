@@ -19,4 +19,10 @@ The fixture simulates PDF page geometry. Real pdf.js integration, reader save/ac
 
 ## Release verification
 
-Planned lockstep public release: `@hamster-note/painting@0.8.0` and `@hamster-note/painting-board@0.8.0`. Task 3.2 stays open until both are publicly downloadable and consumed by a fresh registry-only project. Local build and dry-run packaging alone do not prove publication.
+Lockstep public release: `@hamster-note/painting@0.8.0` and `@hamster-note/painting-board@0.8.0`.
+
+- PR: https://github.com/HamsterNote/painting/pull/40
+- Release source: `v0.8.0` → `3ed1d04d6227d23ea2399b95889b32f8c144a62f`
+- Publish workflow triggered: https://github.com/HamsterNote/painting/actions/runs/41580309081
+
+Task 3.2 stays open until both are publicly downloadable and consumed by a fresh registry-only project. Local build, dry-run packaging and a pushed tag alone do not prove publication.
