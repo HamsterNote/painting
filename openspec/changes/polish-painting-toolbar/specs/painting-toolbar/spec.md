@@ -1,0 +1,110 @@
+# Spec Delta
+
+## Purpose
+
+为 painting 的绘图工具栏定义面向用户的分组、视觉状态、工具可达性与交互边界，使参考图中的底部悬浮胶囊在浏览器和 Expo DOM 承载场景下具有一致、可验收的操作体验，并保留既有绘图、导航和撤销行为。
+
+## ADDED Requirements
+
+### Requirement: Floating toolbar has ordered groups and clear states
+
+画板默认工具栏 SHALL 在所属画板底部居中悬浮，依次显示撤销/重做、缩放比例、OCR、收起/固定、文字、矩形、绘图、六色调色板；次级工具激活时矩形或绘图入口 SHALL 显示其当前名称并标记所属组。工具栏 SHALL 使用浅灰底、圆角胶囊、分组细竖线与紫底白字选中态，普通、悬停、按下、禁用、焦点和选中态 SHALL 可区分。默认激活工具与颜色 SHALL 来自当前编辑器状态，不为匹配示意图强制切换。
+
+#### Scenario: Wide board presents the reference structure
+
+- **WHEN** 以1280或1440 CSS px宽度打开画板，工具栏展开
+- **THEN** 全部分组按上述顺序呈现为单行，胶囊高60px、外圆角30px、底边距16px加底部安全区，背景为#F5F6F8，边框为#E2E5EA，主操作间距4px，组边缘至1px宽分隔线间距8px
+
+#### Scenario: Selecting text distinguishes selection from focus
+
+- **WHEN** 用户激活文字，再通过键盘移动焦点到另一个控件
+- **THEN** 文字保持#7163D9底和#FFFFFF图文，其他主操作不选中；新焦点有独立2px紫色焦点环，既有历史禁用状态仍正确
+
+### Requirement: All existing tools and settings remain reachable
+
+工具栏 SHALL 保留自由笔、直线、矩形、椭圆、多边形、贝塞尔、文字、图片、选择、套索、橡皮擦、平移十二种工具及原有语义。首层 SHALL 提供文字、矩形、绘图主按钮；矩形的独立菜单入口 SHALL 提供五种线/形状及图片，绘图的独立菜单入口 SHALL 提供自由笔、选择、套索、橡皮擦、平移和始终可达的设置入口。设置 SHALL 包含原三档输入模式、尺子、虚拟纸张、小地图及适用工具的自定义颜色、笔宽、不透明度、压力或线型；不得用菜单化删除既有能力。
+
+#### Scenario: Secondary tools can be selected without changing their semantics
+
+- **WHEN** 用户从矩形菜单激活椭圆，随后从绘图菜单激活套索，再从主按钮进入文字
+- **THEN** 当前工具依次为椭圆、套索、文字，对应入口显示当前工具并高亮，已有对象与历史不因入口变化而改变
+
+#### Scenario: Settings remain available outside freehand
+
+- **WHEN** 用户处于文字、平移或选择工具，打开绘图菜单内设置并切换输入模式、尺子、纸张或小地图
+- **THEN** 三档输入模式原名称/选项及导航开关仍可用，不强制切换所选工具；仅更新相应输入或导航状态，不新增文档撤销事务
+
+#### Scenario: Tool families retain independent settings
+
+- **WHEN** 用户设置形状虚线后切自由笔，在设置面板修改笔宽、不透明度、压力和自定义颜色，再切回形状
+- **THEN** 自由笔没有线型控件，形状虚线与原形状参数保留；自由笔配置独立保存，任意有效自定义颜色不被六色预设限制
+
+### Requirement: History and zoom use authoritative editor state
+
+撤销/重做 SHALL 根据已有历史可用性禁用或启用，并保持一次既有事务的撤销语义。缩放入口 SHALL 显示当前权威比例，打开后保留25–800%的数值输入及25%的步长。无效值 SHALL 不提交；状态过期或书写冻结导致拒绝时 SHALL 恢复当前有效比例，不绕过输入会话或建立独立视口。
+
+#### Scenario: External zoom and undo are reflected
+
+- **WHEN** 已提交一笔后用户撤销并重做，之后画布通过合法导航变成125%
+- **THEN** 同一笔仅被移除/恢复一次，按钮可用性与历史一致，比例显示125%，工具栏没有自己的独立缩放状态
+
+#### Scenario: Invalid or rejected zoom cannot move ink
+
+- **WHEN** 用户清空数值、输入0或801，或在书写冻结期间尝试改变比例
+- **THEN** 不应用非法或被拒绝的缩放，控件恢复当前有效比例，文档与当前笔位置不变，不在笔结束后补执行
+
+### Requirement: Palette updates only supported drawing styles
+
+调色板 SHALL 按蓝#7FA3C3、绿#8FBA8D、黄#D5B984、粉#CD9BAA、紫#AB9CC2、黑#2D2D2D顺序显示六点。每点 SHALL 有24px色面和最小44×44px命中区域，选中项 SHALL 同时有紫色环和勾号及可访问选中状态。自由笔或线/形状下选色 SHALL 只更新当前工具族后续绘制设置，不重涂已有对象；其他工具下 SHALL 禁用并说明用途。非预设当前色 SHALL 不伪造某预设选中。
+
+#### Scenario: Freehand and shape colors remain independent
+
+- **WHEN** 用户在自由笔下选蓝，切矩形选黑，再回自由笔
+- **THEN** 自由笔为蓝、形状为黑，调色板正确反映当前工具族，已有对象颜色和历史不变
+
+#### Scenario: Text and custom colors are represented honestly
+
+- **WHEN** 用户进入文字工具，之后回到已设置非预设自定义颜色的自由笔
+- **THEN** 文字模式六点禁用且说明用于绘图或形状；自由笔模式六点均未选中，自定义色仍保留并可在设置编辑
+
+### Requirement: Display controls and unavailable OCR are explicit
+
+工具栏 SHALL 默认展开且未固定。收起 SHALL 仅保留可访问的展开按钮；展开 SHALL 保留当前工具和参数。固定 SHALL 强制保持展开并禁用收起，解除固定后 SHALL 可主动收起；没有自动隐藏。展示状态 SHALL 仅属于本次挂载，不写文档、撤销或输入偏好。OCR SHALL 显示禁用入口及可访问说明「OCR 暂未接入」，不发起识别请求或产生假结果。
+
+#### Scenario: Collapse and pin are reversible presentation changes
+
+- **WHEN** 用户固定、解除固定、收起并重新展开工具栏
+- **THEN** 固定期间收起不可用，收起后可通过44×44px展开按钮恢复，展开后焦点回收起按钮，工具/设置/文档/历史不变
+
+#### Scenario: Missing OCR is not an active command
+
+- **WHEN** 用户查看或尝试触发OCR入口
+- **THEN** 入口明确禁用且原因可被辅助技术读取，不发送识别请求、不改文档
+
+### Requirement: Narrow layouts and keyboard operation preserve access
+
+工具栏 SHALL 限于所属画板宽度、左右至少留16px，内容超宽时内部单行横向滚动，分组不拆分且触控目标不小于44×44px，不使画板或宿主页面横向溢出。键盘聚焦 SHALL 将目标滚入可见区域。菜单与设置面板 SHALL 在可见区域内可操作，支持键盘选项导航、Escape关闭并返回触发器，以及可访问名称/展开状态。
+
+#### Scenario: Small board retains every control
+
+- **WHEN** 在320/390/768/1024px宽度或浏览器200%缩放下展开工具栏并按Tab遍历
+- **THEN** 内容超宽时可在胶囊内部滚到所有分组，焦点目标可见；组顺序和按钮尺寸不变，宿主无新增横向溢出，弹层不被裁成不可操作
+
+### Requirement: Toolbar keeps host and input boundaries
+
+工具栏 SHALL 同时支持浏览器与 Expo DOM/WebView 宿主；不宣称其DOM实现可直接作为原生RN控件。现有隐藏工具栏参数和独立使用入口 SHALL 保持可用。覆盖层空白区域 SHALL 允许画布正常输入，真实控件与弹层 SHALL 保持安全交互边界。静态标签 SHALL 禁选，数值/文本输入 SHALL 保留原生编辑。工具栏 SHALL 延续原有首次输入偏好恢复与画布手势跨界防误触契约，且不得因显示状态改变重置视口或文档。
+
+#### Scenario: Floating controls do not steal canvas input
+
+- **WHEN** 笔从画布空白区域落下、经过悬浮工具栏并结束，之后用户主动点击工具按钮
+- **THEN** 空白覆盖区域不阻断起笔，跨界不误执行命令或选择标签，笔按既有会话契约结束且不重复提交，后续主动首击立即有效
+
+#### Scenario: Embedded board and standalone usage remain usable
+
+- **WHEN** 在Web或Expo DOM中分别打开两个画板、隐藏其中一个工具栏，或独立使用工具栏
+- **THEN** 浮动工具栏仅定位于各自画板，隐藏参数有效，独立入口仍可操作；输入模式按原初始化约束就绪，不影响另一个画板
+
+#### Scenario: Inputs remain editable after remount
+
+- **WHEN** 用户在面板中选择替换笔宽/缩放数字，关闭或卸载后重新挂载并操作
+- **THEN** 原生选择、焦点与编辑可用，静态标签仍禁选，不残留交互锁或吞掉首击
