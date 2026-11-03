@@ -77,5 +77,15 @@ Review found that an active text editor survived disabling input: Ctrl+Enter cou
 - Targeted component validation: 4 suites / 30 tests passed. Full Jest: **96 suites / 1289 tests passed**; responder: **9/9 passed**.
 - Chromium against built Expo Web: **9/9 passed** at DPR 1/2/3. Each DPR checks disabled keyboard/button/IME completion, removal of the editing area, actual clicks through to the underlying page, and a fresh edit after enabling. Existing read-only archive/remount and zoom/scroll/rotation alignment tests also pass.
 - Typecheck, lint (0 errors / 32 existing warnings), both package builds, Expo Web build, layered export verification, both package dry packs and OpenSpec strict validation passed.
-- painting and painting-board metadata, exact board dependency and lockfile are 0.8.3. Public package verification remains pending; previous release tags remain unchanged.
-- PR: https://github.com/HamsterNote/painting/pull/42. Release source `v0.8.3` → `2cce871fa21672af3558ac61e4f71cf62d5e33bd`; workflow: https://github.com/HamsterNote/painting/actions/runs/41591264040. The tag was pushed once; registry verification will use the independent consumer before task 5.2 is marked complete.
+- painting and painting-board metadata, exact board dependency and lockfile are 0.8.3. Public package verification below completes task 5.2; previous release tags remain unchanged.
+- PR: https://github.com/HamsterNote/painting/pull/42. Release source `v0.8.3` → `2cce871fa21672af3558ac61e4f71cf62d5e33bd`; workflow: https://github.com/HamsterNote/painting/actions/runs/41591264040. The immediate verification returned E404 at 06:40:38 UTC, before the packages became visible; no GitHub Release was created. The tag was pushed once and no package was republished.
+
+## 0.8.3 public package verification — 2026-11-03 06:44 UTC
+
+- Public `npm view` returned version/latest `0.8.3` for both packages. Board depends on exact painting `0.8.3`; registry `time.modified` is `2026-11-03T06:42:36.197Z` for painting and `2026-11-03T06:41:53.315Z` for board.
+- Both `npm pack` downloads and a fresh exact-version registry installation succeeded. SHA-512 checks match the downloaded tarballs and installed lockfile integrity; both installed packages resolve to registry.npmjs.org without git/file/link/workspace replacements.
+- Tarball comparison is byte-for-byte identical: painting's 206 source/configuration files match release commit `2cce871`, its 880 generated files match the local build from those unchanged sources, and board's 12 files match the release commit. The publish workflow's `headSha` is the same release commit.
+- All export targets and layered declarations exist. ESM/CJS core exports, three invalid-field migration regressions, source immutability, valid pen serialization and page geometry round-trip passed.
+- The independent consumer bundles the published root/layered/board entry points without local painting implementation. Chromium **9/9 tests passed** at DPR 1/2/3: disabled keyboard/button/IME submissions cannot save text drafts; the editing area is removed and actual clicks reach the underlying page; enabling permits a fresh successful edit. Read-only complete archive/remount and zoom/scroll/rotation positioning regressions also pass.
+
+Reader can pin exact `@hamster-note/painting@0.8.3` and run its assigned persistence regression. The scheduled verification wakeup was disabled because this run completed its work. Overall reader/host/device acceptance remains outside this package delivery.

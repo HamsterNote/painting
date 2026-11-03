@@ -19,4 +19,4 @@
 ## 5. Disabled text editing patch
 
 - [x] 5.1 禁用、无效页面几何、controller 替换或重挂载时取消文字草稿并卸载编辑器，提交检查会话有效性；完成组件、全量和 DPR 浏览器回归。
-- [ ] 5.2 发布 painting / painting-board 0.8.3，验证正式包下载、导出、文字取消与重新启用回归，保留已发布 tag。
+- [x] 5.2 发布 painting / painting-board 0.8.3，验证正式包下载、导出、文字取消与重新启用回归，保留已发布 tag。
