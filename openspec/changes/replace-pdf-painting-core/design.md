@@ -20,3 +20,5 @@ HAM-131 最新决策撤回 legacy 投影和双写。painting 0.7.0 只读 schema
 0.8.2 追加修复只读初始展示：PresentationCoordinator 随 controller/trace 生命周期创建与销毁，不依赖输入启用；输入 adapter 另行绑定该实例，enabled 变化只清理输入。禁用时历史 SVG 不参与命中测试，交互覆盖层不挂载，文档展示继续订阅。reader 当前正式依赖升级为 0.8.2，保留已发布的 0.8.0/0.8.1 tag。
 
 PR #40 已合并；0.8.2 修复从 main 新开 PR，推送新 tag v0.8.2 触发现有 trusted-publishing 流程。正式 npm 是否可用以 registry 查询、下载包及只读展示验证为准；发布失败不将计划版本宣称为已发布。
+
+0.8.3 单独修复文字编辑取消：文字请求绑定创建它的 controller，只有输入有效时才挂载编辑器，禁用或替换 controller 时清空请求，恢复输入不复活旧草稿。编辑器在 layout effect 中建立会话、同步清理并取消；StrictMode 的重放创建新会话。提交和 IME 持久化入口核对当前会话身份，卸载后的旧回调无法写文档。保留 0.8.2 及以前的 tag；使用正式 0.8.3 包复验后交付 reader。

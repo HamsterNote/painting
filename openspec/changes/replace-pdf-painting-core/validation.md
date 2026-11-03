@@ -68,3 +68,13 @@ Reader integration found that `enabled=false` on the first mount skipped the pre
 - Chromium consumer tests: **3/3 passed**, one each at DPR 1/2/3. Initial `enabled=false` displays saved freehand, shape, text and image objects; page/geometry remounts and enable/disable transitions preserve their display; hit testing passes through to the underlying page; document snapshots remain unchanged.
 
 Reader can pin exact `@hamster-note/painting@0.8.2` and continue its integration acceptance. Real pdf.js/host persistence and device WebView verification remain reader-side work.
+
+## 0.8.3 disabled text editing patch — 2026-11-03
+
+Review found that an active text editor survived disabling input: Ctrl+Enter could still create an object and the editor intercepted page events. Text requests now belong to a controller and render only while input is enabled. Disabling input or replacing the controller clears the request; invalid geometry and page/full remounts cancel the editor. The editor's layout effect owns its session, cancels it synchronously on cleanup and creates a new one during StrictMode replay. Both direct and IME persistence check current session identity before writing.
+
+- Seven added component cases cover disable, invalid geometry, page/geometry remount, controller replacement, full unmount, fresh edits after enabling and pending IME edits of saved text under StrictMode. Before the fix, three failed: disabled drafts committed, controller replacement retained the editor, and StrictMode could not commit fresh text. All seven now pass.
+- Targeted component validation: 4 suites / 30 tests passed. Full Jest: **96 suites / 1289 tests passed**; responder: **9/9 passed**.
+- Chromium against built Expo Web: **9/9 passed** at DPR 1/2/3. Each DPR checks disabled keyboard/button/IME completion, removal of the editing area, actual clicks through to the underlying page, and a fresh edit after enabling. Existing read-only archive/remount and zoom/scroll/rotation alignment tests also pass.
+- Typecheck, lint (0 errors / 32 existing warnings), both package builds, Expo Web build, layered export verification, both package dry packs and OpenSpec strict validation passed.
+- painting and painting-board metadata, exact board dependency and lockfile are 0.8.3. Public package verification remains pending; previous release tags remain unchanged.
