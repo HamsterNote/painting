@@ -227,7 +227,7 @@ importers:
   packages/painting-board:
     dependencies:
       '@hamster-note/painting':
-        specifier: 0.8.1
+        specifier: 0.8.2
         version: link:../painting
     devDependencies:
       '@testing-library/dom':

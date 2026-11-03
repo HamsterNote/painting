@@ -46,3 +46,25 @@ The first workflow finished with failure at the final public-registry verificati
 - Both ESM `import('@hamster-note/painting/core')` and CJS `require('@hamster-note/painting/core')` expose the expected functions. In each format, mixed pen inputs with `dashOffset: 'broken'`, `fillOpacity: 2` and `rotationRad: 'broken'` return the exact `invalid-document` field path without changing the source; valid pen migration/serialization and page geometry round-trip pass.
 
 The published P2 fix is verified. Reader integration should pin exact `@hamster-note/painting@0.8.1`; the overall HAM-131 reader/device acceptance remains outside this package delivery.
+
+## 0.8.2 read-only surface patch — 2026-11-03
+
+Reader integration found that `enabled=false` on the first mount skipped the presentation coordinator as well as input initialization. Presentation now follows its controller/trace lifetime independently. Disabling input cancels unfinished gestures and removes listeners, while saved content remains mounted and subscribed. Read-only SVG objects and interactive overlays cannot intercept underlying page events.
+
+- Two new component regressions failed before the fix (missing history layer). They now cover all saved object types from the real 0.4.0 fixture, StrictMode, geometry/page/full remounts, disabled document updates, controller replacement and enable/disable cycles with active-input cancellation.
+- Targeted surface tests: 3 suites / 34 tests passed. Full Jest: 95 suites / 1282 tests passed; responder: 9/9 passed.
+- Typecheck, lint (0 errors / 32 existing warnings), both package builds, Expo Web build and layered export verification passed.
+- Chromium against the built Expo Web app: 6/6 tests passed across DPR 1/2/3, covering read-only saved pen/shape/text/image display, remounts, event pass-through and unchanged document data, plus existing input/Canvas/SVG alignment across zoom, scrolling and rotation. A dedicated local static server was used; no existing service was reused.
+- Version metadata and board's exact dependency are 0.8.2; previous release tags remain unchanged.
+- PR: https://github.com/HamsterNote/painting/pull/41; release source `v0.8.2` → `368ec760d7b4a5b3771962e4f0463ddd99fa6163`.
+- Workflow https://github.com/HamsterNote/painting/actions/runs/41587615290 received HTTP 202 for both publishes and npm's processing notice. Its immediate registry check returned E404; independent queries at 06:06 UTC also returned E404. The packages subsequently became public, and the checks below complete task 4.2. No version was republished and no tag was moved; the initial workflow did not create a GitHub Release.
+
+## 0.8.2 public package verification — 2026-11-03 06:20 UTC
+
+- Public `npm view` returned version/latest `0.8.2` for painting and painting-board, with board depending on exact painting `0.8.2`.
+- Both exact-version `npm pack` downloads and a fresh registry-only consumer installation succeeded. Lockfile URLs point to registry.npmjs.org, with no git/file/link/workspace replacement; downloaded tarball SHA-512 values match the installed lockfile integrity.
+- All declared export targets and layered declarations exist. ESM/CJS core runtime checks passed, including the three 0.8.1 migration regressions, source immutability, valid pen serialization and page-coordinate round-trip.
+- An independent browser bundle imports the published root, layered and painting-board entries and asserts their public page/migration exports. It contains no local painting implementation.
+- Chromium consumer tests: **3/3 passed**, one each at DPR 1/2/3. Initial `enabled=false` displays saved freehand, shape, text and image objects; page/geometry remounts and enable/disable transitions preserve their display; hit testing passes through to the underlying page; document snapshots remain unchanged.
+
+Reader can pin exact `@hamster-note/painting@0.8.2` and continue its integration acceptance. Real pdf.js/host persistence and device WebView verification remain reader-side work.

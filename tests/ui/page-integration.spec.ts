@@ -3,6 +3,62 @@ import { test, expect } from '@playwright/test';
 for (const dpr of [1, 2, 3]) {
   test.describe(`page coordinate contract at DPR ${dpr}`, () => {
     test.use({ deviceScaleFactor: dpr });
+    test('read-only pages show the complete archive on first mount and remount and pass events through', async ({
+      page,
+    }) => {
+      await page.goto('/?fixture=pages&readonly=1');
+      const objects = page.getByTestId('layered-display').locator('[data-object-id]');
+      await expect(objects).toHaveCount(4);
+      const saved = await page.evaluate(() =>
+        window.__pageEditors!.map((editor) => editor.getSnapshot('document'))
+      );
+      const assertArchive = async () => {
+        await expect(objects).toHaveCount(4);
+        for (const id of ['saved-pen', 'saved-rect', 'saved-text', 'saved-image'])
+          await expect(page.locator(`[data-object-id="${id}"]`)).toBeVisible();
+        await expect(page.locator('[data-object-id="saved-text"]')).toHaveText('Saved note');
+        await expect(page.getByTestId('layered-surface')).not.toHaveAttribute(
+          'data-input-arbiter',
+          'ready'
+        );
+      };
+      await assertArchive();
+      const point = await page.locator('[data-object-id="saved-rect"] path').evaluate((node) => {
+        const p = new DOMPoint(130, 50).matrixTransform(
+          (node as SVGGraphicsElement).getScreenCTM()!
+        );
+        return {
+          x: p.x,
+          y: p.y,
+          intercepted: Boolean(
+            document.elementFromPoint(p.x, p.y)?.closest('[data-testid="page-drawing-surface"]')
+          ),
+        };
+      });
+      expect(point.intercepted).toBe(false);
+      await page.mouse.click(point.x, point.y);
+      await page.getByRole('button', { name: 'Switch page' }).click();
+      await assertArchive();
+      await page.getByRole('button', { name: 'Switch page' }).click();
+      await page.getByRole('button', { name: 'Zoom page' }).click();
+      await assertArchive();
+      await page.getByRole('button', { name: 'Rotate page' }).click();
+      await assertArchive();
+      await page.getByRole('button', { name: 'Enable input' }).click();
+      await expect(page.getByTestId('layered-surface')).toHaveAttribute(
+        'data-input-arbiter',
+        'ready'
+      );
+      await expect(objects).toHaveCount(4);
+      await page.getByRole('button', { name: 'Disable input' }).click();
+      await assertArchive();
+      expect(
+        await page.evaluate(() =>
+          window.__pageEditors!.map((editor) => editor.getSnapshot('document'))
+        )
+      ).toEqual(saved);
+    });
+
     test('page anchors align active Canvas and saved SVG across zoom, scrolling, rotation and pages', async ({
       page,
     }) => {
