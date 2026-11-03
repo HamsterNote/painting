@@ -17,7 +17,7 @@ Page tests cover scale 0.1–16, scroll during a stroke, crop/rotation matrices,
 
 The fixture simulates PDF page geometry. Real pdf.js integration, reader save/ack behavior and native pen/palm/WebView behavior still need reader/device acceptance; synthetic events do not establish those results. The complete pre-existing browser suite was not run.
 
-## Release verification
+## 0.8.0 release history
 
 Lockstep public release: `@hamster-note/painting@0.8.0` and `@hamster-note/painting-board@0.8.0`.
 
@@ -25,6 +25,14 @@ Lockstep public release: `@hamster-note/painting@0.8.0` and `@hamster-note/paint
 - Release source: `v0.8.0` → `3ed1d04d6227d23ea2399b95889b32f8c144a62f`
 - Publish workflow triggered: https://github.com/HamsterNote/painting/actions/runs/41580309081
 
-The first workflow finished with failure at the final public-registry verification: both trusted-publishing steps reported success (`+ @hamster-note/painting@0.8.0` and `+ @hamster-note/painting-board@0.8.0`), but the immediately following registry query returned E404. A fresh consumer install and a forced-online metadata query also could not resolve the version. This does not establish an authentication error or a completed public release; no GitHub Release was created. A persisted follow-up is scheduled to inspect registry availability and complete consumer verification before any retry of publishing.
+The first workflow finished with failure at the final public-registry verification: both trusted-publishing steps reported success (`+ @hamster-note/painting@0.8.0` and `+ @hamster-note/painting-board@0.8.0`), but the immediately following registry query returned E404. The registry subsequently exposed 0.8.0, as independently confirmed in the HAM-131 thread; this version and its tag remain unchanged. Review then found that ordinary pen migration bypassed common style validation, so reader integration now requires the 0.8.1 patch.
 
-Task 3.2 stays open until both are publicly downloadable and consumed by a fresh registry-only project. Local build, dry-run packaging and a pushed tag alone do not prove publication.
+## 0.8.1 patch validation — 2026-11-03
+
+- Common `rotationRad`, `fillColor`, `fillOpacity` and `dashOffset` checks run before tool dispatch. Invalid fields fail the whole mixed document with the original field path, without modifying input. Valid pen input retains its freehand result.
+- Added 14 tests: 12 invalid mixed-document cases across pen/text/image and 2 valid pen cases (absent or all-zero dash array). Before the fix, 10 of these failed; after the fix, both migration/page suites passed (46 tests).
+- Full Jest run: 93 suites / 1278 tests passed, 2 existing native UI tests exceeded the default 5-second timeout during concurrent builds. Isolated rerun of the 2 affected suites: 19/19 passed without code changes or an increased timeout. All 1280 tests are covered by the full run plus that rerun. Responder tests: 9/9 passed.
+- Typecheck, lint (0 errors, 32 existing warnings), both package builds, Expo Web build, layered delivery/export verification, both package dry-run packs and OpenSpec strict validation passed. Browser DPR tests were not rerun for this migration-only patch.
+- Release source: `v0.8.1` → `30e959300d67aaabe598379d541cf733b2290f3d`.
+- Workflow: https://github.com/HamsterNote/painting/actions/runs/41584520899.
+- Both publish steps received HTTP 202 and reported that npm was processing the packages; the immediate post-publish query returned E404. Public download and consumer checks are required before task 3.2 is marked complete.
