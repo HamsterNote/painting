@@ -14,6 +14,11 @@ painting SHALL 提供显式 API 将旧 DrawingValue / schema 1、2 文档转换�
 - **WHEN** 文档包含重复 ID、未知工具、未知 schema 或非有限坐标
 - **THEN** API 返回失败和原始位置，不返回部分文档
 
+#### Scenario: Tool dispatch cannot bypass common style validation
+
+- **WHEN** 正常笔迹与公共样式字段非法的 pen、text 或 image 混合输入，即使该工具不使用该字段
+- **THEN** API 整次失败并返回非法字段的原始路径，不修改源输入；合法普通 pen 仍迁移为 freehand
+
 ### Requirement: One page coordinate contract
 
 painting SHALL 提供页面几何 API 与页面绘图表面，页面坐标长期稳定，显示和输入共享正逆仿射；宿主只传页面几何和当前变换。页面表面 SHALL 透明，由宿主管理导航，页面/几何切换取消未完成事务。

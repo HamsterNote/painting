@@ -6,7 +6,7 @@ reader 升级绘图核心需要由 painting 集中承担旧文档迁移和 PDF �
 
 - 新增显式、可重复调用的旧 DrawingValue / schema 1、2 文档到 EditorDocument 的迁移 API；严格校验，不静默丢对象。
 - 新增页面几何与仿射换算 API，以及使用统一输入/显示变换的页面绘图表面。
-- 保持现有 0.7 API；按 lockstep 发布 painting / painting-board 0.8.0。
+- 保持现有 0.7 API；按 lockstep 发布 painting / painting-board 0.8.0，并以 0.8.1 修复旧文档公共样式校验缺口。
 
 ## Capabilities
 

@@ -95,6 +95,15 @@ export function migrateLegacyDocument(input: unknown): DocumentReadResult<Editor
           return value;
         });
       }
+      // Validate shared legacy fields before any tool-specific early return.
+      const rotation = number(stroke.rotationRad, `${path}.rotationRad`, 0);
+      const fill = string(stroke.fillColor, `${path}.fillColor`, 'none');
+      const fillOpacity = number(stroke.fillOpacity, `${path}.fillOpacity`, 1);
+      if (fillOpacity < 0 || fillOpacity > 1) fail(`${path}.fillOpacity`);
+      const dashOffset =
+        stroke.dashOffset === undefined
+          ? undefined
+          : number(stroke.dashOffset, `${path}.dashOffset`);
       const base = {
         objectId,
         objectRevision: 0,
@@ -139,7 +148,6 @@ export function migrateLegacyDocument(input: unknown): DocumentReadResult<Editor
         maxX: Math.max(first.x, last.x),
         maxY: Math.max(first.y, last.y),
       };
-      const rotation = number(stroke.rotationRad, `${path}.rotationRad`, 0);
       const rotated = ['rect', 'ellipse', 'text', 'image'].includes(String(stroke.tool));
       const cx = first.x / 2 + last.x / 2;
       const cy = first.y / 2 + last.y / 2;
@@ -189,19 +197,13 @@ export function migrateLegacyDocument(input: unknown): DocumentReadResult<Editor
       }
       if (shapeType === 'polygon' && points.length > 1 && first.x === last.x && first.y === last.y)
         shapePoints = points.slice(0, -1);
-      const fillOpacity = number(stroke.fillOpacity, `${path}.fillOpacity`, 1);
-      if (fillOpacity < 0 || fillOpacity > 1) fail(`${path}.fillOpacity`);
       const style: ShapeStyle = {
         color: width === 0 ? 'transparent' : color,
         width: width || 1,
         opacity: 1,
         ...(dash?.some((value) => value > 0) ? { dash } : {}),
-        ...(stroke.dashOffset === undefined
-          ? {}
-          : { dashOffset: number(stroke.dashOffset, `${path}.dashOffset`) }),
-        ...(['rect', 'ellipse', 'polygon'].includes(shapeType)
-          ? { fill: string(stroke.fillColor, `${path}.fillColor`, 'none'), fillOpacity }
-          : {}),
+        ...(dashOffset === undefined ? {} : { dashOffset }),
+        ...(['rect', 'ellipse', 'polygon'].includes(shapeType) ? { fill, fillOpacity } : {}),
       };
       // V2 ruler polylines and dashed pen have no schema3 freehand equivalent.
       // Convert once into ordinary editable shape primitives; no legacy renderer survives.

@@ -97,6 +97,50 @@ test.each([
   });
 });
 
+describe.each(['pen', 'text', 'image'])('%s common legacy styles', (tool) => {
+  test.each([
+    ['dashOffset', 'broken'],
+    ['fillOpacity', 2],
+    ['rotationRad', 'broken'],
+    ['fillColor', 123],
+  ])('rejects invalid %s in a mixed document without changing the source', (field, value) => {
+    const input = {
+      strokes: [
+        pen,
+        { ...pen, id: 'invalid', tool, text: 'saved text', src: 'image.png', [field]: value },
+      ],
+    };
+    const before = JSON.stringify(input);
+
+    expect(migrateLegacyDocument(input)).toEqual({
+      ok: false,
+      error: { code: 'invalid-document', path: `$.strokes[1].${field}` },
+    });
+    expect(JSON.stringify(input)).toBe(before);
+  });
+});
+
+test.each([undefined, [0, 0]])('accepts valid pen styles with dashArray %j', (dashArray) => {
+  const input = {
+    strokes: [
+      { ...pen, dashArray, dashOffset: -2, fillOpacity: 0.25, fillColor: 'none', rotationRad: 0 },
+    ],
+  };
+  const before = JSON.stringify(input);
+  const result = migrateLegacyDocument(input);
+
+  expect(result.ok).toBe(true);
+  if (!result.ok) throw new Error(result.error.path);
+  expect(result.value.objects).toHaveLength(1);
+  expect(result.value.objects[0]).toMatchObject({
+    objectId: pen.id,
+    kind: 'freehand',
+    brushSnapshot: { color: pen.strokeColor, nominalSize: pen.strokeWidth },
+    samples: points,
+  });
+  expect(JSON.stringify(input)).toBe(before);
+});
+
 test('empty legacy document migrates; normal reader still rejects legacy documents', () => {
   expect(migrateLegacyDocument({ strokes: [] })).toEqual({
     ok: true,
