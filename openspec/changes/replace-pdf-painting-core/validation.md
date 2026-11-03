@@ -25,4 +25,6 @@ Lockstep public release: `@hamster-note/painting@0.8.0` and `@hamster-note/paint
 - Release source: `v0.8.0` → `3ed1d04d6227d23ea2399b95889b32f8c144a62f`
 - Publish workflow triggered: https://github.com/HamsterNote/painting/actions/runs/41580309081
 
+The first workflow finished with failure at the final public-registry verification: both trusted-publishing steps reported success (`+ @hamster-note/painting@0.8.0` and `+ @hamster-note/painting-board@0.8.0`), but the immediately following registry query returned E404. A fresh consumer install and a forced-online metadata query also could not resolve the version. This does not establish an authentication error or a completed public release; no GitHub Release was created. A persisted follow-up is scheduled to inspect registry availability and complete consumer verification before any retry of publishing.
+
 Task 3.2 stays open until both are publicly downloadable and consumed by a fresh registry-only project. Local build, dry-run packaging and a pushed tag alone do not prove publication.
