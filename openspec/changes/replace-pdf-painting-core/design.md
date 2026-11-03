@@ -9,7 +9,7 @@ HAM-131 最新决策撤回 legacy 投影和双写。painting 0.7.0 只读 schema
 - 新增 `PageGeometry { width, height, pageToSurface: AffineTransform }`、`createPageCoordinateSpace`，返回 pageToSurface / surfaceToPage 和映射函数。width/height 是永久页面坐标尺寸；pageToSurface 是页面到叠加容器局部 CSS 像素的变换。宿主可通过 `createPageGeometry({width,height, viewportTransform, referenceTransform})` 直接传 pdf.js 当前和 scale-one 的六元组，库计算 current × inverse(reference)。
 - 新增 `PageDrawingSurface`，使用几何描述定位透明的页面表面；CSS 仿射负责所有呈现，库内同一逆矩阵负责 freehand/semantic/arbiter 输入。逐批读取容器 rect，因此滚动不引入陈旧偏移。页面表面保持 controller viewport 恒等，禁用库内导航（宿主 PDF viewer 是页面导航权威）；切换页面、矩阵、尺寸会重挂载输入资源并取消未完成笔，不跨页串笔。无页面 prop 的既有 DrawingSurface 行为不变。
 - 页面容器应覆盖 PDF 页内容区域（排除 border/padding），不得再次单独缩放 overlay；父容器的轴对齐 CSS 缩放由实测 rect/client 尺寸比补偿。旋转由 pageToSurface 表达。每页独立 controller，pageId/坐标基准不得随缩放改变。
-- painting / painting-board 0.8.1 正式 npm 版本为 reader 前置依赖；不使用 link/git ref。0.8.0 已发布，0.8.1 修复旧格式公共样式必须在工具分派之前校验的缺口，不改变 API。库只返回新格式；reader 成功写入新键后优先读新键，保留 v4 原 blob，不双写、不投影、不删。旧 App 只看到升级前内容。
+- painting / painting-board 0.8.2 正式 npm 版本为 reader 前置依赖；不使用 link/git ref。0.8.1 修复旧格式公共样式校验，0.8.2 修复禁用输入时的首次展示，不改变已有 API。库只返回新格式；reader 成功写入新键后优先读新键，保留 v4 原 blob，不双写、不投影、不删。旧 App 只看到升级前内容。
 
 ## Validation
 
@@ -17,4 +17,6 @@ HAM-131 最新决策撤回 legacy 投影和双写。painting 0.7.0 只读 schema
 
 ## Release
 
-本地验证后在 PR #40 追加提交；授权范围内推送 v0.8.1 触发现有 trusted-publishing 流程，保留已发布的 v0.8.0。正式 npm 是否可用以 registry 查询和下载包验证为准；发布失败不将计划版本宣称为已发布。
+0.8.2 追加修复只读初始展示：PresentationCoordinator 随 controller/trace 生命周期创建与销毁，不依赖输入启用；输入 adapter 另行绑定该实例，enabled 变化只清理输入。禁用时历史 SVG 不参与命中测试，交互覆盖层不挂载，文档展示继续订阅。reader 当前正式依赖升级为 0.8.2，保留已发布的 0.8.0/0.8.1 tag。
+
+PR #40 已合并；0.8.2 修复从 main 新开 PR，推送新 tag v0.8.2 触发现有 trusted-publishing 流程。正式 npm 是否可用以 registry 查询、下载包及只读展示验证为准；发布失败不将计划版本宣称为已发布。

@@ -46,3 +46,13 @@ The first workflow finished with failure at the final public-registry verificati
 - Both ESM `import('@hamster-note/painting/core')` and CJS `require('@hamster-note/painting/core')` expose the expected functions. In each format, mixed pen inputs with `dashOffset: 'broken'`, `fillOpacity: 2` and `rotationRad: 'broken'` return the exact `invalid-document` field path without changing the source; valid pen migration/serialization and page geometry round-trip pass.
 
 The published P2 fix is verified. Reader integration should pin exact `@hamster-note/painting@0.8.1`; the overall HAM-131 reader/device acceptance remains outside this package delivery.
+
+## 0.8.2 read-only surface patch — 2026-11-03
+
+Reader integration found that `enabled=false` on the first mount skipped the presentation coordinator as well as input initialization. Presentation now follows its controller/trace lifetime independently. Disabling input cancels unfinished gestures and removes listeners, while saved content remains mounted and subscribed. Read-only SVG objects and interactive overlays cannot intercept underlying page events.
+
+- Two new component regressions failed before the fix (missing history layer). They now cover all saved object types from the real 0.4.0 fixture, StrictMode, geometry/page/full remounts, disabled document updates, controller replacement and enable/disable cycles with active-input cancellation.
+- Targeted surface tests: 3 suites / 34 tests passed. Full Jest: 95 suites / 1282 tests passed; responder: 9/9 passed.
+- Typecheck, lint (0 errors / 32 existing warnings), both package builds, Expo Web build and layered export verification passed.
+- Chromium against the built Expo Web app: 6/6 tests passed across DPR 1/2/3, covering read-only saved pen/shape/text/image display, remounts, event pass-through and unchanged document data, plus existing input/Canvas/SVG alignment across zoom, scrolling and rotation. A dedicated local static server was used; no existing service was reused.
+- Version metadata and board's exact dependency are 0.8.2. Public registry/package and browser consumer verification remains pending until publication; previous release tags remain unchanged.

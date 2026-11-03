@@ -91,7 +91,8 @@ export default function LayeredEditorDom(props: {
       delete window.__layeredGestureTrace;
     };
   }, [controller, diagnostics, renders, trace]);
-  if (params.get('fixture') === 'pages') return <PageIntegrationFixture />;
+  if (params.get('fixture') === 'pages')
+    return <PageIntegrationFixture readOnly={params.get('readonly') === '1'} />;
   return (
     <div
       style={{

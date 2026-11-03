@@ -33,6 +33,11 @@ painting SHALL 提供页面几何 API 与页面绘图表面，页面坐标长期
 - **WHEN** 未完成笔迹中途切换页面标识或几何
 - **THEN** 不提交残笔，迟到 pointerup 不会写入新页
 
+#### Scenario: Disabled pages retain their complete saved display
+
+- **WHEN** 页面以 `enabled=false` 首次挂载、重新挂载或接收 controller 文档更新
+- **THEN** 展示完整的已保存对象，输入监听保持禁用、事件可穿透到底层页面；切换 enabled 不销毁展示订阅，禁用仍取消未完成输入
+
 ### Requirement: Additive public release
 
 painting SHALL 保持既有 controller/board/read API，通过 minor 正式版本导出新增能力；库不得读写 v4 blob 或提供降级投影。新增形状样式 SHALL 在 reader、controller、几何与显示路径一致保留。

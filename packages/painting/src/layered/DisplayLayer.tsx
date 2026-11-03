@@ -95,11 +95,13 @@ export function DisplayLayer({
   presentation,
   onRender,
   historyReadyDelayMs = 0,
+  interactive = true,
 }: {
   controller: LayeredEditorController;
   presentation: PresentationCoordinator;
   onRender?: RenderObserver;
   historyReadyDelayMs?: number;
+  interactive?: boolean;
 }) {
   const document = useEditorSnapshot(controller, 'document');
   const preview = useEditorSnapshot(controller, 'preview');
@@ -170,7 +172,7 @@ export function DisplayLayer({
               data-object-id={object.objectId}
               transform={`matrix(${t.a} ${t.b} ${t.c} ${t.d} ${t.tx} ${t.ty})`}
               style={{
-                pointerEvents: 'auto',
+                pointerEvents: interactive ? 'auto' : 'none',
                 visibility:
                   presentation.isHidden(object.objectId) ||
                   (preview.hiddenIds.includes(object.objectId) && !preview.objects.includes(object))

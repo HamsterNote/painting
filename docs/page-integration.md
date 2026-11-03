@@ -1,8 +1,10 @@
-# 页面绘图与旧数据升级（0.8.1）
+# 页面绘图与旧数据升级（0.8.2）
 
-正式依赖：`@hamster-note/painting@0.8.1`。`painting-board@0.8.1` 同步重导出页面 API。旧 0.7 controller/board/read API 保持不变。
+正式依赖：`@hamster-note/painting@0.8.2`。`painting-board@0.8.2` 同步重导出页面 API。旧 0.7 controller/board/read API 保持不变。
 
-0.8.1 修复旧文档公共样式校验被工具提前返回绕过的问题：即使当前工具不使用某个公共样式字段，字段值非法也会整次失败。0.8.0 的普通 pen 可能静默接受损坏的 `dashOffset`、`fillOpacity` 或 `rotationRad`；迁移新数据请使用 0.8.1。
+从 0.8.1 起，旧文档公共样式会在工具分派之前校验：即使当前工具不使用某个公共样式字段，字段值非法也会整次失败。0.8.0 的普通 pen 可能静默接受损坏的 `dashOffset`、`fillOpacity` 或 `rotationRad`。
+
+0.8.2 修复 `enabled=false` 首次挂载不显示存档的问题。展示与 controller 同生命周期，禁用仅停止输入；只读首次挂载、页面重挂载和 controller 文档更新都显示已有笔迹、形状、文字和图片，底层页面仍接收事件。
 
 ## 一次性迁移
 

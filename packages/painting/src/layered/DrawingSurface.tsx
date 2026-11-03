@@ -114,7 +114,17 @@ export function LayeredDrawingSurface({
     reset();
     return controller.subscribe('viewport', reset);
   }, [controller, pageMode]);
-  const [presentation, setPresentation] = useState<PresentationCoordinator>();
+  const [presentationState, setPresentation] = useState<{
+    controller: LayeredEditorController;
+    onGestureTrace: GestureTraceObserver | undefined;
+    queue: PresentationCoordinator;
+  }>();
+  const presentation =
+    presentationState?.controller === controller &&
+    presentationState.onGestureTrace === onGestureTrace
+      ? presentationState.queue
+      : undefined;
+  const inputEnabled = enabled && inputReady && (!pageMode || Boolean(pageSpace));
   const [failure, setFailure] = useState<{ commitId: string; message: string }>();
   const [textPoint, setTextPoint] = useState<Point>();
   const [toolError, setToolError] = useState('');
@@ -130,12 +140,17 @@ export function LayeredDrawingSurface({
     controller.setNavigation({ virtualPaper: { ...current, ...patch } });
   }, [controller, virtualPaper, pageMode]);
   useEffect(() => {
-    if (!enabled || !inputReady || (pageMode && !pageState.current.pageSpace)) return;
+    // Saved content stays mounted and subscribed even when input is disabled.
+    const queue = new PresentationCoordinator(controller, onGestureTrace);
+    setPresentation({ controller, onGestureTrace, queue });
+    return () => queue.destroy();
+  }, [controller, onGestureTrace]);
+  useEffect(() => {
+    if (!inputEnabled || !presentation) return;
     const stopTrace = onGestureTrace
       ? observeGestureEvents(host.current!, onGestureTrace)
       : undefined;
-    const queue = new PresentationCoordinator(controller, onGestureTrace);
-    setPresentation(queue);
+    const queue = presentation;
     const surfaceId = ++nextSurface;
     let sequence = 0;
     let arbiter: ReturnType<typeof createLayeredInputArbiter> | undefined;
@@ -232,13 +247,12 @@ export function LayeredDrawingSurface({
       navigation.destroy();
       semantic.destroy();
       adapter.destroy();
-      queue.destroy();
       stopTrace?.();
     };
   }, [
     controller,
-    inputReady,
-    enabled,
+    inputEnabled,
+    presentation,
     allocateId,
     openImage,
     onGestureTrace,
@@ -276,8 +290,7 @@ export function LayeredDrawingSurface({
         userSelect: 'none',
         WebkitUserSelect: 'none',
         WebkitTouchCallout: 'none',
-        pointerEvents:
-          enabled && inputReady && (!pageMode || pageSpace) ? style?.pointerEvents : 'none',
+        pointerEvents: inputEnabled ? style?.pointerEvents : 'none',
       }}
     >
       {presentation ? (
@@ -288,10 +301,11 @@ export function LayeredDrawingSurface({
             presentation={presentation}
             onRender={onRender}
             historyReadyDelayMs={historyReadyDelayMs}
+            interactive={inputEnabled}
           />
           <DrawingLayer controller={controller} presentation={presentation} />
-          <SelectionOverlay controller={controller} />
-          {pageMode ? null : <NavigationOverlay controller={controller} />}
+          {inputEnabled ? <SelectionOverlay controller={controller} /> : null}
+          {inputEnabled && !pageMode ? <NavigationOverlay controller={controller} /> : null}
         </>
       ) : null}
       {textPoint ? (
@@ -331,7 +345,7 @@ export function LayeredDrawingSurface({
         width: '100%',
         height: '100%',
         overflow: 'hidden',
-        pointerEvents: enabled && pageSpace ? style?.pointerEvents : 'none',
+        pointerEvents: inputEnabled ? style?.pointerEvents : 'none',
       }}
     >
       {surface}

@@ -1,10 +1,110 @@
 import { act, render, screen } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { createEditor, PageDrawingSurface, migrateLegacyDocument } from '../index';
 import { layeredPointer, mockLayeredDom } from './fixtures/layeredDom';
 import type { PageGeometry } from '../geometry/pageCoordinates';
 import { IDENTITY_TRANSFORM } from '../model/document';
+import painting040 from './fixtures/migration/painting-0.4.0.json';
+import { commitLayeredStroke } from './fixtures/layered';
 
 afterEach(() => jest.restoreAllMocks());
+
+test('disabled initial mount and remount display every saved object without accepting input', () => {
+  mockLayeredDom();
+  const migrated = migrateLegacyDocument(painting040);
+  if (!migrated.ok) throw new Error(migrated.error.path);
+  const controller = createEditor(migrated.value);
+  const geometry = { width: 600, height: 800, pageToSurface: IDENTITY_TRANSFORM };
+  const surface = (pageId: string, scale = 1) => (
+    <StrictMode>
+      <PageDrawingSurface
+        pageId={pageId}
+        controller={controller}
+        geometry={{ ...geometry, pageToSurface: { ...IDENTITY_TRANSFORM, a: scale, d: scale } }}
+        enabled={false}
+      />
+    </StrictMode>
+  );
+  const view = render(surface('page-1'));
+  const assertSaved = () => {
+    const display = screen.getByTestId('layered-display');
+    const nodes = Array.from(display.querySelectorAll<SVGGElement>('[data-object-id]'));
+    expect(nodes.map((node) => node.dataset.objectId)).toEqual(
+      migrated.value.objects.map((object) => object.objectId)
+    );
+    for (const node of nodes) expect(node.style.visibility).toBe('visible');
+    expect(
+      display.querySelector('[data-object-id="pen-040"] path')?.getAttribute('d')
+    ).toBeTruthy();
+    expect(display.querySelector('[data-object-id="rect-040"] path')?.getAttribute('fill')).toBe(
+      '#112233'
+    );
+    expect(display.querySelector('[data-object-id="text-040"]')?.textContent).toBe('仓鼠\nPDF');
+    expect(display.querySelector('image')?.getAttribute('href')).toBe('data:image/png;base64,a');
+    expect(screen.getByTestId('layered-surface').dataset.inputArbiter).toBeUndefined();
+    expect(controller.getSnapshot('document')).toEqual(migrated.value);
+  };
+  assertSaved();
+  layeredPointer(screen.getByTestId('layered-surface'), 'down', 100, 100);
+  layeredPointer(window, 'up', 140, 140);
+  assertSaved();
+  view.rerender(surface('page-1', 2));
+  assertSaved();
+  view.rerender(surface('page-2', 2));
+  assertSaved();
+  view.unmount();
+  render(surface('page-1'));
+  assertSaved();
+});
+
+test('disabled history stays subscribed across input toggles and controller changes', () => {
+  mockLayeredDom();
+  const controller = createEditor();
+  commitLayeredStroke(controller, 'saved');
+  const geometry = { width: 600, height: 800, pageToSurface: IDENTITY_TRANSFORM };
+  const surface = (enabled: boolean, editor = controller) => (
+    <PageDrawingSurface pageId="page-1" controller={editor} geometry={geometry} enabled={enabled} />
+  );
+  const view = render(surface(false));
+  const history = screen.getByTestId('layered-display');
+  expect(history.querySelectorAll('[data-object-id]')).toHaveLength(1);
+  act(() => {
+    commitLayeredStroke(controller, 'external');
+  });
+  expect(history.querySelectorAll('[data-object-id]')).toHaveLength(2);
+  view.rerender(surface(true));
+  expect(screen.getByTestId('layered-display')).toBe(history);
+  layeredPointer(screen.getByTestId('layered-surface'), 'down', 100, 100);
+  view.rerender(surface(false));
+  layeredPointer(window, 'up', 140, 140);
+  expect(controller.getSnapshot('document').objects).toHaveLength(2);
+  expect(screen.getByTestId('layered-display')).toBe(history);
+  act(() => {
+    controller.undo();
+  });
+  expect(history.querySelectorAll('[data-object-id]')).toHaveLength(1);
+  view.rerender(surface(true));
+  layeredPointer(screen.getByTestId('layered-surface'), 'down', 100, 100);
+  layeredPointer(window, 'up', 140, 140);
+  expect(controller.getSnapshot('document').objects).toHaveLength(2);
+  const replacement = createEditor();
+  view.rerender(surface(false, replacement));
+  expect(screen.getByTestId('layered-display').querySelectorAll('[data-object-id]')).toHaveLength(
+    0
+  );
+  act(() => {
+    commitLayeredStroke(replacement, 'replacement');
+  });
+  expect(screen.getByTestId('layered-display').querySelectorAll('[data-object-id]')).toHaveLength(
+    1
+  );
+  act(() => {
+    commitLayeredStroke(controller, 'detached');
+  });
+  expect(screen.getByTestId('layered-display').querySelectorAll('[data-object-id]')).toHaveLength(
+    1
+  );
+});
 
 test.each([0.1, 1, 2.5, 16])('page input uses stable DIP at host zoom %s and scroll', (scale) => {
   mockLayeredDom();
