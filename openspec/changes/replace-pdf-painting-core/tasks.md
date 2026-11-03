@@ -9,4 +9,4 @@
 ## 3. Delivery
 
 - [x] 3.1 编写接入说明，完成测试、类型检查、lint、build、pack 和 OpenSpec 校验。
-- [ ] 3.2 提交 PR 并触发正式 minor 发布；核实 registry 可用性，向 reader 交付正式版本与 API 约定。
+- [x] 3.2 提交 PR 并触发正式 minor 发布；核实 registry 可用性，向 reader 交付正式版本与 API 约定。

@@ -35,4 +35,14 @@ The first workflow finished with failure at the final public-registry verificati
 - Typecheck, lint (0 errors, 32 existing warnings), both package builds, Expo Web build, layered delivery/export verification, both package dry-run packs and OpenSpec strict validation passed. Browser DPR tests were not rerun for this migration-only patch.
 - Release source: `v0.8.1` → `30e959300d67aaabe598379d541cf733b2290f3d`.
 - Workflow: https://github.com/HamsterNote/painting/actions/runs/41584520899.
-- Both publish steps received HTTP 202 and reported that npm was processing the packages; the immediate post-publish query returned E404. Public download and consumer checks are required before task 3.2 is marked complete.
+- Both publish steps received HTTP 202 and reported that npm was processing the packages; the immediate post-publish query returned E404. This workflow did not create a GitHub Release. The public npm packages subsequently became available; verification below completes task 3.2 without republishing or moving either release tag.
+
+## 0.8.1 public package verification — 2026-11-03 05:40 UTC
+
+- `npm view @hamster-note/painting@0.8.1 version dependencies dist-tags --registry=https://registry.npmjs.org --prefer-online --json` and the equivalent painting-board command both returned version/latest `0.8.1`. Board depends on exact `@hamster-note/painting: 0.8.1`.
+- `npm pack` downloaded both exact versions from the public registry. The downloaded tarballs' SHA-512 integrity matches the independent consumer lockfile entries.
+- A fresh private consumer installed both exact versions using `npm install --ignore-scripts --legacy-peer-deps --no-audit --no-fund --registry=https://registry.npmjs.org --prefer-online`. Both lockfile entries resolve to registry URLs, with no git/file/link/workspace replacement.
+- All declared export targets exist in both installed packages. The layered declarations expose migration, page surface/props, geometry, reader/serializer and controller APIs.
+- Both ESM `import('@hamster-note/painting/core')` and CJS `require('@hamster-note/painting/core')` expose the expected functions. In each format, mixed pen inputs with `dashOffset: 'broken'`, `fillOpacity: 2` and `rotationRad: 'broken'` return the exact `invalid-document` field path without changing the source; valid pen migration/serialization and page geometry round-trip pass.
+
+The published P2 fix is verified. Reader integration should pin exact `@hamster-note/painting@0.8.1`; the overall HAM-131 reader/device acceptance remains outside this package delivery.
