@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createEditor, type LayeredEditorController } from '@hamster-note/painting/layered';
 import { LayeredPaintingBoard } from '@hamster-note/painting-board';
 import { mixedFixture, resourceFixture } from './mixedFixture';
+import { PageIntegrationFixture } from './PageIntegrationFixture';
 import { createGestureTrace, type GestureTrace } from './gestureTrace';
 import { GestureTracePanel } from './GestureTracePanel';
 import { InputDeviceDiagnostics } from './InputDeviceDiagnostics';
@@ -90,6 +91,7 @@ export default function LayeredEditorDom(props: {
       delete window.__layeredGestureTrace;
     };
   }, [controller, diagnostics, renders, trace]);
+  if (params.get('fixture') === 'pages') return <PageIntegrationFixture />;
   return (
     <div
       style={{

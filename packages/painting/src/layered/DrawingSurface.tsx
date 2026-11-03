@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -16,6 +17,11 @@ import { TextEditor } from './TextEditor';
 import { SelectionOverlay } from './SelectionOverlay';
 import { useImageImport } from './useImageImport';
 import type { Point } from '../model/document';
+import {
+  createPageCoordinateSpace,
+  type PageGeometry,
+  type GetClientToLocal,
+} from '../geometry/pageCoordinates';
 import { NavigationOverlay, VirtualPaper } from './NavigationOverlay';
 import { createNavigationWebAdapter } from './navigationWebAdapter';
 import type { DrawingSurfaceVirtualPaperOptions } from '../virtualPaperOptions';
@@ -29,6 +35,8 @@ import {
 
 export type LayeredDrawingSurfaceProps = {
   controller: LayeredEditorController;
+  /** Disabling cancels unfinished input and lets the underlying page receive events. */
+  enabled?: boolean;
   inputPolicy?: WebFreehandPolicy;
   style?: CSSProperties;
   onRender?: RenderObserver;
@@ -36,6 +44,8 @@ export type LayeredDrawingSurfaceProps = {
   virtualPaper?: boolean | DrawingSurfaceVirtualPaperOptions;
   onGestureTrace?: GestureTraceObserver;
   nativePencilExperiment?: PencilkitDemoConnection;
+  /** Prefer PageDrawingSurface for externally navigated document pages. */
+  page?: PageGeometry;
 };
 
 let nextSurface = 0;
@@ -43,6 +53,7 @@ let nextSurface = 0;
 /** Surface owns DOM resources only. Document, input, settings and viewport live in the controller. */
 export function LayeredDrawingSurface({
   controller,
+  enabled = true,
   inputPolicy,
   style,
   onRender,
@@ -50,6 +61,7 @@ export function LayeredDrawingSurface({
   virtualPaper,
   onGestureTrace,
   nativePencilExperiment,
+  page,
 }: LayeredDrawingSurfaceProps) {
   const inputReady = useInputInitialization(controller, inputPolicy, true);
   const subscribeInput = useCallback(
@@ -59,6 +71,49 @@ export function LayeredDrawingSurface({
   const getInputMode = useCallback(() => controller.getSnapshot('input').mode, [controller]);
   const inputMode = useSyncExternalStore(subscribeInput, getInputMode, getInputMode);
   const host = useRef<HTMLDivElement>(null);
+  const pageHost = useRef<HTMLDivElement>(null);
+  const pageSpace = page && createPageCoordinateSpace(page);
+  const pageState = useRef({ page, pageSpace });
+  pageState.current = { page, pageSpace };
+  const getClientToLocal = useCallback<GetClientToLocal>(() => {
+    const { pageSpace } = pageState.current;
+    const outer = pageHost.current;
+    if (!outer || !pageSpace) return () => null;
+    const rect = outer.getBoundingClientRect();
+    // Rect includes ancestor CSS zoom; layout dimensions do not. Read once per batch.
+    const computed = outer.ownerDocument.defaultView!.getComputedStyle(outer);
+    // offsetWidth rounds fractional PDF page sizes. Use resolved CSS pixels when available.
+    const layoutWidth = computed.width.endsWith('px')
+      ? parseFloat(computed.width)
+      : outer.offsetWidth;
+    const layoutHeight = computed.height.endsWith('px')
+      ? parseFloat(computed.height)
+      : outer.offsetHeight;
+    const sx = layoutWidth ? rect.width / layoutWidth : 1;
+    const sy = layoutHeight ? rect.height / layoutHeight : 1;
+    return (point) =>
+      pageSpace.toPage({
+        x: (point.x - rect.left) / sx - outer.clientLeft,
+        y: (point.y - rect.top) / sy - outer.clientTop,
+      });
+  }, []);
+  const pageMode = page !== undefined;
+  useLayoutEffect(() => {
+    if (!pageMode) return;
+    const reset = () => {
+      const current = controller.getSnapshot('viewport');
+      if (current.viewport.scale === 1 && current.viewport.tx === 0 && current.viewport.ty === 0)
+        return;
+      const result = controller.updateViewport({
+        type: 'replace',
+        expectedRevision: current.revision,
+        viewport: { scale: 1, tx: 0, ty: 0 },
+      });
+      if (!result.ok) throw new Error(`Cannot anchor page viewport: ${result.error.code}`);
+    };
+    reset();
+    return controller.subscribe('viewport', reset);
+  }, [controller, pageMode]);
   const [presentation, setPresentation] = useState<PresentationCoordinator>();
   const [failure, setFailure] = useState<{ commitId: string; message: string }>();
   const [textPoint, setTextPoint] = useState<Point>();
@@ -69,13 +124,13 @@ export function LayeredDrawingSurface({
   const openImage = imageImport.openAt;
   const retry = useRef<(commitId: string) => void>(() => {});
   useEffect(() => {
-    if (virtualPaper === undefined) return;
+    if (pageMode || virtualPaper === undefined) return;
     const current = controller.getSnapshot('navigation').virtualPaper;
     const patch = typeof virtualPaper === 'boolean' ? { enabled: virtualPaper } : virtualPaper;
     controller.setNavigation({ virtualPaper: { ...current, ...patch } });
-  }, [controller, virtualPaper]);
+  }, [controller, virtualPaper, pageMode]);
   useEffect(() => {
-    if (!inputReady) return;
+    if (!enabled || !inputReady || (pageMode && !pageState.current.pageSpace)) return;
     const stopTrace = onGestureTrace
       ? observeGestureEvents(host.current!, onGestureTrace)
       : undefined;
@@ -84,7 +139,7 @@ export function LayeredDrawingSurface({
     const surfaceId = ++nextSurface;
     let sequence = 0;
     let arbiter: ReturnType<typeof createLayeredInputArbiter> | undefined;
-    const canNavigate = () => !arbiter?.isWriting();
+    const canNavigate = () => !pageMode && !arbiter?.isWriting();
     const navigation = createNavigationWebAdapter(
       host.current!,
       controller,
@@ -96,8 +151,22 @@ export function LayeredDrawingSurface({
       host: host.current!,
       controller,
       listen: false,
+      getClientToLocal: pageMode ? getClientToLocal : undefined,
       onTrace: onGestureTrace,
-      createSessionId: () => `surface-${surfaceId}-session-${++sequence}`,
+      createSessionId: () => {
+        do {
+          sequence += 1;
+        } while (
+          controller
+            .getSnapshot('document')
+            .objects.some(
+              (object) =>
+                object.kind === 'freehand' &&
+                object.commitId === `surface-${surfaceId}-commit-${sequence}`
+            )
+        );
+        return `surface-${surfaceId}-session-${sequence}`;
+      },
       createCommitId: () => `surface-${surfaceId}-commit-${sequence}`,
       onResult: (notice) => {
         if (notice.phase !== 'commit') return;
@@ -112,6 +181,7 @@ export function LayeredDrawingSurface({
       host: host.current!,
       controller,
       listen: false,
+      getClientToLocal: pageMode ? getClientToLocal : undefined,
       canNavigate,
       allocateId,
       beforeGesture: () => queue.confirmMounted(),
@@ -135,8 +205,9 @@ export function LayeredDrawingSurface({
           return ink && tool;
         },
       },
-      navigation,
-      targetRole: navigation.targetRole,
+      navigation: pageMode ? { dispatch() {}, begin() {}, cancel: () => true } : navigation,
+      targetRole: pageMode ? undefined : navigation.targetRole,
+      getClientToLocal: pageMode ? getClientToLocal : undefined,
       onDiagnostic: setToolError,
     });
     const surface = host.current!;
@@ -164,8 +235,18 @@ export function LayeredDrawingSurface({
       queue.destroy();
       stopTrace?.();
     };
-  }, [controller, inputReady, allocateId, openImage, onGestureTrace, nativePencilExperiment]);
-  return (
+  }, [
+    controller,
+    inputReady,
+    enabled,
+    allocateId,
+    openImage,
+    onGestureTrace,
+    nativePencilExperiment,
+    pageMode,
+    getClientToLocal,
+  ]);
+  const surface = (
     <div
       ref={host}
       data-testid="layered-surface"
@@ -179,16 +260,29 @@ export function LayeredDrawingSurface({
         background: nativePencilExperiment ? 'transparent' : '#fff',
         touchAction: 'none',
         ...style,
+        ...(page
+          ? {
+              position: 'absolute' as const,
+              left: 0,
+              top: 0,
+              width: page.width,
+              height: page.height,
+              transformOrigin: '0 0',
+              transform: `matrix(${page.pageToSurface.a},${page.pageToSurface.b},${page.pageToSurface.c},${page.pageToSurface.d},${page.pageToSurface.tx},${page.pageToSurface.ty})`,
+              background: 'transparent',
+            }
+          : {}),
         // Browser selection is separate from touch-action; editing controls opt back in.
         userSelect: 'none',
         WebkitUserSelect: 'none',
         WebkitTouchCallout: 'none',
-        pointerEvents: inputReady ? style?.pointerEvents : 'none',
+        pointerEvents:
+          enabled && inputReady && (!pageMode || pageSpace) ? style?.pointerEvents : 'none',
       }}
     >
       {presentation ? (
         <>
-          <VirtualPaper controller={controller} />
+          {pageMode ? null : <VirtualPaper controller={controller} />}
           <DisplayLayer
             controller={controller}
             presentation={presentation}
@@ -197,7 +291,7 @@ export function LayeredDrawingSurface({
           />
           <DrawingLayer controller={controller} presentation={presentation} />
           <SelectionOverlay controller={controller} />
-          <NavigationOverlay controller={controller} />
+          {pageMode ? null : <NavigationOverlay controller={controller} />}
         </>
       ) : null}
       {textPoint ? (
@@ -228,4 +322,46 @@ export function LayeredDrawingSurface({
       ) : null}
     </div>
   );
+  return pageMode ? (
+    <div
+      ref={pageHost}
+      data-testid="page-drawing-surface"
+      style={{
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+        overflow: 'hidden',
+        pointerEvents: enabled && pageSpace ? style?.pointerEvents : 'none',
+      }}
+    >
+      {surface}
+    </div>
+  ) : (
+    surface
+  );
+}
+
+export type PageDrawingSurfaceProps = Omit<
+  LayeredDrawingSurfaceProps,
+  'page' | 'virtualPaper' | 'nativePencilExperiment'
+> & {
+  pageId: string;
+  geometry: PageGeometry;
+};
+
+/** One controller per page. Navigation belongs to the host PDF/document viewer. */
+export function PageDrawingSurface({ pageId, geometry, ...props }: PageDrawingSurfaceProps) {
+  const t = geometry.pageToSurface;
+  const key = JSON.stringify([
+    pageId,
+    geometry.width,
+    geometry.height,
+    t?.a,
+    t?.b,
+    t?.c,
+    t?.d,
+    t?.tx,
+    t?.ty,
+  ]);
+  return <LayeredDrawingSurface key={key} {...props} page={geometry} />;
 }

@@ -472,6 +472,8 @@ function copyShapeStyle(value: unknown): ShapeStyle | null {
     opacity: number;
     dash?: readonly number[];
     fill?: string;
+    fillOpacity?: number;
+    dashOffset?: number;
   } = {
     color: style.color,
     width: style.width,
@@ -482,6 +484,15 @@ function copyShapeStyle(value: unknown): ShapeStyle | null {
   }
   if (fill !== undefined) {
     result.fill = fill;
+  }
+  if (style.fillOpacity !== undefined) {
+    if (!isFiniteNumber(style.fillOpacity) || style.fillOpacity < 0 || style.fillOpacity > 1)
+      return null;
+    result.fillOpacity = style.fillOpacity;
+  }
+  if (style.dashOffset !== undefined) {
+    if (!isFiniteNumber(style.dashOffset)) return null;
+    result.dashOffset = style.dashOffset;
   }
   return Object.freeze(result);
 }
@@ -698,6 +709,7 @@ function copyImageObject(value: Record<string, unknown>): ImageObject | null {
     transformRevision: number;
     src: string;
     resourceId?: string;
+    preserveAspectRatio?: 'none' | 'xMidYMid meet';
     localBounds: Bounds;
   } = {
     kind: 'image',
@@ -713,6 +725,11 @@ function copyImageObject(value: Record<string, unknown>): ImageObject | null {
       return null;
     }
     base.resourceId = value.resourceId;
+  }
+  if (value.preserveAspectRatio !== undefined) {
+    if (value.preserveAspectRatio !== 'none' && value.preserveAspectRatio !== 'xMidYMid meet')
+      return null;
+    base.preserveAspectRatio = value.preserveAspectRatio;
   }
   return Object.freeze(base);
 }
@@ -741,6 +758,11 @@ function copyTextObject(value: Record<string, unknown>): TextObject | null {
   if (!isNonEmptyString(value.color)) {
     return null;
   }
+  if (
+    value.lineHeight !== undefined &&
+    (!isFiniteNumber(value.lineHeight) || value.lineHeight <= 0)
+  )
+    return null;
   const localBounds = copyBounds(value.localBounds);
   if (!localBounds) {
     return null;
@@ -753,6 +775,7 @@ function copyTextObject(value: Record<string, unknown>): TextObject | null {
     transformRevision: value.transformRevision,
     content: value.content,
     fontSize: value.fontSize,
+    ...(value.lineHeight === undefined ? {} : { lineHeight: value.lineHeight as number }),
     color: value.color,
     localBounds,
   });
@@ -1371,6 +1394,8 @@ function sameShapeStyle(left: ShapeStyle, right: ShapeStyle): boolean {
     left.width === right.width &&
     left.opacity === right.opacity &&
     left.fill === right.fill &&
+    left.fillOpacity === right.fillOpacity &&
+    left.dashOffset === right.dashOffset &&
     sameDash(left.dash, right.dash)
   );
 }

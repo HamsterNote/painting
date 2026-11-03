@@ -182,6 +182,8 @@ function readShapeStyle(value: unknown, path: string): ShapeStyle {
     opacity: number;
     dash?: readonly number[];
     fill?: string;
+    fillOpacity?: number;
+    dashOffset?: number;
   } = {
     color: readNonEmptyString(record.color, `${path}.color`),
     width: readPositiveNumber(record.width, `${path}.width`),
@@ -200,6 +202,10 @@ function readShapeStyle(value: unknown, path: string): ShapeStyle {
   if (record.fill !== undefined) {
     style.fill = readString(record.fill, `${path}.fill`);
   }
+  if (record.fillOpacity !== undefined)
+    style.fillOpacity = readUnitInterval(record.fillOpacity, `${path}.fillOpacity`);
+  if (record.dashOffset !== undefined)
+    style.dashOffset = readFiniteNumber(record.dashOffset, `${path}.dashOffset`);
   return style;
 }
 
@@ -353,6 +359,7 @@ function readImageObject(record: Record<string, unknown>, path: string): ImageOb
     transformRevision: number;
     src: string;
     resourceId?: string;
+    preserveAspectRatio?: 'none' | 'xMidYMid meet';
     localBounds: Bounds;
   } = {
     kind: 'image',
@@ -366,6 +373,12 @@ function readImageObject(record: Record<string, unknown>, path: string): ImageOb
   if (record.resourceId !== undefined) {
     image.resourceId = readNonEmptyString(record.resourceId, `${path}.resourceId`);
   }
+  if (record.preserveAspectRatio !== undefined)
+    image.preserveAspectRatio = readEnum(
+      record.preserveAspectRatio,
+      ['none', 'xMidYMid meet'] as const,
+      `${path}.preserveAspectRatio`
+    );
   return image;
 }
 
@@ -393,6 +406,9 @@ function readTextObject(record: Record<string, unknown>, path: string): TextObje
     transformRevision,
     content,
     fontSize,
+    ...(record.lineHeight === undefined
+      ? {}
+      : { lineHeight: readPositiveNumber(record.lineHeight, `${path}.lineHeight`) }),
     color,
     localBounds,
   };

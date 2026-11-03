@@ -23,3 +23,10 @@ export { IDENTITY_TRANSFORM, LAYERED_SCHEMA_VERSION, resolvePressureMode } from 
 export { readLayeredDocument, serializeLayeredDocument } from '../model/documentReader';
 
 export type { GestureTraceEntry, GestureTraceObserver } from '../input/web/gestureTrace';
+
+export { migrateLegacyDocument } from '../model/legacyDocumentMigration';
+export * from '../geometry/pageCoordinates';
+
+export { PageDrawingSurface } from './DrawingSurface';
+export type { PageDrawingSurfaceProps } from './DrawingSurface';
+export type { DocumentReadResult, DocumentReadError } from '../model/documentReader';

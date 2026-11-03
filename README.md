@@ -22,7 +22,7 @@ export function Board() {
 
 ## BREAKING：文档与 API
 
-新文档为 `schemaVersion: 3`，保存真实 raw samples、不可变笔刷快照及对象变换；PF outline 和呈现缓存不进入保存数据。`readLayeredDocument` / `serializeLayeredDocument` 返回带 `ok` 的结果，调用方应处理校验失败。V1/V2 文档与旧 `value/onChange`、`PaintingController`、ref handle API 已退役；没有旧中心线渲染保底或自动迁移承诺。消费方须显式转换已有数据并迁移到 controller API。旧 props 中未进入新公开类型的选项也应由消费方审核迁移。
+新文档为 `schemaVersion: 3`，保存真实 raw samples、不可变笔刷快照及对象变换；PF outline 和呈现缓存不进入保存数据。`readLayeredDocument` / `serializeLayeredDocument` 返回带 `ok` 的结果，调用方应处理校验失败。V1/V2 文档与旧 `value/onChange`、`PaintingController`、ref handle API 已退役；没有旧渲染 fallback，普通 reader 仍不自动迁移。0.8.0 新增显式 `migrateLegacyDocument`，消费方只调用库内迁移 API 并迁移到 controller API。旧 props 中未进入新公开类型的选项也应由消费方审核迁移。
 
 ## 自由笔
 
@@ -83,3 +83,7 @@ pnpm verify:layered
 开发端口为 5266，使用 Expo 支持的 `BROWSER=none` 禁止自动打开浏览器。WebKit 需要 Playwright 对应浏览器和受支持系统依赖。Android/iOS 的 `expo export` 只验证静态依赖解析，不是原生运行证据。
 
 Expo dev client 的构建、局域网连接与两条路由的设备验收步骤见 [Native 运行验证](docs/implementation/native-run-verification/README.md)，本次实际观察与未验证项见该目录的 `results.md`。
+
+## 文档页接入（0.8.0）
+
+新增 `migrateLegacyDocument`、`createPageGeometry`、`createPageCoordinateSpace` 和 `PageDrawingSurface`，由库集中处理旧数据迁移、PDF 页面显示与输入逆变换。[接入说明](docs/page-integration.md) 包含 API、存储边界与可运行示例。

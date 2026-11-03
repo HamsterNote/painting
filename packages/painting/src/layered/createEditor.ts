@@ -10,6 +10,7 @@ export function createEditor(
 ) {
   const editorId = ++nextEditor;
   let sequence = 0;
+  const reservedIds = new Set(document.objects.map((object) => object.objectId));
   const result = createLayeredEditorController({
     inputMode: options.inputMode ?? readInputModePreference(),
     document,
@@ -25,7 +26,14 @@ export function createEditor(
       },
       shape: { color: '#20262d', width: 2, opacity: 1 },
     },
-    allocateObjectId: () => `editor-${editorId}-object-${++sequence}`,
+    allocateObjectId: () => {
+      let id: string;
+      do {
+        id = `editor-${editorId}-object-${++sequence}`;
+      } while (reservedIds.has(id));
+      reservedIds.add(id);
+      return id;
+    },
   });
   if (!result.ok) throw new Error(`Cannot create editor: ${result.error.code}`);
   return result.value;

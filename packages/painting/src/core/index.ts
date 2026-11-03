@@ -13,3 +13,6 @@ export * from '../geometry/affine';
 export * from '../geometry/shape';
 export * from '../geometry/worldBounds';
 export * from '../viewport';
+
+export { migrateLegacyDocument } from '../model/legacyDocumentMigration';
+export * from '../geometry/pageCoordinates';

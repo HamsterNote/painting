@@ -39,6 +39,8 @@ export const ObjectNode = memo(function ObjectNode({
           strokeWidth={object.style.width}
           opacity={object.style.opacity}
           fill={object.style.fill ?? 'none'}
+          fillOpacity={object.style.fillOpacity}
+          strokeDashoffset={object.style.dashOffset}
           strokeDasharray={object.style.dash?.join(' ')}
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -50,6 +52,7 @@ export const ObjectNode = memo(function ObjectNode({
       return (
         <image
           href={object.src}
+          preserveAspectRatio={object.preserveAspectRatio}
           x={bounds.minX}
           y={bounds.minY}
           width={bounds.maxX - bounds.minX}
@@ -73,7 +76,7 @@ export const ObjectNode = memo(function ObjectNode({
               fontSize: object.fontSize,
               color: object.color,
               fontFamily: 'sans-serif',
-              lineHeight: 1.25,
+              lineHeight: object.lineHeight ?? 1.25,
               userSelect: 'none',
               WebkitUserSelect: 'none',
               WebkitTouchCallout: 'none',
