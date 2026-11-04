@@ -6,6 +6,53 @@ import {
   selectToolbarTool,
 } from './layered-helpers';
 
+test('Android WebView height changes keep an active edge editor above the keyboard', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 412, height: 839 });
+  await openLayeredEditor(page);
+  await selectToolbarTool(page, '文字');
+  await dispatchLayeredPointer(page, 'down', { x: 400, y: 720 });
+  await dispatchLayeredPointer(page, 'up', { x: 400, y: 720 });
+  const input = page.getByLabel('文字内容');
+  await input.fill('Android keyboard draft');
+  const before = await layeredState(page);
+  // Model the WebView height delivered by Android's native keyboard host.
+  // No iOS visualViewport overrides or keyboard events are used here.
+  for (const height of [496, 436, 839, 496]) {
+    await page.setViewportSize({ width: 412, height });
+    await expect
+      .poll(() =>
+        page.locator('[data-text-editor]').evaluate((panel) => {
+          const rect = panel.getBoundingClientRect();
+          return (
+            rect.top >= 0 &&
+            rect.bottom <= innerHeight &&
+            [...panel.querySelectorAll('button')].every((button) => {
+              const box = button.getBoundingClientRect();
+              return box.top >= 0 && box.bottom <= innerHeight && box.right <= innerWidth;
+            })
+          );
+        })
+      )
+      .toBe(true);
+    await expect(input).toBeFocused();
+    await expect(input).toHaveValue('Android keyboard draft');
+    expect((await layeredState(page)).document).toEqual(before.document);
+    expect((await layeredState(page)).history).toEqual(before.history);
+  }
+  await page.getByRole('button', { name: '完成', exact: true }).click();
+  const after = await layeredState(page);
+  expect(after.document.objects).toHaveLength(1);
+  expect(after.document.objects[0]).toMatchObject({
+    kind: 'text',
+    content: 'Android keyboard draft',
+    localBounds: { minX: 400, minY: 720 },
+  });
+  await page.evaluate(() => window.__layeredEditor!.undo());
+  expect((await layeredState(page)).document.objects).toEqual(before.document.objects);
+});
+
 for (const width of [320, 402]) {
   test(`right-edge text stays reachable through keyboard viewport changes at ${width}px`, async ({
     page,

@@ -74,10 +74,21 @@ Mac 为 arm64 / macOS 27.2 (26B123) / Xcode 27.2 (27B52)。原生宿主为 Paint
 
 第二轮结束已停止 Metro、AVD、代理与 iPhone 17 Pro，保留单一 API 36 AVD 和 dev client 供新 head 回归。以上均为模拟器结果，不替代实体设备结论。
 
+第三轮设备回归（HAM-164 评论 `01a1a60a-7f4f-7925-ba00-ec1bcaabdb3d`，附件 `HAM-164-round3-validation.md`，head `7e7d062`）：
+
+| 设备 / 项目 | 实际判定 |
+| --- | --- |
+| 同一 Pixel 7 AVD / Android 16 API 36 / System WebView 133，默认入口 | **所测布局恢复**：画布 412.19×839.24 CSS px，胶囊 x16、宽380.19、底823.24；内部横滚通过、外页 scrollX=0。顶部系统状态文字对比不足，未据此宣告安全区全部通过 |
+| 同一 Android AVD / 弹层与焦点 | **Escape 与归还通过**：工具、缩放、设置分别关闭并回触发按钮；Tab 经过实际控件后离开并关闭，无层内闭环 |
+| 同一 Android AVD / 系统键盘 | **仍失败**：Gboard 实际可见时 innerHeight / visualViewport 高仍约839.24，右下 textarea / 完成 / 取消被覆盖；退出再进默认页后仍复现。横向限位已通过，隐藏键盘后可完成提交 |
+| 同一 Android AVD / 两处 P2 | **专项通过**：25% 提交并重开100个“汉”，文档与内容高度均300px；祖先仅 translate(20px,30px)，resize事件0，浮层同步移动。输入来自CDP，不是系统中文IME结论 |
+| iPhone 17 Pro / iOS 26.5、iPhone 18 Pro / iOS 27.2 / 新 dev client | **构建与所测启动通过、稳定布局改善**：iOS27.2不再启动即SIGTRAP；实际进入默认编辑器，稳定画面的安全区与胶囊正常，26.5胶囊x16、宽370、底824。尚未覆盖全部冷启动瞬时首帧 |
+| iOS 26.5 / 横滚、软键盘、焦点与 PencilKit 点击 | **无法验证，输入通道问题**：HID触摸 / Tab / Escape连接失效，Simulator前台System Events仍超时。PencilKit已启用并收到gesture-ancestor配置回执，但不能用AX激活替代真实点击结论；由人工或恢复通道后补验，不在本次Android修复范围 |
+
 ### 修复范围与本机验证边界
 
 - 通过 `apps/playground/plugins/with-ios-scene.cjs` 持久化 UIScene 迁移：Info.plist 注册 Expo 57 自带的 `EXExpoAppSceneDelegate`；AppDelegate 提供 RN factory，由 scene 创建窗口并启动 RN。保留 dev-client bundle URL 与冷 / 热深链接委托，移除 AppDelegate 重复启动。无需手改被忽略的生成工程；模板不兼容时 prebuild 显式报错。
-- 原生编辑器宿主在 RN 层消费四边安全区，根 Provider 使用初始窗口 metrics；DOM 容器与 WebView 显式占满宿主宽度，关闭 WebView 的自动重复 inset。iOS 使用 KeyboardAvoidingView，Android 采用系统 resize；Web 路由保留原入口。
+- 原生编辑器宿主在 RN 层消费四边安全区，根 Provider 使用初始窗口 metrics；DOM 容器与 WebView 显式占满宿主宽度，关闭 WebView 的自动重复 inset。iOS 使用 KeyboardAvoidingView；Android 初版仅依赖系统 resize，第三轮证实 API 36 宿主未随 IME 收缩，现改为订阅 `keyboardDidShow` / `keyboardDidHide` 并读取已有 `Keyboard.metrics()`。用键盘顶部减容器实际窗口坐标，限制内部 WebView 宿主的 maxHeight，键盘变高 / 关闭与容器重排均更新。以高度上限避免已生效的系统 resize 被重复扣减；不重挂载 DOM，既有草稿与焦点保持。Web 路由保留原入口。
 - 胶囊外壳改为明确的 left / right 约束，内部声明固有宽度再按宿主限宽，避免依赖首帧逻辑 inset / shrink-to-fit 的组合。实际 26pt 首帧问题是否完全消除，必须冷启动设备复验。
 - 文字编辑 UI 改为独立 HTML 浮层，SVG 锚点保留对象 / viewport / 页面祖先变换的实际投影，操作面板保持正向并约束到所属画布与 visual viewport 的交集；随宿主 resize、可见视口 resize / scroll 更新。输入区可缩小并内部滚动，操作区换行，保持完成 / 取消可达；字号至少 16 CSS px 避免 iOS 聚焦自动放大。编辑浮层的避让不修改文档坐标、对象 transform、viewport 或撤销历史，提交仍走既有 IME session。
 - 审查 P2 修复：长文字高度通过独立隐藏节点按文档宽度、字号及行高测量，避免 25% 缩放时用浮层换行高度写回导致裁切；已有对象的自定义行高保留。监听 SVG 锚点至页面祖先的属性 / 类变动、尺寸与 CSS 动画，纯平移、缩放、旋转无需额外触发 window resize 即可更新浮层，动画结束后停止逐帧跟随。
@@ -86,15 +97,18 @@ Mac 为 arm64 / macOS 27.2 (26B123) / Xcode 27.2 (27B52)。原生宿主为 Paint
 
 | 本轮命令 / 检查 | 结果 |
 | --- | --- |
-| `pnpm test` | 97 套件 / 1316 项通过，responder 9 项通过，新增 Expo 模板迁移 / 重复执行 / 异常模板测试 2 项通过 |
+| `pnpm test` | 98 套件 / 1318 项通过（含新增 Android 键盘事件 2 项），responder 9 项通过，Expo 模板迁移 / 重复执行 / 异常模板测试 2 项通过 |
 | `pnpm typecheck` | painting / painting-board / playground 全部通过 |
 | `pnpm lint` | 0 errors，已有 32 warnings |
 | `pnpm build` | 库构建 / 类型产物 / Expo Web export 全部通过；不等同原生 Swift 编译或设备启动 |
 | iOS `expo prebuild --platform ios --no-install`，再次执行并比较哈希 | 通过：生成的 AppDelegate / Info.plist 重复生成不变；RN 仅由 Expo scene delegate 启动 |
-| Chromium 专项 UI | 38 项通过，无跳过 / 重试：`mobile-editor-layout`、`painting-toolbar`、`toolbar-round4`、`interaction-feedback` 四份 spec，2 workers；含本轮 6 项 P2 回归 |
+| Chromium 专项 UI | 既有38项通过；新增Android宿主高度回归1项修正撤销版本号断言后单独重跑通过，共39项覆盖。`mobile-editor-layout`、`painting-toolbar`、`toolbar-round4`、`interaction-feedback` 四份 spec，2 workers |
+| `pnpm --filter @hamster-note/painting-playground build:android` | 通过：Android Hermes bundle 与 Expo DOM bundle 均已导出；不等同 API 36 Gboard 设备验收 |
 | WebKit 专项 UI | **无法运行**：默认 Ubuntu 26.04 不支持安装；下载 Ubuntu 24.04 兼容构建 WebKit 26.4 后仍缺 ICU74、libxml2、libevent、libflite、libavif、libmanette、libwoff、GStreamer 等宿主库。13 项在浏览器启动前失败，无页面行为结论 |
 
 UI 使用本地临时配置继承 `playwright.config.ts`，仅改 baseURL / webServer 为 5276、`reuseExistingServer=false`；测试本身已纳入标准 Chromium 配置，新布局 spec 同时加入 WebKit 配置。Chromium 是 147.0.7727.15。首轮新增 4 项覆盖：320 / 402px 右侧文字输入的可见视口缩小与平移、焦点与草稿保留、完成与撤销；零宽宿主恢复后首帧胶囊宽度与内部横滚；旋转 / 缩放祖先下编辑控件可达及取消不改对象。本轮另增 6 项：25% / 50% / 200% 输入 100 个“汉”后提交、重开与改字号，实际渲染高度不超过对象边界；仅改变祖先类名做平移 / 缩放 / 旋转，不派发 resize，检查实际位置、控件可达、草稿与焦点保留、取消不写历史。这里直接输入中文字符串并模拟 viewport 事件，只证明 DOM 布局与会话行为，不冒充系统中文 IME 或软键盘。
+
+Android 续修另增两项原生事件测试：将平台明确设为 Android，模拟 `keyboardDidShow` / `keyboardDidHide`，外层高度保持839px时限制到键盘顶部、键盘高度变化 / 隐藏 / 重开、系统已收缩不二次扣减、容器原点变化与入页已有键盘。仅模拟原生几何边界，使用真实 Keyboard 事件与宿主状态更新，检查子树保留。浏览器新增一项让WebView视口实际按839→496→436→839→496px变化，验证右下编辑框与完成 / 取消位于可见区域，草稿 / 焦点保留、一次提交与撤销；没有使用iOS visualViewport属性覆盖。**这些是自动化边界验证，Android Gboard实机 / 模拟器验收仍须在续修head重跑。**
 
 Web / Expo DOM 浮层使用已有 ReactDOM renderer；包显式声明可选 `react-dom` peer（Web 宿主需提供）并补开发类型，不新增生产依赖。
 
@@ -106,3 +120,4 @@ Web / Expo DOM 浮层使用已有 ReactDOM renderer；包显式声明可选 `rea
 4. 在右侧 / 底部创建文字并打开英文软键盘、中文 IME；长文本、多行、候选选词、完成 / 取消、键盘关闭 / 重开均检查可达、焦点保留与一次提交 / 撤销。增加 25% 缩放输入 100 个“汉”并提交、重开，检查无裁切；仅更改页面祖先 transform 做平移 / 缩放 / 旋转，不派发 resize，检查浮层跟随且保持草稿 / 焦点。补菜单、Escape / Tab（可用外接键盘时）、焦点返回矩阵。iOS 26.5 若 idb 失效，可尝试 Simulator 前台 System Events 或 simctl 硬件键盘开关，仍无响应则明确记录输入通道不可用。
 5. 显式开启 `pencilkit=1`，重复菜单、横滚和文字编辑，确认原生覆盖层未吞工具栏点击；实体 Pencil 的输入仍单独标记。
 6. 复用现有 Android API 36 AVD，在默认入口完整重跑安全区、胶囊首帧 / 横滚、系统键盘、文字限位、弹层与焦点，不能以诊断入口替代。每项回传实际设备型号 / OS / 宿主版本 / 构建 SHA / 输入来源、步骤、判定与截图或录屏，含未通过原因。4.2 / 4.3 保持未勾选，直到父任务有完整设备证据。
+7. 本次续修优先复验Android右下文字：Gboard可见时原生内部宿主、WebView innerHeight与visualViewport应缩至键盘上方，完成 / 取消可点击；改变键盘高度、关闭 / 重开、退出重进默认页，检查内容 / 焦点与一次提交 / 撤销。原生宿主JS已变化，需加载新Metro bundle；本次未新增原生模块或修改Android工程配置。iOS交互缺项交由人工 / 恢复输入通道后补验。
