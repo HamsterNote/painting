@@ -127,7 +127,6 @@ test('editing transformed content keeps controls upright and cancel preserves th
       transformOrigin: '0 0',
       transform: 'translate(50px, 40px) rotate(5deg) scale(0.8)',
     });
-    window.dispatchEvent(new Event('resize'));
   });
   const panel = page.locator('[data-text-editor]');
   await expect(panel).toHaveCSS('transform', 'none');
@@ -153,3 +152,104 @@ test('editing transformed content keeps controls upright and cancel preserves th
   expect(after.history).toEqual(before.history);
   expect(after.viewport).toEqual(before.viewport);
 });
+
+for (const scale of [0.25, 0.5, 2]) {
+  test(`long text uses document typography at ${scale * 100}% and survives reopening`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1000, height: 800 });
+    await openLayeredEditor(page);
+    await selectToolbarTool(page, '文字');
+    await page.evaluate((scale) => {
+      const editor = window.__layeredEditor!;
+      editor.updateViewport({
+        type: 'replace',
+        expectedRevision: editor.getSnapshot('viewport').revision,
+        viewport: { scale, tx: 0, ty: 0 },
+      });
+    }, scale);
+    await dispatchLayeredPointer(page, 'down', { x: 100, y: 100 });
+    await dispatchLayeredPointer(page, 'up', { x: 100, y: 100 });
+    const content = '汉'.repeat(100);
+    await page.getByLabel('文字内容').fill(content);
+    await page.getByRole('button', { name: '完成', exact: true }).click();
+    const check = async () =>
+      page.locator('[data-object-id] foreignObject div').evaluate((node) => ({
+        content: node.textContent,
+        textHeight: node.scrollHeight,
+        boundsHeight: Number(node.parentElement!.getAttribute('height')),
+      }));
+    const first = await check();
+    expect(first.content).toBe(content);
+    expect(first.textHeight).toBeGreaterThan(120);
+    expect(first.boundsHeight).toBeGreaterThanOrEqual(first.textHeight);
+    const before = await layeredState(page);
+    await dispatchLayeredPointer(page, 'down', { x: 110, y: 110 });
+    await dispatchLayeredPointer(page, 'up', { x: 110, y: 110 });
+    await expect(page.getByLabel('文字内容')).toHaveValue(content);
+    await page.getByRole('button', { name: '完成', exact: true }).click();
+    expect((await layeredState(page)).document).toEqual(before.document);
+    expect((await layeredState(page)).history).toEqual(before.history);
+    await dispatchLayeredPointer(page, 'down', { x: 110, y: 110 });
+    await dispatchLayeredPointer(page, 'up', { x: 110, y: 110 });
+    await page.getByLabel('文字字号').fill('36');
+    await page.getByRole('button', { name: '完成', exact: true }).click();
+    const resized = await check();
+    expect(resized.textHeight).toBeGreaterThan(first.textHeight);
+    expect(resized.boundsHeight).toBeGreaterThanOrEqual(resized.textHeight);
+    const after = await layeredState(page);
+    expect(after.document.objects).toHaveLength(1);
+    expect(after.document.objects[0]).toMatchObject({
+      content,
+      fontSize: 36,
+      localBounds: { minX: 100 / scale, minY: 100 / scale, maxX: 100 / scale + 240 },
+    });
+  });
+}
+
+for (const [name, transform, expectedX] of [
+  ['translation', 'translateX(400px)', 500],
+  ['scale', 'scale(0.5)', 50],
+  ['rotation', 'rotate(10deg)', 100 * Math.cos(Math.PI / 18) - 220 * Math.sin(Math.PI / 18)],
+] as const) {
+  test(`text follows ancestor ${name} without a resize event`, async ({ page }) => {
+    await page.setViewportSize({ width: 1000, height: 800 });
+    await openLayeredEditor(page);
+    await selectToolbarTool(page, '文字');
+    const before = await layeredState(page);
+    await dispatchLayeredPointer(page, 'down', { x: 100, y: 100 });
+    await dispatchLayeredPointer(page, 'up', { x: 100, y: 100 });
+    await page.getByLabel('文字内容').fill('keep this draft');
+    await page.locator('[data-painting-board]').evaluate((board, transform) => {
+      // Only an ancestor's class/transform changes; no size, scroll or viewport event.
+      const ancestor = board.parentElement!;
+      const style = document.createElement('style');
+      style.textContent = `.transformed-editor-host { transform-origin: 0 0; transform: ${transform}; }`;
+      document.head.append(style);
+      ancestor.classList.add('transformed-editor-host');
+    }, transform);
+    const panel = page.locator('[data-text-editor]');
+    await expect.poll(async () => (await panel.boundingBox())!.x).toBeCloseTo(expectedX, 0);
+    await expect
+      .poll(() =>
+        panel.evaluate((node) => {
+          const rect = node.getBoundingClientRect();
+          const surface = document
+            .querySelector('[data-drawing-viewport]')!
+            .getBoundingClientRect();
+          return (
+            rect.left >= Math.max(0, surface.left) &&
+            rect.right <= Math.min(innerWidth, surface.right) &&
+            rect.top >= Math.max(0, surface.top) &&
+            rect.bottom <= Math.min(innerHeight, surface.bottom)
+          );
+        })
+      )
+      .toBe(true);
+    await expect(page.getByLabel('文字内容')).toBeFocused();
+    await expect(page.getByLabel('文字内容')).toHaveValue('keep this draft');
+    await page.getByRole('button', { name: '取消', exact: true }).click();
+    expect((await layeredState(page)).document).toEqual(before.document);
+    expect((await layeredState(page)).history).toEqual(before.history);
+  });
+}

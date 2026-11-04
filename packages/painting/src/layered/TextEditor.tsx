@@ -72,6 +72,31 @@ export function TextEditor({
   const { viewport } = useEditorSnapshot(controller, 'viewport');
   const panel = useRef<HTMLDivElement>(null);
   const anchor = useRef<SVGRectElement>(null);
+  const measurement = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!editing || !panel.current) return;
+    const node = panel.current.ownerDocument.createElement('div');
+    Object.assign(node.style, {
+      position: 'fixed',
+      left: '0',
+      top: '0',
+      visibility: 'hidden',
+      pointerEvents: 'none',
+      whiteSpace: 'pre-wrap',
+      overflowWrap: 'anywhere',
+      fontFamily: 'sans-serif',
+      padding: '0',
+      margin: '0',
+      border: '0',
+    });
+    node.setAttribute('aria-hidden', 'true');
+    panel.current.ownerDocument.body.append(node);
+    measurement.current = node;
+    return () => {
+      measurement.current = null;
+      node.remove();
+    };
+  }, [editing]);
   const [position, setPosition] = useState<CSSProperties>({ left: 0, top: 0, width: 240 });
   useLayoutEffect(() => {
     const element = panel.current;
@@ -105,15 +130,51 @@ export function TextEditor({
       });
     };
     place();
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(place);
+    // Transform-only page changes do not notify ResizeObserver. Watch the actual
+    // marker ancestry, including pageToSurface's SVG/CSS transforms and host classes.
+    const ancestors: Element[] = [];
+    for (let node: Element | null = marker; node; node = node.parentElement) ancestors.push(node);
+    let animationFrame = 0;
+    const moving = () =>
+      ancestors.some(
+        (node) =>
+          typeof node.getAnimations === 'function' &&
+          node.getAnimations().some((animation) => animation.playState === 'running')
+      );
+    const followAnimation = () => {
+      place();
+      animationFrame = moving() ? view.requestAnimationFrame(followAnimation) : 0;
+    };
+    const geometryChanged = () => {
+      place();
+      if (!animationFrame && moving()) animationFrame = view.requestAnimationFrame(followAnimation);
+    };
+    const observer =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(geometryChanged);
     observer?.observe(element);
-    observer?.observe(surface);
+    const mutations =
+      typeof MutationObserver === 'undefined' ? null : new MutationObserver(geometryChanged);
+    for (const node of ancestors) {
+      observer?.observe(node);
+      mutations?.observe(node, {
+        attributes: true,
+        attributeFilter: ['style', 'class', 'transform', 'width', 'height'],
+      });
+      node.addEventListener('transitionrun', geometryChanged);
+      node.addEventListener('animationstart', geometryChanged);
+    }
     view.addEventListener('resize', place);
     view.addEventListener('scroll', place, true);
     view.visualViewport?.addEventListener('resize', place);
     view.visualViewport?.addEventListener('scroll', place);
     return () => {
       observer?.disconnect();
+      mutations?.disconnect();
+      if (animationFrame) view.cancelAnimationFrame(animationFrame);
+      for (const node of ancestors) {
+        node.removeEventListener('transitionrun', geometryChanged);
+        node.removeEventListener('animationstart', geometryChanged);
+      }
       view.removeEventListener('resize', place);
       view.removeEventListener('scroll', place, true);
       view.visualViewport?.removeEventListener('resize', place);
@@ -139,6 +200,22 @@ export function TextEditor({
     Math.hypot(transform.a, transform.b) * viewport.scale,
     16 / draft.fontSize
   );
+  function measureHeight(content: string, fontSize: number) {
+    const lineHeight = editing?.object?.lineHeight ?? 1.25;
+    const node = measurement.current;
+    if (node) {
+      // Match DisplayLayer's document-space typography, never the scaled/limited textarea.
+      node.style.width = `${bounds.maxX - bounds.minX}px`;
+      node.style.fontSize = `${fontSize}px`;
+      node.style.lineHeight = String(lineHeight);
+      node.textContent = content;
+    }
+    return Math.max(
+      120,
+      node?.scrollHeight ?? 0,
+      content.split('\n').length * fontSize * lineHeight
+    );
+  }
   function persist() {
     // Late keyboard/button/IME callbacks cannot write through a replaced or unmounted editor.
     if (!editing || currentEditing.current !== editing) return;
@@ -180,6 +257,9 @@ export function TextEditor({
                 objectRevision: (editing.object?.objectRevision ?? 0) + 1,
                 transformRevision: editing.object?.transformRevision ?? 1,
                 transform,
+                ...(editing.object?.lineHeight !== undefined
+                  ? { lineHeight: editing.object.lineHeight }
+                  : {}),
                 ...value.draft,
               },
             ],
@@ -237,11 +317,7 @@ export function TextEditor({
         }}
         onChange={(event) => {
           const content = event.target.value;
-          const height = Math.max(
-            120,
-            event.target.scrollHeight / screenScale,
-            content.split('\n').length * draft.fontSize * 1.25
-          );
+          const height = measureHeight(content, draft.fontSize);
           editing.session.updateDraft({
             content,
             localBounds: { ...bounds, maxY: bounds.minY + height },
@@ -250,7 +326,11 @@ export function TextEditor({
         }}
         onCompositionStart={() => editing.session.startComposition()}
         onCompositionEnd={(event) => {
-          editing.session.endComposition({ content: event.currentTarget.value });
+          const content = event.currentTarget.value;
+          editing.session.endComposition({
+            content,
+            localBounds: { ...bounds, maxY: bounds.minY + measureHeight(content, draft.fontSize) },
+          });
           refresh((n) => n + 1);
           persist();
         }}
@@ -294,10 +374,7 @@ export function TextEditor({
                 fontSize,
                 localBounds: {
                   ...bounds,
-                  maxY: Math.max(
-                    bounds.maxY,
-                    bounds.minY + draft.content.split('\n').length * fontSize * 1.25
-                  ),
+                  maxY: Math.max(bounds.maxY, bounds.minY + measureHeight(draft.content, fontSize)),
                 },
               });
               refresh((n) => n + 1);
