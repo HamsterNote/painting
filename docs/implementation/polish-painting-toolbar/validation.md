@@ -2,6 +2,8 @@
 
 对应 HAM-156 / OpenSpec change `polish-painting-toolbar` / PR #44。本轮在同一 change 和分支落实已采纳的第四轮三条验收意见，先更新 spec/design 并严格校验后实施。
 
+2026-11-04用户验收后已同步主规格并归档，任务仍为14/16；归档位置、校验及实机待验说明见 [归档记录](archive-verification.md)。以下保留实施阶段的验证结果。
+
 ## 行为与实现
 
 - `PaintingBoard` 在自身定位上下文内承载底部悬浮工具栏；空白覆盖区域透传，真实控件与面板保留输入安全边界。
