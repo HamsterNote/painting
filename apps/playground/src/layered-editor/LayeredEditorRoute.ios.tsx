@@ -10,6 +10,7 @@ import {
   type PencilkitDemoState,
 } from '@hamster-note/painting/input/native';
 import LayeredEditorDom from './LayeredEditorDom';
+import { NativeEditorHost, editorDOMProps } from './NativeEditorHost';
 
 type Outgoing<T = PencilkitDemoMessage> = T extends PencilkitDemoMessage
   ? Omit<T, 'messageId' | 'protocolVersion'>
@@ -160,7 +161,7 @@ export default function LayeredEditorRoute() {
   const editor = useMemo(
     () => (
       <LayeredEditorDom
-        dom={{ style: { flex: 1 } }}
+        dom={editorDOMProps}
         nativePencilEnabled={requested && available}
         editorParams={editorParams}
         nativeMessage={outgoing}
@@ -172,7 +173,7 @@ export default function LayeredEditorRoute() {
     [requested, available, editorParams, outgoing, onState, onReply]
   );
   return (
-    <View style={styles.root} testID="layered-ios-host">
+    <NativeEditorHost testID="layered-ios-host">
       <View style={styles.status}>
         <View style={styles.statusRow}>
           <Text testID="layered-native-status" numberOfLines={2} style={styles.statusTitle}>
@@ -321,12 +322,11 @@ export default function LayeredEditorRoute() {
           editor
         )}
       </View>
-    </View>
+    </NativeEditorHost>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#fff' },
   editor: { flex: 1 },
   status: {
     gap: 4,

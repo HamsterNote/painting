@@ -109,7 +109,8 @@
   },
   "peerDependencies": {
     "react": "^19.0.0",
-    "react-native": ">=0.74"
+    "react-native": ">=0.74",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.0.0",
@@ -120,7 +121,8 @@
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
     "react-native-builder-bob": "^0.40.13",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "@types/react-dom": "~19.2.0"
   },
   "react-native-builder-bob": {
     "source": "src",
@@ -147,5 +149,10 @@
     "polyclip-ts": "0.16.8",
     "robust-predicates": "2.0.4",
     "use-undo": "1.2.0"
+  },
+  "peerDependenciesMeta": {
+    "react-dom": {
+      "optional": true
+    }
   }
 }

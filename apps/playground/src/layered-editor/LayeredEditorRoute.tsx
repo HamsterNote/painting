@@ -1,5 +1,10 @@
 import LayeredEditorDom from './LayeredEditorDom';
+import { NativeEditorHost, editorDOMProps } from './NativeEditorHost';
 
 export default function LayeredEditorRoute() {
-  return <LayeredEditorDom dom={{ style: { flex: 1 } }} />;
+  return (
+    <NativeEditorHost>
+      <LayeredEditorDom dom={editorDOMProps} />
+    </NativeEditorHost>
+  );
 }

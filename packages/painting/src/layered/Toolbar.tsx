@@ -156,7 +156,8 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
         ...(placement === 'floating'
           ? {
               position: 'absolute',
-              insetInline: 0,
+              left: 0,
+              right: 0,
               bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))',
               zIndex: 20,
               pointerEvents: 'none',
@@ -206,6 +207,7 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
             flexWrap: 'nowrap',
             flex: '0 1 auto',
             minWidth: 0,
+            width: 'max-content',
             maxWidth: 'calc(100% - 32px)',
             height: 60,
             padding: '7px 12px',
