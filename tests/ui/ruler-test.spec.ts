@@ -1,3 +1,5 @@
+import { setToolbarZoom } from './layered-helpers';
+import { openToolbarSettings, openToolbarZoom } from './layered-helpers';
 import { expect, test } from '@playwright/test';
 import {
   dispatchLayeredPointer as pointer,
@@ -7,6 +9,7 @@ import {
 
 test.beforeEach(async ({ page }) => {
   await openLayeredEditor(page);
+  await openToolbarSettings(page);
   await page.getByLabel('尺子', { exact: true }).check();
 });
 
@@ -26,7 +29,8 @@ test('infinite ruler has physical ticks and is clipped by the surface', async ({
 test('paper zoom leaves screen-space ruler pose unchanged', async ({ page }) => {
   const ruler = page.getByTestId('layered-ruler').locator(':scope > g');
   const before = await ruler.getAttribute('transform');
-  await page.getByLabel('缩放', { exact: true }).fill('200');
+  await openToolbarZoom(page);
+  await setToolbarZoom(page, 200);
   await expect(ruler).toHaveAttribute('transform', before!);
   expect((await layeredState(page)).viewport.viewport.scale).toBe(2);
   expect((await layeredState(page)).document.objects).toHaveLength(0);

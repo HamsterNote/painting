@@ -24,6 +24,20 @@ export function Board() {
 
 新文档为 `schemaVersion: 3`，保存真实 raw samples、不可变笔刷快照及对象变换；PF outline 和呈现缓存不进入保存数据。`readLayeredDocument` / `serializeLayeredDocument` 返回带 `ok` 的结果，调用方应处理校验失败。V1/V2 文档与旧 `value/onChange`、`PaintingController`、ref handle API 已退役；没有旧渲染 fallback，普通 reader 仍不自动迁移。0.8.0 新增显式 `migrateLegacyDocument`，消费方只调用库内迁移 API 并迁移到 controller API。旧 props 中未进入新公开类型的选项也应由消费方审核迁移。
 
+## 工具栏
+
+`PaintingBoard` 默认在所属画板底部显示悬浮胶囊工具栏，`toolbar={false}` 隐藏。独立使用 `Toolbar` 时默认 `placement="inline"`；指定 `placement="floating"` 时请放在有 `position: relative` 和明确尺寸的父容器中。工具栏定位不修改 controller 的 viewport。
+
+工具菜单以「画笔」（原自由笔）为首项，保留形状、文字与图片；设置、选择、橡皮擦、套索、移动、清空画布为独立操作组。套索完成且命中对象后自动切换到选择，直接拖动即可移动；空套索或取消不切换。清空可一次撤销恢复全部对象，空画布时禁用。输入模式、尺子/虚拟纸张/小地图及其他笔刷和形状参数在设置中。笔宽在工具菜单后的独立组直接调节，自由笔和形状参数分别保留；不支持的工具下禁用。缩放比例按钮固定72px宽、使用等宽数字，打开 25–800% 滑动条，以所属绘图可视区中心为锚点缩放，平移与窗口大小改变后仍保持中心内容不动。
+
+橡皮擦的轨迹以瞬时淡紫拖尾提示，每段从采样起2秒内逐渐消失；切工具、清空、撤销/重做和离开页面立即清理。拖尾不进入文档或撤销栈，空闲时没有动画计时循环。
+
+调色板从黑色开始，新编辑器默认黑色；色点之间的留白压缩至原来的三分之一。预设色激活环与本色一致；最右多色圆环仅在非预设自定义色激活时显示当前色轮廓，否则不显示轮廓。预设/自定义颜色只影响后续自由笔或形状，其他工具下禁用，笔刷与形状配置互相独立，已有编辑器颜色不会被挂载覆盖。
+
+窄屏可在胶囊内横向滚动；Tab 会将焦点控件滚入视野。菜单支持上下方向键、Enter/空格选择和 Escape 返回入口。收起按钮为胶囊上方独立圆形按钮；收起后隐藏胶囊，仅保留展开按钮。这些展示状态不进入文档、历史或持久化。
+
+工具栏可在 Web 和 Expo DOM/WebView 中使用，不能直接作为原生 RN View。`@hamster-note/components` 的原生转换不属于本次改动。[验证记录与实机待验项](docs/implementation/polish-painting-toolbar/validation.md)。
+
 ## 自由笔
 
 | 压力模式    | 行为                                                                         |

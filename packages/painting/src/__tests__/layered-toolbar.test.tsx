@@ -1,72 +1,536 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { Profiler } from 'react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { Toolbar } from '../layered/Toolbar';
-import { makeLayeredController } from './fixtures/layered';
+import { commitLayeredStroke, makeLayeredController } from './fixtures/layered';
 import { createEditor } from '../layered/createEditor';
 import { INPUT_MODE_PREFERENCE_KEY as key } from '../layered/inputModePreference';
+import { parseLayeredDocument, serializeLayeredDocument } from '../model/documentReader';
+import { createLayeredToolSession } from '../core/layeredToolSession';
 
-test('freehand controls are isolated from shape dash and algorithm settings', () => {
+function settings() {
+  fireEvent.click(screen.getByRole('button', { name: '设置' }));
+}
+function choose(name: string) {
+  if (['选择', '橡皮擦', '套索', '平移'].includes(name)) {
+    fireEvent.click(screen.getByRole('button', { name: name === '平移' ? '移动' : name }));
+    return;
+  }
+  fireEvent.click(screen.getByRole('button', { name: '工具菜单' }));
+  fireEvent.click(screen.getByRole('menuitemradio', { name: name === '自由笔' ? '画笔' : name }));
+}
+function dismiss() {
+  fireEvent.keyDown(document, { key: 'Escape' });
+}
+
+afterEach(() => localStorage.clear());
+
+test('primary width follows tool parameters, committed object history and document reload', () => {
   const controller = makeLayeredController();
   render(<Toolbar controller={controller} />);
+  const input = () => screen.getByLabelText<HTMLInputElement>('笔宽');
+  expect(within(screen.getByRole('toolbar')).getByLabelText('笔宽')).toBe(input());
+  settings();
+  expect(within(screen.getByRole('dialog')).queryByLabelText('笔宽')).toBeNull();
+  dismiss();
+  const history = controller.getSnapshot('history');
+  fireEvent.change(input(), { target: { value: '4' } });
+  expect(controller.getSnapshot('history')).toBe(history);
+  act(() => {
+    commitLayeredStroke(controller, 'thin');
+  });
+  fireEvent.change(input(), { target: { value: '16' } });
+  act(() => {
+    commitLayeredStroke(controller, 'thick');
+  });
+  choose('矩形');
+  fireEvent.change(input(), { target: { value: '3' } });
+  act(() => {
+    const session = createLayeredToolSession(controller, () => 'shape');
+    session.begin({ x: 200, y: 100 });
+    session.update([{ x: 250, y: 150 }]);
+    session.end();
+    session.destroy();
+  });
+  choose('画笔');
+  expect(input().value).toBe('16');
+  act(() => {
+    controller.setFreehandSettings({
+      ...controller.getSnapshot('tools').settings.freehand,
+      nominalSize: 24,
+    });
+  });
+  expect(input().value).toBe('24');
+  const objects = controller.getSnapshot('document').objects;
+  expect(
+    objects.map((object) =>
+      object.kind === 'freehand'
+        ? object.brushSnapshot.nominalSize
+        : object.kind === 'shape'
+          ? object.style.width
+          : null
+    )
+  ).toEqual([4, 16, 3]);
+  act(() => {
+    controller.undo();
+    controller.redo();
+  });
+  expect(controller.getSnapshot('document').objects).toEqual(objects);
+  expect(input().value).toBe('24');
+  const serialized = serializeLayeredDocument(controller.getSnapshot('document'));
+  expect(serialized.ok).toBe(true);
+  if (!serialized.ok) throw new Error(serialized.error.code);
+  const parsed = parseLayeredDocument(serialized.value);
+  if (!parsed.ok) throw new Error(parsed.error.code);
+  expect(createEditor(parsed.value).getSnapshot('document').objects).toEqual(objects);
+  choose('选择');
+  expect(input().disabled).toBe(true);
+  expect(input().value).toBe('');
+  choose('矩形');
+  expect(input().value).toBe('3');
+});
+
+test('freehand settings are isolated from shapes through the real settings path', () => {
+  const controller = makeLayeredController();
+  render(<Toolbar controller={controller} />);
+  settings();
   expect(screen.queryByLabelText('形状线型')).toBeNull();
   expect(screen.getByLabelText('压力模式')).toHaveProperty('value', 'auto');
   expect(screen.getAllByRole('slider')).toHaveLength(1);
-  fireEvent.click(screen.getByRole('button', { name: '矩形' }));
+  dismiss();
+  choose('矩形');
+  settings();
   fireEvent.change(screen.getByLabelText('形状线型'), { target: { value: 'dash' } });
-  fireEvent.click(screen.getByRole('button', { name: '自由笔' }));
+  dismiss();
+  choose('自由笔');
+  settings();
   fireEvent.change(screen.getByLabelText('笔宽'), { target: { value: '24' } });
   fireEvent.change(screen.getByLabelText('压力模式'), { target: { value: 'constant' } });
+  fireEvent.change(screen.getByLabelText('颜色'), { target: { value: '#123456' } });
+  fireEvent.change(screen.getByLabelText('不透明度'), { target: { value: '0.7' } });
   expect(screen.queryByLabelText('形状线型')).toBeNull();
   expect(controller.getSnapshot('tools').settings.freehand).toEqual({
-    color: '#008060',
+    color: '#123456',
     nominalSize: 24,
-    opacity: 0.5,
+    opacity: 0.7,
     pressureMode: 'constant',
     presetRevision: 1,
   });
-  fireEvent.click(screen.getByRole('button', { name: '矩形' }));
+  dismiss();
+  choose('矩形');
+  settings();
   expect(screen.getByLabelText('形状线型')).toHaveProperty('value', 'dash');
   expect(screen.getByLabelText('笔宽')).toHaveProperty('value', '2');
 });
 
-test('input menu is available for every tool, restores preferences and writes no undo', () => {
+test('all twelve tools remain reachable, cancel drafts and add no document transactions', () => {
+  const controller = makeLayeredController();
+  render(<Toolbar controller={controller} />);
+  const history = controller.getSnapshot('history');
+  for (const [label, tool] of [
+    ['直线', 'line'],
+    ['矩形', 'rect'],
+    ['椭圆', 'ellipse'],
+    ['多边形', 'polygon'],
+    ['贝塞尔', 'bezier'],
+    ['图片', 'image'],
+  ] as const) {
+    choose(label);
+    expect(controller.getSnapshot('tools').activeTool).toBe(tool);
+    expect(screen.getByRole('button', { name: '工具菜单' }).getAttribute('aria-pressed')).toBe(
+      'true'
+    );
+  }
+  for (const [label, tool] of [
+    ['自由笔', 'freehand'],
+    ['选择', 'selection'],
+    ['套索', 'lasso'],
+    ['橡皮擦', 'eraser'],
+    ['平移', 'pan'],
+  ] as const) {
+    choose(label);
+    expect(controller.getSnapshot('tools').activeTool).toBe(tool);
+  }
+  act(() => {
+    controller.setTool('freehand');
+    controller.beginFreehand({
+      type: 'begin',
+      commitId: 'draft',
+      pressureCapability: 'available',
+      batch: {
+        sessionId: 'draft',
+        pointerId: 1,
+        source: 'pen',
+        coordinateSpace: 'world',
+        viewportRevision: 0,
+        batchSequence: 0,
+        samples: [{ sequence: 0, x: 20, y: 20, phase: 'down', pressure: 0.5, time: 0 }],
+      },
+    });
+  });
+  expect(controller.getSnapshot('interaction').activeFreehand).toBeDefined();
+  choose('椭圆');
+  expect(controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
+  choose('文字');
+  expect(controller.getSnapshot('tools').activeTool).toBe('text');
+  expect(controller.getSnapshot('history')).toBe(history);
+  expect(controller.getSnapshot('document').objects).toHaveLength(0);
+});
+
+test('input preference and navigation settings remain accessible in every tool family', () => {
   localStorage.setItem(key, '"pen"');
   const controller = createEditor();
   const history = controller.getSnapshot('history');
   render(<Toolbar controller={controller} />);
-  expect(screen.getByRole('combobox', { name: '输入模式' })).toHaveProperty('value', 'pen');
-  expect(
-    [...screen.getByLabelText<HTMLSelectElement>('输入模式').options].map((option) => option.text)
-  ).toEqual(['自动', '强制手指绘制', '强制手写笔绘制']);
-  fireEvent.click(screen.getByRole('button', { name: '平移' }));
-  fireEvent.change(screen.getByLabelText('输入模式'), { target: { value: 'finger' } });
-  expect(controller.getSnapshot('tools').activeTool).toBe('pan');
+  for (const tool of ['文字', '平移', '选择']) {
+    choose(tool);
+    settings();
+    const menu = screen.getByRole('combobox', { name: '输入模式' });
+    expect(
+      [...screen.getByLabelText<HTMLSelectElement>('输入模式').options].map((o) => o.text)
+    ).toEqual(['自动', '强制手指绘制', '强制手写笔绘制']);
+    fireEvent.change(menu, { target: { value: 'finger' } });
+    for (const label of ['尺子', '虚拟纸张', '小地图'])
+      fireEvent.click(screen.getByLabelText(label));
+    expect(screen.queryByLabelText('颜色')).toBeNull();
+    dismiss();
+  }
+  expect(controller.getSnapshot('tools').activeTool).toBe('selection');
   expect(controller.getSnapshot('input').mode).toBe('finger');
   expect(localStorage.getItem(key)).toBe('"finger"');
   expect(controller.getSnapshot('history')).toBe(history);
-  localStorage.clear();
 });
 
-test('standalone toolbar protects static text and preserves editing after remount', () => {
+test('palette updates only the current family, never existing objects or history', () => {
+  const controller = makeLayeredController();
+  commitLayeredStroke(controller, 'ink');
+  const document = controller.getSnapshot('document');
+  const history = controller.getSnapshot('history');
+  render(<Toolbar controller={controller} />);
+  fireEvent.click(screen.getByRole('button', { name: '蓝', exact: true }));
+  choose('矩形');
+  fireEvent.click(screen.getByRole('button', { name: '黑', exact: true }));
+  expect(controller.getSnapshot('tools').settings.shape.color).toBe('#2D2D2D');
+  choose('自由笔');
+  expect(screen.getByRole('button', { name: '蓝', exact: true }).getAttribute('aria-pressed')).toBe(
+    'true'
+  );
+  expect(controller.getSnapshot('tools').settings.freehand.color).toBe('#7FA3C3');
+  settings();
+  fireEvent.change(screen.getByLabelText('颜色'), { target: { value: '#123456' } });
+  dismiss();
+  const palette = screen.getByRole('group', { name: '调色板，用于绘图或形状' });
+  expect(within(palette).queryAllByRole('button', { pressed: true })).toHaveLength(0);
+  choose('文字');
+  for (const button of within(palette).getAllByRole('button'))
+    expect(button).toHaveProperty('disabled', true);
+  expect(controller.getSnapshot('history')).toBe(history);
+  expect(controller.getSnapshot('document')).toBe(document);
+});
+
+test('history and zoom reflect authoritative snapshots and reject invalid or frozen input', () => {
+  const controller = makeLayeredController();
+  render(<Toolbar controller={controller} />);
+  expect(screen.getByRole('button', { name: '撤销' })).toHaveProperty('disabled', true);
+  act(() => {
+    commitLayeredStroke(controller, 'ink');
+  });
+  fireEvent.click(screen.getByRole('button', { name: '撤销' }));
+  expect(controller.getSnapshot('document').objects).toHaveLength(0);
+  fireEvent.click(screen.getByRole('button', { name: '重做' }));
+  expect(controller.getSnapshot('document').objects).toHaveLength(1);
+  act(() => {
+    controller.updateViewport({
+      type: 'replace',
+      expectedRevision: 0,
+      viewport: { scale: 1.25, tx: 0, ty: 0 },
+    });
+  });
+  expect(screen.getByRole('button', { name: '缩放比例' }).textContent).toBe('125%');
+  fireEvent.click(screen.getByRole('button', { name: '缩放比例' }));
+  const zoom = screen.getByLabelText('缩放');
+  expect(zoom).toHaveProperty('type', 'range');
+  expect(zoom).toHaveProperty('min', '25');
+  expect(zoom).toHaveProperty('max', '800');
+  fireEvent.change(zoom, { target: { value: '150' } });
+  expect(controller.getSnapshot('viewport').viewport.scale).toBe(1.5);
+  // A stale command is rejected even if submitted by a racing host.
+  const original = controller.updateViewport.bind(controller);
+  jest
+    .spyOn(controller, 'updateViewport')
+    .mockImplementation((command) => original({ ...command, expectedRevision: 0 }));
+  fireEvent.change(zoom, { target: { value: '175' } });
+  expect(zoom).toHaveProperty('value', '150');
+  jest.restoreAllMocks();
+  act(() => {
+    controller.beginFreehand({
+      type: 'begin',
+      commitId: 'draft',
+      pressureCapability: 'available',
+      batch: {
+        sessionId: 'draft',
+        pointerId: 1,
+        source: 'pen',
+        coordinateSpace: 'world',
+        viewportRevision: 2,
+        batchSequence: 0,
+        samples: [{ sequence: 0, x: 20, y: 20, phase: 'down', pressure: 0.5, time: 0 }],
+      },
+    });
+  });
+  fireEvent.change(zoom, { target: { value: '200' } });
+  expect(zoom).toHaveProperty('value', '150');
+  act(() => {
+    controller.setTool('text');
+  });
+  expect(controller.getSnapshot('viewport').viewport.scale).toBe(1.5);
+});
+
+test('independent circular collapse control preserves state and restores focus', () => {
   const controller = makeLayeredController();
   const first = render(<Toolbar controller={controller} />);
-  const toolbar = screen.getByRole('toolbar');
-  expect(toolbar.style.userSelect).toBe('none');
-  for (const name of ['笔宽', '缩放']) {
-    const input = screen.getByLabelText<HTMLInputElement>(name);
-    expect(input.style.userSelect).toBe('text');
-    expect(input.parentElement!.style.userSelect).toBe('');
-    input.focus();
-    expect(document.activeElement).toBe(input);
-  }
+  const document = controller.getSnapshot('document');
+  const history = controller.getSnapshot('history');
+  const input = controller.getSnapshot('input');
+  expect(screen.queryByRole('button', { name: 'OCR' })).toBeNull();
+  expect(screen.queryByRole('button', { name: '固定工具栏' })).toBeNull();
+  expect(
+    screen.getByRole('toolbar').contains(screen.getByRole('button', { name: '收起工具栏' }))
+  ).toBe(false);
+  settings();
+  fireEvent.click(screen.getByRole('button', { name: '收起工具栏' }));
+  expect(screen.queryByRole('toolbar')).toBeNull();
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(screen.getAllByRole('button')).toHaveLength(1);
+  expect(window.document.activeElement).toBe(screen.getByRole('button', { name: '展开工具栏' }));
+  fireEvent.click(screen.getByRole('button', { name: '展开工具栏' }));
+  expect(window.document.activeElement).toBe(screen.getByRole('button', { name: '收起工具栏' }));
   first.unmount();
   render(<Toolbar controller={controller} />);
-  fireEvent.click(screen.getByRole('button', { name: '矩形' }));
-  expect(controller.getSnapshot('tools').activeTool).toBe('rect');
-  fireEvent.change(screen.getByLabelText('笔宽'), { target: { value: '12' } });
-  fireEvent.change(screen.getByLabelText('颜色'), { target: { value: '#123456' } });
-  expect(controller.getSnapshot('tools').settings.shape).toMatchObject({
-    width: 12,
-    color: '#123456',
+  expect(screen.getByRole('button', { name: '收起工具栏' })).toBeTruthy();
+  expect(controller.getSnapshot('document')).toBe(document);
+  expect(controller.getSnapshot('history')).toBe(history);
+  expect(controller.getSnapshot('input')).toBe(input);
+  expect(localStorage.getItem(key)).toBeNull();
+});
+
+test('black defaults apply only to new editors and the custom ring tracks each family', () => {
+  const controller = createEditor();
+  render(<Toolbar controller={controller} />);
+  expect(controller.getSnapshot('tools').settings.freehand.color).toBe('#2D2D2D');
+  expect(controller.getSnapshot('tools').settings.shape.color).toBe('#2D2D2D');
+  const palette = screen.getByRole('group', { name: '调色板，用于绘图或形状' });
+  expect(within(palette).getAllByRole('button')[0].getAttribute('aria-label')).toBe('黑');
+  fireEvent.change(screen.getByLabelText('自由取色'), { target: { value: '#123456' } });
+  expect(controller.getSnapshot('tools').settings.freehand.color).toBe('#123456');
+  expect(
+    screen.getByLabelText('自由取色').parentElement?.style.getPropertyValue('--current-color')
+  ).toBe('#123456');
+  choose('矩形');
+  expect(screen.getByLabelText('自由取色')).toHaveProperty('value', '#2d2d2d');
+  choose('文字');
+  expect(screen.getByLabelText('自由取色')).toHaveProperty('disabled', true);
+});
+
+test('clear is atomic, reversible and does nothing on an empty board or active stroke', () => {
+  const controller = makeLayeredController();
+  render(<Toolbar controller={controller} />);
+  const clear = screen.getByRole('button', { name: '清空画布' });
+  expect(clear).toHaveProperty('disabled', true);
+  act(() => {
+    commitLayeredStroke(controller, 'one');
+    commitLayeredStroke(controller, 'two');
   });
-  expect(controller.getSnapshot('history').canUndo).toBe(false);
+  const objects = controller.getSnapshot('document').objects;
+  fireEvent.click(clear);
+  expect(controller.getSnapshot('document').objects).toHaveLength(0);
+  expect(clear).toHaveProperty('disabled', true);
+  fireEvent.click(screen.getByRole('button', { name: '撤销' }));
+  expect(controller.getSnapshot('document').objects).toEqual(objects);
+  fireEvent.click(screen.getByRole('button', { name: '重做' }));
+  expect(controller.getSnapshot('document').objects).toHaveLength(0);
+  fireEvent.click(screen.getByRole('button', { name: '撤销' }));
+  act(() => {
+    controller.beginFreehand({
+      type: 'begin',
+      commitId: 'draft',
+      pressureCapability: 'available',
+      batch: {
+        sessionId: 'draft',
+        pointerId: 1,
+        source: 'pen',
+        coordinateSpace: 'world',
+        viewportRevision: 0,
+        batchSequence: 0,
+        samples: [{ sequence: 0, x: 20, y: 20, phase: 'down', pressure: 0.5, time: 0 }],
+      },
+    });
+  });
+  const document = controller.getSnapshot('document');
+  const history = controller.getSnapshot('history');
+  fireEvent.click(clear);
+  expect(controller.getSnapshot('document')).toBe(document);
+  expect(controller.getSnapshot('history')).toBe(history);
+  expect(controller.getSnapshot('interaction').activeFreehand).toBeDefined();
+  act(() => controller.setTool('text'));
+  expect(controller.getSnapshot('document')).toBe(document);
+});
+
+test('keyboard menu navigation, Escape, outside input and editable fields survive remount', () => {
+  const controller = makeLayeredController();
+  const first = render(<Toolbar controller={controller} />);
+  const trigger = screen.getByRole('button', { name: '工具菜单' });
+  fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+  expect(document.activeElement).toBe(screen.getByRole('menuitemradio', { name: '画笔' }));
+  fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' });
+  expect(document.activeElement).toBe(screen.getByRole('menuitemradio', { name: '直线' }));
+  fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' });
+  expect(document.activeElement).toBe(screen.getByRole('menuitemradio', { name: '矩形' }));
+  dismiss();
+  expect(document.activeElement).toBe(trigger);
+  settings();
+  const width = screen.getByLabelText<HTMLInputElement>('笔宽');
+  expect(width.style.userSelect).toBe('text');
+  width.focus();
+  expect(document.activeElement).toBe(width);
+  fireEvent.pointerDown(document.body);
+  expect(screen.queryByRole('dialog')).toBeNull();
+  choose('矩形');
+  expect(controller.getSnapshot('tools').activeTool).toBe('rect');
+  settings();
+  first.unmount();
+  render(<Toolbar controller={controller} />);
+  settings();
+  fireEvent.change(screen.getByLabelText('笔宽'), { target: { value: '12' } });
+  expect(controller.getSnapshot('tools').settings.shape.width).toBe(12);
+  fireEvent(window, new Event('blur'));
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(screen.getByRole('toolbar').style.userSelect).toBe('none');
+});
+
+test('raw sample batches never reconcile the toolbar', () => {
+  const controller = makeLayeredController();
+  const renders = jest.fn();
+  render(
+    <Profiler id="toolbar" onRender={renders}>
+      <Toolbar controller={controller} />
+    </Profiler>
+  );
+  const before = renders.mock.calls.length;
+  const identity = {
+    sessionId: 'hot',
+    pointerId: 1,
+    source: 'pen' as const,
+    coordinateSpace: 'world' as const,
+    viewportRevision: 0,
+  };
+  act(() => {
+    expect(
+      controller.beginFreehand({
+        type: 'begin',
+        commitId: 'hot',
+        pressureCapability: 'available',
+        batch: {
+          ...identity,
+          batchSequence: 0,
+          samples: [{ sequence: 0, x: 20, y: 20, phase: 'down', pressure: 0.5, time: 0 }],
+        },
+      }).ok
+    ).toBe(true);
+    for (let sequence = 1; sequence <= 30; sequence++) {
+      expect(
+        controller.updateFreehand({
+          type: 'update',
+          batch: {
+            ...identity,
+            batchSequence: sequence,
+            samples: [
+              { sequence, x: 20 + sequence, y: 20, phase: 'move', pressure: 0.5, time: sequence },
+            ],
+          },
+        }).ok
+      ).toBe(true);
+    }
+  });
+  expect(renders).toHaveBeenCalledTimes(before);
+  expect(controller.getSnapshot('interaction').activeFreehand).toBeDefined();
+  act(() => {
+    controller.setTool('text');
+  });
+  expect(renders.mock.calls.length).toBeGreaterThan(before);
+});
+
+test('brush leads the menu and selection and eraser are direct controls', () => {
+  const controller = makeLayeredController();
+  render(<Toolbar controller={controller} />);
+  fireEvent.click(screen.getByRole('button', { name: '工具菜单' }));
+  expect(screen.getAllByRole('menuitemradio')[0]).toBe(
+    screen.getByRole('menuitemradio', { name: '画笔' })
+  );
+  expect(screen.getAllByRole('menuitemradio')).toHaveLength(8);
+  expect(screen.queryByRole('menuitemradio', { name: '选择' })).toBeNull();
+  expect(screen.queryByRole('menuitemradio', { name: '橡皮擦' })).toBeNull();
+  dismiss();
+  for (const [name, tool] of [
+    ['选择', 'selection'],
+    ['橡皮擦', 'eraser'],
+  ] as const) {
+    fireEvent.click(screen.getByRole('button', { name }));
+    expect(controller.getSnapshot('tools').activeTool).toBe(tool);
+    expect(screen.getByRole('button', { name }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: '工具菜单' }).getAttribute('aria-pressed')).toBe(
+      'false'
+    );
+  }
+});
+
+test('slider preserves the measured viewport center after pan and resize', () => {
+  const controller = makeLayeredController();
+  render(
+    <div data-painting-board>
+      <div data-drawing-viewport data-testid="viewport" />
+      <Toolbar controller={controller} />
+    </div>
+  );
+  const surface = screen.getByTestId('viewport');
+  const measure = jest.spyOn(surface, 'getBoundingClientRect');
+  act(() => {
+    controller.updateViewport({
+      type: 'replace',
+      expectedRevision: 0,
+      viewport: { scale: 1.5, tx: 140, ty: -45 },
+    });
+  });
+  fireEvent.click(screen.getByRole('button', { name: '缩放比例' }));
+  const zoom = screen.getByLabelText('缩放');
+  const document = controller.getSnapshot('document'),
+    history = controller.getSnapshot('history');
+  for (const [width, height, percent] of [
+    [800, 600, 200],
+    [600, 400, 75],
+  ]) {
+    measure.mockReturnValue({
+      left: 100,
+      top: 80,
+      right: 100 + width,
+      bottom: 80 + height,
+      width,
+      height,
+      x: 100,
+      y: 80,
+      toJSON: () => ({}),
+    });
+    const before = controller.getSnapshot('viewport').viewport;
+    const world = {
+      x: (width / 2 - before.tx) / before.scale,
+      y: (height / 2 - before.ty) / before.scale,
+    };
+    fireEvent.change(zoom, { target: { value: String(percent) } });
+    const after = controller.getSnapshot('viewport').viewport;
+    expect(after.scale).toBe(percent / 100);
+    expect(world.x * after.scale + after.tx).toBeCloseTo(width / 2);
+    expect(world.y * after.scale + after.ty).toBeCloseTo(height / 2);
+  }
+  expect(controller.getSnapshot('document')).toBe(document);
+  expect(controller.getSnapshot('history')).toBe(history);
+  measure.mockRestore();
 });

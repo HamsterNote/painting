@@ -25,11 +25,14 @@ test('board toolbar and surface use the same controller with isolated document r
   const board = render(<LayeredPaintingBoard controller={controller} onRender={renderObserver} />);
   expect(screen.getByTestId('layered-surface')).toBeTruthy();
   const before = renderObserver.mock.calls.length;
+  fireEvent.click(screen.getByRole('button', { name: '设置' }));
   fireEvent.change(screen.getByLabelText('压力模式'), { target: { value: 'constant' } });
   expect(controller.getSnapshot('tools').settings.freehand.pressureMode).toBe('constant');
   expect(renderObserver).toHaveBeenCalledTimes(before);
   act(() => controller.setTool('rect'));
-  expect(screen.getByRole('button', { name: '矩形' }).getAttribute('aria-pressed')).toBe('true');
+  expect(screen.getByRole('button', { name: '工具菜单' }).getAttribute('aria-pressed')).toBe(
+    'true'
+  );
   expect(controller.getSnapshot('document').objects).toHaveLength(0);
   board.unmount();
   jest.restoreAllMocks();

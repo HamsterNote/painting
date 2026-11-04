@@ -18,13 +18,13 @@ export function createEditor(
     viewport: { revision: 0, viewport: { scale: 1, tx: 0, ty: 0 } },
     settings: {
       freehand: {
-        color: '#147d64',
+        color: '#2D2D2D',
         nominalSize: 8,
         opacity: 1,
         pressureMode: 'auto',
         presetRevision: 1,
       },
-      shape: { color: '#20262d', width: 2, opacity: 1 },
+      shape: { color: '#2D2D2D', width: 2, opacity: 1 },
     },
     allocateObjectId: () => {
       let id: string;

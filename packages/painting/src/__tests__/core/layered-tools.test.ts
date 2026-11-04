@@ -162,3 +162,69 @@ test('lasso uses the complete path for live multiselect and restores selection o
   expect(controller.getSnapshot('history').canUndo).toBe(false);
   session.destroy();
 });
+
+test('lasso completion switches to selection and can immediately move every hit once', () => {
+  const controller = makeLayeredController([
+    layeredRect('a'),
+    { ...layeredRect('b'), transform: { a: 1, b: 0, c: 0, d: 1, tx: 150, ty: 0 } },
+  ]);
+  controller.setTool('lasso');
+  controller.setSelection(['a']);
+  const session = createLayeredToolSession(controller, () => 'unused');
+  const document = controller.getSnapshot('document'),
+    history = controller.getSnapshot('history');
+  session.begin({ x: -20, y: -20 });
+  session.update([
+    { x: 300, y: -20 },
+    { x: 300, y: 140 },
+    { x: -20, y: 140 },
+    { x: -20, y: -20 },
+  ]);
+  expect(controller.getSnapshot('tools').activeTool).toBe('lasso');
+  session.end();
+  expect(controller.getSnapshot('selection')).toEqual(['a', 'b']);
+  expect(controller.getSnapshot('tools').activeTool).toBe('selection');
+  expect(controller.getSnapshot('preview').path).toEqual([]);
+  expect(controller.getSnapshot('document')).toBe(document);
+  expect(controller.getSnapshot('history')).toBe(history);
+  session.begin({ x: 50, y: 50 });
+  session.update([{ x: 70, y: 80 }]);
+  session.end();
+  expect(controller.getSnapshot('document').objects.map((o) => o.transform.tx)).toEqual([20, 170]);
+  controller.undo();
+  expect(controller.getSnapshot('document').objects).toEqual(document.objects);
+  expect(controller.getSnapshot('history').canUndo).toBe(false);
+  session.destroy();
+});
+
+test.each(['empty', 'degenerate', 'cancel'] as const)(
+  'lasso %s does not switch tools or write history',
+  (mode) => {
+    const controller = makeLayeredController([layeredRect('a')]);
+    controller.setTool('lasso');
+    controller.setSelection(['a']);
+    const session = createLayeredToolSession(controller, () => 'unused');
+    const document = controller.getSnapshot('document'),
+      history = controller.getSnapshot('history');
+    session.begin({ x: mode === 'cancel' ? -20 : 400, y: -20 });
+    if (mode === 'empty')
+      session.update([
+        { x: 600, y: -20 },
+        { x: 600, y: 140 },
+        { x: 400, y: 140 },
+      ]);
+    if (mode === 'cancel')
+      session.update([
+        { x: 300, y: -20 },
+        { x: 300, y: 140 },
+        { x: -20, y: 140 },
+      ]);
+    if (mode === 'cancel') session.cancel();
+    else session.end();
+    expect(controller.getSnapshot('tools').activeTool).toBe('lasso');
+    expect(controller.getSnapshot('selection')).toEqual(mode === 'empty' ? [] : ['a']);
+    expect(controller.getSnapshot('document')).toBe(document);
+    expect(controller.getSnapshot('history')).toBe(history);
+    session.destroy();
+  }
+);

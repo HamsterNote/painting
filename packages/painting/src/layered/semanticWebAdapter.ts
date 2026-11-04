@@ -3,6 +3,7 @@ import type { LayeredEditorController } from '../core/layeredEditorController';
 import { createLayeredToolSession, type SelectionOperation } from '../core/layeredToolSession';
 import type { Point } from '../model/document';
 import type { WebFreehandPolicy } from '../input/web/freehandWebAdapter';
+import { createEraserTrail } from './eraserTrail';
 import { createZoomFeedback } from './zoomFeedback';
 import { traceGesture, type GestureTraceObserver } from '../input/web/gestureTrace';
 
@@ -30,6 +31,7 @@ export function createSemanticWebAdapter(options: {
   const { host, controller } = options;
   const view = host.ownerDocument.defaultView!;
   const zoomFeedback = createZoomFeedback(controller, view);
+  const eraserTrail = createEraserTrail(host, controller);
   const engine = createLayeredToolSession(controller, options.allocateId);
   let owner: { id: number; source: string; start: Point; pan: boolean } | undefined;
   let snapshot = controller.getSnapshot('viewport');
@@ -103,6 +105,7 @@ export function createSemanticWebAdapter(options: {
         )
       )
         return;
+      if (tool === 'eraser') eraserTrail.begin(world(point));
       owner = { id: event.pointerId, source: event.pointerType, start: point, pan: tool === 'pan' };
       if (options.onTrace)
         traceGesture(options.onTrace, {
@@ -155,7 +158,9 @@ export function createSemanticWebAdapter(options: {
         } catch {
           /* Parent sample remains available. */
         }
-        engine.update(events.map((sample) => world(screen(sample))));
+        const points = events.map((sample) => world(screen(sample)));
+        engine.update(points);
+        if (controller.getSnapshot('tools').activeTool === 'eraser') eraserTrail.append(points);
       }
     });
     event.preventDefault();
@@ -181,14 +186,19 @@ export function createSemanticWebAdapter(options: {
     if (!owner || event.pointerId !== owner.id || event.pointerType !== owner.source) return;
     safely(() => {
       if (!owner!.pan) {
-        engine.update([world(screen(event))]);
-        engine.end();
+        const point = world(screen(event));
+        engine.update([point]);
+        if (controller.getSnapshot('tools').activeTool === 'eraser') {
+          eraserTrail.append([point]);
+          eraserTrail.finish(() => engine.end());
+        } else engine.end();
       }
     });
     release();
   }
   function cancel() {
     zoomFeedback.clear();
+    eraserTrail.clear();
     engine.cancel();
     release();
     return (
@@ -263,6 +273,7 @@ export function createSemanticWebAdapter(options: {
     view.addEventListener('pointercancel', pointerCancel);
   }
   view.addEventListener('blur', cancel);
+  view.addEventListener('pagehide', cancel);
   host.ownerDocument.addEventListener('visibilitychange', hidden);
   host.addEventListener('pointermove', hover);
   host.addEventListener('dblclick', doubleClick);
@@ -279,6 +290,7 @@ export function createSemanticWebAdapter(options: {
     destroy() {
       cancel();
       engine.destroy();
+      eraserTrail.destroy();
       unsubscribe();
       host.removeEventListener('pointerdown', down);
       host.removeEventListener('wheel', wheel);
@@ -288,6 +300,7 @@ export function createSemanticWebAdapter(options: {
       view.removeEventListener('pointerup', up);
       view.removeEventListener('pointercancel', pointerCancel);
       view.removeEventListener('blur', cancel);
+      view.removeEventListener('pagehide', cancel);
       view.removeEventListener('keydown', keyDown);
       host.ownerDocument.removeEventListener('visibilitychange', hidden);
     },

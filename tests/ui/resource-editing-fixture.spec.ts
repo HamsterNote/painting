@@ -1,3 +1,4 @@
+import { selectToolbarTool } from './layered-helpers';
 import { expect, test, type Page } from '@playwright/test';
 import { dispatchLayeredPointer, openLayeredEditor } from './layered-helpers';
 
@@ -16,7 +17,7 @@ async function openFixture(page: Page) {
   await openLayeredEditor(page, '&fixture=resources');
   await expect(page.locator('[data-object-id]')).toHaveCount(2);
   await expect(page.getByRole('button', { name: '撤销', exact: true })).toBeDisabled();
-  await page.getByRole('button', { name: '文字', exact: true }).click();
+  await selectToolbarTool(page, '文字');
 }
 
 async function editText(page: Page, expected: string) {

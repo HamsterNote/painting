@@ -1,3 +1,4 @@
+import { openToolbarSettings, selectToolbarTool, setToolbarInputMode } from './layered-helpers';
 import { expect, test, type Page } from '@playwright/test';
 import {
   dispatchLayeredPointer as pointer,
@@ -11,7 +12,7 @@ for (const mode of ['auto', 'finger', 'pen']) {
     page,
   }) => {
     await openLayeredEditor(page);
-    await page.getByLabel('输入模式').selectOption(mode);
+    await setToolbarInputMode(page, mode);
     const initial = await layeredState(page);
     // Exact signed IDs observed in the iPadOS 18 / Edge device trace.
     await stroke(page, 'touch', -765894343);
@@ -44,7 +45,7 @@ for (const mode of ['auto', 'finger', 'pen']) {
     );
     if (mode === 'finger') expect(after.viewport).toEqual(penned.viewport);
     else expect(after.viewport).not.toEqual(penned.viewport);
-    await page.getByRole('button', { name: '矩形', exact: true }).click();
+    await selectToolbarTool(page, '矩形');
     await stroke(page, 'pen', -765894344);
     expect((await layeredState(page)).document.objects).toHaveLength(
       after.document.objects.length + 1
@@ -80,6 +81,7 @@ test('auto-default-touch: visible ink, one undo transaction and a stationary vie
   page,
 }) => {
   await openLayeredEditor(page);
+  await openToolbarSettings(page);
   await expect(page.getByLabel('输入模式')).toHaveValue('auto');
   const before = await layeredState(page);
   await pointer(page, 'down', { x: 100, y: 120 }, { source: 'touch', id: 1 });
@@ -107,7 +109,7 @@ for (const mode of ['auto', 'finger']) {
     page,
   }) => {
     await openLayeredEditor(page);
-    await page.getByLabel('输入模式').selectOption(mode);
+    await setToolbarInputMode(page, mode);
     const before = await layeredState(page);
     await pointer(page, 'down', { x: 100, y: 120 }, { source: 'touch', id: 1 });
     await pointer(page, 'move', { x: 180, y: 140 }, { source: 'touch', id: 1 });
@@ -137,7 +139,7 @@ test('auto-pen-latch: valid first down survives detection and only a new control
   await openLayeredEditor(page);
   await pointer(page, 'move', { x: 70, y: 70 }, { source: 'pen', id: 8 });
   await page
-    .getByRole('button', { name: '自由笔', exact: true })
+    .getByRole('button', { name: '工具菜单', exact: true })
     .dispatchEvent('pointerdown', { pointerType: 'pen', pointerId: 9, button: 0 });
   expect((await layeredState(page)).input.penSeen).toBe(false);
   await stroke(page, 'touch');
@@ -150,8 +152,8 @@ test('auto-pen-latch: valid first down survives detection and only a new control
   await page.clock.install();
   await page.clock.fastForward('01:00:00');
   await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-  await page.getByRole('button', { name: '矩形', exact: true }).click();
-  await page.getByRole('button', { name: '自由笔', exact: true }).click();
+  await selectToolbarTool(page, '矩形');
+  await selectToolbarTool(page, '自由笔');
   await stroke(page, 'touch', 11);
   const after = await layeredState(page);
   expect(after.input).toEqual(detected.input);
@@ -174,25 +176,25 @@ test('forced-finger-override: takes effect immediately and auto retains the orig
 }) => {
   await openLayeredEditor(page);
   await stroke(page, 'pen');
-  await page.getByLabel('输入模式').selectOption('finger');
+  await setToolbarInputMode(page, 'finger');
   await stroke(page, 'touch', 2, 180);
   await stroke(page, 'pen', 3, 220);
   await stroke(page, 'touch', 4, 260);
   const finger = await layeredState(page);
   expect(finger.document.objects).toHaveLength(4);
   expect(finger.input).toEqual({ mode: 'finger', penSeen: true, effectiveTouch: 'draw' });
-  await page.getByLabel('输入模式').selectOption('auto');
+  await setToolbarInputMode(page, 'auto');
   await stroke(page, 'touch', 5);
   expect((await layeredState(page)).document).toEqual(finger.document);
   expect((await layeredState(page)).input.effectiveTouch).toBe('pan');
-  await page.getByLabel('输入模式').selectOption('finger');
+  await setToolbarInputMode(page, 'finger');
   await pointer(page, 'down', { x: 100, y: 180 }, { source: 'touch', id: 6 });
   await pointer(page, 'move', { x: 180, y: 200 }, { source: 'touch', id: 6 });
   await expect.poll(() => activePixels(page)).toBeGreaterThan(0);
-  await page.getByLabel('输入模式').selectOption('pen');
+  await setToolbarInputMode(page, 'pen');
   await expect.poll(() => activePixels(page)).toBe(0);
   await pointer(page, 'move', { x: 240, y: 220 }, { source: 'touch', id: 6 });
-  await page.getByLabel('输入模式').selectOption('finger');
+  await setToolbarInputMode(page, 'finger');
   // A fresh contact works even while the cancelled contact has not lifted yet.
   await stroke(page, 'touch', 7, 320);
   await pointer(page, 'up', { x: 260, y: 240 }, { source: 'touch', id: 6 });
@@ -215,7 +217,7 @@ test('forced-pen: single touch pans and palms never move the viewport during or 
   page,
 }) => {
   await openLayeredEditor(page);
-  await page.getByLabel('输入模式').selectOption('pen');
+  await setToolbarInputMode(page, 'pen');
   const initial = await layeredState(page);
   expect(initial.input.penSeen).toBe(false);
   await stroke(page, 'touch');
@@ -258,8 +260,9 @@ for (const operation of ['getItem', 'setItem'] as const) {
       });
     }, operation);
     await openLayeredEditor(page);
+    await openToolbarSettings(page);
     await expect(page.getByLabel('输入模式')).toHaveValue('auto');
-    await page.getByLabel('输入模式').selectOption('finger');
+    await setToolbarInputMode(page, 'finger');
     await stroke(page);
     const state = await layeredState(page);
     expect(state.input.mode).toBe('finger');
@@ -278,11 +281,11 @@ test('preference-first-frame: restores before input and never restores penSeen',
     }
     const observer = new MutationObserver(() => {
       const surface = document.querySelector('[data-input-ready="true"]');
-      const menu = document.querySelector<HTMLSelectElement>('[aria-label="输入模式"]');
+      const menu = document.querySelector<HTMLElement>('[role="toolbar"][data-input-mode]');
       if (surface && menu && !window.__inputFirstFrame) {
         window.__inputFirstFrame = {
           surface: surface.getAttribute('data-input-mode'),
-          menu: menu.value,
+          menu: menu.getAttribute('data-input-mode')!,
         };
         observer.disconnect();
       }
@@ -301,7 +304,7 @@ test('preference-first-frame: restores before input and never restores penSeen',
   expect(firstTouch.viewport).not.toEqual(before.viewport);
   await stroke(page, 'pen', 2);
   expect(await page.evaluate((k) => localStorage.getItem(k), key)).toBe('"pen"');
-  await page.getByLabel('输入模式').selectOption('finger');
+  await setToolbarInputMode(page, 'finger');
   await page.reload();
   await page.waitForFunction(() => Boolean(window.__layeredEditor && window.__inputFirstFrame));
   expect(await page.evaluate(() => window.__inputFirstFrame)).toEqual({
@@ -310,7 +313,7 @@ test('preference-first-frame: restores before input and never restores penSeen',
   });
   await stroke(page);
   expect((await layeredState(page)).document.objects).toHaveLength(1);
-  await page.getByLabel('输入模式').selectOption('auto');
+  await setToolbarInputMode(page, 'auto');
   await stroke(page, 'pen', 3);
   expect((await layeredState(page)).input.penSeen).toBe(true);
   expect(await page.evaluate((k) => localStorage.getItem(k), key)).toBe('"auto"');
@@ -337,17 +340,17 @@ for (const mode of ['auto', 'finger', 'pen']) {
     page,
   }) => {
     await openLayeredEditor(page);
-    await page.getByLabel('输入模式').selectOption(mode);
+    await setToolbarInputMode(page, mode);
     const initial = await layeredState(page);
     await stroke(page, 'mouse');
     expect((await layeredState(page)).viewport).toEqual(initial.viewport);
     expect((await layeredState(page)).document.objects).toHaveLength(1);
-    await page.getByRole('button', { name: '平移', exact: true }).click();
+    await selectToolbarTool(page, '平移');
     await stroke(page, 'mouse', 2);
     const panned = await layeredState(page);
     expect(panned.viewport).not.toEqual(initial.viewport);
     expect(panned.document.objects).toHaveLength(1);
-    await page.getByRole('button', { name: '自由笔', exact: true }).click();
+    await selectToolbarTool(page, '自由笔');
     await pointer(page, 'down', { x: 100, y: 100 }, { source: 'touch', id: 3 });
     await pointer(page, 'down', { x: 200, y: 100 }, { source: 'touch', id: 4 });
     await pointer(page, 'down', { x: 400, y: 180 }, { source: 'touch', id: 5 });
@@ -373,7 +376,8 @@ for (const mode of ['auto', 'finger', 'pen']) {
     page,
   }) => {
     await openLayeredEditor(page);
-    await page.getByLabel('输入模式').selectOption(mode);
+    await setToolbarInputMode(page, mode);
+    await openToolbarSettings(page);
     await page.getByLabel('尺子', { exact: true }).check();
     const initial = await layeredState(page);
     await pointer(page, 'down', { x: 100, y: 80 }, { source: 'touch', id: 1 });
@@ -406,7 +410,7 @@ for (const mode of ['auto', 'finger', 'pen']) {
 for (const mode of ['auto', 'finger']) {
   test(`adapter-matrix: ${mode} pen safely preempts a touch stroke`, async ({ page }) => {
     await openLayeredEditor(page);
-    await page.getByLabel('输入模式').selectOption(mode);
+    await setToolbarInputMode(page, mode);
     const initial = await layeredState(page);
     await pointer(page, 'down', { x: 100, y: 100 }, { source: 'touch', id: 1 });
     await pointer(page, 'move', { x: 180, y: 120 }, { source: 'touch', id: 1 });
@@ -436,8 +440,8 @@ for (const mode of ['auto', 'finger']) {
       page,
     }) => {
       await openLayeredEditor(page, '&fixture=mixed');
-      await page.getByLabel('输入模式').selectOption(mode);
-      await page.getByRole('button', { name: label, exact: true }).click();
+      await setToolbarInputMode(page, mode);
+      await selectToolbarTool(page, label);
       const initial = await layeredState(page);
       await pointer(page, 'down', { x: 100, y: 160 }, { source: 'touch', id: 1 });
       await pointer(page, 'move', { x: 220, y: 200 }, { source: 'touch', id: 1 });
@@ -463,12 +467,12 @@ for (const mode of ['auto', 'finger']) {
     page,
   }) => {
     await openLayeredEditor(page);
-    await page.getByLabel('输入模式').selectOption(mode);
-    await page.getByRole('button', { name: '矩形', exact: true }).click();
+    await setToolbarInputMode(page, mode);
+    await selectToolbarTool(page, '矩形');
     await pointer(page, 'down', { x: 100, y: 100 }, { source: 'mouse', id: 1 });
     await pointer(page, 'move', { x: 200, y: 200 }, { source: 'mouse', id: 1 });
     await pointer(page, 'up', { x: 200, y: 200 }, { source: 'mouse', id: 1 });
-    await page.getByRole('button', { name: '选择', exact: true }).click();
+    await selectToolbarTool(page, '选择');
     await page.evaluate(() => {
       const editor = window.__layeredEditor!;
       editor.setSelection([editor.getSnapshot('document').objects[0].objectId]);
@@ -528,7 +532,7 @@ for (const interruption of ['mode', 'blur', 'hidden'] as const) {
       page,
     }) => {
       await openLayeredEditor(page);
-      await page.getByRole('button', { name: label, exact: true }).click();
+      await selectToolbarTool(page, label);
       const click = async (x: number, y: number) => {
         await pointer(page, 'down', { x, y }, { source: 'mouse', id: 1 });
         await pointer(page, 'up', { x, y }, { source: 'mouse', id: 1 });
@@ -542,7 +546,7 @@ for (const interruption of ['mode', 'blur', 'hidden'] as const) {
       }
       const preview = (await layeredState(page)).preview;
       expect(preview.objects.length + preview.path.length).toBeGreaterThan(0);
-      if (interruption === 'mode') await page.getByLabel('输入模式').selectOption('finger');
+      if (interruption === 'mode') await setToolbarInputMode(page, 'finger');
       else
         await page.evaluate((kind) => {
           if (kind === 'blur') window.dispatchEvent(new Event('blur'));
@@ -587,7 +591,7 @@ for (const interruption of ['mode', 'blur', 'hidden'] as const) {
     const initial = await layeredState(page);
     await pointer(page, 'down', { x: 150, y: 200 }, { source: 'touch', id: -201 });
     await pointer(page, 'down', { x: 250, y: 200 }, { source: 'touch', id: -202 });
-    if (interruption === 'mode') await page.getByLabel('输入模式').selectOption('finger');
+    if (interruption === 'mode') await setToolbarInputMode(page, 'finger');
     else
       await page.evaluate((kind) => {
         if (kind === 'blur') window.dispatchEvent(new Event('blur'));
@@ -626,6 +630,7 @@ for (const width of [1366, 390]) {
     await openLayeredEditor(page);
     await stroke(page);
     await expect(page.locator('[data-object-id] path').first()).toBeVisible();
+    await openToolbarSettings(page);
     const fits = await page.evaluate(() => {
       const menu = document.querySelector('[aria-label="输入模式"]')!.getBoundingClientRect();
       const surface = document
@@ -633,7 +638,11 @@ for (const width of [1366, 390]) {
         .getBoundingClientRect();
       return {
         overflow: document.documentElement.scrollWidth > innerWidth,
-        menuFits: menu.left >= 0 && menu.right <= innerWidth && menu.bottom <= surface.top,
+        menuFits:
+          menu.left >= 0 &&
+          menu.right <= innerWidth &&
+          menu.top >= surface.top &&
+          menu.bottom <= surface.bottom,
       };
     });
     expect(fits).toEqual({ overflow: false, menuFits: true });

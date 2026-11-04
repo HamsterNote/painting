@@ -1,3 +1,4 @@
+import { openToolbarSettings, selectToolbarTool } from './layered-helpers';
 import { expect, test, type Page } from '@playwright/test';
 
 async function openEditor(page: Page, fixture = '') {
@@ -67,7 +68,7 @@ test('bezier is a dragged line followed by two clicked control points and one tr
   page,
 }) => {
   await openEditor(page);
-  await page.getByRole('button', { name: '贝塞尔', exact: true }).click();
+  await selectToolbarTool(page, '贝塞尔');
   const box = (await page.getByTestId('layered-surface').boundingBox())!;
   const click = (x: number, y: number) => page.mouse.click(box.x + x, box.y + y);
   await page.mouse.move(box.x + 80, box.y + 100);
@@ -105,7 +106,7 @@ test('polygon accepts click vertices, ignores drag samples and double click clos
   page,
 }) => {
   await openEditor(page);
-  await page.getByRole('button', { name: '多边形', exact: true }).click();
+  await selectToolbarTool(page, '多边形');
   const box = (await page.getByTestId('layered-surface').boundingBox())!;
   await page.mouse.move(box.x + 80, box.y + 100);
   await page.mouse.down();
@@ -149,7 +150,7 @@ for (const name of ['贝塞尔', '多边形']) {
     await openEditor(page);
     const box = (await page.getByTestId('layered-surface').boundingBox())!;
     const start = async () => {
-      await page.getByRole('button', { name, exact: true }).click();
+      await selectToolbarTool(page, name);
       await page.mouse.move(box.x + 80, box.y + 100);
       await page.mouse.down();
       await page.mouse.move(box.x + 300, box.y + 100);
@@ -163,7 +164,7 @@ for (const name of ['贝塞尔', '多边形']) {
       page.getByTestId('layered-display').locator('[data-object-id],polyline')
     ).toHaveCount(0);
     await start();
-    await page.getByRole('button', { name: '自由笔', exact: true }).click();
+    await selectToolbarTool(page, '自由笔');
     await expect(
       page.getByTestId('layered-display').locator('[data-object-id],polyline')
     ).toHaveCount(0);
@@ -177,7 +178,9 @@ test('minimap paper is absent and background is white when the toolbar paper tog
 }) => {
   await openEditor(page);
   const map = page.getByTestId('layered-minimap');
+  await openToolbarSettings(page);
   await page.getByLabel('小地图', { exact: true }).check();
+  await openToolbarSettings(page);
   const paper = page.getByLabel('虚拟纸张', { exact: true });
   await paper.check();
   await expect(page.getByTestId('layered-paper')).toBeVisible();
@@ -210,7 +213,9 @@ for (const width of [1280, 390]) {
       const before = await page.evaluate(
         () => window.__layeredEditor!.getSnapshot('viewport').viewport
       );
+      await openToolbarSettings(page);
       await page.getByLabel('虚拟纸张', { exact: true }).check();
+      await openToolbarSettings(page);
       await page.getByLabel('小地图', { exact: true }).check();
       const paper = page.getByTestId('layered-paper');
       const paperWidth = Number(await paper.locator('rect').getAttribute('width'));
@@ -276,7 +281,9 @@ for (const width of [1280, 390]) {
         viewport.revision
       );
       const navigated = await page.evaluate(() => window.__layeredEditor!.getSnapshot('viewport'));
+      await openToolbarSettings(page);
       await page.getByLabel('虚拟纸张', { exact: true }).uncheck();
+      await openToolbarSettings(page);
       await page.getByLabel('虚拟纸张', { exact: true }).check();
       await page.setViewportSize({ width: width + 80, height: 900 });
       await expect(surface).toHaveCSS('width', `${width + 80}px`);
