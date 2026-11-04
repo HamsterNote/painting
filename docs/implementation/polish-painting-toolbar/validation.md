@@ -85,6 +85,20 @@ Mac 为 arm64 / macOS 27.2 (26B123) / Xcode 27.2 (27B52)。原生宿主为 Paint
 | iPhone 17 Pro / iOS 26.5、iPhone 18 Pro / iOS 27.2 / 新 dev client | **构建与所测启动通过、稳定布局改善**：iOS27.2不再启动即SIGTRAP；实际进入默认编辑器，稳定画面的安全区与胶囊正常，26.5胶囊x16、宽370、底824。尚未覆盖全部冷启动瞬时首帧 |
 | iOS 26.5 / 横滚、软键盘、焦点与 PencilKit 点击 | **无法验证，输入通道问题**：HID触摸 / Tab / Escape连接失效，Simulator前台System Events仍超时。PencilKit已启用并收到gesture-ancestor配置回执，但不能用AX激活替代真实点击结论；由人工或恢复通道后补验，不在本次Android修复范围 |
 
+第四轮 Android Gboard 续修验证（HAM-164 评论 `01a1a61d-f7f7-7202-a2d4-b8c819c9e5f4`，附件 `HAM-164-round4-validation.md` / `HAM-164-round4-evidence.zip`，head `a97818e16a15b046eaabffe7cbd394799a2e33fb`）：
+
+环境为 Pixel 7 配置 AVD / Android 16 / API 36 ARM64，Playground development client 0.1.0 (1)，Expo 57.0.24 / RN 0.86.3 / @expo/dom-webview 57.0.1，System WebView 133.0.6943.137，Gboard 15.1.08.726012951-preload-arm64-v8a。默认入口已确认加载新 Metro Android / DOM bundle，未启用 diagnostics，也未改写视口或 CSS。输入为 ADB 模拟触摸（含 Gboard 按键、完成 / 取消 / 撤销）与文本注入，菜单选文字使用 CDP 点击。**以下仅为模拟器所测场景通过，非 Android 真机、非中文 IME 或手写验收。**
+
+| 场景 | 第四轮实际判定与证据 |
+| --- | --- |
+| 字母键盘 / 表情面板高度切换 | **通过**：无键盘 innerHeight / visualViewport.height 为839 / 839.238 CSS px，字母模式527 / 527.238，表情模式403 / 403.048。原生外层仍为完整高度，内部宿主及直接 WebView 底边实际从2337→1517→1192设备像素，缩至键盘上方；以稳定态记录，不宣告所有过渡帧无延迟或闪动。证据 `typed.*`、`keyboard-stable.png`、`emoji-stable.*` |
+| 键盘可见时完成 / 一次撤销 | **通过**：完成 / 取消均在可见区域内并可实际触摸；完成提交恰一段 `AndroidRound4g`，一次撤销后对象归零、撤销禁用且重做可用。证据 `committed.*`、`undone.*` |
+| 键盘可见时取消 | **通过**：新建 `CancelRound4` 草稿后实际触摸取消，编辑器关闭、对象仍零、撤销仍禁用且重做仍可用，未新增对象或历史。证据 `cancel-draft.*`、`cancelled.*` |
+| 高度变化、隐藏 / 重开期间草稿与焦点 | **通过**：隐藏后高度恢复839，重开字母键盘回到527；同一 textarea 和页面观测标记保留，草稿不变、焦点持续为“文字内容”，未收到 focusout。完成 / 取消后 textarea 正常销毁、焦点 BODY，不描述为回到工具按钮。证据 `hidden.*`、`reopened.*` 及焦点观测 |
+| 退出 / 重进默认页 | **行为已确认**：带 `LeaveDraft` 离开至另一原生路由再返回后，创建新编辑器、观测标记消失、未提交草稿不恢复，焦点 BODY、对象与历史均空；再次编辑可唤起 Gboard、缩至527并取消。不是跨页面草稿持久化通过。证据 `before-leave.*`、`away.*`、`reenter-default.*`、`reenter-keyboard.*` |
+
+第四轮未扩大为全部4.3或真机结论。iOS26.5交互仍需人工 / 恢复输入通道，实体iPad + Apple Pencil仍缺；4.2 / 4.3保持未勾选，HAM-164继续 `blocked`。
+
 ### 修复范围与本机验证边界
 
 - 通过 `apps/playground/plugins/with-ios-scene.cjs` 持久化 UIScene 迁移：Info.plist 注册 Expo 57 自带的 `EXExpoAppSceneDelegate`；AppDelegate 提供 RN factory，由 scene 创建窗口并启动 RN。保留 dev-client bundle URL 与冷 / 热深链接委托，移除 AppDelegate 重复启动。无需手改被忽略的生成工程；模板不兼容时 prebuild 显式报错。
@@ -93,7 +107,7 @@ Mac 为 arm64 / macOS 27.2 (26B123) / Xcode 27.2 (27B52)。原生宿主为 Paint
 - 文字编辑 UI 改为独立 HTML 浮层，SVG 锚点保留对象 / viewport / 页面祖先变换的实际投影，操作面板保持正向并约束到所属画布与 visual viewport 的交集；随宿主 resize、可见视口 resize / scroll 更新。输入区可缩小并内部滚动，操作区换行，保持完成 / 取消可达；字号至少 16 CSS px 避免 iOS 聚焦自动放大。编辑浮层的避让不修改文档坐标、对象 transform、viewport 或撤销历史，提交仍走既有 IME session。
 - 审查 P2 修复：长文字高度通过独立隐藏节点按文档宽度、字号及行高测量，避免 25% 缩放时用浮层换行高度写回导致裁切；已有对象的自定义行高保留。监听 SVG 锚点至页面祖先的属性 / 类变动、尺寸与 CSS 动画，纯平移、缩放、旋转无需额外触发 window resize 即可更新浮层，动画结束后停止逐帧跟随。
 
-修复执行环境为 Linux / Node 24.15.0 / pnpm 10.28.2。调用模拟器工具返回 `spawn xcrun ENOENT`，本机没有 Xcode / iOS 运行时，**无法完成修复后的 iOS 26.5 / 27.2 启动与系统键盘自查**。该缺口留待 HAM-164 Mac 环境回归；父任务最新安排已允许直接使用 PR #45 的最新 head，**无需等待合并**。旧 head `19a7d46` 的设备结果仅作基线，须在包含两处 P2 修复的新 head 重跑。浏览器测试使用独立 5276 端口，避免复用 HAM-156 的旧服务。
+修复执行环境为 Linux / Node 24.15.0 / pnpm 10.28.2。调用模拟器工具返回 `spawn xcrun ENOENT`，本机没有 Xcode / iOS 运行时，**未在本机执行 iOS 26.5 / 27.2 启动与系统键盘自查**。Mac 第三轮已覆盖所测构建 / 启动，第四轮已在 `a97818e` 覆盖 Android Gboard 续修场景，结果见上；iOS交互输入通道缺口仍保留。各轮设备结果以各自 head 为准，`19a7d46` 仅作基线。浏览器测试使用独立 5276 端口，避免复用 HAM-156 的旧服务。
 
 | 本轮命令 / 检查 | 结果 |
 | --- | --- |
@@ -108,11 +122,13 @@ Mac 为 arm64 / macOS 27.2 (26B123) / Xcode 27.2 (27B52)。原生宿主为 Paint
 
 UI 使用本地临时配置继承 `playwright.config.ts`，仅改 baseURL / webServer 为 5276、`reuseExistingServer=false`；测试本身已纳入标准 Chromium 配置，新布局 spec 同时加入 WebKit 配置。Chromium 是 147.0.7727.15。首轮新增 4 项覆盖：320 / 402px 右侧文字输入的可见视口缩小与平移、焦点与草稿保留、完成与撤销；零宽宿主恢复后首帧胶囊宽度与内部横滚；旋转 / 缩放祖先下编辑控件可达及取消不改对象。本轮另增 6 项：25% / 50% / 200% 输入 100 个“汉”后提交、重开与改字号，实际渲染高度不超过对象边界；仅改变祖先类名做平移 / 缩放 / 旋转，不派发 resize，检查实际位置、控件可达、草稿与焦点保留、取消不写历史。这里直接输入中文字符串并模拟 viewport 事件，只证明 DOM 布局与会话行为，不冒充系统中文 IME 或软键盘。
 
-Android 续修另增两项原生事件测试：将平台明确设为 Android，模拟 `keyboardDidShow` / `keyboardDidHide`，外层高度保持839px时限制到键盘顶部、键盘高度变化 / 隐藏 / 重开、系统已收缩不二次扣减、容器原点变化与入页已有键盘。仅模拟原生几何边界，使用真实 Keyboard 事件与宿主状态更新，检查子树保留。浏览器新增一项让WebView视口实际按839→496→436→839→496px变化，验证右下编辑框与完成 / 取消位于可见区域，草稿 / 焦点保留、一次提交与撤销；没有使用iOS visualViewport属性覆盖。**这些是自动化边界验证，Android Gboard实机 / 模拟器验收仍须在续修head重跑。**
+Android 续修另增两项原生事件测试：将平台明确设为 Android，模拟 `keyboardDidShow` / `keyboardDidHide`，外层高度保持839px时限制到键盘顶部、键盘高度变化 / 隐藏 / 重开、系统已收缩不二次扣减、容器原点变化与入页已有键盘。仅模拟原生几何边界，使用真实 Keyboard 事件与宿主状态更新，检查子树保留。浏览器新增一项让WebView视口实际按839→496→436→839→496px变化，验证右下编辑框与完成 / 取消位于可见区域，草稿 / 焦点保留、一次提交与撤销；没有使用iOS visualViewport属性覆盖。**这些是自动化边界验证；第四轮已另外在 `a97818e` 的 API 36 模拟器完成 Gboard 所测场景，仍不替代真机或中文 IME 验收。**
 
 Web / Expo DOM 浮层使用已有 ReactDOM renderer；包显式声明可选 `react-dom` peer（Web 宿主需提供）并补开发类型，不新增生产依赖。
 
-### Mac 回归清单（修复后待执行）
+### Mac 回归清单（历轮执行与剩余项）
+
+以下为累计清单；第三 / 四轮已完成部分以上述结果为准，未覆盖的冷启动瞬时首帧、iOS交互与实体笔项目继续待验。
 
 1. 直接取 HAM-167 PR #45 的最新 head（无需等待合并），安装依赖与 `prepare:playground-artifacts`；运行 `prebuild --platform ios --no-install` 检查生成 AppDelegate 与 Info.plist，再安装 Pods / 重建 dev client。**必须重建，刷新 JS 无法更新 UIScene 生命周期**。
 2. iPhone 17 Pro / iOS 26.5、iPhone 18 Pro / iOS 27.2 分别冷启动与热启动，连接 Metro，验证首页及 `/layered-editor` 冷 / 热深链接均进入编辑器，保留进程日志。
@@ -120,4 +136,4 @@ Web / Expo DOM 浮层使用已有 ReactDOM renderer；包显式声明可选 `rea
 4. 在右侧 / 底部创建文字并打开英文软键盘、中文 IME；长文本、多行、候选选词、完成 / 取消、键盘关闭 / 重开均检查可达、焦点保留与一次提交 / 撤销。增加 25% 缩放输入 100 个“汉”并提交、重开，检查无裁切；仅更改页面祖先 transform 做平移 / 缩放 / 旋转，不派发 resize，检查浮层跟随且保持草稿 / 焦点。补菜单、Escape / Tab（可用外接键盘时）、焦点返回矩阵。iOS 26.5 若 idb 失效，可尝试 Simulator 前台 System Events 或 simctl 硬件键盘开关，仍无响应则明确记录输入通道不可用。
 5. 显式开启 `pencilkit=1`，重复菜单、横滚和文字编辑，确认原生覆盖层未吞工具栏点击；实体 Pencil 的输入仍单独标记。
 6. 复用现有 Android API 36 AVD，在默认入口完整重跑安全区、胶囊首帧 / 横滚、系统键盘、文字限位、弹层与焦点，不能以诊断入口替代。每项回传实际设备型号 / OS / 宿主版本 / 构建 SHA / 输入来源、步骤、判定与截图或录屏，含未通过原因。4.2 / 4.3 保持未勾选，直到父任务有完整设备证据。
-7. 本次续修优先复验Android右下文字：Gboard可见时原生内部宿主、WebView innerHeight与visualViewport应缩至键盘上方，完成 / 取消可点击；改变键盘高度、关闭 / 重开、退出重进默认页，检查内容 / 焦点与一次提交 / 撤销。原生宿主JS已变化，需加载新Metro bundle；本次未新增原生模块或修改Android工程配置。iOS交互缺项交由人工 / 恢复输入通道后补验。
+7. Android右下文字续修已在第四轮 `a97818e` 完成所测场景：Gboard字母 / 表情模式下内部宿主和WebView实际收缩至527 / 403 CSS px，完成 / 取消可点，草稿与焦点在高度变化、隐藏 / 重开期间保留，提交后一次撤销；键盘可见时取消不写对象 / 历史。退出重进创建新编辑器、未提交草稿不恢复。详见第四轮记录；本轮未新增原生模块或修改Android工程配置，iOS交互缺项仍交由人工 / 恢复输入通道后补验。
