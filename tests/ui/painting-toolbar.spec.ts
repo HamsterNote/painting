@@ -26,11 +26,15 @@ for (const width of [320, 390, 768, 1024, 1280, 1440]) {
     const targets = await strip.getByRole('button').evaluateAll((buttons) =>
       buttons.map((button) => {
         const rect = button.getBoundingClientRect();
-        return { width: rect.width, height: rect.height };
+        return {
+          width: rect.width,
+          height: rect.height,
+          compact: button.classList.contains('hn-painting-color'),
+        };
       })
     );
     for (const target of targets) {
-      expect(target.width).toBeGreaterThanOrEqual(44);
+      expect(target.width).toBeGreaterThanOrEqual(target.compact ? 30 : 44);
       expect(target.height).toBeGreaterThanOrEqual(44);
     }
     await page.getByRole('button', { name: '缩放比例' }).focus();
@@ -55,16 +59,23 @@ for (const width of [320, 390, 768, 1024, 1280, 1440]) {
     await page.screenshot({ path: info.outputPath(`toolbar-${width}-settings.png`) });
     await info.attach('settings', { body: await page.screenshot(), contentType: 'image/png' });
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: '文字', exact: true }).click();
+    await selectToolbarTool(page, '文字');
     await page.mouse.move(1, 1);
-    await expect(page.getByRole('button', { name: '文字', exact: true })).toHaveCSS(
+    await expect(page.getByRole('button', { name: '工具菜单', exact: true })).toHaveCSS(
       'background-color',
       'rgb(113, 99, 217)'
     );
-    await expect(page.getByRole('button', { name: 'OCR', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'OCR', exact: true })).toHaveCount(0);
+    const collapse = (await page.getByRole('button', { name: '收起工具栏' }).boundingBox())!;
+    expect(collapse.y + collapse.height).toBeLessThanOrEqual(box.y - 8);
+    const colors = page.locator('.hn-painting-color span');
+    const firstColor = (await colors.nth(0).boundingBox())!,
+      secondColor = (await colors.nth(1).boundingBox())!;
+    expect(secondColor.x - firstColor.x - firstColor.width).toBeCloseTo(20 / 3, 1);
+    await expect(page.getByLabel('自由取色', { exact: true })).toBeDisabled();
     await page.screenshot({ path: info.outputPath(`toolbar-${width}.png`) });
     await page.getByRole('button', { name: '收起工具栏' }).click();
-    await expect(strip.getByRole('button')).toHaveCount(1);
+    await expect(strip).toHaveCount(0);
     await page.screenshot({ path: info.outputPath(`toolbar-${width}-collapsed.png`) });
     await page.getByRole('button', { name: '展开工具栏' }).click();
     await expect(page.getByRole('button', { name: '收起工具栏' })).toBeFocused();
@@ -75,7 +86,7 @@ test('keyboard menu selection, editable numbers, dismissal and the next canvas d
   page,
 }) => {
   await openLayeredEditor(page);
-  const trigger = page.getByRole('button', { name: '形状和对象菜单' });
+  const trigger = page.getByRole('button', { name: '工具菜单' });
   await trigger.focus();
   await page.keyboard.press('ArrowDown');
   await expect(page.getByRole('menuitemradio', { name: '直线', exact: true })).toBeFocused();
@@ -94,12 +105,10 @@ test('keyboard menu selection, editable numbers, dismissal and the next canvas d
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '缩放比例' }).click();
   const zoom = page.getByLabel('缩放', { exact: true });
-  await zoom.selectText();
-  await page.keyboard.type('125');
+  await zoom.press('Home');
+  for (let i = 0; i < 4; i++) await zoom.press('ArrowRight');
   expect((await layeredState(page)).viewport.viewport.scale).toBe(1.25);
-  await zoom.fill('801');
-  await zoom.press('Enter');
-  await expect(zoom).toHaveValue('125');
+  await expect(zoom).toHaveAttribute('type', 'range');
   await page.keyboard.press('Escape');
   await selectToolbarTool(page, '自由笔');
   await openToolbarSettings(page);
@@ -123,7 +132,7 @@ test('thirty short pen strokes and a crossing do not activate the toolbar or swa
   }
   expect((await layeredState(page)).document.objects).toHaveLength(30);
   const surface = (await page.getByTestId('layered-surface').boundingBox())!;
-  const target = (await page.getByRole('button', { name: '文字', exact: true }).boundingBox())!;
+  const target = (await page.getByRole('button', { name: '工具菜单', exact: true }).boundingBox())!;
   const cdp = await page.context().newCDPSession(page);
   for (const [type, x, y, buttons] of [
     ['mousePressed', surface.x + 80, surface.y + 80, 1],
@@ -142,7 +151,7 @@ test('thirty short pen strokes and a crossing do not activate the toolbar or swa
   }
   expect((await layeredState(page)).tools.activeTool).toBe('freehand');
   expect((await layeredState(page)).document.objects).toHaveLength(31);
-  await page.getByRole('button', { name: '文字', exact: true }).click();
+  await selectToolbarTool(page, '文字');
   expect((await layeredState(page)).tools.activeTool).toBe('text');
   expect(await page.evaluate(() => getSelection()?.toString())).toBe('');
 });
@@ -173,4 +182,40 @@ test('200% browser page scale and visual viewport resize keep settings reachable
   await expect.poll(check).toBe(true);
   await page.getByLabel('笔宽', { exact: true }).fill('20');
   expect((await layeredState(page)).tools.settings.freehand.nominalSize).toBe(20);
+});
+
+test('custom color and clear canvas preserve independent styles and reversible history', async ({
+  page,
+}) => {
+  await openLayeredEditor(page);
+  const ring = page.getByLabel('自由取色', { exact: true });
+  await expect(ring).toHaveValue('#2d2d2d');
+  await ring.evaluate((node: HTMLInputElement) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+      node,
+      '#123456'
+    );
+    node.dispatchEvent(new Event('input', { bubbles: true }));
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect((await layeredState(page)).tools.settings.freehand.color).toBe('#123456');
+  await expect(page.locator('.hn-painting-custom-color span')).toHaveCSS(
+    'outline-color',
+    'rgb(18, 52, 86)'
+  );
+  await selectToolbarTool(page, '矩形');
+  await expect(ring).toHaveValue('#2d2d2d');
+  await selectToolbarTool(page, '自由笔');
+  await dispatchLayeredPointer(page, 'down', { x: 50, y: 50 });
+  await dispatchLayeredPointer(page, 'up', { x: 150, y: 50 });
+  await dispatchLayeredPointer(page, 'down', { x: 50, y: 90 });
+  await dispatchLayeredPointer(page, 'up', { x: 150, y: 90 });
+  const before = await layeredState(page);
+  await page.getByRole('button', { name: '清空画布', exact: true }).click();
+  expect((await layeredState(page)).document.objects).toHaveLength(0);
+  await expect(page.getByRole('button', { name: '清空画布', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '撤销', exact: true }).click();
+  expect((await layeredState(page)).document.objects).toEqual(before.document.objects);
+  await page.getByRole('button', { name: '重做', exact: true }).click();
+  expect((await layeredState(page)).document.objects).toHaveLength(0);
 });

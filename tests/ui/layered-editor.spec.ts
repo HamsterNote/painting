@@ -126,11 +126,11 @@ test('new mouse ink covers existing HTML text in active and historical pixels', 
   await page.mouse.move(box.x + 110, box.y + 150);
   await expect
     .poll(async () => pixel(await decodeRgbaPng(await surface.screenshot()), 90, 150))
-    .toEqual([20, 125, 100]);
+    .toEqual([45, 45, 45]);
   await page.mouse.up();
   await expect(page.locator('[data-object-id]')).toHaveCount(6);
   await expect(page.locator('[data-object-id]').last()).toHaveCSS('visibility', 'visible');
-  expect(pixel(await decodeRgbaPng(await surface.screenshot()), 90, 150)).toEqual([20, 125, 100]);
+  expect(pixel(await decodeRgbaPng(await surface.screenshot()), 90, 150)).toEqual([45, 45, 45]);
 });
 
 test('default route opens the layered editor and responds over LAN', async ({ page, request }) => {
@@ -163,14 +163,14 @@ test('dot, pressure width and half-opacity delayed handoff remain visible', asyn
   // WebKit screenshots may precede the rAF that draws the accepted input.
   await expect
     .poll(async () => surfacePixel(await decodeRgbaPng(await page.screenshot()), 100, 100))
-    .toEqual([137, 190, 177]);
+    .toEqual([150, 150, 150]);
   const active = await decodeRgbaPng(await page.screenshot());
-  expect(surfacePixel(active, 100, 100)).toEqual([137, 190, 177]);
+  expect(surfacePixel(active, 100, 100)).toEqual([150, 150, 150]);
   await pointer(page, 'up', 100, 100, 0);
   await expect(page.locator('[data-object-id]')).toHaveCount(1);
   await expect(page.locator('[data-object-id]')).toHaveCSS('visibility', 'hidden');
   const pending = await decodeRgbaPng(await page.screenshot());
-  expect(surfacePixel(pending, 100, 100)).toEqual([137, 190, 177]);
+  expect(surfacePixel(pending, 100, 100)).toEqual([150, 150, 150]);
   await expect(page.locator('[data-object-id]')).toHaveCSS('visibility', 'visible');
   const final = await page.screenshot();
   await testInfo.attach('dot-final', { body: final, contentType: 'image/png' });
@@ -191,7 +191,7 @@ test('dot, pressure width and half-opacity delayed handoff remain visible', asyn
   const png = await decodeRgbaPng(await page.screenshot());
   const thickness = (y: number) =>
     Array.from({ length: 70 }, (_, i) => surfacePixel(png, 220, y - 35 + i)).filter(
-      ([r, g, b]) => g > r && g > b
+      ([r, g, b]) => r < 200 && g < 200 && b < 200
     ).length;
   expect(thickness(220)).toBeGreaterThan(thickness(140) + 8);
   await openToolbarSettings(page);
@@ -201,7 +201,7 @@ test('dot, pressure width and half-opacity delayed handoff remain visible', asyn
   await pointer(page, 'up', 360, 100, 0);
   await expect(page.locator('[data-object-id]').last()).toHaveCSS('visibility', 'visible');
   const short = await decodeRgbaPng(await page.screenshot());
-  expectCompositedPixel(surfacePixel(short, 355, 100), [137, 190, 177]);
+  expectCompositedPixel(surfacePixel(short, 355, 100), [150, 150, 150]);
 });
 
 test('active samples do not reconcile history; tools preview and IME commit through the controller', async ({
@@ -213,12 +213,12 @@ test('active samples do not reconcile history; tools preview and IME commit thro
   for (let i = 0; i < 20; i++) await pointer(page, 'move', 350 + i * 3, 300);
   expect(await page.evaluate(() => window.__layeredRenders)).toEqual(before);
   await pointer(page, 'up', 420, 300, 0);
-  await page.getByRole('button', { name: '矩形', exact: true }).click();
+  await selectToolbarTool(page, '矩形');
   await pointer(page, 'down', 350, 100);
   await pointer(page, 'move', 450, 200);
   await expect(page.locator('[data-object-id="preview-shape"]')).toBeVisible();
   await pointer(page, 'up', 450, 200);
-  await page.getByRole('button', { name: '文字', exact: true }).click();
+  await selectToolbarTool(page, '文字');
   await pointer(page, 'down', 350, 350);
   const input = page.getByLabel('文字内容');
   await expect(input).toBeFocused();
@@ -287,7 +287,7 @@ test('real mouse paints over existing SVG ink; keyboard cancellation preserves t
   await page.mouse.move(box.x + 300, box.y + 180);
   await page.mouse.up();
   await expect(page.locator('[data-object-id]')).toHaveCount(6);
-  await page.getByRole('button', { name: '文字', exact: true }).click();
+  await selectToolbarTool(page, '文字');
   await pointer(page, 'down', 350, 300);
   await pointer(page, 'up', 350, 300, 0);
   const input = page.getByLabel('文字内容');

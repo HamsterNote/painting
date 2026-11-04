@@ -8,7 +8,7 @@
 
 ### Requirement: Floating toolbar has ordered groups and clear states
 
-画板默认工具栏 SHALL 在所属画板底部居中悬浮，依次显示撤销/重做、缩放比例、OCR、收起/固定、文字、矩形、绘图、六色调色板；次级工具激活时矩形或绘图入口 SHALL 显示其当前名称并标记所属组。工具栏 SHALL 使用浅灰底、圆角胶囊、分组细竖线与紫底白字选中态，普通、悬停、按下、禁用、焦点和选中态 SHALL 可区分。默认激活工具与颜色 SHALL 来自当前编辑器状态，不为匹配示意图强制切换。
+画板默认工具栏 SHALL 在所属画板底部居中悬浮，依次显示撤销/重做、缩放比例、统一工具菜单、设置/套索/移动/清空画布独立组、调色板；统一工具入口 SHALL 显示当前工具名称，套索/移动选中时仅对应独立按钮高亮。工具栏 SHALL 使用浅灰底、圆角胶囊、分组细竖线与紫底白字选中态，普通、悬停、按下、禁用、焦点和选中态 SHALL 可区分。默认激活工具与颜色 SHALL 来自当前编辑器状态，不为匹配示意图强制切换。
 
 #### Scenario: Wide board presents the reference structure
 
@@ -18,20 +18,20 @@
 #### Scenario: Selecting text distinguishes selection from focus
 
 - **WHEN** 用户激活文字，再通过键盘移动焦点到另一个控件
-- **THEN** 文字保持#7163D9底和#FFFFFF图文，其他主操作不选中；新焦点有独立2px紫色焦点环，既有历史禁用状态仍正确
+- **THEN** 统一工具入口显示文字并保持#7163D9底和#FFFFFF图文，其他工具按钮不选中；新焦点有独立2px紫色焦点环，既有历史禁用状态仍正确
 
 ### Requirement: All existing tools and settings remain reachable
 
-工具栏 SHALL 保留自由笔、直线、矩形、椭圆、多边形、贝塞尔、文字、图片、选择、套索、橡皮擦、平移十二种工具及原有语义。首层 SHALL 提供文字、矩形、绘图主按钮；矩形的独立菜单入口 SHALL 提供五种线/形状及图片，绘图的独立菜单入口 SHALL 提供自由笔、选择、套索、橡皮擦、平移和始终可达的设置入口。设置 SHALL 包含原三档输入模式、尺子、虚拟纸张、小地图及适用工具的自定义颜色、笔宽、不透明度、压力或线型；不得用菜单化删除既有能力。
+工具栏 SHALL 保留自由笔、直线、矩形、椭圆、多边形、贝塞尔、文字、图片、选择、套索、橡皮擦、平移十二种工具及原有语义。首层 SHALL 提供统一工具菜单（自由笔、直线、矩形、椭圆、多边形、贝塞尔、文字、图片、选择、橡皮擦）；设置、套索、移动、清空画布 SHALL 在独立组直接可达，移动映射既有平移工具。设置 SHALL 包含原三档输入模式、尺子、虚拟纸张、小地图及适用工具的自定义颜色、笔宽、不透明度、压力或线型；不得用菜单化删除既有能力。
 
 #### Scenario: Secondary tools can be selected without changing their semantics
 
-- **WHEN** 用户从矩形菜单激活椭圆，随后从绘图菜单激活套索，再从主按钮进入文字
+- **WHEN** 用户从统一工具菜单激活椭圆，随后点击套索，再从统一菜单进入文字
 - **THEN** 当前工具依次为椭圆、套索、文字，对应入口显示当前工具并高亮，已有对象与历史不因入口变化而改变
 
 #### Scenario: Settings remain available outside freehand
 
-- **WHEN** 用户处于文字、平移或选择工具，打开绘图菜单内设置并切换输入模式、尺子、纸张或小地图
+- **WHEN** 用户处于文字、平移或选择工具，点击独立设置按钮并切换输入模式、尺子、纸张或小地图
 - **THEN** 三档输入模式原名称/选项及导航开关仍可用，不强制切换所选工具；仅更新相应输入或导航状态，不新增文档撤销事务
 
 #### Scenario: Tool families retain independent settings
@@ -41,7 +41,7 @@
 
 ### Requirement: History and zoom use authoritative editor state
 
-撤销/重做 SHALL 根据已有历史可用性禁用或启用，并保持一次既有事务的撤销语义。缩放入口 SHALL 显示当前权威比例，打开后保留25–800%的数值输入及25%的步长。无效值 SHALL 不提交；状态过期或书写冻结导致拒绝时 SHALL 恢复当前有效比例，不绕过输入会话或建立独立视口。
+撤销/重做 SHALL 根据已有历史可用性禁用或启用，并保持一次既有事务的撤销语义。缩放入口 SHALL 显示当前权威比例，打开后提供25–800%、步长25的滑动条与百分比读数，不提供缩放数值输入。非法命令 SHALL 不提交；状态过期或书写冻结导致拒绝时 SHALL 恢复当前有效比例，不绕过输入会话或建立独立视口。
 
 #### Scenario: External zoom and undo are reflected
 
@@ -50,12 +50,12 @@
 
 #### Scenario: Invalid or rejected zoom cannot move ink
 
-- **WHEN** 用户清空数值、输入0或801，或在书写冻结期间尝试改变比例
+- **WHEN** 用户拖动滑动条时版本过期或处于书写冻结期间
 - **THEN** 不应用非法或被拒绝的缩放，控件恢复当前有效比例，文档与当前笔位置不变，不在笔结束后补执行
 
 ### Requirement: Palette updates only supported drawing styles
 
-调色板 SHALL 按蓝#7FA3C3、绿#8FBA8D、黄#D5B984、粉#CD9BAA、紫#AB9CC2、黑#2D2D2D顺序显示六点。每点 SHALL 有24px色面和最小44×44px命中区域，选中项 SHALL 同时有紫色环和勾号及可访问选中状态。自由笔或线/形状下选色 SHALL 只更新当前工具族后续绘制设置，不重涂已有对象；其他工具下 SHALL 禁用并说明用途。非预设当前色 SHALL 不伪造某预设选中。
+调色板 SHALL 按黑#2D2D2D、蓝#7FA3C3、绿#8FBA8D、黄#D5B984、粉#CD9BAA、紫#AB9CC2顺序显示六点。每点 SHALL 有24px色面和约30.67×44px不重叠命中区域，色面留白约6.67px（原20px的1/3），选中项 SHALL 同时有紫色环和勾号及可访问选中状态。自由笔或线/形状下选色 SHALL 只更新当前工具族后续绘制设置，不重涂已有对象；其他工具下 SHALL 禁用并说明用途。非预设当前色 SHALL 不伪造某预设选中。新编辑器的自由笔与形状 SHALL 默认黑色，不覆盖现有快照。最右 SHALL 提供自由取色环，内部多色、外轮廓为当前色，选择任意有效颜色只更新当前工具族；不支持颜色的工具下该控件也禁用。
 
 #### Scenario: Freehand and shape colors remain independent
 
@@ -65,25 +65,34 @@
 #### Scenario: Text and custom colors are represented honestly
 
 - **WHEN** 用户进入文字工具，之后回到已设置非预设自定义颜色的自由笔
-- **THEN** 文字模式六点禁用且说明用于绘图或形状；自由笔模式六点均未选中，自定义色仍保留并可在设置编辑
+- **THEN** 文字模式六点禁用且说明用于绘图或形状；自由笔模式六点均未选中，自定义色仍保留并由最右取色环外轮廓表示，可直接编辑
 
-### Requirement: Display controls and unavailable OCR are explicit
+### Requirement: Collapse uses an independent circular control
 
-工具栏 SHALL 默认展开且未固定。收起 SHALL 仅保留可访问的展开按钮；展开 SHALL 保留当前工具和参数。固定 SHALL 强制保持展开并禁用收起，解除固定后 SHALL 可主动收起；没有自动隐藏。展示状态 SHALL 仅属于本次挂载，不写文档、撤销或输入偏好。OCR SHALL 显示禁用入口及可访问说明「OCR 暂未接入」，不发起识别请求或产生假结果。
+工具栏 SHALL 默认展开。收起/展开 SHALL 使用位于胶囊上方、间隔8px的独立44×44px圆形按钮，不进入胶囊滚动区域。收起 SHALL 隐藏胶囊与弹层，仅保留展开按钮；展开 SHALL 保留工具、参数并恢复焦点。展示状态 SHALL 仅属于本次挂载，不写文档、历史或输入偏好。
 
-#### Scenario: Collapse and pin are reversible presentation changes
+#### Scenario: Collapse preserves state and focus
 
-- **WHEN** 用户固定、解除固定、收起并重新展开工具栏
-- **THEN** 固定期间收起不可用，收起后可通过44×44px展开按钮恢复，展开后焦点回收起按钮，工具/设置/文档/历史不变
+- **WHEN** 用户收起并展开工具栏，随后卸载重新挂载
+- **THEN** 收起时仅圆形展开按钮可见，展开后焦点在收起按钮；重新挂载默认展开，工具/设置/文档/历史/输入偏好不变
 
-#### Scenario: Missing OCR is not an active command
+### Requirement: Clear canvas is one reversible operation
 
-- **WHEN** 用户查看或尝试触发OCR入口
-- **THEN** 入口明确禁用且原因可被辅助技术读取，不发送识别请求、不改文档
+清空画布 SHALL 通过当前document revision的一次对象编辑删除全部对象，空画布 SHALL 禁用；成功后清理预览和失效选择，不改变当前工具与样式。活动书写或版本冲突时 SHALL 遵循控制器拒绝，不排队、不重试。
+
+#### Scenario: Clear can be undone once
+
+- **WHEN** 画布已有多个对象，用户清空并撤销
+- **THEN** 清空后对象为零且清空按钮禁用，一次撤销恢复全部对象，重做再次清空
+
+#### Scenario: Active writing is preserved
+
+- **WHEN** 已有对象且正在书写时触发清空
+- **THEN** 对象、历史和活动笔保持不变，结束后不补执行清空
 
 ### Requirement: Narrow layouts and keyboard operation preserve access
 
-工具栏 SHALL 限于所属画板宽度、左右至少留16px，内容超宽时内部单行横向滚动，分组不拆分且触控目标不小于44×44px，不使画板或宿主页面横向溢出。键盘聚焦 SHALL 将目标滚入可见区域。菜单与设置面板 SHALL 在可见区域内可操作，支持键盘选项导航、Escape关闭并返回触发器，以及可访问名称/展开状态。
+工具栏 SHALL 限于所属画板宽度、左右至少留16px，内容超宽时内部单行横向滚动，分组不拆分且一般触控目标不小于44×44px，紧凑调色板采用上述约30.67×44px尺寸，不使画板或宿主页面横向溢出。键盘聚焦 SHALL 将目标滚入可见区域。菜单与设置面板 SHALL 在可见区域内可操作，支持键盘选项导航、Escape关闭并返回触发器，以及可访问名称/展开状态。
 
 #### Scenario: Small board retains every control
 
@@ -106,5 +115,5 @@
 
 #### Scenario: Inputs remain editable after remount
 
-- **WHEN** 用户在面板中选择替换笔宽/缩放数字，关闭或卸载后重新挂载并操作
+- **WHEN** 用户在面板中选择替换笔宽数字并键盘调节缩放滑动条，关闭或卸载后重新挂载并操作
 - **THEN** 原生选择、焦点与编辑可用，静态标签仍禁选，不残留交互锁或吞掉首击

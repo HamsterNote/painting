@@ -1,41 +1,43 @@
 # 工具栏验证
 
-对应 OpenSpec change：`polish-painting-toolbar`，HAM-156。
+对应 HAM-156 / OpenSpec change `polish-painting-toolbar` / PR #44。本轮在同一 change 和分支落实已采纳的五条验收意见，先更新 spec/design 并严格校验后实施。
 
 ## 行为与实现
 
-- `PaintingBoard` 在自身定位上下文内承载底部悬浮工具栏；空白覆盖区域透传，工具栏与面板标记安全交互边界。
-- 独立 `Toolbar` 默认 `placement="inline"`；可指定 `floating`，由定位父容器承载。`toolbar={false}` 隐藏整个工具栏。两个画板各自绑定 controller，不共享局部状态。
-- 文字直接选择；形状和对象菜单包含直线、矩形、椭圆、多边形、贝塞尔、图片；绘图菜单包含自由笔、选择、套索、橡皮擦、平移与设置。
-- 设置保留输入模式、导航开关，以及适用工具的自定义颜色、笔宽、不透明度、压力或线型。自由笔和形状的六色/自定义色配置互相独立。
-- 收起、固定、面板状态仅在本次组件挂载期间有效。固定时不能收起。OCR 固定禁用，辅助说明为「OCR 暂未接入」。
-- 继续复用 `@hamster-note/components` 的 Icon，未新增生产依赖，未修改版本和锁文件。工具栏依赖 DOM，仅可用于 Web 与 Expo DOM/WebView，不能直接渲染在 RN View 树中；组件库转换仍为独立建议。
+- `PaintingBoard` 在自身定位上下文内承载底部悬浮工具栏；空白覆盖区域透传，真实控件与面板保留输入安全边界。
+- 十种工具合并到统一菜单；设置、套索、移动、清空画布为独立组。保留全部十二工具、输入模式、导航和独立笔刷/形状参数。
+- 缩放使用25–800%滑动条和百分比读数；命令带最新revision，拒绝后恢复权威值，不补执行。
+- 收起/展开按钮为胶囊上方独立44px圆形按钮，不参与横向滚动；收起隐藏胶囊与面板，恢复焦点与设置，不写入文档、历史或输入偏好。
+- 黑色最左、新编辑器默认黑色；不覆盖现有编辑器快照。24px色面之间留白约6.67px（原20px的1/3），命中区域约30.67×44px且不重叠；其他按钮至少44×44px。
+- 最右自由取色环使用原生颜色输入，多色内部、当前颜色外轮廓；预设/自定义颜色仅更新当前支持的工具族，不重涂对象。
+- 清空通过已有对象事务一次删除全部对象，一次撤销可全部恢复，重做再次清空；空画布禁用，活动书写/版本冲突遵循控制器拒绝。
+- 旧识别入口与固定功能及相应规格条目已移除。未新增生产依赖、文档模型或原生桥变更；组件库转Expo仍不在本次范围。
+- 独立 `Toolbar` 默认inline、可选floating；`toolbar={false}` 有效。实现可用于Web/Expo DOM/WebView，不能直接渲染到原生RN View。
 
 ## 自动化验证
 
-环境：Linux，Node 24.15.0，pnpm 10.28.2，Playwright 1.59.1 / Chromium 147。以下为实际执行结果：
+环境：Linux，Node 24.15.0，pnpm 10.28.2，Playwright 1.59.1 / Chromium 147.0.7727.15。本机浏览器安装使用Ubuntu24.04兼容构建。
 
-| 命令                                                 | 结果                                                   |
-| ---------------------------------------------------- | ------------------------------------------------------ |
-| `pnpm run test`                                      | 96 套件、1295 项通过；额外 responder 依赖回归 9 项通过 |
-| `pnpm run typecheck`                                 | painting、painting-board、playground 均通过            |
-| `pnpm run lint`                                      | 通过，0 errors；保留已有 32 warnings                   |
-| `pnpm run build`                                     | 库构建与 Expo Web export 通过                          |
-| `pnpm run test:ui --workers=4`                       | 完整运行后记录结果                                     |
-| `openspec validate polish-painting-toolbar --strict` | 通过                                                   |
+| 命令                                                 | 结果                                                    |
+| ---------------------------------------------------- | ------------------------------------------------------- |
+| `pnpm run test`                                      | 96套件、1297项通过；responder依赖回归9项通过            |
+| `pnpm run typecheck`                                 | painting、painting-board、playground通过                |
+| `pnpm run lint`                                      | 0 errors，已有32 warnings                               |
+| `pnpm run build`                                     | 库构建与Expo Web export通过                             |
+| `pnpm run test:ui --workers=4 --shard=1/2`           | 94项通过；2项旧默认色像素断言修正后，单独补跑2项通过    |
+| `pnpm run test:ui --workers=4 --shard=2/2`           | 94项通过；1项旧默认色/半透明断言修正后，单独补跑1项通过 |
+| `openspec validate polish-painting-toolbar --strict` | 通过                                                    |
 
-已人工对照1280宽截图，胶囊/分组/浅灰底/文字紫底白字与提案一致；完整宽屏、菜单、收起及390宽设置面板截图通过附件交付。局域网 HTTP 200 与实际页面操作验证通过。
+两分片共191个不同用例均取得通过结果。补跑命令：`pnpm run test:ui tests/ui/editor-candidate-canvas2d-pen.spec.ts --workers=4`（2项）、`pnpm run test:ui tests/ui/layered-editor.spec.ts --grep "dot, pressure width" --workers=4`（1项）；没有跳过用例。
 
-完整浏览器执行曾收到 SIGTERM 中止；最终以两批分片运行收集完整190项通过结果，未跳过用例。
+新版工具栏专项10项已通过：320/390/768/1024/1280/1440宽度、横向滚动与焦点可达、独立收起位置、1/3色面留白、键盘菜单、笔宽编辑、滑动缩放、外部首击起笔、30笔单次提交及跨工具栏真实Chromium笔事件、自定义色轮廓、清空/撤销/重做。2×页面比例与可视区缩小用于浏览器模拟，不作为实体键盘证据。
 
-浏览器用例覆盖 320/390/768/1024/1280/1440 CSS px、胶囊高度/圆角/底色、44px命中区、横向滚动与 Tab 可达、菜单键盘选择、数值替换、Escape 焦点回归、外部首击起笔、30笔单次提交以及跨工具栏的真实 Chromium pen 事件。页面比例模拟使用 CDP 2× page scale，可视区域缩小模拟键盘遮挡；它不是实体软键盘证据。
+本轮新截图包含宽屏、工具菜单、缩放滑动条、文字选中及禁用调色板、收起、390宽设置面板；通过issue附件交付。1280宽截图已目视核对，局域网页面HTTP200及实际操作验证通过。tmux验证服务的会话、日志与停止方式在issue交接。
 
 ## 实机待验
 
-本次环境为 Linux + Chromium 自动化，无已连接的 iPad Safari、iOS 或 Android Expo DOM 实机。以下不以浏览器结果替代，任务 4.2/4.3 保留未勾选供评审验收：
+无已连接的iPad Safari、iOS或Android Expo DOM实机；OpenSpec任务4.2/4.3保持未勾选，不以Chromium/CDP结果代替：
 
-- iPad Safari + 实体笔：30笔快速短笔、跨工具栏边界结束、无原生选词、后续首击、中文 IME。
-- iOS/Android Expo DOM：底部安全区、单行横滚、系统软键盘、面板可达与焦点。
-- 显式启用 iOS PencilKit 原型：原生覆盖层不吞工具栏。
-
-截图通过 issue 附件交付；验证服务与停止命令在 issue 最终评论中提供。
+- iPad Safari实体笔：30笔快速短笔、跨工具栏边界、无原生选词、后续首击、中文IME及系统取色器。
+- iOS/Android Expo DOM：安全区、横滚、系统软键盘、弹层和焦点。
+- 显式启用iOS PencilKit原型：原生覆盖层不吞工具栏。

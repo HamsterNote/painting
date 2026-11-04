@@ -53,7 +53,7 @@ for (const dpr of [1, 2]) {
       const screenshot = await page.getByTestId('layered-surface').screenshot();
       const png = await decodeRgbaPng(screenshot);
       const offset = (120 * dpr * png.width + 200 * dpr) * 4;
-      expect(Array.from(png.pixels.slice(offset, offset + 3))).toEqual([20, 125, 100]);
+      expect(Array.from(png.pixels.slice(offset, offset + 3))).toEqual([45, 45, 45]);
       await testInfo.attach('long-input-pixels', { body: screenshot, contentType: 'image/png' });
       await testInfo.attach('host-frame-observations-not-device-budget', {
         body: Buffer.from(JSON.stringify(measurement, null, 2)),

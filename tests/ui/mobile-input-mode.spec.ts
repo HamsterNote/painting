@@ -45,7 +45,7 @@ for (const mode of ['auto', 'finger', 'pen']) {
     );
     if (mode === 'finger') expect(after.viewport).toEqual(penned.viewport);
     else expect(after.viewport).not.toEqual(penned.viewport);
-    await page.getByRole('button', { name: '矩形', exact: true }).click();
+    await selectToolbarTool(page, '矩形');
     await stroke(page, 'pen', -765894344);
     expect((await layeredState(page)).document.objects).toHaveLength(
       after.document.objects.length + 1
@@ -139,7 +139,7 @@ test('auto-pen-latch: valid first down survives detection and only a new control
   await openLayeredEditor(page);
   await pointer(page, 'move', { x: 70, y: 70 }, { source: 'pen', id: 8 });
   await page
-    .getByRole('button', { name: '绘图（自由笔）', exact: true })
+    .getByRole('button', { name: '工具菜单', exact: true })
     .dispatchEvent('pointerdown', { pointerType: 'pen', pointerId: 9, button: 0 });
   expect((await layeredState(page)).input.penSeen).toBe(false);
   await stroke(page, 'touch');
@@ -152,7 +152,7 @@ test('auto-pen-latch: valid first down survives detection and only a new control
   await page.clock.install();
   await page.clock.fastForward('01:00:00');
   await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-  await page.getByRole('button', { name: '矩形', exact: true }).click();
+  await selectToolbarTool(page, '矩形');
   await selectToolbarTool(page, '自由笔');
   await stroke(page, 'touch', 11);
   const after = await layeredState(page);
@@ -468,7 +468,7 @@ for (const mode of ['auto', 'finger']) {
   }) => {
     await openLayeredEditor(page);
     await setToolbarInputMode(page, mode);
-    await page.getByRole('button', { name: '矩形', exact: true }).click();
+    await selectToolbarTool(page, '矩形');
     await pointer(page, 'down', { x: 100, y: 100 }, { source: 'mouse', id: 1 });
     await pointer(page, 'move', { x: 200, y: 200 }, { source: 'mouse', id: 1 });
     await pointer(page, 'up', { x: 200, y: 200 }, { source: 'mouse', id: 1 });

@@ -34,14 +34,14 @@ test('tap is a filled dot; cancelling or changing tools never writes a partial s
 }) => {
   await pointer(page, 'down', { x: 100, y: 100 });
   await pointer(page, 'up', { x: 100, y: 100 });
-  await expect(page.locator('[data-object-id] path')).toHaveAttribute('fill', '#147d64');
+  await expect(page.locator('[data-object-id] path')).toHaveAttribute('fill', '#2D2D2D');
   const saved = (await layeredState(page)).document.objects;
   await pointer(page, 'down', { x: 200, y: 100 });
   await pointer(page, 'move', { x: 250, y: 100 });
   await pointer(page, 'cancel', { x: 250, y: 100 });
   expect((await layeredState(page)).document.objects).toEqual(saved);
   await pointer(page, 'down', { x: 200, y: 100 });
-  await page.getByRole('button', { name: '矩形', exact: true }).click();
+  await selectToolbarTool(page, '矩形');
   await pointer(page, 'up', { x: 260, y: 100 });
   expect((await layeredState(page)).document.objects).toEqual(saved);
   await page.getByRole('button', { name: '撤销', exact: true }).click();
@@ -81,7 +81,7 @@ test('all retained tool modes route to the one controller', async ({ page }) => 
   ]) {
     await selectToolbarTool(page, name);
     const button = page.getByRole('button', {
-      name: name === '自由笔' ? '绘图（自由笔）' : name,
+      name: name === '套索' ? '套索' : name === '平移' ? '移动' : '工具菜单',
       exact: true,
     });
     await expect(button).toHaveAttribute('aria-pressed', 'true');

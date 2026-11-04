@@ -49,7 +49,9 @@ for (const source of ['pen', 'touch'] as const) {
       });
     }
     expect((await layeredState(page)).document.objects).toHaveLength(1);
-    const target = (await page.getByRole('button', { name: '矩形', exact: true }).boundingBox())!;
+    const target = (await page
+      .getByRole('button', { name: '工具菜单', exact: true })
+      .boundingBox())!;
     for (const [type, x, y, buttons] of [
       ['mousePressed', surface.x + 80, surface.y + 8, 1],
       ['mouseMoved', target.x + 15, target.y + 15, 1],
@@ -67,11 +69,12 @@ for (const source of ['pen', 'touch'] as const) {
     }
     expect((await layeredState(page)).tools.activeTool).toBe('freehand');
     expect((await layeredState(page)).document.objects).toHaveLength(2);
-    await tap(page.getByRole('button', { name: '矩形', exact: true }));
+    await tap(page.getByRole('button', { name: '工具菜单', exact: true }));
+    await tap(page.getByRole('menuitemradio', { name: '矩形', exact: true }));
     expect((await layeredState(page)).tools.activeTool).toBe('rect');
-    await tap(page.getByRole('button', { name: '绘图（自由笔）', exact: true }));
-    await tap(page.getByRole('button', { name: '绘图菜单' }));
-    await tap(page.getByRole('menuitem', { name: '设置' }));
+    await tap(page.getByRole('button', { name: '工具菜单', exact: true }));
+    await tap(page.getByRole('menuitemradio', { name: '自由笔', exact: true }));
+    await tap(page.getByRole('button', { name: '设置', exact: true }));
     await openToolbarSettings(page);
     const width = page.getByLabel('笔宽', { exact: true });
     await tap(width);

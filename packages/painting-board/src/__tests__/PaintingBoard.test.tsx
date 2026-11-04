@@ -95,7 +95,8 @@ test('two boards keep floating toolbars within their own controller and position
     expect(overlay.style.pointerEvents).toBe('none');
     expect(within(board).getByRole('toolbar').style.pointerEvents).toBe('auto');
   }
-  fireEvent.click(within(boards[0]).getByRole('button', { name: '文字' }));
+  fireEvent.click(within(boards[0]).getByRole('button', { name: '工具菜单' }));
+  fireEvent.click(screen.getByRole('menuitemradio', { name: '文字' }));
   expect(left.getSnapshot('tools').activeTool).toBe('text');
   expect(right.getSnapshot('tools').activeTool).toBe('freehand');
 });

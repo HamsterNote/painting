@@ -1,3 +1,4 @@
+import { setToolbarZoom } from './layered-helpers';
 import { openToolbarZoom, selectToolbarTool } from './layered-helpers';
 import { expect, test } from '@playwright/test';
 import {
@@ -15,7 +16,7 @@ test('default editor keeps one Canvas mounted across drawing, tools and viewport
   await drawLayeredStroke(page);
   const document = (await layeredState(page)).document;
   await openToolbarZoom(page);
-  await page.getByLabel('缩放', { exact: true }).fill('200');
+  await setToolbarZoom(page, 200);
   await selectToolbarTool(page, '选择');
   expect((await layeredState(page)).document).toEqual(document);
   expect(await canvas!.evaluate((node) => node.isConnected)).toBe(true);
@@ -31,7 +32,7 @@ test('mixed Unicode and newline composition commits once and is editable verbati
 }) => {
   await openLayeredEditor(page);
   const content = 'Latin 中文 العربية 😀\n第二行';
-  await page.getByRole('button', { name: '文字', exact: true }).click();
+  await selectToolbarTool(page, '文字');
   await pointer(page, 'down', { x: 100, y: 100 });
   await pointer(page, 'up', { x: 100, y: 100 });
   const input = page.getByLabel('文字内容');

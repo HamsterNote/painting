@@ -22,8 +22,7 @@ test.each([
   const policy = touch ? ({ mouse: 'draw', pen: 'draw', touch } as const) : undefined;
   const { rerender } = render(<LayeredPaintingBoard controller={editor} inputPolicy={policy} />);
   expect(screen.getByRole('toolbar').getAttribute('data-input-mode')).toBe(expected);
-  fireEvent.click(screen.getByRole('button', { name: '绘图菜单' }));
-  fireEvent.click(screen.getByRole('menuitem', { name: '设置' }));
+  fireEvent.click(screen.getByRole('button', { name: '设置' }));
   expect(screen.getByLabelText('输入模式')).toHaveProperty('value', expected);
   fireEvent.keyDown(document, { key: 'Escape' });
   expect(screen.getByTestId('layered-surface').getAttribute('data-input-mode')).toBe(expected);

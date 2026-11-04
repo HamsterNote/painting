@@ -1,3 +1,4 @@
+import { setToolbarZoom } from './layered-helpers';
 import { openToolbarSettings, openToolbarZoom } from './layered-helpers';
 import { expect, test } from '@playwright/test';
 import {
@@ -29,7 +30,7 @@ test('paper zoom leaves screen-space ruler pose unchanged', async ({ page }) => 
   const ruler = page.getByTestId('layered-ruler').locator(':scope > g');
   const before = await ruler.getAttribute('transform');
   await openToolbarZoom(page);
-  await page.getByLabel('缩放', { exact: true }).fill('200');
+  await setToolbarZoom(page, 200);
   await expect(ruler).toHaveAttribute('transform', before!);
   expect((await layeredState(page)).viewport.viewport.scale).toBe(2);
   expect((await layeredState(page)).document.objects).toHaveLength(0);

@@ -18,27 +18,27 @@ const SHAPES: readonly [LayeredEditorTool, string, IconName][] = [
   ['bezier', '贝塞尔', 'curve'],
   ['image', '图片', 'image'],
 ];
-const DRAWING: typeof SHAPES = [
+const TOOLS: typeof SHAPES = [
+  ...SHAPES,
   ['freehand', '自由笔', 'pen'],
+  ['text', '文字', 'type'],
   ['selection', '选择', 'mouse'],
-  ['lasso', '套索', 'lasso'],
   ['eraser', '橡皮擦', 'eraser'],
-  ['pan', '平移', 'drag'],
 ];
 const COLORS = [
+  ['黑', '#2D2D2D'],
   ['蓝', '#7FA3C3'],
   ['绿', '#8FBA8D'],
   ['黄', '#D5B984'],
   ['粉', '#CD9BAA'],
   ['紫', '#AB9CC2'],
-  ['黑', '#2D2D2D'],
 ] as const;
 const editableStyle: CSSProperties = {
   userSelect: 'text',
   WebkitUserSelect: 'text',
   WebkitTouchCallout: 'default',
 };
-type Panel = 'shapes' | 'drawing' | 'settings' | 'zoom';
+type Panel = 'tools' | 'settings' | 'zoom';
 export type ToolbarProps = {
   controller: LayeredEditorController;
   /** floating is positioned within the nearest positioned parent (normally PaintingBoard). */
@@ -54,25 +54,22 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
   const navigation = useEditorSnapshot(controller, 'navigation');
   const { viewport } = useEditorSnapshot(controller, 'viewport');
   const [collapsed, setCollapsed] = useState(false);
-  const [pinned, setPinned] = useState(false);
+  const document = useEditorSnapshot(controller, 'document');
   const [openPanel, setOpenPanel] = useState<Panel | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const anchor = useRef<HTMLButtonElement | null>(null);
   const collapseButton = useRef<HTMLButtonElement>(null);
-  const expandButton = useRef<HTMLButtonElement>(null);
   const panelId = useId();
   const descriptionId = useId();
   const wasCollapsed = useRef(false);
   useLayoutEffect(() => {
-    if (collapsed) expandButton.current?.focus();
-    else if (wasCollapsed.current) collapseButton.current?.focus();
+    if (collapsed || wasCollapsed.current) collapseButton.current?.focus();
     wasCollapsed.current = collapsed;
   }, [collapsed]);
   const freehand = activeTool === 'freehand';
   const shape = ['line', 'rect', 'ellipse', 'polygon', 'bezier'].includes(activeTool);
   const style = freehand ? settings.freehand : settings.shape;
-  const currentShape = SHAPES.find(([tool]) => tool === activeTool);
-  const currentDrawing = DRAWING.find(([tool]) => tool === activeTool);
+  const currentTool = TOOLS.find(([tool]) => tool === activeTool);
   const closePanel = useCallback((restoreFocus: boolean) => {
     setOpenPanel(null);
     if (restoreFocus) anchor.current?.focus();
@@ -98,9 +95,10 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
       type="button"
       aria-label={label}
       title={label}
-      aria-haspopup={panel === 'zoom' ? 'dialog' : 'menu'}
-      aria-expanded={openPanel === panel || (panel === 'drawing' && openPanel === 'settings')}
-      aria-controls={openPanel ? panelId : undefined}
+      aria-haspopup={panel === 'tools' ? 'menu' : 'dialog'}
+      aria-expanded={openPanel === panel}
+      aria-pressed={panel === 'tools' ? Boolean(currentTool) : undefined}
+      aria-controls={openPanel === panel ? panelId : undefined}
       onClick={(event) => togglePanel(panel, event.currentTarget)}
       onKeyDown={(event) => {
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -110,13 +108,24 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
         }
       }}
     >
-      {panel === 'zoom' ? `${Math.round(viewport.scale * 100)}%` : <Icon name="chevron-down" />}
+      {panel === 'zoom' ? (
+        `${Math.round(viewport.scale * 100)}%`
+      ) : panel === 'tools' ? (
+        <>
+          <Icon name={currentTool?.[2] ?? 'pen'} />
+          {currentTool?.[1] ?? '工具'}
+          <Icon name="chevron-down" />
+        </>
+      ) : (
+        <Icon name="settings" />
+      )}
     </button>
   );
   if (!inputReady) return null;
   return (
     <div
       ref={root}
+      className="hn-painting-toolbar-shell"
       data-toolbar-placement={placement}
       role="region"
       aria-label="绘图工具栏，可横向滚动"
@@ -131,180 +140,173 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
             }
           : { position: 'relative', maxWidth: '100%' }),
         display: 'flex',
-        justifyContent: 'center',
+        alignItems: 'center',
+        flexDirection: 'column',
+        gap: 8,
         minWidth: 0,
       }}
     >
       <style>{toolbarStyles}</style>
-      <div
-        role="toolbar"
-        aria-label="绘图工具"
-        data-input-mode={input.mode}
+      <button
+        ref={collapseButton}
+        type="button"
+        className="hn-painting-collapse"
         data-interactive="true"
-        className="hn-painting-toolbar"
-        onFocusCapture={(event) => {
-          const target = event.target as HTMLElement;
-          // Scroll only the capsule; scrollIntoView could move the host document.
-          const strip = event.currentTarget;
-          const rect = target.getBoundingClientRect();
-          const bounds = strip.getBoundingClientRect();
-          if (rect.left < bounds.left + 8) strip.scrollLeft -= bounds.left + 8 - rect.left;
-          if (rect.right > bounds.right - 8) strip.scrollLeft += rect.right - bounds.right + 8;
-        }}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          flexWrap: 'nowrap',
-          flex: '0 1 auto',
-          minWidth: 0,
-          maxWidth: 'calc(100% - 32px)',
-          height: collapsed ? 44 : 60,
-          padding: collapsed ? 0 : '7px 12px',
-          boxSizing: 'border-box',
-          borderRadius: 30,
-          border: '1px solid #E2E5EA',
-          background: '#F5F6F8',
-          boxShadow: '0 6px 24px rgba(15,23,42,0.12)',
-          overflowX: 'auto',
-          scrollbarWidth: 'none',
-          pointerEvents: 'auto',
-          userSelect: 'none',
-          WebkitUserSelect: 'none',
-          WebkitTouchCallout: 'none',
+        aria-label={collapsed ? '展开工具栏' : '收起工具栏'}
+        aria-expanded={!collapsed}
+        onClick={() => {
+          closePanel(false);
+          setCollapsed(!collapsed);
         }}
       >
-        {collapsed ? (
-          <button
-            ref={expandButton}
-            type="button"
-            aria-label="展开工具栏"
-            onClick={() => {
-              setCollapsed(false);
-            }}
+        <Icon name={collapsed ? 'chevron-up' : 'chevron-down'} />
+      </button>
+      {!collapsed ? (
+        <div
+          role="toolbar"
+          aria-label="绘图工具"
+          data-input-mode={input.mode}
+          data-interactive="true"
+          className="hn-painting-toolbar"
+          onFocusCapture={(event) => {
+            const target = event.target as HTMLElement;
+            // Scroll only the capsule; scrollIntoView could move the host document.
+            const strip = event.currentTarget;
+            const rect = target.getBoundingClientRect();
+            const bounds = strip.getBoundingClientRect();
+            if (rect.left < bounds.left + 8) strip.scrollLeft -= bounds.left + 8 - rect.left;
+            if (rect.right > bounds.right - 8) strip.scrollLeft += rect.right - bounds.right + 8;
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'nowrap',
+            flex: '0 1 auto',
+            minWidth: 0,
+            maxWidth: 'calc(100% - 32px)',
+            height: 60,
+            padding: '7px 12px',
+            boxSizing: 'border-box',
+            borderRadius: 30,
+            border: '1px solid #E2E5EA',
+            background: '#F5F6F8',
+            boxShadow: '0 6px 24px rgba(15,23,42,0.12)',
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+            pointerEvents: 'auto',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+            WebkitTouchCallout: 'none',
+          }}
+        >
+          <div className="hn-painting-group">
+            <button
+              type="button"
+              aria-label="撤销"
+              title="撤销"
+              disabled={!history.canUndo}
+              onClick={() => controller.undo()}
+            >
+              <Icon name="undo" />
+            </button>
+            <button
+              type="button"
+              aria-label="重做"
+              title="重做"
+              disabled={!history.canRedo}
+              onClick={() => controller.redo()}
+            >
+              <Icon name="redo" />
+            </button>
+          </div>
+          <span className="hn-painting-divider" aria-hidden="true" />
+          <div className="hn-painting-group">{menuButton('zoom', '缩放比例')}</div>
+          <span className="hn-painting-divider" aria-hidden="true" />
+          <div className="hn-painting-group">{menuButton('tools', '工具菜单')}</div>
+          <span className="hn-painting-divider" aria-hidden="true" />
+          <div className="hn-painting-group" role="group" aria-label="画布操作">
+            {menuButton('settings', '设置')}
+            <button
+              type="button"
+              aria-label="套索"
+              title="套索"
+              aria-pressed={activeTool === 'lasso'}
+              onClick={() => controller.setTool('lasso')}
+            >
+              <Icon name="lasso" />
+            </button>
+            <button
+              type="button"
+              aria-label="移动"
+              title="移动"
+              aria-pressed={activeTool === 'pan'}
+              onClick={() => controller.setTool('pan')}
+            >
+              <Icon name="drag" />
+            </button>
+            <button
+              type="button"
+              aria-label="清空画布"
+              title="清空画布（可撤销）"
+              disabled={document.objects.length === 0}
+              onClick={() => {
+                const latest = controller.getSnapshot('document');
+                if (!latest.objects.length) return;
+                const result = controller.editObjects({
+                  expectedDocumentRevision: latest.documentRevision,
+                  removeIds: latest.objects.map((object) => object.objectId),
+                });
+                if (result.ok) controller.setPreview(null);
+              }}
+            >
+              <Icon name="delete" />
+            </button>
+          </div>
+          <span className="hn-painting-divider" aria-hidden="true" />
+          <div
+            className="hn-painting-group hn-painting-palette"
+            role="group"
+            aria-label="调色板，用于绘图或形状"
           >
-            <Icon name="chevron-up" />
-          </button>
-        ) : (
-          <>
-            <div className="hn-painting-group">
-              <button
-                type="button"
-                aria-label="撤销"
-                title="撤销"
-                disabled={!history.canUndo}
-                onClick={() => controller.undo()}
-              >
-                <Icon name="undo" />
-              </button>
-              <button
-                type="button"
-                aria-label="重做"
-                title="重做"
-                disabled={!history.canRedo}
-                onClick={() => controller.redo()}
-              >
-                <Icon name="redo" />
-              </button>
-            </div>
-            <span className="hn-painting-divider" aria-hidden="true" />
-            <div className="hn-painting-group">{menuButton('zoom', '缩放比例')}</div>
-            <span className="hn-painting-divider" aria-hidden="true" />
-            <div className="hn-painting-group">
-              <button type="button" disabled aria-describedby={descriptionId} title="OCR 暂未接入">
-                <Icon name="search" /> OCR
-              </button>
-            </div>
-            <span className="hn-painting-divider" aria-hidden="true" />
-            <div className="hn-painting-group">
-              <button
-                type="button"
-                ref={collapseButton}
-                aria-label="收起工具栏"
-                title="收起工具栏"
-                disabled={pinned}
-                onClick={() => {
-                  closePanel(false);
-                  setCollapsed(true);
-                }}
-              >
-                <Icon name="chevron-down" />
-              </button>
-              <button
-                type="button"
-                aria-label="固定工具栏"
-                title="固定工具栏"
-                aria-pressed={pinned}
-                onClick={() => setPinned(!pinned)}
-              >
-                <Icon name="magnet" />
-              </button>
-            </div>
-            <span className="hn-painting-divider" aria-hidden="true" />
-            <div className="hn-painting-group">
-              <button
-                type="button"
-                aria-label="文字"
-                aria-pressed={activeTool === 'text'}
-                onClick={() => controller.setTool('text')}
-              >
-                <Icon name="type" />
-                文字
-              </button>
-              <div className="hn-painting-group">
+            {COLORS.map(([name, color]) => {
+              const selected =
+                (freehand || shape) && style.color.toLowerCase() === color.toLowerCase();
+              return (
                 <button
+                  key={color}
                   type="button"
-                  aria-label={currentShape?.[1] ?? '矩形'}
-                  aria-pressed={Boolean(currentShape)}
-                  onClick={() => controller.setTool('rect')}
+                  aria-label={name}
+                  title={`${name}，用于绘图或形状`}
+                  className="hn-painting-color"
+                  disabled={!freehand && !shape}
+                  aria-pressed={selected}
+                  aria-describedby={`${descriptionId}-palette`}
+                  onClick={() => updateStyle({ color })}
                 >
-                  <Icon name={currentShape?.[2] ?? 'rectangle'} />
-                  {currentShape?.[1] ?? '矩形'}
+                  <span style={{ background: color }} aria-hidden="true">
+                    {selected ? '✓' : ''}
+                  </span>
                 </button>
-                {menuButton('shapes', '形状和对象菜单')}
-              </div>
-              <div className="hn-painting-group">
-                <button
-                  type="button"
-                  aria-label={freehand || !currentDrawing ? '绘图（自由笔）' : currentDrawing[1]}
-                  aria-pressed={Boolean(currentDrawing)}
-                  onClick={() => controller.setTool('freehand')}
-                >
-                  <Icon name={currentDrawing?.[2] ?? 'pen'} />
-                  {freehand || !currentDrawing ? '绘图' : currentDrawing[1]}
-                </button>
-                {menuButton('drawing', '绘图菜单')}
-              </div>
-            </div>
-            <span className="hn-painting-divider" aria-hidden="true" />
-            <div className="hn-painting-group" role="group" aria-label="调色板，用于绘图或形状">
-              {COLORS.map(([name, color]) => {
-                const selected =
-                  (freehand || shape) && style.color.toLowerCase() === color.toLowerCase();
-                return (
-                  <button
-                    key={color}
-                    type="button"
-                    aria-label={name}
-                    title={`${name}，用于绘图或形状`}
-                    className="hn-painting-color"
-                    disabled={!freehand && !shape}
-                    aria-pressed={selected}
-                    aria-describedby={`${descriptionId}-palette`}
-                    onClick={() => updateStyle({ color })}
-                  >
-                    <span style={{ background: color }} aria-hidden="true">
-                      {selected ? '✓' : ''}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </div>
-      <span id={descriptionId} hidden>
-        OCR 暂未接入
-      </span>
+              );
+            })}
+            <label
+              className="hn-painting-custom-color"
+              title="自由取色，外轮廓表示当前色"
+              style={{ '--current-color': style.color } as CSSProperties}
+            >
+              <span aria-hidden="true" />
+              <input
+                type="color"
+                aria-label="自由取色"
+                value={style.color}
+                disabled={!freehand && !shape}
+                aria-describedby={`${descriptionId}-palette`}
+                onChange={(event) => updateStyle({ color: event.target.value })}
+              />
+            </label>
+          </div>
+        </div>
+      ) : null}
       <span id={`${descriptionId}-palette`} hidden>
         用于绘图或形状
       </span>
@@ -312,19 +314,15 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
         <ToolbarPanel
           key={openPanel}
           id={panelId}
-          label={
-            { shapes: '形状和对象', drawing: '绘图', settings: '绘图设置', zoom: '缩放设置' }[
-              openPanel
-            ]
-          }
-          menu={openPanel === 'shapes' || openPanel === 'drawing'}
+          label={{ tools: '工具', settings: '绘图设置', zoom: '缩放设置' }[openPanel]}
+          menu={openPanel === 'tools'}
           anchor={anchor}
           boundary={root}
           onClose={closePanel}
         >
-          {openPanel === 'shapes' || openPanel === 'drawing' ? (
+          {openPanel === 'tools' ? (
             <>
-              {(openPanel === 'shapes' ? SHAPES : DRAWING).map(([tool, label, icon]) => (
+              {TOOLS.map(([tool, label, icon]) => (
                 <button
                   type="button"
                   role="menuitemradio"
@@ -339,34 +337,31 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
                   {label}
                 </button>
               ))}
-              {openPanel === 'drawing' ? (
-                <button type="button" role="menuitem" onClick={() => setOpenPanel('settings')}>
-                  设置
-                </button>
-              ) : null}
             </>
           ) : null}
           {openPanel === 'zoom' ? (
             <label>
               缩放{' '}
-              <ToolbarNumberField
-                label="缩放"
+              <input
+                aria-label="缩放"
+                type="range"
                 min={25}
                 max={800}
                 step={25}
-                style={{ ...editableStyle, width: 100 }}
                 value={Math.round(viewport.scale * 100)}
-                apply={(value) => {
+                aria-valuetext={`${Math.round(viewport.scale * 100)}%`}
+                onChange={(event) => {
+                  const value = event.target.valueAsNumber;
+                  if (!Number.isFinite(value) || value < 25 || value > 800) return;
                   const latest = controller.getSnapshot('viewport');
                   controller.updateViewport({
                     type: 'replace',
                     expectedRevision: latest.revision,
                     viewport: { ...latest.viewport, scale: value / 100 },
                   });
-                  return Math.round(controller.getSnapshot('viewport').viewport.scale * 100);
                 }}
               />
-              %
+              <output>{Math.round(viewport.scale * 100)}%</output>
             </label>
           ) : null}
           {openPanel === 'settings' ? (
