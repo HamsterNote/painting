@@ -4,6 +4,8 @@ import { Toolbar } from '../layered/Toolbar';
 import { commitLayeredStroke, makeLayeredController } from './fixtures/layered';
 import { createEditor } from '../layered/createEditor';
 import { INPUT_MODE_PREFERENCE_KEY as key } from '../layered/inputModePreference';
+import { parseLayeredDocument, serializeLayeredDocument } from '../model/documentReader';
+import { createLayeredToolSession } from '../core/layeredToolSession';
 
 function settings() {
   fireEvent.click(screen.getByRole('button', { name: '设置' }));
@@ -21,6 +23,71 @@ function dismiss() {
 }
 
 afterEach(() => localStorage.clear());
+
+test('primary width follows tool parameters, committed object history and document reload', () => {
+  const controller = makeLayeredController();
+  render(<Toolbar controller={controller} />);
+  const input = () => screen.getByLabelText<HTMLInputElement>('笔宽');
+  expect(within(screen.getByRole('toolbar')).getByLabelText('笔宽')).toBe(input());
+  settings();
+  expect(within(screen.getByRole('dialog')).queryByLabelText('笔宽')).toBeNull();
+  dismiss();
+  const history = controller.getSnapshot('history');
+  fireEvent.change(input(), { target: { value: '4' } });
+  expect(controller.getSnapshot('history')).toBe(history);
+  act(() => {
+    commitLayeredStroke(controller, 'thin');
+  });
+  fireEvent.change(input(), { target: { value: '16' } });
+  act(() => {
+    commitLayeredStroke(controller, 'thick');
+  });
+  choose('矩形');
+  fireEvent.change(input(), { target: { value: '3' } });
+  act(() => {
+    const session = createLayeredToolSession(controller, () => 'shape');
+    session.begin({ x: 200, y: 100 });
+    session.update([{ x: 250, y: 150 }]);
+    session.end();
+    session.destroy();
+  });
+  choose('画笔');
+  expect(input().value).toBe('16');
+  act(() => {
+    controller.setFreehandSettings({
+      ...controller.getSnapshot('tools').settings.freehand,
+      nominalSize: 24,
+    });
+  });
+  expect(input().value).toBe('24');
+  const objects = controller.getSnapshot('document').objects;
+  expect(
+    objects.map((object) =>
+      object.kind === 'freehand'
+        ? object.brushSnapshot.nominalSize
+        : object.kind === 'shape'
+          ? object.style.width
+          : null
+    )
+  ).toEqual([4, 16, 3]);
+  act(() => {
+    controller.undo();
+    controller.redo();
+  });
+  expect(controller.getSnapshot('document').objects).toEqual(objects);
+  expect(input().value).toBe('24');
+  const serialized = serializeLayeredDocument(controller.getSnapshot('document'));
+  expect(serialized.ok).toBe(true);
+  if (!serialized.ok) throw new Error(serialized.error.code);
+  const parsed = parseLayeredDocument(serialized.value);
+  if (!parsed.ok) throw new Error(parsed.error.code);
+  expect(createEditor(parsed.value).getSnapshot('document').objects).toEqual(objects);
+  choose('选择');
+  expect(input().disabled).toBe(true);
+  expect(input().value).toBe('');
+  choose('矩形');
+  expect(input().value).toBe('3');
+});
 
 test('freehand settings are isolated from shapes through the real settings path', () => {
   const controller = makeLayeredController();

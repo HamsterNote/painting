@@ -8,7 +8,7 @@
 
 ### Requirement: Floating toolbar has ordered groups and clear states
 
-画板默认工具栏 SHALL 在所属画板底部居中悬浮，依次显示撤销/重做、缩放比例、统一工具菜单、设置/选择/橡皮擦/套索/移动/清空画布独立组、调色板；统一工具入口 SHALL 显示当前工具名称，选择/橡皮擦/套索/移动选中时仅对应独立按钮高亮。工具栏 SHALL 使用浅灰底、圆角胶囊、分组细竖线与紫底白字选中态，普通、悬停、按下、禁用、焦点和选中态 SHALL 可区分。默认激活工具与颜色 SHALL 来自当前编辑器状态，不为匹配示意图强制切换。
+画板默认工具栏 SHALL 在所属画板底部居中悬浮，依次显示撤销/重做、缩放比例、统一工具菜单、笔宽、设置/选择/橡皮擦/套索/移动/清空画布独立组、调色板；统一工具入口 SHALL 显示当前工具名称，选择/橡皮擦/套索/移动选中时仅对应独立按钮高亮。工具栏 SHALL 使用浅灰底、圆角胶囊、分组细竖线与紫底白字选中态，普通、悬停、按下、禁用、焦点和选中态 SHALL 可区分。默认激活工具与颜色 SHALL 来自当前编辑器状态，不为匹配示意图强制切换。
 
 #### Scenario: Wide board presents the reference structure
 
@@ -22,7 +22,7 @@
 
 ### Requirement: All existing tools and settings remain reachable
 
-工具栏 SHALL 保留自由笔、直线、矩形、椭圆、多边形、贝塞尔、文字、图片、选择、套索、橡皮擦、平移十二种工具及原有语义。首层 SHALL 提供统一工具菜单（画笔、直线、矩形、椭圆、多边形、贝塞尔、图片、文字），画笔 SHALL 为首项且映射原freehand；选择、橡皮擦 SHALL 移出菜单，和设置、套索、移动、清空画布 SHALL 在独立组直接可达，移动映射既有平移工具。设置 SHALL 包含原三档输入模式、尺子、虚拟纸张、小地图及适用工具的自定义颜色、笔宽、不透明度、压力或线型；不得用菜单化删除既有能力。
+工具栏 SHALL 保留自由笔、直线、矩形、椭圆、多边形、贝塞尔、文字、图片、选择、套索、橡皮擦、平移十二种工具及原有语义。首层 SHALL 提供统一工具菜单（画笔、直线、矩形、椭圆、多边形、贝塞尔、图片、文字），画笔 SHALL 为首项且映射原freehand；选择、橡皮擦 SHALL 移出菜单，和设置、套索、移动、清空画布 SHALL 在独立组直接可达，移动映射既有平移工具。设置 SHALL 包含原三档输入模式、尺子、虚拟纸张、小地图及适用工具的自定义颜色、不透明度、压力或线型；不得用菜单化删除既有能力。
 
 #### Scenario: Secondary tools can be selected without changing their semantics
 
@@ -36,7 +36,7 @@
 
 #### Scenario: Tool families retain independent settings
 
-- **WHEN** 用户设置形状虚线后切自由笔，在设置面板修改笔宽、不透明度、压力和自定义颜色，再切回形状
+- **WHEN** 用户设置形状虚线后切自由笔，在独立笔宽组修改笔宽、在设置面板修改不透明度、压力和自定义颜色，再切回形状
 - **THEN** 自由笔没有线型控件，形状虚线与原形状参数保留；自由笔配置独立保存，任意有效自定义颜色不被六色预设限制
 
 ### Requirement: Completed lasso switches to selection
@@ -141,3 +141,40 @@
 
 - **WHEN** 用户在面板中选择替换笔宽数字并键盘调节缩放滑动条，关闭或卸载后重新挂载并操作
 - **THEN** 原生选择、焦点与编辑可用，静态标签仍禁选，不残留交互锁或吞掉首击
+
+### Requirement: Zoom readout width is stable
+
+比例入口 SHALL 固定72px宽，使用等宽数字，缩放变化 SHALL 不改变胶囊宽度、内容滚动宽度和后续组位置。
+
+#### Scenario: Percent changes do not shift the toolbar
+
+- **WHEN** 在1280/390/320px宽度依次显示100%、125%、200%、25%、800%
+- **THEN** 比例按钮宽度、胶囊宽度及scrollWidth完全一致，组位置不抖动，窄屏仍可横滚
+
+### Requirement: Stroke width is a primary tool parameter
+
+笔宽 SHALL 从设置面板移到紧跟统一工具菜单的独立常驻组，使用64×44px数值输入，范围0.5–200、步长0.5。值 SHALL 来自当前工具族权威参数并调用原控制器设置命令，无额外持久化复本；自由笔与形状独立，其他工具显示禁用占位。设置面板 SHALL 不再包含笔宽。
+
+#### Scenario: Width follows tool families and external updates
+
+- **WHEN** 自由笔笔宽设为12，形状笔宽设为3，切换工具或外部更新当前参数
+- **THEN** 首层输入反映当前族参数，其他工具禁用，切回时各族值保留，不产生文档历史或重涂旧对象
+
+#### Scenario: Width survives committed object undo and reload
+
+- **WHEN** 分别用不同笔宽绘制对象并撤销/重做，再序列化并重载文档
+- **THEN** 各对象原始笔刷/形状宽度保持一致，主栏参数继续遵循原控制器语义，拖尾等展示状态不写入文档
+
+### Requirement: Eraser trail is transient feedback
+
+有效擦除输入 SHALL 在独立、事件透传的SVG叠加层显示12px圆头淡紫轨迹，每段从采样时起线性渐隐并在2000ms完全消失；新段 SHALL 不延长旧段寿命。轨迹 SHALL 跟随既有viewport，不进入文档、preview或撤销栈；无拖尾时 SHALL 无动画或计时循环，不使用常驻RAF。
+
+#### Scenario: Eraser feedback fades without changing saved history
+
+- **WHEN** 用户擦除并抬笔
+- **THEN** 中间帧仍可见渐隐轨迹，擦除事务按原语义只提交一次，每段2秒后移除，文档/history不因渐隐改变，空闲没有RAF
+
+#### Scenario: Lifecycle transitions clear all feedback
+
+- **WHEN** 拖尾仍可见时切工具、取消输入、清空画布、撤销/重做、失焦、页面隐藏/离开或卸载
+- **THEN** 轨迹节点和到期计时器立即清理，未完成擦除沿用原取消语义，重新进入不残留旧拖尾

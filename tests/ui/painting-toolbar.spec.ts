@@ -165,7 +165,7 @@ test('200% browser page scale and visual viewport resize keep settings reachable
   const cdp = await page.context().newCDPSession(page);
   await openToolbarSettings(page);
   await cdp.send('Emulation.setPageScaleFactor', { pageScaleFactor: 2 });
-  await page.getByLabel('笔宽', { exact: true }).focus();
+  await page.getByLabel('不透明度', { exact: true }).focus();
   const check = async () =>
     page.getByRole('dialog', { name: '绘图设置' }).evaluate((el) => {
       const rect = el.getBoundingClientRect(),

@@ -116,6 +116,7 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
     <button
       type="button"
       aria-label={label}
+      className={panel === 'zoom' ? 'hn-painting-zoom' : undefined}
       title={label}
       aria-haspopup={panel === 'tools' ? 'menu' : 'dialog'}
       aria-expanded={openPanel === panel}
@@ -245,6 +246,30 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
           <div className="hn-painting-group">{menuButton('zoom', '缩放比例')}</div>
           <span className="hn-painting-divider" aria-hidden="true" />
           <div className="hn-painting-group">{menuButton('tools', '工具菜单')}</div>
+          <span className="hn-painting-divider" aria-hidden="true" />
+          <div className="hn-painting-group hn-painting-width" role="group" aria-label="笔触宽度">
+            <label>
+              笔宽
+              {supportedColor ? (
+                <ToolbarNumberField
+                  key={freehand ? 'freehand' : 'shape'}
+                  label="笔宽"
+                  min={0.5}
+                  max={200}
+                  step={0.5}
+                  style={editableStyle}
+                  value={freehand ? settings.freehand.nominalSize : settings.shape.width}
+                  apply={(width) => {
+                    updateStyle({ width });
+                    const current = controller.getSnapshot('tools').settings;
+                    return freehand ? current.freehand.nominalSize : current.shape.width;
+                  }}
+                />
+              ) : (
+                <input aria-label="笔宽" type="number" disabled value="" placeholder="—" />
+              )}
+            </label>
+          </div>
           <span className="hn-painting-divider" aria-hidden="true" />
           <div className="hn-painting-group" role="group" aria-label="画布操作">
             {menuButton('settings', '设置')}
@@ -442,22 +467,6 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
                       title="颜色"
                       value={style.color}
                       onChange={(event) => updateStyle({ color: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    笔宽{' '}
-                    <ToolbarNumberField
-                      label="笔宽"
-                      min={0.5}
-                      max={200}
-                      step={0.5}
-                      style={{ ...editableStyle, width: 56 }}
-                      value={freehand ? settings.freehand.nominalSize : settings.shape.width}
-                      apply={(width) => {
-                        updateStyle({ width });
-                        const current = controller.getSnapshot('tools').settings;
-                        return freehand ? current.freehand.nominalSize : current.shape.width;
-                      }}
                     />
                   </label>
                   <label>

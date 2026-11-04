@@ -50,7 +50,8 @@ test('toolbar static labels reject browser selection while controls keep editing
   await openToolbarSettings(page);
   const panel = page.getByRole('dialog', { name: '绘图设置' });
   for (const label of await panel.locator('label').all()) await expectUserSelect(label, 'none');
-  const label = panel.locator('label').filter({ hasText: '笔宽' });
+  const label = toolbar.locator('label').filter({ hasText: '笔宽' });
+  await page.keyboard.press('Escape');
   await label.dblclick({ position: { x: 3, y: 8 } });
   const bounds = (await label.boundingBox())!;
   await page.mouse.move(bounds.x + 2, bounds.y + 8);
@@ -74,9 +75,9 @@ test('toolbar static labels reject browser selection while controls keep editing
   await expect(width).toHaveValue('24');
   await expect(width).toBeFocused();
   expect((await layeredState(page)).tools.settings.freehand.nominalSize).toBe(24);
-  await width.press('Tab');
   await openToolbarSettings(page);
   const opacity = page.getByLabel('不透明度');
+  await opacity.focus();
   await expect(opacity).toBeFocused();
   await opacity.press('Home');
   await opacity.press('ArrowRight');

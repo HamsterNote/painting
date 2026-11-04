@@ -10,6 +10,10 @@ export const toolbarStyles = `
 .hn-painting-toolbar button:disabled { color:#9AA5B5; cursor:default; }
 .hn-painting-toolbar :is(button,input,select):focus-visible { outline:2px solid #7163D9; outline-offset:2px; }
 .hn-painting-toolbar svg { width:18px; height:18px; flex-shrink:0; }
+.hn-painting-toolbar .hn-painting-zoom { width:72px; min-width:72px; max-width:72px; flex:0 0 72px; font-variant-numeric:tabular-nums; }
+.hn-painting-width label { display:flex; align-items:center; gap:8px; white-space:nowrap; }
+.hn-painting-width input { box-sizing:border-box; width:64px; min-width:64px; height:44px; border:1px solid #D9DEE5; border-radius:8px; background:#FFF; color:inherit; font:inherit; padding:0 6px; }
+.hn-painting-width input:disabled { color:#9AA5B5; background:transparent; }
 .hn-painting-group { display:flex; align-items:center; flex:0 0 auto; gap:4px; }
 .hn-painting-divider { flex:0 0 1px; width:1px; height:24px; background:#D9DEE5; margin:0 8px; }
 .hn-painting-palette { gap:0; }
