@@ -23,6 +23,7 @@ The primary user edits strokes with a mouse, pen, or touch input and expects sel
 - Ruler marks mirror across the top and bottom edges, using three line-height levels for 1 mm, 5 mm, and 10 mm intervals. The ruler contains no numeric or textual labels.
 - Transient interaction feedback uses a white surface with black, tabular numeric text. Ruler angle feedback is a 44 px circle; mouse zoom feedback is a compact 32 px-high pill with a minimum width of 48 px, while touch zoom feedback is fixed at 64 × 32 px so viewport clamping uses its exact rendered bounds.
 - Minimap uses an 8 px canvas-edge inset. A built-in bottom toolbar uses a 32 px container-edge inset; bottom-left and bottom-right Minimap positions clear the 42 px toolbar surface with an additional 8 px gap.
+- Toolbar panels use the intersection of the drawing host and viewport. Upward popups and visible-host overlays share a visible bottom boundary for both height and placement, and remeasure on resize and scroll so the first and last controls remain reachable through internal scrolling.
 
 ## 4. Selection control anatomy
 

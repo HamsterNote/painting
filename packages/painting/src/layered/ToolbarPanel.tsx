@@ -29,23 +29,25 @@ export function ToolbarPanel({
     const place = () => {
       const visual = view.visualViewport;
       const board = boundary.current?.closest('[data-painting-board]')?.getBoundingClientRect();
+      const viewportTop = visual?.offsetTop ?? 0;
+      const viewportBottom = viewportTop + (visual?.height ?? view.innerHeight);
+      const visibleTop = Math.max(viewportTop, board?.top ?? viewportTop);
+      const visibleBottom = Math.min(viewportBottom, board?.bottom ?? viewportBottom);
       const left = Math.max(visual?.offsetLeft ?? 0, board?.left ?? 0) + 8;
       const right =
         Math.min(
           (visual?.offsetLeft ?? 0) + (visual?.width ?? view.innerWidth),
           board?.right ?? view.innerWidth
         ) - 8;
-      const top = Math.max(visual?.offsetTop ?? 0, board?.top ?? 0) + 8;
-      const bottom =
-        Math.min(
-          (visual?.offsetTop ?? 0) + (visual?.height ?? view.innerHeight),
-          board?.bottom ?? view.innerHeight
-        ) - 8;
+      const top = visibleTop + 8;
+      const bottom = visibleBottom - 8;
       const width = Math.max(0, Math.min(288, right - left));
       const rect = trigger.getBoundingClientRect();
       const available = Math.max(44, bottom - top);
       // Prefer above the trigger, but use all visible space when the keyboard covers it.
-      const end = rect.top - 8 > top + 100 ? Math.min(rect.top - 8, bottom) : bottom;
+      // Both modes share this visible end; a popup above the trigger cannot
+      // keep an old, taller height after the host extends below the viewport.
+      const end = rect.top - 8 > top + 100 ? Math.max(top, Math.min(rect.top - 8, bottom)) : bottom;
       const maxHeight = Math.min(available, Math.max(44, end - top));
       const height = Math.min(element.scrollHeight, maxHeight);
       setPosition({
