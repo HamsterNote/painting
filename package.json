@@ -14,14 +14,15 @@
     "build:all": "pnpm run build:lib && pnpm run build:demo",
     "build": "pnpm run build:all",
     "prepare:playground-artifacts": "pnpm --filter @hamster-note/painting build && pnpm --filter @hamster-note/painting-board build",
-    "test": "jest --runInBand && pnpm test:responder",
+    "test": "jest --runInBand && pnpm test:responder && pnpm test:native-config",
     "test:responder": "node --test tests/dependencies/web-responder-touch-identity.test.mjs",
     "test:ui": "playwright test --config=playwright.config.ts",
     "test:webkit": "playwright test --config=playwright.webkit.config.ts",
     "verify:layered": "node scripts/verify-layered-delivery.mjs",
     "ci:local": "pnpm install --frozen-lockfile && pnpm run lint && pnpm run test && pnpm run test:ui && pnpm run build && pnpm run pack:dry",
     "pack:dry": "cd packages/painting && npm pack --dry-run && cd ../painting-board && npm pack --dry-run",
-    "dev": "pnpm --filter @hamster-note/painting-playground dev"
+    "dev": "pnpm --filter @hamster-note/painting-playground dev",
+    "test:native-config": "node --test tests/dependencies/expo-scene.test.mjs"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.24.0",

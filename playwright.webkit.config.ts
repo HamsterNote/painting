@@ -20,6 +20,7 @@ export default defineConfig({
     'painting-controller-color.spec.ts',
     'painting-controller-width.spec.ts',
     'interaction-feedback.spec.ts',
+    'mobile-editor-layout.spec.ts',
     'touch-ruler-feedback.spec.ts',
     'editor-candidate.spec.ts',
     'editor-candidate-canvas2d-pen.spec.ts',

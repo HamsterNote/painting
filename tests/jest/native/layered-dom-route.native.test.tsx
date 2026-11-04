@@ -401,7 +401,12 @@ test('native route always registers actions while leaving the experiment disable
   jest.mocked(useRouter).mockReturnValue({ setParams } as unknown as ReturnType<typeof useRouter>);
   const result = await render(<LayeredEditorRoute />);
   const host = result.getByTestId('expo-dom-editor-host');
-  expect(host.props.dom).toEqual({ style: { flex: 1 } });
+  expect(host.props.dom).toMatchObject({
+    style: { flex: 1, width: '100%' },
+    containerStyle: { flex: 1, width: '100%' },
+    contentInsetAdjustmentBehavior: 'never',
+    scrollEnabled: false,
+  });
   expect(host.props.nativePencilEnabled).toBe(false);
   expect(host.props.onNativeState).toEqual(expect.any(Function));
   expect(host.props.onNativeReply).toEqual(expect.any(Function));

@@ -97,7 +97,9 @@ export default function LayeredEditorDom(props: {
     <div
       style={{
         height: '100dvh',
-        minHeight: 240,
+        width: '100%',
+        minHeight: 0,
+        minWidth: 0,
         display: 'flex',
         flexDirection: 'column',
         fontFamily: 'sans-serif',
