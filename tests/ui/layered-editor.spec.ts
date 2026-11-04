@@ -242,6 +242,80 @@ test('mobile toolbar fits without horizontal overflow', async ({ page }, testInf
   await testInfo.attach('mobile', { body: await page.screenshot(), contentType: 'image/png' });
 });
 
+test('settings panel follows the visible host after resize and scrolling', async ({ page }) => {
+  await page.setViewportSize({ width: 812, height: 812 });
+  await openEditor(page);
+  await page.locator('[data-painting-board]').evaluate((board) => {
+    const host = board as HTMLElement;
+    const app = host.parentElement!;
+    app.style.height = 'auto';
+    app.style.minHeight = '0';
+    app.style.display = 'block';
+    app.style.paddingTop = '80px';
+    host.style.height = '600px';
+    host.style.minHeight = '0';
+    host.style.flex = 'none';
+    for (const sibling of Array.from(app.children)) {
+      if (sibling !== host) (sibling as HTMLElement).style.display = 'none';
+    }
+  });
+  await page.getByRole('button', { name: '设置', exact: true }).click();
+  const panel = page.getByRole('dialog', { name: '绘图设置' });
+  await expect(panel).toBeVisible();
+  await page.setViewportSize({ width: 812, height: 375 });
+  const hostBox = (await page.locator('[data-painting-board]').boundingBox())!;
+  expect(hostBox.y).toBe(80);
+  expect(hostBox.height).toBe(600);
+  const trigger = await page.getByRole('button', { name: '设置', exact: true }).boundingBox();
+  expect(trigger!.y).toBeGreaterThan(100);
+  await expect.poll(async () => (await panel.boundingBox())!.y).toBeLessThan(375);
+  const resizedBox = (await panel.boundingBox())!;
+  expect(resizedBox.y).toBe(88);
+  expect(resizedBox.y + resizedBox.height).toBe(367);
+  expect(await panel.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  const expectControlInView = async (label: string, top: number, bottom: number) => {
+    const control = panel.getByLabel(label, { exact: true });
+    await control.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const popup = element.closest('[role="dialog"]')!;
+      popup.scrollTop += bounds.top - popup.getBoundingClientRect().top - 8;
+    });
+    const bounds = await control.boundingBox();
+    expect(bounds!.y).toBeGreaterThanOrEqual(top);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(bottom);
+  };
+  await expectControlInView('输入模式', 88, 367);
+  await expectControlInView('小地图', 88, 367);
+  await panel.getByLabel('小地图', { exact: true }).check();
+  expect(
+    (await page.evaluate(() => window.__layeredEditor!.getSnapshot('navigation'))).minimap
+  ).toBe(true);
+
+  await page.evaluate(() => {
+    document.documentElement.style.overflow = 'auto';
+    document.body.style.overflow = 'auto';
+    document.body.style.height = 'calc(100dvh + 160px)';
+  });
+  await page.locator('[data-painting-board]').evaluate((board) => {
+    const host = board as HTMLElement;
+    host.style.height = '200px';
+    host.parentElement!.style.paddingBottom = '160px';
+    window.scrollTo(0, 160);
+  });
+  await expect
+    .poll(async () => (await page.locator('[data-painting-board]').boundingBox())!.y)
+    .toBe(-80);
+  await expect.poll(async () => (await panel.boundingBox())!.y).toBe(8);
+  const clippedBox = (await panel.boundingBox())!;
+  expect(clippedBox.y + clippedBox.height).toBe(112);
+  await expectControlInView('输入模式', 8, 112);
+  await expectControlInView('小地图', 8, 112);
+  await panel.getByLabel('输入模式', { exact: true }).selectOption('finger');
+  expect(await page.evaluate(() => window.__layeredEditor!.getSnapshot('input').mode)).toBe(
+    'finger'
+  );
+});
+
 test('image file import decodes into ordered SVG pixels and one undo transaction', async ({
   page,
 }) => {
