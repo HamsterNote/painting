@@ -270,6 +270,7 @@ export function LayeredDrawingSurface({
     <div
       ref={host}
       data-testid="layered-surface"
+      data-drawing-viewport="true"
       data-input-ready={inputReady}
       data-input-mode={inputMode}
       style={{

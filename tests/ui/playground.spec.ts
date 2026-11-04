@@ -81,7 +81,11 @@ test('all retained tool modes route to the one controller', async ({ page }) => 
   ]) {
     await selectToolbarTool(page, name);
     const button = page.getByRole('button', {
-      name: name === '套索' ? '套索' : name === '平移' ? '移动' : '工具菜单',
+      name: ['选择', '橡皮擦', '套索'].includes(name)
+        ? name
+        : name === '平移'
+          ? '移动'
+          : '工具菜单',
       exact: true,
     });
     await expect(button).toHaveAttribute('aria-pressed', 'true');

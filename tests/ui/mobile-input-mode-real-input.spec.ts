@@ -73,7 +73,7 @@ for (const source of ['pen', 'touch'] as const) {
     await tap(page.getByRole('menuitemradio', { name: '矩形', exact: true }));
     expect((await layeredState(page)).tools.activeTool).toBe('rect');
     await tap(page.getByRole('button', { name: '工具菜单', exact: true }));
-    await tap(page.getByRole('menuitemradio', { name: '自由笔', exact: true }));
+    await tap(page.getByRole('menuitemradio', { name: '画笔', exact: true }));
     await tap(page.getByRole('button', { name: '设置', exact: true }));
     await openToolbarSettings(page);
     const width = page.getByLabel('笔宽', { exact: true });

@@ -9,12 +9,12 @@ function settings() {
   fireEvent.click(screen.getByRole('button', { name: '设置' }));
 }
 function choose(name: string) {
-  if (name === '套索' || name === '平移') {
+  if (['选择', '橡皮擦', '套索', '平移'].includes(name)) {
     fireEvent.click(screen.getByRole('button', { name: name === '平移' ? '移动' : name }));
     return;
   }
   fireEvent.click(screen.getByRole('button', { name: '工具菜单' }));
-  fireEvent.click(screen.getByRole('menuitemradio', { name }));
+  fireEvent.click(screen.getByRole('menuitemradio', { name: name === '自由笔' ? '画笔' : name }));
 }
 function dismiss() {
   fireEvent.keyDown(document, { key: 'Escape' });
@@ -313,6 +313,8 @@ test('keyboard menu navigation, Escape, outside input and editable fields surviv
   const first = render(<Toolbar controller={controller} />);
   const trigger = screen.getByRole('button', { name: '工具菜单' });
   fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+  expect(document.activeElement).toBe(screen.getByRole('menuitemradio', { name: '画笔' }));
+  fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' });
   expect(document.activeElement).toBe(screen.getByRole('menuitemradio', { name: '直线' }));
   fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' });
   expect(document.activeElement).toBe(screen.getByRole('menuitemradio', { name: '矩形' }));
@@ -388,4 +390,80 @@ test('raw sample batches never reconcile the toolbar', () => {
     controller.setTool('text');
   });
   expect(renders.mock.calls.length).toBeGreaterThan(before);
+});
+
+test('brush leads the menu and selection and eraser are direct controls', () => {
+  const controller = makeLayeredController();
+  render(<Toolbar controller={controller} />);
+  fireEvent.click(screen.getByRole('button', { name: '工具菜单' }));
+  expect(screen.getAllByRole('menuitemradio')[0]).toBe(
+    screen.getByRole('menuitemradio', { name: '画笔' })
+  );
+  expect(screen.getAllByRole('menuitemradio')).toHaveLength(8);
+  expect(screen.queryByRole('menuitemradio', { name: '选择' })).toBeNull();
+  expect(screen.queryByRole('menuitemradio', { name: '橡皮擦' })).toBeNull();
+  dismiss();
+  for (const [name, tool] of [
+    ['选择', 'selection'],
+    ['橡皮擦', 'eraser'],
+  ] as const) {
+    fireEvent.click(screen.getByRole('button', { name }));
+    expect(controller.getSnapshot('tools').activeTool).toBe(tool);
+    expect(screen.getByRole('button', { name }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: '工具菜单' }).getAttribute('aria-pressed')).toBe(
+      'false'
+    );
+  }
+});
+
+test('slider preserves the measured viewport center after pan and resize', () => {
+  const controller = makeLayeredController();
+  render(
+    <div data-painting-board>
+      <div data-drawing-viewport data-testid="viewport" />
+      <Toolbar controller={controller} />
+    </div>
+  );
+  const surface = screen.getByTestId('viewport');
+  const measure = jest.spyOn(surface, 'getBoundingClientRect');
+  act(() => {
+    controller.updateViewport({
+      type: 'replace',
+      expectedRevision: 0,
+      viewport: { scale: 1.5, tx: 140, ty: -45 },
+    });
+  });
+  fireEvent.click(screen.getByRole('button', { name: '缩放比例' }));
+  const zoom = screen.getByLabelText('缩放');
+  const document = controller.getSnapshot('document'),
+    history = controller.getSnapshot('history');
+  for (const [width, height, percent] of [
+    [800, 600, 200],
+    [600, 400, 75],
+  ]) {
+    measure.mockReturnValue({
+      left: 100,
+      top: 80,
+      right: 100 + width,
+      bottom: 80 + height,
+      width,
+      height,
+      x: 100,
+      y: 80,
+      toJSON: () => ({}),
+    });
+    const before = controller.getSnapshot('viewport').viewport;
+    const world = {
+      x: (width / 2 - before.tx) / before.scale,
+      y: (height / 2 - before.ty) / before.scale,
+    };
+    fireEvent.change(zoom, { target: { value: String(percent) } });
+    const after = controller.getSnapshot('viewport').viewport;
+    expect(after.scale).toBe(percent / 100);
+    expect(world.x * after.scale + after.tx).toBeCloseTo(width / 2);
+    expect(world.y * after.scale + after.ty).toBeCloseTo(height / 2);
+  }
+  expect(controller.getSnapshot('document')).toBe(document);
+  expect(controller.getSnapshot('history')).toBe(history);
+  measure.mockRestore();
 });

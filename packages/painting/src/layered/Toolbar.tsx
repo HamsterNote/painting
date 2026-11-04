@@ -18,13 +18,7 @@ const SHAPES: readonly [LayeredEditorTool, string, IconName][] = [
   ['bezier', '贝塞尔', 'curve'],
   ['image', '图片', 'image'],
 ];
-const TOOLS: typeof SHAPES = [
-  ...SHAPES,
-  ['freehand', '自由笔', 'pen'],
-  ['text', '文字', 'type'],
-  ['selection', '选择', 'mouse'],
-  ['eraser', '橡皮擦', 'eraser'],
-];
+const TOOLS: typeof SHAPES = [['freehand', '画笔', 'pen'], ...SHAPES, ['text', '文字', 'type']];
 const COLORS = [
   ['黑', '#2D2D2D'],
   ['蓝', '#7FA3C3'],
@@ -69,6 +63,10 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
   const freehand = activeTool === 'freehand';
   const shape = ['line', 'rect', 'ellipse', 'polygon', 'bezier'].includes(activeTool);
   const style = freehand ? settings.freehand : settings.shape;
+  const supportedColor = freehand || shape;
+  const customColorActive =
+    supportedColor &&
+    !COLORS.some(([, color]) => color.toLowerCase() === style.color.toLowerCase());
   const currentTool = TOOLS.find(([tool]) => tool === activeTool);
   const closePanel = useCallback((restoreFocus: boolean) => {
     setOpenPanel(null);
@@ -77,6 +75,30 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
   const togglePanel = (panel: Panel, trigger: HTMLButtonElement) => {
     anchor.current = trigger;
     setOpenPanel(openPanel === panel ? null : panel);
+  };
+  const zoomFocalPoint = () => {
+    const element = root.current!;
+    const view = element.ownerDocument.defaultView!;
+    const container = element.closest('[data-painting-board]') ?? element.parentElement;
+    const surface = container?.querySelector<HTMLElement>('[data-drawing-viewport]');
+    const visual = view.visualViewport;
+    const visible = {
+      left: visual?.offsetLeft ?? 0,
+      top: visual?.offsetTop ?? 0,
+      width: visual?.width ?? view.innerWidth,
+      height: visual?.height ?? view.innerHeight,
+    };
+    if (surface) {
+      const rect = surface.getBoundingClientRect();
+      const origin = { x: rect.left + surface.clientLeft, y: rect.top + surface.clientTop };
+      const left = Math.max(origin.x, visible.left),
+        top = Math.max(origin.y, visible.top);
+      const right = Math.min(rect.right, visible.left + visible.width),
+        bottom = Math.min(rect.bottom, visible.top + visible.height);
+      if (right > left && bottom > top)
+        return { x: (left + right) / 2 - origin.x, y: (top + bottom) / 2 - origin.y };
+    }
+    return { x: visible.width / 2, y: visible.height / 2 };
   };
   const updateStyle = (patch: { color?: string; opacity?: number; width?: number }) => {
     if (freehand) {
@@ -228,6 +250,24 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
             {menuButton('settings', '设置')}
             <button
               type="button"
+              aria-label="选择"
+              title="选择"
+              aria-pressed={activeTool === 'selection'}
+              onClick={() => controller.setTool('selection')}
+            >
+              <Icon name="mouse" />
+            </button>
+            <button
+              type="button"
+              aria-label="橡皮擦"
+              title="橡皮擦"
+              aria-pressed={activeTool === 'eraser'}
+              onClick={() => controller.setTool('eraser')}
+            >
+              <Icon name="eraser" />
+            </button>
+            <button
+              type="button"
               aria-label="套索"
               title="套索"
               aria-pressed={activeTool === 'lasso'}
@@ -274,6 +314,7 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
               return (
                 <button
                   key={color}
+                  style={{ '--swatch-color': color } as CSSProperties}
                   type="button"
                   aria-label={name}
                   title={`${name}，用于绘图或形状`}
@@ -291,13 +332,15 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
             })}
             <label
               className="hn-painting-custom-color"
-              title="自由取色，外轮廓表示当前色"
+              data-active={customColorActive}
+              title={customColorActive ? '自由取色，当前自定义颜色' : '自由取色'}
               style={{ '--current-color': style.color } as CSSProperties}
             >
               <span aria-hidden="true" />
               <input
                 type="color"
                 aria-label="自由取色"
+                aria-description={customColorActive ? '当前自定义颜色' : '选择自定义颜色'}
                 value={style.color}
                 disabled={!freehand && !shape}
                 aria-describedby={`${descriptionId}-palette`}
@@ -354,10 +397,15 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
                   const value = event.target.valueAsNumber;
                   if (!Number.isFinite(value) || value < 25 || value > 800) return;
                   const latest = controller.getSnapshot('viewport');
+                  const focal = zoomFocalPoint();
                   controller.updateViewport({
-                    type: 'replace',
+                    type: 'transform',
                     expectedRevision: latest.revision,
-                    viewport: { ...latest.viewport, scale: value / 100 },
+                    intent: {
+                      startFocal: focal,
+                      currentFocal: focal,
+                      scaleRatio: value / (latest.viewport.scale * 100),
+                    },
                   });
                 }}
               />

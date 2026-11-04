@@ -194,7 +194,15 @@ export function createLayeredToolSession(
     const current = gesture;
     // Clear transport ownership before publishing a document mutation to subscribers.
     gesture = undefined;
-    if (current.tool !== 'lasso') {
+    if (current.tool === 'lasso') {
+      const result = queryObjectLasso(requireValue(prepared), current.points, 'intersects');
+      if (result.ok) {
+        const selected = result.value.map((hit) => hit.objectId);
+        controller.setSelection(selected);
+        // Ownership is already released: tool-change subscribers must not restore the old selection.
+        if (selected.length) controller.setTool('selection');
+      }
+    } else {
       const moved = current.points.some(
         (point) => point.x !== current.points[0]!.x || point.y !== current.points[0]!.y
       );

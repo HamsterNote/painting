@@ -89,7 +89,8 @@ test('keyboard menu selection, editable numbers, dismissal and the next canvas d
   const trigger = page.getByRole('button', { name: '工具菜单' });
   await trigger.focus();
   await page.keyboard.press('ArrowDown');
-  await expect(page.getByRole('menuitemradio', { name: '直线', exact: true })).toBeFocused();
+  await expect(page.getByRole('menuitemradio', { name: '画笔', exact: true })).toBeFocused();
+  await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   expect((await layeredState(page)).tools.activeTool).toBe('rect');
@@ -218,4 +219,134 @@ test('custom color and clear canvas preserve independent styles and reversible h
   expect((await layeredState(page)).document.objects).toEqual(before.document.objects);
   await page.getByRole('button', { name: '重做', exact: true }).click();
   expect((await layeredState(page)).document.objects).toHaveLength(0);
+});
+
+test('dragging zoom preserves visible center ink after pan, embedded offset and resize', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openLayeredEditor(page);
+  await page.evaluate(() => {
+    const editor = window.__layeredEditor!;
+    editor.updateViewport({
+      type: 'replace',
+      expectedRevision: editor.getSnapshot('viewport').revision,
+      viewport: { scale: 1.5, tx: 140, ty: -45 },
+    });
+  });
+  for (const [width, height, left, top, fraction] of [
+    [900, 600, 100, 60, 0.8],
+    [680, 430, 70, -100, 0.3],
+  ]) {
+    await page.locator('[data-painting-board]').evaluate(
+      (board: HTMLElement, size) => {
+        Object.assign(board.style, {
+          width: `${size.width}px`,
+          height: `${size.height}px`,
+          flex: 'none',
+          marginLeft: `${size.left}px`,
+          marginTop: `${size.top}px`,
+        });
+      },
+      { width, height, left, top }
+    );
+    const center = await page.getByTestId('layered-surface').evaluate((host) => {
+      const rect = host.getBoundingClientRect(),
+        view = visualViewport!;
+      const x =
+        (Math.max(rect.left, view.offsetLeft) +
+          Math.min(rect.right, view.offsetLeft + view.width)) /
+        2;
+      const y =
+        (Math.max(rect.top, view.offsetTop) + Math.min(rect.bottom, view.offsetTop + view.height)) /
+        2;
+      return { x: x - rect.left, y: y - rect.top };
+    });
+    await dispatchLayeredPointer(page, 'down', center);
+    await dispatchLayeredPointer(page, 'up', center);
+    const marker = page.locator('[data-object-id]').last();
+    await expect(marker).toHaveCSS('visibility', 'visible');
+    const beforeBox = (await marker.boundingBox())!;
+    const before = await layeredState(page);
+    await page.getByRole('button', { name: '缩放比例', exact: true }).click();
+    const slider = page.getByRole('slider', { name: '缩放', exact: true });
+    const bounds = (await slider.boundingBox())!;
+    await page.mouse.move(bounds.x + bounds.width * 0.5, bounds.y + bounds.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + bounds.width * fraction, bounds.y + bounds.height / 2, {
+      steps: 8,
+    });
+    await page.mouse.up();
+    const after = await layeredState(page);
+    expect(after.viewport.viewport.scale).not.toBe(before.viewport.viewport.scale);
+    expect(after.viewport.viewport.tx).not.toBe(before.viewport.viewport.tx);
+    const afterBox = (await marker.boundingBox())!;
+    const world = {
+      x: (center.x - before.viewport.viewport.tx) / before.viewport.viewport.scale,
+      y: (center.y - before.viewport.viewport.ty) / before.viewport.viewport.scale,
+    };
+    expect(world.x * after.viewport.viewport.scale + after.viewport.viewport.tx).toBeCloseTo(
+      center.x,
+      6
+    );
+    expect(world.y * after.viewport.viewport.scale + after.viewport.viewport.ty).toBeCloseTo(
+      center.y,
+      6
+    );
+    // Tap outlines are slightly asymmetric; their SVG bounding center can move subpixel as they grow.
+    expect(
+      Math.abs(afterBox.x + afterBox.width / 2 - beforeBox.x - beforeBox.width / 2)
+    ).toBeLessThan(0.5);
+    expect(
+      Math.abs(afterBox.y + afterBox.height / 2 - beforeBox.y - beforeBox.height / 2)
+    ).toBeLessThan(0.5);
+    expect(after.document).toEqual(before.document);
+    expect(after.history).toEqual(before.history);
+    await page.keyboard.press('Escape');
+  }
+});
+
+test('preset rings match the selected color and the custom ring only outlines custom colors', async ({
+  page,
+}) => {
+  await openLayeredEditor(page);
+  const custom = page.locator('.hn-painting-custom-color span');
+  const ring = page.getByLabel('自由取色', { exact: true });
+  for (const [name, color] of [
+    ['黑', 'rgb(45, 45, 45)'],
+    ['蓝', 'rgb(127, 163, 195)'],
+    ['紫', 'rgb(171, 156, 194)'],
+  ]) {
+    const button = page.getByRole('button', { name, exact: true });
+    await button.click();
+    await expect(button.locator('span')).toHaveCSS('outline-color', color);
+    await expect(button).toHaveAttribute('aria-pressed', 'true');
+    await expect(custom).toHaveCSS('outline-style', 'none');
+  }
+  await ring.evaluate((node: HTMLInputElement) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+      node,
+      '#123456'
+    );
+    node.dispatchEvent(new Event('input', { bubbles: true }));
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(custom).toHaveCSS('outline-color', 'rgb(18, 52, 86)');
+  await expect(custom).toHaveCSS('outline-width', '2px');
+  await expect(page.locator('.hn-painting-color[aria-pressed="true"]')).toHaveCount(0);
+  await selectToolbarTool(page, '矩形');
+  await expect(custom).toHaveCSS('outline-style', 'none');
+  await selectToolbarTool(page, '画笔');
+  await expect(custom).toHaveCSS('outline-color', 'rgb(18, 52, 86)');
+  await page.getByRole('button', { name: '蓝', exact: true }).click();
+  await expect(custom).toHaveCSS('outline-style', 'none');
+  await page.evaluate(() => {
+    const editor = window.__layeredEditor!,
+      settings = editor.getSnapshot('tools').settings.freehand;
+    editor.setFreehandSettings({ ...settings, color: '#123456' });
+  });
+  await expect(custom).toHaveCSS('outline-color', 'rgb(18, 52, 86)');
+  await selectToolbarTool(page, '文字');
+  await expect(custom).toHaveCSS('outline-style', 'none');
+  await expect(ring).toBeDisabled();
 });

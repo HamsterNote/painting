@@ -425,7 +425,13 @@ test('lasso, move, resize, rotate and fast erase retain raw data and reversible 
   expect(await page.evaluate(() => window.__layeredEditor!.getSnapshot('selection').length)).toBe(
     5
   );
-  await selectToolbarTool(page, '选择');
+  expect((await page.evaluate(() => window.__layeredEditor!.getSnapshot('tools'))).activeTool).toBe(
+    'selection'
+  );
+  await expect(page.getByRole('button', { name: '选择', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  );
   await pointer(page, 'down', 230, 180);
   await pointer(page, 'move', 250, 200);
   await pointer(page, 'up', 250, 200);

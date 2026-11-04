@@ -251,7 +251,7 @@ test.each([
     const select = (next: 'freehand' | 'line') => {
       fireEvent.click(view.getByRole('button', { name: '工具菜单' }));
       fireEvent.click(
-        view.getByRole('menuitemradio', { name: next === 'freehand' ? '自由笔' : '直线' })
+        view.getByRole('menuitemradio', { name: next === 'freehand' ? '画笔' : '直线' })
       );
     };
     select(tool);

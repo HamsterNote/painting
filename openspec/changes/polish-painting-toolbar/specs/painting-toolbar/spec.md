@@ -8,7 +8,7 @@
 
 ### Requirement: Floating toolbar has ordered groups and clear states
 
-画板默认工具栏 SHALL 在所属画板底部居中悬浮，依次显示撤销/重做、缩放比例、统一工具菜单、设置/套索/移动/清空画布独立组、调色板；统一工具入口 SHALL 显示当前工具名称，套索/移动选中时仅对应独立按钮高亮。工具栏 SHALL 使用浅灰底、圆角胶囊、分组细竖线与紫底白字选中态，普通、悬停、按下、禁用、焦点和选中态 SHALL 可区分。默认激活工具与颜色 SHALL 来自当前编辑器状态，不为匹配示意图强制切换。
+画板默认工具栏 SHALL 在所属画板底部居中悬浮，依次显示撤销/重做、缩放比例、统一工具菜单、设置/选择/橡皮擦/套索/移动/清空画布独立组、调色板；统一工具入口 SHALL 显示当前工具名称，选择/橡皮擦/套索/移动选中时仅对应独立按钮高亮。工具栏 SHALL 使用浅灰底、圆角胶囊、分组细竖线与紫底白字选中态，普通、悬停、按下、禁用、焦点和选中态 SHALL 可区分。默认激活工具与颜色 SHALL 来自当前编辑器状态，不为匹配示意图强制切换。
 
 #### Scenario: Wide board presents the reference structure
 
@@ -22,7 +22,7 @@
 
 ### Requirement: All existing tools and settings remain reachable
 
-工具栏 SHALL 保留自由笔、直线、矩形、椭圆、多边形、贝塞尔、文字、图片、选择、套索、橡皮擦、平移十二种工具及原有语义。首层 SHALL 提供统一工具菜单（自由笔、直线、矩形、椭圆、多边形、贝塞尔、文字、图片、选择、橡皮擦）；设置、套索、移动、清空画布 SHALL 在独立组直接可达，移动映射既有平移工具。设置 SHALL 包含原三档输入模式、尺子、虚拟纸张、小地图及适用工具的自定义颜色、笔宽、不透明度、压力或线型；不得用菜单化删除既有能力。
+工具栏 SHALL 保留自由笔、直线、矩形、椭圆、多边形、贝塞尔、文字、图片、选择、套索、橡皮擦、平移十二种工具及原有语义。首层 SHALL 提供统一工具菜单（画笔、直线、矩形、椭圆、多边形、贝塞尔、图片、文字），画笔 SHALL 为首项且映射原freehand；选择、橡皮擦 SHALL 移出菜单，和设置、套索、移动、清空画布 SHALL 在独立组直接可达，移动映射既有平移工具。设置 SHALL 包含原三档输入模式、尺子、虚拟纸张、小地图及适用工具的自定义颜色、笔宽、不透明度、压力或线型；不得用菜单化删除既有能力。
 
 #### Scenario: Secondary tools can be selected without changing their semantics
 
@@ -39,14 +39,33 @@
 - **WHEN** 用户设置形状虚线后切自由笔，在设置面板修改笔宽、不透明度、压力和自定义颜色，再切回形状
 - **THEN** 自由笔没有线型控件，形状虚线与原形状参数保留；自由笔配置独立保存，任意有效自定义颜色不被六色预设限制
 
+### Requirement: Completed lasso switches to selection
+
+套索 SHALL 在完成有效路径且命中对象后自动切换到选择工具，保留全部命中选区并清理预览，不产生文档或历史事务。拖动期间、取消、空/退化路径或失效手势 SHALL 不自动切换。
+
+#### Scenario: Lasso selection can be moved immediately
+
+- **WHEN** 用户套住一个或多个对象并抬笔，再直接拖动命中选区
+- **THEN** 抬笔后选择按钮激活、工具为selection、选区不丢失，下一拖动可移动对象并形成一次可撤销事务
+
+#### Scenario: Empty and cancelled lasso keep the lasso tool
+
+- **WHEN** 用户完成无命中的套索或取消已有命中的套索预览
+- **THEN** 仍在套索工具，取消恢复原选区，文档与历史不变
+
 ### Requirement: History and zoom use authoritative editor state
 
-撤销/重做 SHALL 根据已有历史可用性禁用或启用，并保持一次既有事务的撤销语义。缩放入口 SHALL 显示当前权威比例，打开后提供25–800%、步长25的滑动条与百分比读数，不提供缩放数值输入。非法命令 SHALL 不提交；状态过期或书写冻结导致拒绝时 SHALL 恢复当前有效比例，不绕过输入会话或建立独立视口。
+撤销/重做 SHALL 根据已有历史可用性禁用或启用，并保持一次既有事务的撤销语义。缩放入口 SHALL 显示当前权威比例，打开后提供25–800%、步长25的滑动条与百分比读数，不提供缩放数值输入。滑动条 SHALL 以所属绘图可视区域中心为锚点，同时更新scale/tx/ty，保持该中心对应的世界内容位置不变；锚点 SHALL 按每次输入时的实际绘图可视区域计算，不以纸张左上角为基准。非法命令 SHALL 不提交；状态过期或书写冻结导致拒绝时 SHALL 恢复当前有效比例，不绕过输入会话或建立独立视口。
 
 #### Scenario: External zoom and undo are reflected
 
 - **WHEN** 已提交一笔后用户撤销并重做，之后画布通过合法导航变成125%
 - **THEN** 同一笔仅被移除/恢复一次，按钮可用性与历史一致，比例显示125%，工具栏没有自己的独立缩放状态
+
+#### Scenario: Slider zoom keeps visible center content fixed
+
+- **WHEN** 已平移且缩放的画板中，用户拖动缩放条，随后改变画板尺寸并再次缩放
+- **THEN** 每次变换前视口可见中心下的世界点仍投影在同一屏幕位置，scale改变且tx/ty相应改变；文档与历史不变，不将纸张原点固定
 
 #### Scenario: Invalid or rejected zoom cannot move ink
 
@@ -55,7 +74,7 @@
 
 ### Requirement: Palette updates only supported drawing styles
 
-调色板 SHALL 按黑#2D2D2D、蓝#7FA3C3、绿#8FBA8D、黄#D5B984、粉#CD9BAA、紫#AB9CC2顺序显示六点。每点 SHALL 有24px色面和约30.67×44px不重叠命中区域，色面留白约6.67px（原20px的1/3），选中项 SHALL 同时有紫色环和勾号及可访问选中状态。自由笔或线/形状下选色 SHALL 只更新当前工具族后续绘制设置，不重涂已有对象；其他工具下 SHALL 禁用并说明用途。非预设当前色 SHALL 不伪造某预设选中。新编辑器的自由笔与形状 SHALL 默认黑色，不覆盖现有快照。最右 SHALL 提供自由取色环，内部多色、外轮廓为当前色，选择任意有效颜色只更新当前工具族；不支持颜色的工具下该控件也禁用。
+调色板 SHALL 按黑#2D2D2D、蓝#7FA3C3、绿#8FBA8D、黄#D5B984、粉#CD9BAA、紫#AB9CC2顺序显示六点。每点 SHALL 有24px色面和约30.67×44px不重叠命中区域，色面留白约6.67px（原20px的1/3），选中项 SHALL 同时有与该预设色一致的环和勾号及可访问选中状态。自由笔或线/形状下选色 SHALL 只更新当前工具族后续绘制设置，不重涂已有对象；其他工具下 SHALL 禁用并说明用途。非预设当前色 SHALL 不伪造某预设选中。新编辑器的自由笔与形状 SHALL 默认黑色，不覆盖现有快照。最右 SHALL 提供自由取色环，内部多色，仅当前色不匹配预设且工具支持颜色时active并显示当前色外轮廓，非active时无外轮廓；匹配预设时仅相应预设active，键盘焦点提示独立保留，选择任意有效颜色只更新当前工具族；不支持颜色的工具下该控件也禁用。
 
 #### Scenario: Freehand and shape colors remain independent
 
@@ -66,6 +85,11 @@
 
 - **WHEN** 用户进入文字工具，之后回到已设置非预设自定义颜色的自由笔
 - **THEN** 文字模式六点禁用且说明用于绘图或形状；自由笔模式六点均未选中，自定义色仍保留并由最右取色环外轮廓表示，可直接编辑
+
+#### Scenario: Preset and custom outlines are mutually exclusive
+
+- **WHEN** 用户依次选择预设蓝色、非预设自定义色、预设黑色并切换工具族
+- **THEN** 蓝色激活环为蓝色；自定义色时仅自由取色环有当前色轮廓；黑色时仅黑色有黑色激活环，自由取色无轮廓；工具族切换后状态由该族颜色派生
 
 ### Requirement: Collapse uses an independent circular control
 

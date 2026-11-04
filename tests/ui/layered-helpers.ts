@@ -59,7 +59,7 @@ export async function openToolbarSettings(page: Page) {
 }
 
 export async function selectToolbarTool(page: Page, label: string) {
-  if (label === '套索' || label === '平移') {
+  if (['选择', '橡皮擦', '套索', '平移'].includes(label)) {
     await page
       .getByRole('button', { name: label === '平移' ? '移动' : label, exact: true })
       .click();
@@ -67,7 +67,9 @@ export async function selectToolbarTool(page: Page, label: string) {
   }
   const trigger = page.getByRole('button', { name: '工具菜单', exact: true });
   await trigger.click();
-  await page.getByRole('menuitemradio', { name: label, exact: true }).click();
+  await page
+    .getByRole('menuitemradio', { name: label === '自由笔' ? '画笔' : label, exact: true })
+    .click();
 }
 
 export async function setToolbarInputMode(page: Page, mode: string) {
