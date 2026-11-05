@@ -78,7 +78,17 @@ export function ToolbarPanel({
       )
         onClose(false);
     };
-    const escape = (event: KeyboardEvent) => {
+    let tabExit: number | undefined;
+    const keyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Tab' && element.contains(doc.activeElement)) {
+        // Preserve native traversal, then close even when it lands in this toolbar.
+        // Pointer focus in the toolbar remains allowed by focusOutside above.
+        view.clearTimeout(tabExit);
+        tabExit = view.setTimeout(() => {
+          if (!element.contains(doc.activeElement)) onClose(false);
+        }, 0);
+        return;
+      }
       if (event.key !== 'Escape') return;
       event.preventDefault();
       onClose(true);
@@ -86,7 +96,7 @@ export function ToolbarPanel({
     const blur = () => onClose(false);
     doc.addEventListener('pointerdown', outside, true);
     doc.addEventListener('focusin', focusOutside);
-    doc.addEventListener('keydown', escape);
+    doc.addEventListener('keydown', keyDown);
     view.addEventListener('blur', blur);
     view.addEventListener('resize', place);
     view.addEventListener('scroll', place, true);
@@ -96,10 +106,11 @@ export function ToolbarPanel({
       element.querySelector<HTMLElement>('[role="menuitemradio"], [role="menuitem"]')?.focus();
     else element.querySelector<HTMLElement>('input,select,button')?.focus();
     return () => {
+      view.clearTimeout(tabExit);
       observer?.disconnect();
       doc.removeEventListener('pointerdown', outside, true);
       doc.removeEventListener('focusin', focusOutside);
-      doc.removeEventListener('keydown', escape);
+      doc.removeEventListener('keydown', keyDown);
       view.removeEventListener('blur', blur);
       view.removeEventListener('resize', place);
       view.removeEventListener('scroll', place, true);

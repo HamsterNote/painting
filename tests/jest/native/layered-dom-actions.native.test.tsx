@@ -3,6 +3,7 @@ import { useLocalSearchParams } from 'expo-router';
 import LayeredEditorRoute from '../../../apps/playground/src/layered-editor/LayeredEditorRoute';
 
 const mockInjectedScripts: string[] = [];
+const mockRequestFocus = jest.fn(async () => {});
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: jest.fn(() => ({})),
@@ -27,6 +28,7 @@ jest.mock('../../../apps/playground/node_modules/expo/src/dom/webview/ExpoDOMWeb
     default: React.forwardRef(function MockDOMWebView(props: object, ref: object) {
       React.useImperativeHandle(ref, () => ({
         injectJavaScript: (script: string) => mockInjectedScripts.push(script),
+        requestFocus: mockRequestFocus,
       }));
       return React.createElement(View, { ...props, testID: 'actual-expo-dom-webview' });
     }),
@@ -54,6 +56,7 @@ test('Expo action names stay registered across initial-off, enable, disable and 
   expect(webview().props.injectedJavaScriptObject.initialProps.names).toEqual([
     'onNativeState',
     'onNativeReply',
+    'onRequestKeyboardFocus',
   ]);
   const state = {
     protocolVersion: 1,
@@ -73,6 +76,8 @@ test('Expo action names stay registered across initial-off, enable, disable and 
         }),
       },
     });
+  await send('onRequestKeyboardFocus', {});
+  expect(mockRequestFocus).toHaveBeenCalledTimes(1);
   jest.mocked(useLocalSearchParams).mockReturnValue({ pencilkit: '1' });
   await view.rerender(<LayeredEditorRoute />);
   await send('onNativeState', state);

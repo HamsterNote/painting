@@ -1,0 +1,97 @@
+diff --git a/build/DomWebView.types.d.ts b/build/DomWebView.types.d.ts
+index 6ea41ff0152909ba1f1e8bc07de41afcecbcc278..010aaeffa94df443ac5fddb2287f2cc81da35b3c 100644
+--- a/build/DomWebView.types.d.ts
++++ b/build/DomWebView.types.d.ts
+@@ -246,6 +246,12 @@ export type DomWebViewRef = {
+         y?: number | undefined;
+         animated?: boolean | undefined;
+     }): void;
++    /**
++     * Makes the WebView content first responder so hardware keyboard events
++     * can reach non-editable DOM content.
++     * @platform ios
++     */
++    requestFocus: () => Promise<void>;
+     /**
+      * Injects a JavaScript string into the `WebView` and executes it.
+      */
+diff --git a/ios/DomWebView.swift b/ios/DomWebView.swift
+index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..4ae91988bd2f6343a2616343996f5b907b31165b 100644
+--- a/ios/DomWebView.swift
++++ b/ios/DomWebView.swift
+@@ -192,6 +192,28 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
+     webView?.scrollView.setContentOffset(offset, animated: animated)
+   }
+ 
++  func requestFocus() {
++    guard let webView, webView.window != nil else { return }
++    // The DOM action crosses an async bridge. Recheck the live active element
++    // here so a delayed menu request cannot interrupt typing or an IME session.
++    let isNonEditingScript = """
++    (() => {
++      const active = document.activeElement;
++      if (!active) return true;
++      if (active.isContentEditable || active.matches('textarea,select')) return false;
++      return active.tagName !== 'INPUT' ||
++        ['button', 'submit', 'reset', 'checkbox', 'radio', 'range'].includes(active.type);
++    })()
++    """
++    webView.evaluateJavaScript(isNonEditingScript) { [weak webView] result, error in
++      guard error == nil, let mayFocus = result as? Bool, mayFocus,
++        let webView, webView.window != nil else { return }
++      // WKWebView forwards this public API to its content responder. Do not
++      // dispatch synthetic key events or interfere with WebKit's text input.
++      webView.becomeFirstResponder()
++    }
++  }
++
+   func injectJavaScript(_ script: String) {
+     DispatchQueue.main.async { [weak self] in
+       self?.webView?.evaluateJavaScript(script)
+diff --git a/ios/DomWebViewModule.swift b/ios/DomWebViewModule.swift
+index 811a3924dd76f365fc8cecbd94cd1fdf62609ae9..08ef5ce92b80a6f9c2be3066660cf3df9cd663eb 100644
+--- a/ios/DomWebViewModule.swift
++++ b/ios/DomWebViewModule.swift
+@@ -130,6 +130,10 @@ public final class DomWebViewModule: Module {
+         view.scrollTo(offset: CGPoint(x: param.x, y: param.y), animated: param.animated)
+       }
+ 
++      AsyncFunction("requestFocus") { (view: DomWebView) in
++        view.requestFocus()
++      }
++
+       AsyncFunction("injectJavaScript") { (view: DomWebView, script: String) in
+         view.injectJavaScript(script)
+       }
+diff --git a/src/DomWebView.tsx b/src/DomWebView.tsx
+index 3a07ac938325385dc7e314f0e6d557068bc6f622..a40b31200d4faaa17144ac11b0d35e5a6c5c5592 100644
+--- a/src/DomWebView.tsx
++++ b/src/DomWebView.tsx
+@@ -23,6 +23,9 @@ const WebView = React.forwardRef<DomWebViewRef, DomWebViewProps>(
+       ref,
+       () => ({
+         scrollTo: (params) => viewRef.current?.scrollTo(params),
++        requestFocus: async () => {
++          await viewRef.current?.requestFocus();
++        },
+         injectJavaScript: (script: string) => viewRef.current?.injectJavaScript(script),
+         reload: () => viewRef.current?.reload(),
+       }),
+diff --git a/src/DomWebView.types.ts b/src/DomWebView.types.ts
+index 8e89c59fa2dc3f60813ad764d3101b1f04c070c0..f90bc99b697595c5d43437476ab39d07c6a10e75 100644
+--- a/src/DomWebView.types.ts
++++ b/src/DomWebView.types.ts
+@@ -270,6 +270,13 @@ export type DomWebViewRef = {
+     animated?: boolean | undefined;
+   }): void;
+ 
++  /**
++   * Makes the WebView content first responder so hardware keyboard events
++   * can reach non-editable DOM content.
++   * @platform ios
++   */
++  requestFocus: () => Promise<void>;
++
+   /**
+    * Injects a JavaScript string into the `WebView` and executes it.
+    */

@@ -137,3 +137,51 @@ Web / Expo DOM 浮层使用已有 ReactDOM renderer；包显式声明可选 `rea
 5. 显式开启 `pencilkit=1`，重复菜单、横滚和文字编辑，确认原生覆盖层未吞工具栏点击；实体 Pencil 的输入仍单独标记。
 6. 复用现有 Android API 36 AVD，在默认入口完整重跑安全区、胶囊首帧 / 横滚、系统键盘、文字限位、弹层与焦点，不能以诊断入口替代。每项回传实际设备型号 / OS / 宿主版本 / 构建 SHA / 输入来源、步骤、判定与截图或录屏，含未通过原因。4.2 / 4.3 保持未勾选，直到父任务有完整设备证据。
 7. Android右下文字续修已在第四轮 `a97818e` 完成所测场景：Gboard字母 / 表情模式下内部宿主和WebView实际收缩至527 / 403 CSS px，完成 / 取消可点，草稿与焦点在高度变化、隐藏 / 重开期间保留，提交后一次撤销；键盘可见时取消不写对象 / 历史。退出重进创建新编辑器、未提交草稿不恢复。详见第四轮记录；本轮未新增原生模块或修改Android工程配置，iOS交互缺项仍交由人工 / 恢复输入通道后补验。
+
+
+## HAM-175：iOS 非编辑态键盘路由（2026-11-05）
+
+### B 轮设备事实（修复前）
+
+基线 `main 0116d23`，iPhone 17 Pro / iOS 26.5 **模拟器**，Playground Expo development client 0.1.0 (1)，Expo 57.0.24 / RN 0.86.3 / @expo/dom-webview 57.0.1。输入全部来自 idb 脚本触摸、英文文本与 HID 键注入，**不是人工手点、真实 iPhone / iPad、Apple Pencil 或系统中文 IME 的验收**。来源为 HAM-164 评论 `01a1abdb-89de-7c48-be47-369b437bd198` 与 `01a1abe3-f9b1-7d6e-aa1c-7f6504781fdd`，附件 `HAM-164-ios-input-validation.md` / `HAM-164-ios-evidence.zip`、`HAM-164-key-routing-result.md` / `native-events.jsonl` / `dom-events-all.json` / `HAM-164-key-routing-evidence.zip`。
+
+| 子项 | B 轮实际结论 |
+| --- | --- |
+| 胶囊内部横滚 | **所测场景通过**：scrollLeft 0→457→601→0，外页 scrollX / scrollY 始终为0 |
+| 系统键盘与文字框 | **所测场景通过**：脚本触摸聚焦、输入英文；键盘出现时 innerHeight / visualViewport 722→353，完成 / 取消均可触摸；完成后一次撤销移除，取消另一草稿不新增历史 |
+| PencilKit 不吞工具栏点击 | **所测点击通过**：显式启用并收到 `gesture-ancestor`，脚本触摸可打开工具菜单、缩放并横滚；原生笔计数0，不推导实体笔通过 |
+| 工具菜单、缩放弹层 Escape / Tab | **不通过，已定位为产品缺陷**：原生 UIApplication 已接收 Escape（keyCode41）/ Tab（43），DOM 无 keydown，弹层保持打开，焦点停在菜单项或 BODY。触摸缩放滑条重试仍复现。不是“按键未进入模拟器”的工具链缺口 |
+| 文字框 Escape / Tab 阳性对照 | **通过**：同一注入命令与记录器，Tab / Escape 到 DOM 约55 / 47ms，`isTrusted=true`；分别移到字号、取消草稿。不能推广为弹层键盘通过 |
+| 设置弹层键盘、系统中文 IME | **本轮未覆盖** |
+
+### 本次实现与验证边界
+
+已有日志确认了原生→DOM传递中断，但没有记录失效时的 first responder；“需要补原生响应者”是本次候选修复方向，尚不能写成已证实的具体根因。Mac回归须记录实际响应者类名及所属WebView；若失效时已有WKContentView响应者，应继续定位而非沿用此假设。
+
+通过 pnpm 的 `@expo/dom-webview@57.0.1` 补丁增加 iOS 原生 `requestFocus` 方法，调用公开 `WKWebView.becomeFirstResponder()`，由 WebKit 将响应者交给内容视图。原生路由在 DOM 挂载就绪、非编辑控件 focusin 或工具栏 / 面板 pointerdown 后请求焦点；同一事件循环合并请求，非交互画布笔迹不产生逐点桥调用。监听卸载时清理，不替换 WebKit 的键盘事件或构造 DOM keydown。Android 不注册该 iOS action，Web 保留直接 DOM 入口。
+
+采纳补充分支 `agent/ham175-toolbar-tab-supplement`（`24223be`）的DOM退出处理与双向Tab回归要点：保留浏览器默认遍历，待Tab默认操作完成后，焦点离开面板即关闭（含回到同一工具栏），不夺回新焦点；卸载时清理待执行检查。Escape仍归还原触发器。B轮证据合并在上表，仅保留本分支实际执行的测试结果，不重复记录补充分支的历史测试数字。
+
+DOM 侧跳过正在输入的 textarea、文本 / 数字 input、select 和 contenteditable；原生方法在异步跨桥后重新读取当前 activeElement，再决定是否请求焦点，避免迟到的弹层请求打断文字或 IME。range / checkbox 等非文本控件允许获取响应者。此变更包含 Swift，**必须重新安装依赖并重建 iOS development client，单纯刷新 Metro 不会安装原生方法**。
+
+本机为 Linux / Node 24.15.0 / pnpm 10.28.2。模拟器工具实际返回 `spawn xcrun ENOENT`，没有执行 iOS Swift 编译或 iPhone 17 Pro / iOS 26.5 回归。因此本次状态为：**修复实现已提交验证；修复后弹层键盘路由尚待模拟器确认，不能记为通过**。下列自动化只证明桥契约与浏览器行为，不证明原生按键可达。
+
+| 本机检查 | 结果 |
+| --- | --- |
+| `pnpm test` | 100套件 / 1322项通过；responder 9项；原生配置 / 补丁依赖检查4项通过。包含真实 Expo action registry / ref 转发、DOM就绪请求、非编辑交互、编辑态保护、异步请求清理和原生侧JS守卫；不等于Swift运行测试 |
+| `pnpm typecheck` | painting / painting-board / playground 通过 |
+| `pnpm lint` | 0 errors，已有32 warnings |
+| `pnpm build` | 两库构建与 Expo Web export 通过 |
+| Chromium 专项 UI | 42项通过（既有39项及新增三类弹层Escape焦点归还 / Tab离开关闭）；使用独立5285端口，未复用其他任务服务。包括文字composition提交 / 取消、一次撤销、Android宿主高度变化和笔迹 / 工具栏回归 |
+| iOS / Android `expo export` | 两端Hermes与DOM bundle均导出通过；只验证静态依赖解析，不证明Swift编译或原生运行 |
+| WebKit | 无页面结论：本机缺少本版本所需的webkit-2272；安装命令失败，`Playwright does not support webkit on ubuntu26.04-x64`，不把其他已安装WebKit版本当作本版本测试 |
+| `pnpm install --frozen-lockfile` / `git diff --check` | 通过；4.2 / 4.3仍未勾选，未改规格 |
+
+### Mac 必须补齐的修复后回归
+
+1. 取 HAM-175 的 PR head；执行 `pnpm install --frozen-lockfile`、`pnpm prepare:playground-artifacts`，重建并安装 iOS development client。只连接原来的0.1.0(1)安装包、刷新JS不足以验证Swift补丁；记录实际构建SHA。
+2. iPhone 17 Pro / iOS 26.5 模拟器从默认入口进入，不启用 diagnostics。冷启动后，分别打开工具菜单、缩放、设置：用相同 idb HID 路径发 Escape，验证真实 DOM keydown、弹层关闭且 activeElement 回各自触发器；重开后用 Tab / Shift+Tab 经过实际控件并离开，验证自动关闭且不困住。同步保存原生 / DOM 事件、`isTrusted`、焦点和截图，不能以 `dispatchEvent` 替代原生输入。
+3. 文字框英文与中文 IME 输入、候选选词、完成 / 取消 / 一次撤销；文字框 Tab 到字号、Escape 取消，再开三类弹层重复第2步，检查原生焦点可恢复且无重复键或软键盘误弹。补后台 / 前台及离开 / 重进后的首次按键。
+4. 重新检查横滚、软键盘布局；显式启用 PencilKit 后重复工具栏点击与弹层键盘矩阵。Android 继续复用 API36 AVD 验证既有 Escape / Tab 和 Gboard 高度路径，不以iOS修复推导Android通过。
+
+4.2 实体笔五项继续待 iPad + Apple Pencil。归档 `tasks.md` 的4.2 / 4.3保持未勾选；HAM-175 的原生回归结果应另行写入本节，HAM-164 最终验收以实际设备证据为准。

@@ -8,6 +8,7 @@ import { PageIntegrationFixture } from './PageIntegrationFixture';
 import { createGestureTrace, type GestureTrace } from './gestureTrace';
 import { GestureTracePanel } from './GestureTracePanel';
 import { InputDeviceDiagnostics } from './InputDeviceDiagnostics';
+import { installNativeKeyboardFocus } from './nativeKeyboardFocus';
 import type { PencilkitDemoConnection } from '@hamster-note/painting/input/native/pencilkitDemoBridge';
 import type {
   PencilkitDemoMessage,
@@ -30,7 +31,12 @@ export default function LayeredEditorDom(props: {
   nativeMessage?: PencilkitDemoMessage;
   onNativeState?: (state: PencilkitDemoState) => Promise<void>;
   onNativeReply?: (reply: PencilkitDemoReply) => Promise<void>;
+  onRequestKeyboardFocus?: () => Promise<void>;
 }) {
+  const { onRequestKeyboardFocus } = props;
+  useEffect(() => {
+    if (onRequestKeyboardFocus) return installNativeKeyboardFocus(document, onRequestKeyboardFocus);
+  }, [onRequestKeyboardFocus]);
   const [receive, setReceive] = useState<(message: PencilkitDemoMessage) => void>();
   const { nativePencilEnabled, onNativeState, onNativeReply } = props;
   const actions = useRef({ onNativeState, onNativeReply });
