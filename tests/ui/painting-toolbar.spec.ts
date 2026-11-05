@@ -123,6 +123,43 @@ test('keyboard menu selection, editable numbers, dismissal and the next canvas d
   expect((await layeredState(page)).document.objects).toHaveLength(1);
 });
 
+for (const [triggerName, role, label] of [
+  ['工具菜单', 'menu', '工具'],
+  ['缩放比例', 'dialog', '缩放设置'],
+  ['设置', 'dialog', '绘图设置'],
+] as const) {
+  test(`${triggerName}: Escape restores focus and Tab leaves the panel`, async ({ page }) => {
+    await openLayeredEditor(page);
+    const trigger = page.getByRole('button', { name: triggerName, exact: true });
+    const panel = page.getByRole(role, { name: label, exact: true });
+    await trigger.click();
+    await expect(panel).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    for (const direction of ['Tab', 'Shift+Tab']) {
+      await trigger.click();
+      await expect(panel).toBeVisible();
+      // Keep forward traversal in the document instead of entering browser chrome.
+      await page.evaluate(() => {
+        document.getElementById('after-toolbar-panel')?.remove();
+        const next = document.createElement('button');
+        next.id = 'after-toolbar-panel';
+        next.textContent = 'After panel';
+        document.body.append(next);
+      });
+      const controls = panel.locator(
+        'button:not(:disabled),input:not(:disabled),select:not(:disabled)'
+      );
+      await (direction === 'Tab' ? controls.last() : controls.first()).focus();
+      await page.keyboard.press(direction);
+      await expect(panel).toHaveCount(0);
+      expect(await page.evaluate(() => document.activeElement?.isConnected)).toBe(true);
+      expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe('BODY');
+    }
+  });
+}
+
 test('thirty short pen strokes and a crossing do not activate the toolbar or swallow its next click', async ({
   page,
 }) => {

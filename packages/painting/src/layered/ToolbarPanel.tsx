@@ -78,7 +78,18 @@ export function ToolbarPanel({
       )
         onClose(false);
     };
+    let tabExit: number | undefined;
     const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Tab' && element.contains(doc.activeElement)) {
+        // Let the browser perform native traversal before unmounting the panel.
+        // focusOutside deliberately permits toolbar clicks (including the trigger),
+        // but keyboard traversal out to that same toolbar must also dismiss it.
+        view.clearTimeout(tabExit);
+        tabExit = view.setTimeout(() => {
+          if (!element.contains(doc.activeElement)) onClose(false);
+        }, 0);
+        return;
+      }
       if (event.key !== 'Escape') return;
       event.preventDefault();
       onClose(true);
@@ -96,6 +107,7 @@ export function ToolbarPanel({
       element.querySelector<HTMLElement>('[role="menuitemradio"], [role="menuitem"]')?.focus();
     else element.querySelector<HTMLElement>('input,select,button')?.focus();
     return () => {
+      view.clearTimeout(tabExit);
       observer?.disconnect();
       doc.removeEventListener('pointerdown', outside, true);
       doc.removeEventListener('focusin', focusOutside);
