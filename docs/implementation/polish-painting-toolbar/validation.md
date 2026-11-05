@@ -185,3 +185,26 @@ DOM 侧跳过正在输入的 textarea、文本 / 数字 input、select 和 conte
 4. 重新检查横滚、软键盘布局；显式启用 PencilKit 后重复工具栏点击与弹层键盘矩阵。Android 继续复用 API36 AVD 验证既有 Escape / Tab 和 Gboard 高度路径，不以iOS修复推导Android通过。
 
 4.2 实体笔五项继续待 iPad + Apple Pencil。归档 `tasks.md` 的4.2 / 4.3保持未勾选；HAM-175 的原生回归结果应另行写入本节，HAM-164 最终验收以实际设备证据为准。
+
+### HAM-175 Mac 原生候选回归（2026-11-05，b50496f）：不通过
+
+实际构建 `b50496f30531e1275e821109518a9f0c2e506e28`（PR #46），arm64 / macOS 27.2 / Xcode 27.2，iPhone 17 Pro / iOS 26.5 **模拟器**，development client 0.1.0(1)。frozen install、库产物、iOS prebuild、pod install 通过；真实 Debug build / install / launch 成功（533704ms、编译错误0）。已核对安装的可执行文件及debug dylib与构建产物SHA-256一致，包含requestFocus符号；原生栈实际经过 `DomWebView.requestFocus()` 完成闭包 → `WKWebView.becomeFirstResponder()`。使用本轮独立Metro5275，默认入口、未启用diagnostics，不能把此结果解释为旧安装包未更新。Mac本轮补丁依赖检查4项通过，未重复运行Linux全量用例。
+
+输入为idb HID模拟触摸、Escape(41)、Tab(43)、Shift+Tab；中文来自系统拼音软键与候选实际点击。PencilKit开关用accessibility press完成设置，其后的工具栏点击均为HID触摸。DOM仅安装只读事件监听和读取快照，原生LLDB只观察事件、responder及调用栈；没有构造DOM键盘事件、强制焦点或修改产品视口/CSS。
+
+| 本轮项目 | 实际结果 |
+| --- | --- |
+| 默认入口：工具 / 缩放 / 设置，各Escape、Tab、Shift+Tab | **9项全部失败**：确认弹层已打开后发键，DOM无keydown、弹层不关闭。工具停在画笔菜单项，缩放停在range；设置Escape后BODY、Tab两向停在输入模式select，未完成遍历或焦点归还 |
+| PencilKit开启后同一键盘矩阵 | **9项全部失败**，与默认入口一致。两组共84条原生Escape/Tab按下/抬起记录，失效时均找到WKContentView first responder及所属Expo DomWKWebView |
+| 英文及文字框键盘阳性对照 | **所测通过**：H175Alpha完整保留；相同HID路径Tab/Escape以isTrusted=true到达DOM，分别移到文字字号、取消草稿。Commit175完成后可一次撤销；取消另一草稿未新增历史 |
+| 系统中文IME / 完成 / 撤销 / 取消 | **所测通过**：实际点拼音n/i/h/a/o，出现“你好”候选，可信compositionstart/update/end；点击选词后textarea为“你好”。完成生成恰一个“你好”对象，一次撤销归零，取消另一草稿仍零且未新增历史 |
+| 软键盘布局 | **所测通过**：无键盘宿主高722，英文键盘353、中文约352；textarea / 完成 / 取消均在可见范围并可实际点击；不代表全部过渡帧或真机结论 |
+| PencilKit点击与横滚 | **所测通过**：收到gesture-ancestor、canvas402×622，原生起笔0；可实际点击打开三类弹层，内部横滚scrollLeft601→187、外页scrollX=0。不推导Apple Pencil书写通过 |
+| 前后台、离开 / 重进后的首键 | **未验**：前后台launch自动化45秒超时，其工具命令带terminate-running-process，后续为新PID，未形成有效同进程对照；离开重进步骤未执行 |
+| Android / iOS27.2 / 实体iPad与Apple Pencil | **本轮未验** |
+
+新的证据表明补丁已经执行，**仅补becomeFirstResponder不足以修复问题**。失效时已有 `WKContentView: 0x1026a3800`，祖先含同一 `ExpoDomWebView.DomWKWebView: 0x102688a00`；具体WebKit/UIKit传递根因仍未定，不应继续把“没有响应者”记作已证实原因。文字操作后关闭所有原生断点再试工具Escape仍失败，已保留DOM快照。
+
+HAM-175评论附件 `HAM-175-b50496f-ios-evidence.zip` / `HAM-175-ios-validation.md` 保存原生 `native-events.jsonl`、18项 `matrix-summary.json`、各项open/result DOM快照与截图、可信文字/IME事件、原生调用栈、构建和安装身份及操作脚本。正式默认矩阵使用 `rerun-*`（工具/缩放）和 `settings-settled-*`（设置），PencilKit矩阵使用 `pencil-*`；初始观测表达式错误已修正并重跑，不以探索快照作为最终判定。
+
+结论：HAM-175原生键盘回归不通过，PR #46继续Draft，开发agent需据此继续定位；HAM-164不能据此解除iOS键盘阻塞，归档4.2 / 4.3保持未勾选。
