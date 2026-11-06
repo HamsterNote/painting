@@ -24,6 +24,19 @@ def objc(classes, selectors):
 # Names are discovery patterns, not a promise that Apple's shipped build exposes
 # them. Inventory and a positive control are mandatory before interpreting absence.
 PROBES = {
+    # One bounded Pinyin Escape experiment. No hot command getters or WebContent
+    # attachment; compare real HID with the Debug container switch off/on.
+    "escape": [
+        ("application.receive", objc("UIApplication", "_handleKeyUIEvent:")),
+        ("application.dispatch", objc("UIApplication", "sendEvent:")),
+        ("application.action", objc("UIApplication", "sendAction:to:from:forEvent:")),
+        ("keyboard.precommand", objc("UIKeyboardImpl", "handleKeyCommand:repeatOkay:beforePublicKeyCommands:")),
+        ("keyboard.impl", objc("UIKeyboardImpl", "_?handleKeyEvent:(executionContext:)?")),
+        ("keyboard.manager", objc("_UIKeyboardStateManager", "handleKeyEvent:(executionContext:)?")),
+        ("webkit.presses", objc("WKContentView", "_tryToHandlePressesEvent:")),
+        ("webkit.entry", objc("WKContentView", "(_internalHandleKeyWebEvent:|handleKeyWebEvent:)(withCompletionHandler:)?|handleKeyEntry:withCompletionHandler:")),
+        ("webkit.completion", objc("WKContentView", "_didHandleKeyEvent:eventWasHandled:")),
+    ],
     "app": [
         ("application.receive", objc("UIApplication", "_handleKeyUIEvent:")),
         ("application.dispatch", objc("UIApplication", "sendEvent:")),
@@ -54,7 +67,7 @@ PROBES = {
     ],
 }
 
-# Keep return probes to the one Objective-C BOOL boundary under investigation.
+# Only known BOOL boundaries, plus a runtime-verified private IME signature.
 # Hot getters and optimized C++/inline functions are entry-only, verbose opt-in.
 BOOL_RETURNS = {"webkit.presses"}
 VERBOSE_PROBES = {"responder.commands", "webkit.requires", "webkit.keyboard-required",
@@ -112,7 +125,7 @@ def json_expression(body):
         encoding:4]; })''' % body
 
 
-def evaluate_json(frame, body):
+def expression_options():
     # Avoid recursive callbacks from getters and bound expression execution.
     options = lldb.SBExpressionOptions()
     options.SetLanguage(lldb.eLanguageTypeObjC_plus_plus)
@@ -121,7 +134,11 @@ def evaluate_json(frame, body):
     options.SetTryAllThreads(False)
     options.SetSuppressPersistentResult(True)
     options.SetTimeoutInMicroSeconds(250000)
-    value = frame.EvaluateExpression(json_expression(body), options)
+    return options
+
+
+def evaluate_json(frame, body):
+    value = frame.EvaluateExpression(json_expression(body), expression_options())
     if value.GetError().Fail():
         raise ValueError(str(value.GetError()))
     return json.loads(value.GetObjectDescription())
@@ -221,6 +238,40 @@ def focus_body(receiver):
 def details(frame, point, args):
     body = detail_body(point, args)
     return evaluate_json(frame, body) if body else {}
+
+
+def precommand_bool_abi(encoding):
+    # BOOL/bool return, self, _cmd, object command, BOOL* repeat, BOOL beforePublic.
+    # Do not interpret a register from a void/different private ABI as "handled".
+    return bool(re.fullmatch(r"[cB]\d+@\d+:\d+@\d+\^[cB]\d+[cB]\d+", encoding))
+
+
+def precommand_encoding(target):
+    # Explicitly paused inventory only, before any HID. Runtime metadata reads;
+    # no UIKit singleton, input method, responder or command getter is invoked.
+    frame = target.GetProcess().GetSelectedThread().GetFrameAtIndex(0)
+    imports = frame.EvaluateExpression("@import Foundation; @import ObjectiveC;", expression_options())
+    if imports.GetError().Fail():
+        raise ValueError(str(imports.GetError()))
+    return evaluate_json(frame, '''
+        Class ham175_trace_class = (Class)objc_getClass("UIKeyboardImpl");
+        Method ham175_trace_method = ham175_trace_class ? class_getInstanceMethod(ham175_trace_class,
+            sel_registerName("handleKeyCommand:repeatOkay:beforePublicKeyCommands:")) : 0;
+        const char *ham175_trace_encoding = ham175_trace_method ? method_getTypeEncoding(ham175_trace_method) : 0;
+        ham175_trace_record[@"encoding"] = ham175_trace_encoding ?
+            (id)[NSString stringWithUTF8String:ham175_trace_encoding] : @"";
+    ''')["encoding"]
+
+
+def routing_arguments(probe, args, verified_returns):
+    if probe == "application.action":
+        # Match sender/target pointers against command-route IDs. Never execute
+        # NSStringFromSelector or a UIKeyCommand getter at a delivery breakpoint.
+        return {"selectorAddress": hex(args[2]), "target": hex(args[3]),
+                "sender": hex(args[4]), "event": hex(args[5])}
+    if probe == "keyboard.precommand" and probe in verified_returns:
+        return {"keyCommand": hex(args[2]), "beforePublicKeyCommands": bool(args[4] & 0xff)}
+    return {}
 
 
 def read_register(frame, name):
@@ -369,8 +420,11 @@ def observe(frame, bp_loc, internal_dict):
     # Completion's handled argument is available even if getter compilation fails.
     if probe == "webkit.completion" and args is not None:
         entry["handled"] = bool(args[3] & 0xff)
+    if args is not None:
+        entry.update(routing_arguments(probe, args, s.get("verifiedReturns", set())))
     call_id = write(entry)
-    if probe in BOOL_RETURNS and args is not None:
+    if args is not None and (probe in BOOL_RETURNS or probe in s.get("verifiedReturns", set())
+                             or (probe == "application.action" and s["role"] == "escape")):
         try:
             arm_return(frame, probe, call_id, args[0])
         except Exception as error:
@@ -416,13 +470,24 @@ def install(target, role):
         finally:
             target.BreakpointDelete(discovery.GetID())
         ids = []
+        return_metadata = {}
+        if probe == "keyboard.precommand" and addresses:
+            try:
+                encoding = precommand_encoding(target)
+                verified = precommand_bool_abi(encoding)
+                return_metadata = {"encoding": encoding, "returnCoverage": "verified" if verified else "unavailable"}
+                if verified:
+                    _session.setdefault("verifiedReturns", set()).add(probe)
+            except Exception as error:
+                return_metadata = {"returnCoverage": "unavailable", "encodingError": str(error)}
         for start in addresses.values():
             bp = target.BreakpointCreateBySBAddress(start)
             _session["owned"][bp.GetID()] = {"probe": probe, "pattern": pattern, "pc": start.GetLoadAddress(target)}
             bp.SetScriptCallbackFunction(__name__ + ".observe")
             ids.append(bp.GetID())
         inventory.append({"probe": probe, "pattern": pattern, "breakpoints": ids,
-                          "coverage": "resolved" if ids else "unavailable", "rejected": rejected})
+                          "coverage": "resolved" if ids else "unavailable", "rejected": rejected,
+                          **return_metadata})
     return inventory
 
 

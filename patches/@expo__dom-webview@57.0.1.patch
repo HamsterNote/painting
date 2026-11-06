@@ -18,10 +18,10 @@ index 6ea41ff0152909ba1f1e8bc07de41afcecbcc278..92d21ca8fa3b91173365a7be97af5026
       * Injects a JavaScript string into the `WebView` and executes it.
       */
 diff --git a/ios/DomWebView.swift b/ios/DomWebView.swift
-index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..b25a335ea3a7dffe9a30c6833e0319a1985a0a82 100644
+index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..31ceab654b64c977b60a47f916a4599205844cd4 100644
 --- a/ios/DomWebView.swift
 +++ b/ios/DomWebView.swift
-@@ -9,6 +9,205 @@ import WebKit
+@@ -9,12 +9,291 @@ import WebKit
  final class DomWKWebView: WKWebView {
    var hidesInputAccessoryView = false
  
@@ -40,6 +40,7 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..b25a335ea3a7dffe9a30c6833e0319a1
 +  // doing so would create the very routing calls this trace is meant to observe.
 +  #if DEBUG
 +  private let toolbarRouteTraceEnabled = UserDefaults.standard.bool(forKey: "HAM175KeyboardRouteTrace")
++  private let toolbarContainerExperiment = UserDefaults.standard.string(forKey: "HAM175EscapeCommandOwner") ?? "webview"
 +  private var toolbarRouteSequence = 0
 +  private func toolbarObject(_ object: AnyObject?) -> String {
 +    guard let object else { return "nil" }
@@ -55,17 +56,20 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..b25a335ea3a7dffe9a30c6833e0319a1
 +  }
 +  #endif
 +
-+  private func traceToolbarRoute(_ stage: String, action: Selector? = nil,
++  fileprivate func traceToolbarRoute(_ stage: String, action: Selector? = nil,
 +    sender: Any? = nil, target: Any? = nil, allowed: Bool? = nil,
-+    commands: [UIKeyCommand]? = nil, inherited: [UIKeyCommand]? = nil) {
++    commands: [UIKeyCommand]? = nil, inherited: [UIKeyCommand]? = nil,
++    owner: UIResponder? = nil) {
 +    #if DEBUG
 +    guard toolbarRouteTraceEnabled else { return }
 +    toolbarRouteSequence += 1
 +    // Bound hot command queries. An explicit overflow invalidates absence claims.
 +    guard toolbarRouteSequence <= 4097 else { return }
++    let routeOwner = owner ?? self
 +    var row: [String: Any] = ["stage": stage, "traceSequence": toolbarRouteSequence,
 +      "atMs": Date().timeIntervalSince1970 * 1000, "uptime": ProcessInfo.processInfo.systemUptime,
-+      "owner": toolbarObject(self), "scope": toolbarKeyboardScope,
++      "owner": toolbarObject(routeOwner), "scope": toolbarKeyboardScope,
++      "containerExperiment": toolbarContainerExperiment,
 +      "tabOnly": toolbarKeyboardTabOnly, "keyWindow": window?.isKeyWindow == true]
 +    if toolbarRouteSequence == 4097 {
 +      row["stage"] = "overflow"
@@ -86,7 +90,7 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..b25a335ea3a7dffe9a30c6833e0319a1
 +        current = item.next
 +      }
 +      row["chain"] = chain
-+      row["ownerInChain"] = chain.contains(toolbarObject(self))
++      row["ownerInChain"] = chain.contains(toolbarObject(routeOwner))
 +      if let action { row["action"] = NSStringFromSelector(action) }
 +      if let sender = sender as? UIKeyCommand { row["command"] = toolbarCommandDescription(sender) }
 +      if stage == "target" { row["target"] = toolbarObject(target as AnyObject?) }
@@ -149,20 +153,48 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..b25a335ea3a7dffe9a30c6833e0319a1
 +    return commands
 +  }()
 +
++  // Bounded Debug A/B: relocate only the existing idle Chinese-color Escape.
++  // The same command instance/selector, native gate and final delivery guard apply.
++  fileprivate var toolbarContainerEscapeCommand: UIKeyCommand? {
++    #if DEBUG
++    guard !toolbarKeyboardScope.isEmpty else { return nil }
++    switch toolbarContainerExperiment {
++    case "color-container":
++      guard toolbarKeyboardTabOnly, toolbarColorEscapeState().enabled else { return nil }
++    case "menu-container-control":
++      // A separate real-HID positive control for the container action. Never
++      // used for the retained matrix or for color/composition measurements.
++      guard !toolbarKeyboardTabOnly else { return nil }
++    default:
++      return nil
++    }
++    return toolbarCommands.first
++    #else
++    return nil
++    #endif
++  }
++
++  fileprivate func toolbarActionAllowed(_ action: Selector) -> Bool {
++    !toolbarKeyboardScope.isEmpty && window?.isKeyWindow == true
++      && (!toolbarKeyboardTabOnly || action == #selector(toolbarTab(_:)) || toolbarColorEscapeState().enabled)
++  }
++
 +  override var keyCommands: [UIKeyCommand]? {
 +    guard !toolbarKeyboardScope.isEmpty else { return super.keyCommands }
 +    let commands = toolbarKeyboardTabOnly && !toolbarColorEscapeState().enabled
 +      ? toolbarCommands.filter { $0.input == "\t" } : toolbarCommands
++    let localCommands = toolbarContainerEscapeCommand == nil
++      ? commands : commands.filter { $0.input != UIKeyCommand.inputEscape }
 +    let inherited = super.keyCommands ?? []
-+    let result = commands + inherited
++    let result = localCommands + inherited
 +    traceToolbarRoute("commands", commands: result, inherited: inherited)
 +    return result
 +  }
 +
 +  override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
 +    if action == #selector(toolbarTab(_:)) || action == #selector(toolbarKey(_:)) {
-+      let allowed = !toolbarKeyboardScope.isEmpty && window?.isKeyWindow == true
-+        && (!toolbarKeyboardTabOnly || action == #selector(toolbarTab(_:)) || toolbarColorEscapeState().enabled)
++      let movedEscape = action == #selector(toolbarKey(_:)) && toolbarContainerEscapeCommand != nil
++      let allowed = !movedEscape && toolbarActionAllowed(action)
 +      traceToolbarRoute("validate", action: action, sender: sender, allowed: allowed)
 +      return allowed
 +    }
@@ -174,7 +206,10 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..b25a335ea3a7dffe9a30c6833e0319a1
 +  }
 +
 +  override func target(forAction action: Selector, withSender sender: Any?) -> Any? {
-+    let target = super.target(forAction: action, withSender: sender)
++    let movedEscape = action == #selector(toolbarKey(_:)) && toolbarContainerEscapeCommand != nil
++    let target = movedEscape
++      ? next?.target(forAction: action, withSender: sender)
++      : super.target(forAction: action, withSender: sender)
 +    if isToolbarRouteAction(action) {
 +      traceToolbarRoute("target", action: action, sender: sender, target: target)
 +    }
@@ -185,7 +220,7 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..b25a335ea3a7dffe9a30c6833e0319a1
 +    toolbarKey(command)
 +  }
 +
-+  @objc private func toolbarKey(_ command: UIKeyCommand) {
++  @objc fileprivate func toolbarKey(_ command: UIKeyCommand) {
 +    // Entry is recorded before any guard, unlike the successful JS callback log.
 +    traceToolbarRoute("action-enter", action: command.action, sender: command)
 +    guard !toolbarKeyboardScope.isEmpty, window?.isKeyWindow == true,
@@ -227,7 +262,58 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..b25a335ea3a7dffe9a30c6833e0319a1
    override var inputAccessoryView: UIView? {
      hidesInputAccessoryView ? nil : super.inputAccessoryView
    }
-@@ -192,6 +391,11 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
+ }
+ 
+ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler, RCTAutoInsetsProtocol {
++  #if DEBUG
++  // Already in WKContentView's next chain. Do not insert a new responder or
++  // change first responder; this experiment changes only the Escape owner.
++  override var keyCommands: [UIKeyCommand]? {
++    guard let command = webView?.toolbarContainerEscapeCommand else { return super.keyCommands }
++    let inherited = super.keyCommands ?? []
++    let commands = [command] + inherited
++    webView?.traceToolbarRoute("commands", commands: commands, inherited: inherited, owner: self)
++    return commands
++  }
++
++  override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
++    guard action == #selector(toolbarKey(_:)) else {
++      return super.canPerformAction(action, withSender: sender)
++    }
++    // Explicit false while disabled: merely implementing this selector must
++    // not turn the container into an alternative target for ordinary menu keys.
++    let allowed = webView?.toolbarContainerEscapeCommand != nil
++      && webView?.toolbarActionAllowed(action) == true
++    webView?.traceToolbarRoute("validate", action: action, sender: sender, allowed: allowed, owner: self)
++    return allowed
++  }
++
++  override func target(forAction action: Selector, withSender sender: Any?) -> Any? {
++    let target = super.target(forAction: action, withSender: sender)
++    if action == #selector(toolbarKey(_:)) {
++      webView?.traceToolbarRoute("target", action: action, sender: sender, target: target, owner: self)
++    }
++    return target
++  }
++
++  @objc private func toolbarKey(_ command: UIKeyCommand) {
++    guard let webView else { return }
++    webView.traceToolbarRoute("container-action-enter", action: command.action, sender: command, owner: self)
++    guard command.input == UIKeyCommand.inputEscape,
++      webView.toolbarContainerEscapeCommand != nil else {
++      webView.traceToolbarRoute("container-action-reject", sender: command, owner: self)
++      return
++    }
++    // Only a real UIKit action reaches this path; the unchanged WebView handler
++    // rechecks foreground/scope/marked state before the single bridge delivery.
++    webView.toolbarKey(command)
++  }
++  #endif
++
+   // Created on first prop sync — `WKWebViewConfiguration` is copied at init,
+   // so init-only props need to land before `WKWebView()` is called.
+   private(set) var webView: DomWKWebView?
+@@ -192,6 +471,11 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
      webView?.scrollView.setContentOffset(offset, animated: animated)
    }
  
@@ -239,7 +325,7 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..b25a335ea3a7dffe9a30c6833e0319a1
    func injectJavaScript(_ script: String) {
      DispatchQueue.main.async { [weak self] in
        self?.webView?.evaluateJavaScript(script)
-@@ -275,7 +479,12 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
+@@ -275,7 +559,12 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
  
    // MARK: - WKNavigationDelegate implementations
  

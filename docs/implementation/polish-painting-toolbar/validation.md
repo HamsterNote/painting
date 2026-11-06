@@ -401,3 +401,21 @@ Linux本轮验证：Python26项（新增证据判定回归8项）、桥接/宿�
 Mac arm64 / Xcode27.2面向iPhone17 Pro / iOS26.5模拟器真实构建4c4fec2，依赖/prebuild/Pods成功，143秒后Swift编译失败：诊断字段`NSStringFromSelector(command.action)`将`Selector?`直接传给非可选参数。未安装，18/32/12/8、拼音HID单键诊断及关闭诊断对照全部未验；不能沿用旧版本运行结果。证据为issue附件`HAM-175-4c4fec2-ios-validation.md`及同名evidence.zip。
 
 修正仅为诊断字段安全解包：`command.action.map { NSStringFromSelector($0) } ?? "nil"`。同文件另一处command.action传入的参数本身是Selector?，记录前已有if let；command.input使用可选比较或guard解包，modifierFlags和wantsPriorityOverSystemBehavior为非可选。门控、命令及DOM路径不变。新补丁仍须Mac重建，本机无xcrun、不声称Swift编译通过；HAM-175保持blocked，PR #46为Draft，4.2/4.3未勾。
+
+### HAM-175 Mac f21a1ee：编译恢复，拼音停在查询与action入口之间
+
+Mac arm64 / Xcode27.2真实重建安装f21a1ee964a268186e16c8e1b37c530134ab6397，180秒、457 warnings / 0 errors，主程序/debug dylib构建与安装哈希匹配。环境仍为iPhone17 Pro / **iOS26.5模拟器、idb脚本HID/触摸**，全程无LLDB。关闭诊断的18/32/12/8组行为达成；44次矩阵HID对应44命令/DOM键、全false、无双发，正式仍0/18；长按松开后1.482–1.508秒无补发。额外label16项、独立文字提交/撤销/取消、横滚未在此head重跑，不继承旧结果。
+
+两入口各五态、开/关诊断共20个窗口各一次Escape，10对结果/焦点一致。六个非组合拼音窗口均zh-Hans、marked=false、gate放行，返回Escape/priority=true、validate=true、target=当前WebView、owner在next链；无action-enter/guard/payload/DOM。关闭诊断后同六项失败；组合取消与英文可信Escape各四次成立。traceSequence1–1318连续、无overflow，有35次action正对照。证据只收窄到查询之后、action入口之前，尚未证明具体哪层终止。
+
+统一日志长JSON严重截断，实际分析使用完整console及逐行核验的native-console-normalized.jsonl；4项事后解析错误只重做离线检查，未重发键。另有一次测量前Expo app-context丢失崩溃，重启后恢复，原因未定。原报告/ZIP为issue附件HAM-175-f21a1ee-ios-validation.md及HAM-175-f21a1ee-ios-evidence.zip，全部为模拟器脚本输入，非真机/物理键盘结果。
+
+### HAM-175 最后一轮候选：公开容器对照与有界分层取证
+
+新增默认关闭的Debug `HAM175EscapeCommandOwner` 实验：webview为原路径；color-container仅把原gate已放行的中文颜色Escape交给既有DomWebView容器，同一命令对象/selector/priority，原WebView不再认领该Escape；menu-container-control仅用于非编辑Escape的真实HID阳性对照。容器的真实UIKit action仍经过原处理函数/DOM校验，不添加raw presses转发、不改Tab/组合态/DOM触摸路径。原18/32/12/8先在默认模式无LLDB复验。
+
+trace_keyboard.py新增escape预设：读取UIKeyboardImpl公开命令前处理的匹配BOOL返回、UIApplication sendAction的实际sender/target及返回、WK try匹配返回与entry/completion。私有方法先在暂停时校验实际ABI，缺失/不符只记entry或unavailable，不猜handled；键期间不执行getter。计划限定一次构建、最多30个单键窗口与一次结果交回，详见ios-pinyin-escape-final-round.md的假设/对照/停止表。
+
+若全部证伪且有效A/B仍无action/DOM，记录“拼音 + 颜色字段下UIKeyCommand不可达”，限定于本机型/系统/宿主及已测owner；无法区分则如实保留根因未定，均不追加取证轮次。当前仅交付待Mac重建的实验候选，本机无xcrun、未编译Swift或执行新HID；HAM-175保持blocked，PR #46保持Draft，spec及4.2/4.3未改。接受桥事件与平台限制的口径仍由用户决定。
+
+本轮Linux：Python探针/证据测试30项（新增4项校验私有ABI、派发身份和未知签名处理）、桥接/宿主Jest4套件36项、依赖契约3项、frozen install及新增文档格式/diff检查通过。既有输入、观察器、判定及DOM交互代码未改；这些检查不覆盖UIKit实际命令选择或Swift编译。

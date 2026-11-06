@@ -54,6 +54,49 @@ class KeyboardTraceTests(unittest.TestCase):
         self.assertRegex("-[OtherResponder keyCommands]", probes["responder.commands"])
         self.assertIsNone(re.search(probes["proxy.send"], "WTF::Wrapper<WebKit::WebPageProxy::sendKeyEvent()>::call()"))
 
+    def test_escape_inventory_separates_ime_precommand_dispatch_and_wk_consumption(self):
+        probes = dict(trace.PROBES["escape"])
+        self.assertRegex("-[UIKeyboardImpl handleKeyCommand:repeatOkay:beforePublicKeyCommands:]", probes["keyboard.precommand"])
+        self.assertRegex("-[UIApplication sendAction:to:from:forEvent:]", probes["application.action"])
+        self.assertRegex("-[WKContentView(WKInteraction) _tryToHandlePressesEvent:]", probes["webkit.presses"])
+        self.assertNotIn("responder.commands", probes)
+        self.assertNotIn("page.active", probes)
+
+    def test_private_ime_abi_must_match_before_interpreting_consumption(self):
+        for encoding in ("B36@0:8@16^B24B32", "c36@0:8@16^c24c32"):
+            self.assertTrue(trace.precommand_bool_abi(encoding))
+        for encoding in ("", "v36@0:8@16^B24B32", "B32@0:8@16@24", "@36@0:8@16^B24B32"):
+            self.assertFalse(trace.precommand_bool_abi(encoding))
+        args = [10, 20, 30, 40, 0x101, 60]
+        self.assertEqual(trace.routing_arguments("keyboard.precommand", args, set()), {})
+        self.assertEqual(trace.routing_arguments("keyboard.precommand", args, {"keyboard.precommand"}),
+                         {"keyCommand": "0x1e", "beforePublicKeyCommands": True})
+
+    def test_dispatch_identity_uses_sender_target_and_event_not_query_counts(self):
+        args = [10, 20, 30, 40, 50, 60]
+        self.assertEqual(trace.routing_arguments("application.action", args, set()),
+                         {"selectorAddress": "0x1e", "target": "0x28", "sender": "0x32", "event": "0x3c"})
+
+    def test_void_private_method_stays_entry_only_even_when_symbol_resolves(self):
+        target, discovery, location, start = Mock(), Mock(), Mock(), Mock()
+        point = "-[UIKeyboardImpl handleKeyCommand:repeatOkay:beforePublicKeyCommands:]"
+        address = location.GetAddress.return_value
+        address.GetFunction.return_value.IsValid.return_value = True
+        address.GetFunction.return_value.GetName.return_value = point
+        address.GetFunction.return_value.GetStartAddress.return_value = start
+        start.GetLoadAddress.return_value = 4096
+        discovery.__iter__ = Mock(side_effect=lambda: iter([location]))
+        target.BreakpointCreateByRegex.return_value = discovery
+        target.BreakpointCreateBySBAddress.return_value.GetID.return_value = 10
+        trace._session = {"target": target, "owned": {}, "file": io.StringIO()}
+        probe = [("keyboard.precommand", re.escape(point))]
+        with patch.dict(trace.PROBES, {"abi-test": probe}), \
+                patch.object(trace, "precommand_encoding", return_value="v36@0:8@16^B24B32"):
+            rows = trace.install(target, "abi-test")
+        self.assertEqual(rows[0]["coverage"], "resolved")
+        self.assertEqual(rows[0]["returnCoverage"], "unavailable")
+        self.assertNotIn("keyboard.precommand", trace._session.get("verifiedReturns", set()))
+
     def test_unresolved_symbols_are_unavailable_not_zero_hit_success(self):
         target = Mock()
         discovery = Mock()
