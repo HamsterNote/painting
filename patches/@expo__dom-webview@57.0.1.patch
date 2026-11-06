@@ -1,14 +1,15 @@
 diff --git a/build/DomWebView.types.d.ts b/build/DomWebView.types.d.ts
-index 6ea41ff0152909ba1f1e8bc07de41afcecbcc278..79f1903780405df2ef2daaf77218578c34d9fc91 100644
+index 6ea41ff0152909ba1f1e8bc07de41afcecbcc278..1fdb413c193a5c002f1df39594e42fa5b76615d5 100644
 --- a/build/DomWebView.types.d.ts
 +++ b/build/DomWebView.types.d.ts
-@@ -246,6 +246,13 @@ export type DomWebViewRef = {
+@@ -246,6 +246,14 @@ export type DomWebViewRef = {
          y?: number | undefined;
          animated?: boolean | undefined;
      }): void;
 +    /**
 +     * Enables scoped iOS toolbar Escape/Tab commands. Empty string disables.
-+     * tabOnly keeps Tab registered during color editing; Escape stays in WebKit.
++     * tabOnly keeps Tab registered during color editing. Idle Chinese-IME Escape
++     * may also bridge when the native editor confirms there is no marked text.
 +     * The DOM receiver must reject stale scopes; events are untrusted.
 +     * @platform ios
 +     */
@@ -17,19 +18,47 @@ index 6ea41ff0152909ba1f1e8bc07de41afcecbcc278..79f1903780405df2ef2daaf77218578c
       * Injects a JavaScript string into the `WebView` and executes it.
       */
 diff --git a/ios/DomWebView.swift b/ios/DomWebView.swift
-index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..df0fd36d9dbc69259c43b56da4350ba4ca418545 100644
+index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..8faa23fc3979a539fb1411434aa34c6f28373699 100644
 --- a/ios/DomWebView.swift
 +++ b/ios/DomWebView.swift
-@@ -9,6 +9,71 @@ import WebKit
+@@ -9,6 +9,103 @@ import WebKit
  final class DomWKWebView: WKWebView {
    var hidesInputAccessoryView = false
  
 +  // Color editing keeps only Tab registered, so a held Tab does not change
-+  // delivery paths mid-press. Characters/Escape still use WebKit's editor.
++  // delivery paths mid-press. Chinese IMEs can also swallow idle Escape;
++  // enable that fallback only with no native marked text. Characters stay native.
 +  // Public UIKit commands consume once; do not also forward raw presses.
 +  var toolbarKeyboardScope = ""
 +  var toolbarKeyboardTabOnly = false
 +  private var toolbarKeySequence = 0
++  private var toolbarColorRouteDescription = ""
++
++  private func toolbarFirstResponder(in view: UIView) -> UIView? {
++    if view.isFirstResponder { return view }
++    for child in view.subviews {
++      if let responder = toolbarFirstResponder(in: child) { return responder }
++    }
++    return nil
++  }
++
++  private func toolbarColorEscapeState() -> (enabled: Bool, language: String?, marked: Bool?) {
++    guard toolbarKeyboardTabOnly else { return (false, nil, nil) }
++    let responder = toolbarFirstResponder(in: self)
++    let textInput = responder as? UITextInput
++    let language = responder?.textInputMode?.primaryLanguage
++    let marked = textInput.map { $0.markedTextRange != nil }
++    // Unknown native editor state must not consume an IME cancellation key.
++    let enabled = language?.hasPrefix("zh") == true && marked == false
++    #if DEBUG
++    let description = "scope=\(toolbarKeyboardScope) language=\(language ?? "unavailable") marked=\(String(describing: marked)) escapeBridge=\(enabled)"
++    if description != toolbarColorRouteDescription {
++      toolbarColorRouteDescription = description
++      NSLog("[HAM175 color-route] %@", description)
++    }
++    #endif
++    return (enabled, language, marked)
++  }
 +
 +  // Reuse the same command objects across focus changes and repeat callbacks.
 +  private lazy var toolbarCommands: [UIKeyCommand] = {
@@ -46,7 +75,7 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..df0fd36d9dbc69259c43b56da4350ba4
 +
 +  override var keyCommands: [UIKeyCommand]? {
 +    guard !toolbarKeyboardScope.isEmpty else { return super.keyCommands }
-+    let commands = toolbarKeyboardTabOnly
++    let commands = toolbarKeyboardTabOnly && !toolbarColorEscapeState().enabled
 +      ? toolbarCommands.filter { $0.input == "\t" } : toolbarCommands
 +    return commands + (super.keyCommands ?? [])
 +  }
@@ -54,7 +83,7 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..df0fd36d9dbc69259c43b56da4350ba4
 +  override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
 +    if action == #selector(toolbarTab(_:)) || action == #selector(toolbarKey(_:)) {
 +      return !toolbarKeyboardScope.isEmpty && window?.isKeyWindow == true
-+        && (!toolbarKeyboardTabOnly || action == #selector(toolbarTab(_:)))
++        && (!toolbarKeyboardTabOnly || action == #selector(toolbarTab(_:)) || toolbarColorEscapeState().enabled)
 +    }
 +    return super.canPerformAction(action, withSender: sender)
 +  }
@@ -67,14 +96,18 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..df0fd36d9dbc69259c43b56da4350ba4
 +    guard !toolbarKeyboardScope.isEmpty, window?.isKeyWindow == true,
 +      window?.windowScene?.activationState == .foregroundActive,
 +      let input = command.input,
-+      input == "\t" || input == UIKeyCommand.inputEscape,
-+      !toolbarKeyboardTabOnly || input == "\t" else { return }
++      input == "\t" || input == UIKeyCommand.inputEscape else { return }
++    let colorEscape = toolbarKeyboardTabOnly && input == UIKeyCommand.inputEscape
++    let colorState = toolbarColorEscapeState()
++    guard !colorEscape || colorState.enabled else { return }
 +    toolbarKeySequence += 1
 +    let payload: [String: Any] = [
 +      "scope": toolbarKeyboardScope, "sequence": toolbarKeySequence,
 +      "key": input == "\t" ? "Tab" : "Escape",
 +      "shiftKey": command.modifierFlags.contains(.shift), "source": "ios-key-command",
-+      "tabOnly": toolbarKeyboardTabOnly
++      "tabOnly": toolbarKeyboardTabOnly, "colorEscape": colorEscape,
++      "inputLanguage": colorState.language ?? "unavailable",
++      "markedText": colorState.marked.map { $0 ? "true" : "false" } ?? "unavailable"
 +    ]
 +    guard let data = try? JSONSerialization.data(withJSONObject: payload),
 +      let json = String(data: data, encoding: .utf8) else { return }
@@ -92,7 +125,7 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..df0fd36d9dbc69259c43b56da4350ba4
    override var inputAccessoryView: UIView? {
      hidesInputAccessoryView ? nil : super.inputAccessoryView
    }
-@@ -192,6 +257,11 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
+@@ -192,6 +289,11 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
      webView?.scrollView.setContentOffset(offset, animated: animated)
    }
  
@@ -104,7 +137,7 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..df0fd36d9dbc69259c43b56da4350ba4
    func injectJavaScript(_ script: String) {
      DispatchQueue.main.async { [weak self] in
        self?.webView?.evaluateJavaScript(script)
-@@ -275,7 +345,12 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
+@@ -275,7 +377,12 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
  
    // MARK: - WKNavigationDelegate implementations
  
@@ -147,16 +180,17 @@ index 3a07ac938325385dc7e314f0e6d557068bc6f622..e35b8435f892540debd5d2833b3f0264
          reload: () => viewRef.current?.reload(),
        }),
 diff --git a/src/DomWebView.types.ts b/src/DomWebView.types.ts
-index 8e89c59fa2dc3f60813ad764d3101b1f04c070c0..60d8a64b46faf502ae98732aae7e3acac8ddd227 100644
+index 8e89c59fa2dc3f60813ad764d3101b1f04c070c0..f40be55fbb0df7f6acc3b002dc7d85231bd00cc1 100644
 --- a/src/DomWebView.types.ts
 +++ b/src/DomWebView.types.ts
-@@ -270,6 +270,14 @@ export type DomWebViewRef = {
+@@ -270,6 +270,15 @@ export type DomWebViewRef = {
      animated?: boolean | undefined;
    }): void;
  
 +  /**
 +   * Enables scoped iOS toolbar Escape/Tab commands. Empty string disables.
-+   * tabOnly keeps Tab registered during color editing; Escape stays in WebKit.
++   * tabOnly keeps Tab registered during color editing. Idle Chinese-IME Escape
++   * may also bridge when the native editor confirms there is no marked text.
 +   * The DOM receiver must reject stale scopes; events are untrusted.
 +   * @platform ios
 +   */

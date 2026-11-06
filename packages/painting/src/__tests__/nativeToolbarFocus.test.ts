@@ -76,6 +76,44 @@ test('radio/label activation restores the touched control after UIKit leaves BOD
   expect(state.acknowledgedScope).toBe(state.scope);
 });
 
+test('color-to-label waits for activation before blurring the editor or moving the panel', async () => {
+  input('color').focus();
+  const label = document.getElementById('finger-label')!;
+  pointer(label, 'pointerdown');
+  pointer(label, 'pointerup');
+  await paint();
+  expect(document.activeElement).toBe(input('color'));
+  expect(input('finger').checked).toBe(false);
+  label.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+  await paint();
+  expect(input('finger').checked).toBe(true);
+  expect(document.activeElement).toBe(input('finger'));
+});
+
+test('a native idle-color Escape can bridge, but active composition and a newer text editor reject it', async () => {
+  input('color').focus();
+  await flush();
+  const bridge = window.__paintingToolbarKeyboard!;
+  const scope = bridge.snapshot().scope;
+  const message = {
+    scope,
+    sequence: 1,
+    key: 'Escape' as const,
+    shiftKey: false,
+    source: 'ios-key-command' as const,
+    colorEscape: true,
+  };
+  const observe = jest.fn();
+  input('color').addEventListener('keydown', observe);
+  expect(bridge.receive(message)).toBe(true);
+  expect(observe).toHaveBeenCalledTimes(1);
+  expect(observe.mock.calls[0][0].isTrusted).toBe(false);
+  input('color').dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+  expect(bridge.receive({ ...message, sequence: 2 })).toBe(false);
+  input('editor').focus();
+  expect(bridge.receive({ ...message, sequence: 3 })).toBe(false);
+});
+
 test.each(['finger', 'check'])(
   'compatibility click restores %s after the pointerup frame has already run',
   async (id) => {

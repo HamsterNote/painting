@@ -353,3 +353,27 @@ radio/checkbox触摸交接回退24项：原32项为7项达成、24项失败、1�
 Mac按runbook先无LLDB跑原18项，再重跑32项触摸及颜色→radio/label，保存pointerup恢复、兼容mousedown失焦、click后再次恢复和scope/命令的顺序；保留range12项、双向长按8项与松开静默、快切文字首键和IME/PencilKit。原判定不变，HAM-175保持blocked，PR #46仍Draft，4.2/4.3未勾；本机无xcrun，不声称验证Swift或新原生行为。
 
 本轮Linux验证：Jest102套件/1353项、responder9项、依赖配置3项通过；Chromium49项通过（独立5296端口、2 workers）。新增两条兼容时序用例在11893ba上失败、新候选通过；既有真实触摸range外抬起及工具栏回归通过。typecheck、库/Web build、代码格式/diff检查通过，lint 0 errors/原有32 warnings。原HID输入、观察器、可信度判定、Swift/API和spec均未改。浏览器fixture的显式失焦重放只证明DOM恢复逻辑，iOS兼容事件及立即按键时序仍需Mac实测。
+
+### HAM-175 Mac `5e5be90`（2026-11-06）：基础矩阵收敛，三个颜色交接边界待修
+
+Mac从 `5e5be90cb637e42655b947e1582fc102ea058a53` 重建安装，编译482 warnings / 0 errors，安装产物哈希匹配。环境仍为iPhone17 Pro / **iOS26.5模拟器、idb脚本HID/触摸**，全程无LLDB。原18项行为18/18，44次单键对应44个命令/DOM keydown、全部false，无双发，正式0/18；全轮累计265个命令均sequence唯一、accepted=1/error=nil。
+
+原32项触摸32/32，包含radio/checkbox24项；手势返回直接发HID，中间无读取、等待或scope轮询。颜色下range拖动12/12、双向真实长按1.5秒8/8，松开后1.502–1.526秒内无DOM/原生补发。英文键盘下HEX/可信Escape4/4、快速菜单→文字首键、英文/IME提交取消撤销及重进Escape、PencilKit点击/横滚所测通过。这些均为局部行为结果，不替代正式可信度或真机验收。
+
+颜色→radio input/label补充16项中，首键焦点/scope16/16，完整行为14/16。默认入口/矩形的两个label用例未改选，Tab还提前退出BODY。11:09:22.074 pointerup目标LABEL，.075颜色focusout→未选finger focusin，.147兼容mousedown/click目标DIV；.163桥恢复未选radio焦点，.412 Tab退出。组件是原生HTML label/input，桥没有阻止指针默认事件；证据支持提前程序focus导致颜色失焦、布局变化赶在兼容命中之前的假设，原记录没有逐帧几何，尚不能称原生根因全部证实。focus并不等于checked，不能改遍历规则掩盖未激活。
+
+另两处异常：拼音颜色Escape没有DOM投递，现场composingConnected=false、tabOnly/ack=true，切英文后同字段可信Escape有效；PencilKit颜色→radio→Tab回颜色时原生英文键盘仍可见，DOM innerHeight/visualViewport.height却622，设置按钮原生y794位于键盘下，清理点击实际输入Space。它们没有同序列旧head对照，不定性为新增回归。原始报告/证据为issue附件 `HAM-175-5e5be90-ios-validation.md` / `HAM-175-5e5be90-ios-evidence.zip`。
+
+### HAM-175 新候选：延后label让焦、拼音Escape门控、按原生frame约束宿主
+
+颜色→label的手势等真实click激活后再安排恢复，保留原origin/focusVersion；range及直接input的pointerup路径继续保留。新增浏览器回归固定触摸坐标，重放颜色blur引发重排及延迟兼容命中：旧helper命中背景、新helper命中label并由默认动作改选，随后Tab到颜色。没有改测试坐标、手工设置checked或补发激活。该fixture证明控制流及其布局后果，不冒充UIKit实测。
+
+颜色请求tabOnly时，Swift候选读取该WebView内first responder的公开textInputMode与UITextInput.markedTextRange。仅primaryLanguage以zh开头、原生明确无marked text时注册Escape例外，payload标记colorEscape；DOM仍校验当前scope/焦点/composition再接收。未知原生编辑状态或正在组合时不接管；英文颜色Escape保留WebKit路径。拼音例外事件如实为false。新增`[HAM175 color-route]`状态日志及payload的inputLanguage/markedText用于辨别门控未开启和命令未回调，必须由Mac证实公开读数及实际路由。
+
+iOS宿主改用原生will/did frame通知和measureInWindow的同一坐标系限制WebView高度，包含PencilKit头部与safe-area偏移；will阶段只提前收紧，确认did frame/hide后才释放，不在willHide时立即扩成全高。RN原KeyboardAvoidingView只监听willShow/willHide，现有日志未采原生frame，故这是基于代码缺口的候选，并非已证明现场通知顺序。新增`[HAM175 keyboard-frame]`/`[HAM175 keyboard-layout]`只记通知、坐标和高度，不记录输入文字。宿主测试覆盖中断hide、没有新willShow的frame变化、窗口偏移、旧measure回调和卸载；原生画面/DOM同步仍需Mac对照。
+
+本版Swift补丁/lockfile已更新，需Mac重建安装。原输入/观察/矩阵判定不改，按runbook保留18/32/12/8组，增加颜色label固定点位、拼音空闲/组合/结束后的Escape与英文对照、PencilKit颜色往返时的原生frame/宿主高度/DOM/AX/截图联合证据。本机没有xcrun，不声称Swift编译或iOS通过；HAM-175保持blocked、PR #46保持Draft，spec与4.2/4.3不改。
+
+本轮Linux：Jest103套件/1358项、responder9项、配置3项通过；Chromium50项通过（独立5296端口、2 workers）。最终宿主generation清理调整后，iOS宿主3项定向复测通过。typecheck、库/Web build、frozen install、代码格式/diff检查通过。新增可选`trace_toolbar_handoff.js`被动记录低频事件及下一帧/resize几何，不读取输入值；浏览器smoke确认不妨碍checked默认动作、包含矩形、无输入文本、stop后不再记录。此脚本仅用于原矩阵之后的诊断，原HID输入与observe/matrix/metrics均未修改。
+
+最终lint为0 errors/原有32 warnings，新增宿主的cleanup告警已修正并定向验证，最终playground类型检查通过。

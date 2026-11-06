@@ -234,3 +234,57 @@ for (const type of ['radio', 'checkbox'] as const) {
     await expect(page.getByRole('button', { name: 'Next' })).toBeFocused();
   });
 }
+
+test('color-to-label preserves the activation hit target until the compatibility click', async ({
+  page,
+}) => {
+  await page.setContent(`<div id="backdrop" style="position:absolute;inset:0"></div>
+    <div id="panel" class="hn-painting-panel" style="position:absolute;left:20px;top:20px;width:320px">
+      <label style="display:block;height:44px"><input type="radio" name="mode" checked>Auto</label>
+      <label id="finger-label" style="display:block;height:44px"><input id="finger" type="radio" name="mode">Finger</label>
+      <input type="text" data-toolbar-color-field="true" aria-label="Color" value="#123456">
+      <input type="range" aria-label="Opacity">
+    </div>`);
+  await install(page);
+  await page.getByRole('textbox').focus();
+  // Replay only the host's reflow on color blur and delayed compatibility
+  // hit-test. Keep the same input coordinates; never synthesize a corrected
+  // label/input click when the hit-test misses, and never set checked/focus.
+  const point = await page.locator('#finger-label').evaluate((label) => {
+    const rect = label.getBoundingClientRect();
+    const point = { x: rect.right - 20, y: rect.top + rect.height / 2 };
+    document.querySelector<HTMLInputElement>('[aria-label=Color]')!.addEventListener('blur', () => {
+      document.getElementById('panel')!.style.top = '300px';
+    });
+    for (const type of ['pointerdown', 'pointerup'])
+      label.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          pointerId: 9,
+          pointerType: 'touch',
+          clientX: point.x,
+          clientY: point.y,
+        })
+      );
+    return point;
+  });
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      )
+  );
+  const hit = await page.evaluate(({ x, y }) => {
+    const target = document.elementFromPoint(x, y)!;
+    for (const type of ['mousedown', 'mouseup', 'click'])
+      target.dispatchEvent(
+        new MouseEvent(type, { bubbles: true, cancelable: true, detail: 1, clientX: x, clientY: y })
+      );
+    return target.id;
+  }, point);
+  expect(hit).toBe('finger-label');
+  await expect(page.getByRole('radio', { name: 'Finger' })).toBeChecked();
+  await expect(page.getByRole('radio', { name: 'Finger' })).toBeFocused();
+  expect(await key(page, 'Tab')).toBe(true);
+  await expect(page.getByRole('textbox')).toBeFocused();
+});

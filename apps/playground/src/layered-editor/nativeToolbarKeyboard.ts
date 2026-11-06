@@ -9,6 +9,7 @@ type NativeToolbarKey = {
   key: 'Escape' | 'Tab';
   shiftKey: boolean;
   source: 'ios-key-command';
+  colorEscape?: boolean;
 };
 
 declare global {
@@ -80,7 +81,8 @@ export function installNativeToolbarKeyboard(
     )
       return null;
     // Keep Tab on the same UIKit command path across the color field, including
-    // hardware repeats. Characters/Escape still belong to WebKit's editor.
+    // hardware repeats. Characters/IME remain native; idle Chinese-IME Escape
+    // has a separate native-validated fallback when WebKit swallows that key.
     if (isEditing(target) && !isColorField(target)) return null;
     return target.closest('.hn-painting-panel');
   };
@@ -130,7 +132,7 @@ export function installNativeToolbarKeyboard(
         !Number.isSafeInteger(message.sequence) ||
         message.sequence <= sequence ||
         !['Escape', 'Tab'].includes(message.key) ||
-        (tabOnly && message.key !== 'Tab') ||
+        (tabOnly && message.key === 'Escape' && message.colorEscape !== true) ||
         typeof message.shiftKey !== 'boolean'
       )
         return false;
@@ -194,6 +196,7 @@ export function installNativeToolbarKeyboard(
     origin: Element | null;
     focusVersion: number;
     released: boolean;
+    waitForLabelClick?: boolean;
   };
   let touched: Touch | undefined;
   const cancelFocus = () => {
@@ -251,13 +254,17 @@ export function installNativeToolbarKeyboard(
           origin: doc.activeElement,
           focusVersion,
           released: false,
+          // Blurring a color editor can resize/reposition the panel before
+          // UIKit hit-tests its delayed compatibility click. Let the label's
+          // real activation finish first; focusing a radio never selects it.
+          waitForLabelClick: isColorField(doc.activeElement) && event.target !== control,
         }
       : undefined;
   };
   const pointerUp = (event: PointerEvent) => {
     if (touched && !touched.released && touched.pointer === event.pointerId) {
       touched.released = true;
-      restoreTouchedFocus(touched);
+      if (!touched.waitForLabelClick) restoreTouchedFocus(touched);
     }
   };
   const pointerCancel = () => {
