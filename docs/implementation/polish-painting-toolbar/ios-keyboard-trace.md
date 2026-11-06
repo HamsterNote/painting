@@ -1,8 +1,8 @@
 # HAM-175 iOS 键盘：原生命令桥候选与低扰动取证
 
-PR #46 保持 Draft，HAM-175 保持 blocked，4.2 / 4.3 不勾选。本轮选择授权的 **(b) 原生→DOM 转发桥**。这是待 Mac 重建的候选；本机没有 xcrun / Apple LLDB，没有 Swift 编译或原生通过结论。
+**诊断已停止（39fd473，2026-11-06）。** 收口证据与待修勾选择的两种措辞见[validation定稿](validation.md)。PR #46保持Draft、HAM-175保持blocked，4.2/4.3不勾选；不再追加取证或改代码。以下为原生桥及各轮诊断的历史记录，不是新的执行请求。
 
-最新执行范围见 [拼音Escape最后一轮有界实验](ios-pinyin-escape-final-round.md)：f21a1ee已证明返回命令/validate/target成功而action未进。本轮只做输入法前置消费、公开容器owner对照和WK try返回三条假设；默认不启用容器实验，原门控不改。以下各轮步骤保留作历史背景，不与最新流程叠加运行。
+已结束的[拼音Escape最后一轮有界实验](ios-pinyin-escape-final-round.md)未能确定内部终止层；现有方案下拼音颜色Escape仍不可达，不能称三条假设全部证伪。Mac已真实构建安装39fd473；本地Linux没有xcrun或新的Swift运行结论。
 
 ## 96625b6 回归后：拼音命令选择诊断候选
 

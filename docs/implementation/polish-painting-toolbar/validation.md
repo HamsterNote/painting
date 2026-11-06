@@ -1,5 +1,64 @@
 # 工具栏验证
 
+## HAM-175 收口定稿：诊断已停止，待修勾选择验收口径
+
+最终结论为**内部终止层未定；现有UIKeyCommand方案下，拼音输入法＋颜色字段的Escape不可达**。有界轮次已经结束，不追加取证、不再修改产品代码。PR #46保持Draft、不合并；HAM-175保持blocked。4.2/4.3仍未勾选，spec未改，以下两种决策措辞均未生效。
+
+统一证据口径：**iOS 26.5模拟器 / idb脚本输入 / 非真机**。具体为iPhone17 Pro模拟器、当前Expo DOM宿主及默认/PencilKit入口；不是实体键盘或真实Apple Pencil验收，不外推其他iOS版本、真机或Android。最终实测源码为`39fd473e1822b9068dec060c159ee2946bbcd003`，Mac arm64 / Xcode27.2一次原生构建安装成功，188.107秒、0编译错误，主程序/debug dylib构建与安装哈希一致。本次收口仅整理文档，不产生新的运行结论。
+
+### 已达成行为与正式判定
+
+下表均来自该SHA在无LLDB、诊断关闭、默认webview owner下的保留组；未放宽原输入、观察器或判定。
+
+| 范围                                                                               | 行为结果    | 原始证据文件（本单最终ZIP内）                           |
+| ---------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------- |
+| 默认/PencilKit × 工具、缩放、设置 × Escape/Tab/Shift+Tab；关闭、焦点归还、完整遍历 | 18/18       | baseline-summary.json、matrix-summary.json及逐步DOM记录 |
+| 触摸激活后直接发首键；实际改选、焦点、scope/ack及按键效果                          | 32/32       | touch-summary.json及原始触摸/state记录                  |
+| 颜色焦点下真实range拖动；pointerup/change、拖后焦点与紧接按键                      | 12/12       | boundary-summary.json及原始拖动记录                     |
+| 真正双向持续按住Tab 1.5秒跨颜色；松开后约1.48–1.51秒静默                           | 8/8，无补发 | boundary-summary.json及长按/释放记录                    |
+
+**原18项矩阵的正式判定仍为0/18，唯一失败原因是桥事件`isTrusted=false`。** 该矩阵44次HID对应44次原生投递和44个false DOM keydown，无重复；整个保留阶段184次命令包含准备和其他组，不能替代矩阵键数。这个“唯一原因”仅指原18项矩阵；追加的拼音颜色Escape存在独立的无投递/不关闭行为失败，不可归为仅可信度问题。
+
+### 已知限制一：原生桥事件的可信度
+
+在已测宿主的非编辑态，真实脚本HID到达UIApplication/WK处理路径，但WebKit没有向DOM投递keydown。公开UIKeyCommand接管后，经JS桥创建的KeyboardEvent按平台语义为`isTrusted=false`；桥行为达成并不使事件成为WebKit可信事件。没有覆盖isTrusted、伪装来源或修改原观察器/矩阵来通过判定。
+
+三个焦点方向均未形成满足本单约束的方案，但证据范围必须区分：`becomeFirstResponder`（b50496f）和页面`window.focus()`（e1b939a）在**iOS模拟器原生重建回归**中无效；页面focus sink的透明textarea/contenteditable实验在**Chromium 147**里虽有可信键，却仍暴露focused/editable AX节点，`aria-hidden`/tabindex=-1不满足无障碍约束，见[原始记录](focus-sink-chromium.json)。不存在这第三条的iOS实测证据，不能写成“三套焦点方案均已实机排除”；这些记录更不代表真机结论。
+
+### 已知限制二：拼音颜色Escape仍不可达，内部终止层未定
+
+最后一轮A/B共20个有效单键窗口：12个非组合拼音窗口均无原生投递/DOM Escape，颜色焦点和面板保持；4个组合取消、4个英文同字段可信Escape对照成立。中文gate已放行、marked=false、scope/ack一致；B的validate=true、target确实移到既有DomWebView容器，行为仍未改善。关闭探针后的A/B拼音空闲仍失败，英文对照正常。
+
+固定30个预留窗口中25个有单键前后证据且各一次HID，5个测量前失效、未重发。两项无LLDB容器阳性对照因Inspector EOFError失效；三个颜色短探针安装超时，H1私有ABI和拼音H3匹配返回缺失。非编辑容器短探针虽有sendAction=true、两次WK try=false和关闭归还，但完整action console缺失，accepted payload晚于after快照，原检查器失败仍保留。因此H1（输入法前置消费）/H3（WK try先消费）无法区分，H2（WKWebView命令owner影响派发）不作严格排除；**不能写“三条假设全部证伪”或已证明某个UIKit内部根因**。
+
+按停止条件结束取证。不可达结论仅限已测iOS 26.5模拟器、当前宿主、idb脚本输入及现有两种owner方案；不是对全部iOS/WKWebView能力的不可实现证明。实验开关保持既有默认，不推广容器方案。
+
+### 验收材料索引与未覆盖范围
+
+本单Mac最终评论`01a1b148-d071-76b4-9917-c9e7f606cb0f`的三份附件是收口依据：
+
+- `HAM-175-39fd473-ios-validation.md`：构建身份、保留组、30窗口账本、H1/H2/H3边界和停止结论。
+- `HAM-175-39fd473-ios-evidence.zip`：原始HID/DOM、完整已保存console及投影校验、LLDB inventory/返回/超时、window-ledger.json、single-key-audit.json、command-summary.json。不要凭截断的统一日志或不完整的LLDB段推断缺席。
+- `HAM-175-39fd473-package-proof.json`：Mac报告包内1566文件，CRC/逐字节校验通过；ZIP SHA-256为`742e66eb8046fcc94bf1f68f2b30eb1cfe07ad37675109779dba3ec32ad1a654`。
+
+前轮证据用于解释方案来源，不拼接为本SHA新通过项；例如96625b6的label16/16、文字编辑回归及键盘稳定遮挡结果并未全部在39fd473重跑。真机/实体键盘、真实Apple Pencil压感倾斜和跨边界、完整VoiceOver、其他机型/系统、4.3的Android及完整设备验收不由本单模拟器结果覆盖。原[有界计划](ios-pinyin-escape-final-round.md)和[诊断记录](ios-keyboard-trace.md)均已转为历史资料，不再作为下一轮执行请求。
+
+### 待选择的收口措辞：只替换这一段
+
+以上证据、两条限制、输入口径和未覆盖范围是共同记录；以下A/B仅替换决策段，不改变历史结果、原0/18判定或任务勾选。**还差修勾一句话：选择A“接受行为验收＋两条已知限制”，或选择B“按平台限制降级记录”。** 当前没有代为选择，也没有新的Mac取证任务等待执行。
+
+**A：修勾接受行为验收时采用（待确认）**
+
+> 4.3的本次iOS宿主子项按已测行为及已知限制记录：接受iOS 26.5模拟器、idb脚本输入下18/32/12/8的行为达成，同时接受原生桥事件isTrusted=false，以及拼音输入法＋颜色字段的Escape在现有UIKeyCommand方案下不可达、内部终止层未定。此口径保留原矩阵0/18及全部未覆盖项，不表示真机或完整4.3通过；4.2/4.3仍未勾选。
+
+**B：修勾选择降级时采用（待确认）**
+
+> 4.3的本次iOS宿主子项按平台限制降级记录：保留iOS 26.5模拟器、idb脚本输入下18/32/12/8的行为证据，将原生桥事件isTrusted=false，以及拼音输入法＋颜色字段的Escape在现有UIKeyCommand方案下不可达、内部终止层未定列为未满足项，不据此承诺完整键盘支持。此口径保留原矩阵0/18及全部未覆盖项，不表示真机或完整4.3通过；4.2/4.3仍未勾选。
+
+## 历史验证记录
+
+以下保留各轮当时的实现、待验计划和结果；“本轮/新候选/待Mac重建”等历史措辞不覆盖上面的最终收口状态，也不构成继续取证或改代码的授权。
+
 对应 HAM-156 / OpenSpec change `polish-painting-toolbar` / PR #44。本轮在同一 change 和分支落实已采纳的第四轮三条验收意见，先更新 spec/design 并严格校验后实施。
 
 2026-11-04用户验收后已同步主规格并归档，任务仍为14/16；归档位置、校验及实机待验说明见 [归档记录](archive-verification.md)。以下保留实施阶段的验证结果。
