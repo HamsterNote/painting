@@ -18,7 +18,7 @@ index 6ea41ff0152909ba1f1e8bc07de41afcecbcc278..92d21ca8fa3b91173365a7be97af5026
       * Injects a JavaScript string into the `WebView` and executes it.
       */
 diff --git a/ios/DomWebView.swift b/ios/DomWebView.swift
-index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..b0e3fdbb19e88a20e67f1fe6fd6ff1dd7ddd374c 100644
+index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..b25a335ea3a7dffe9a30c6833e0319a1985a0a82 100644
 --- a/ios/DomWebView.swift
 +++ b/ios/DomWebView.swift
 @@ -9,6 +9,205 @@ import WebKit
@@ -50,7 +50,7 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..b0e3fdbb19e88a20e67f1fe6fd6ff1dd
 +    // Never log typed text or arbitrary command input.
 +    let key = command.input == UIKeyCommand.inputEscape ? "Escape" : command.input == "\t" ? "Tab" : "other"
 +    return ["id": toolbarObject(command), "key": key,
-+      "action": NSStringFromSelector(command.action), "modifiers": command.modifierFlags.rawValue,
++      "action": command.action.map { NSStringFromSelector($0) } ?? "nil", "modifiers": command.modifierFlags.rawValue,
 +      "priority": command.wantsPriorityOverSystemBehavior]
 +  }
 +  #endif

@@ -395,3 +395,9 @@ PencilKit颜色往返的稳定遮挡未复现：键盘显示时DOM/canvas280高�
 新补丁/lockfile需Mac真实重建；本机无xcrun，未编译Swift、未获得新原生结果。Mac步骤见`ios-keyboard-trace.md`：先诊断关闭跑保留组，再诊断开启按默认/PencilKit重复拼音空闲/组合/结束/新scope及英文，保存scope、commands/validate/target/action、原DOM与真实HID时序，再关闭诊断对照。HAM-175保持blocked、PR #46保持Draft；spec及4.2/4.3不改，可信度验收口径仍待用户决定。
 
 Linux本轮验证：Python26项（新增证据判定回归8项）、桥接/宿主Jest4套件36项、依赖契约3项、frozen install、新增文档片段/fixture格式与diff检查通过。新增Mac单键入口`probe_color_escape_hid.py`复用原harness，只发一次idb HID Escape，校验实际拼音日志而非英文代偿；本机只能验证参数入口及拒绝非macOS，未执行此原生用例。本轮未改DOM/宿主交互代码，未重复声称浏览器或原生保留组通过。
+
+### HAM-175 Mac 4c4fec2：诊断代码编译失败，未安装
+
+Mac arm64 / Xcode27.2面向iPhone17 Pro / iOS26.5模拟器真实构建4c4fec2，依赖/prebuild/Pods成功，143秒后Swift编译失败：诊断字段`NSStringFromSelector(command.action)`将`Selector?`直接传给非可选参数。未安装，18/32/12/8、拼音HID单键诊断及关闭诊断对照全部未验；不能沿用旧版本运行结果。证据为issue附件`HAM-175-4c4fec2-ios-validation.md`及同名evidence.zip。
+
+修正仅为诊断字段安全解包：`command.action.map { NSStringFromSelector($0) } ?? "nil"`。同文件另一处command.action传入的参数本身是Selector?，记录前已有if let；command.input使用可选比较或guard解包，modifierFlags和wantsPriorityOverSystemBehavior为非可选。门控、命令及DOM路径不变。新补丁仍须Mac重建，本机无xcrun、不声称Swift编译通过；HAM-175保持blocked，PR #46为Draft，4.2/4.3未勾。
