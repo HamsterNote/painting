@@ -65,9 +65,13 @@ export function installNativeToolbarKeyboard(
           sync();
           if (disposed || version !== publication || value !== scope || onlyTab !== tabOnly) return;
         }
-        await setNativeScope(value, onlyTab);
-        acknowledgedScope = value;
-        acknowledgedTabOnly = onlyTab;
+        // WKContentView's public text state does not identify its DOM editor.
+        // Color focus must revoke authority, never grant an
+        // editing exception that could outlive the Expo acknowledgement.
+        const nativeScope = onlyTab ? '' : value;
+        await setNativeScope(nativeScope, false);
+        acknowledgedScope = nativeScope;
+        acknowledgedTabOnly = false;
       })
       .catch((error: unknown) => {
         console.warn(
@@ -89,9 +93,8 @@ export function installNativeToolbarKeyboard(
       !(target instanceof HTMLElement)
     )
       return null;
-    // Keep Tab on the same UIKit command path across the color field, including
-    // hardware repeats. Characters/IME remain native; idle Chinese-IME Escape
-    // has a separate native-validated fallback when WebKit swallows that key.
+    // Retain panel identity across color traversal, but publish a native disable
+    // while editing color. Only its original WebKit Tab may move focus out.
     if (isEditing(target) && !isColorField(target)) return null;
     return target.closest('.hn-painting-panel');
   };
@@ -141,7 +144,7 @@ export function installNativeToolbarKeyboard(
         !Number.isSafeInteger(message.sequence) ||
         message.sequence <= sequence ||
         !['Escape', 'Tab'].includes(message.key) ||
-        (tabOnly && message.key === 'Escape' && message.colorEscape !== true) ||
+        tabOnly ||
         typeof message.shiftKey !== 'boolean'
       )
         return false;

@@ -90,7 +90,7 @@ test('color-to-label waits for activation before blurring the editor or moving t
   expect(document.activeElement).toBe(input('finger'));
 });
 
-test('a native idle-color Escape can bridge, but active composition and a newer text editor reject it', async () => {
+test('color editing rejects even a legacy native color Escape; only WebKit may supply its key', async () => {
   input('color').focus();
   await flush();
   const bridge = window.__paintingToolbarKeyboard!;
@@ -105,9 +105,8 @@ test('a native idle-color Escape can bridge, but active composition and a newer 
   };
   const observe = jest.fn();
   input('color').addEventListener('keydown', observe);
-  expect(bridge.receive(message)).toBe(true);
-  expect(observe).toHaveBeenCalledTimes(1);
-  expect(observe.mock.calls[0][0].isTrusted).toBe(false);
+  expect(bridge.receive(message)).toBe(false);
+  expect(observe).not.toHaveBeenCalled();
   input('color').dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
   expect(bridge.receive({ ...message, sequence: 2 })).toBe(false);
   input('editor').focus();
@@ -205,7 +204,7 @@ test.each(['same color', 'document text'])(
   }
 );
 
-test('one scope accepts successive native Tab callbacks across color in both directions, but never color Escape', async () => {
+test('native traversal yields color to original WebKit Tab in both directions and then re-arms', async () => {
   input('auto').focus();
   await flush();
   const bridge = window.__paintingToolbarKeyboard!;
@@ -224,13 +223,14 @@ test('one scope accepts successive native Tab callbacks across color in both dir
   await flush();
   expect(bridge.snapshot()).toMatchObject({
     scope,
-    acknowledgedScope: scope,
+    acknowledgedScope: '',
     tabOnly: true,
-    acknowledgedTabOnly: true,
+    acknowledgedTabOnly: false,
   });
   expect(receive('Escape')).toBe(false);
   expect(document.activeElement).toBe(input('color'));
-  expect(receive('Tab')).toBe(true);
+  expect(receive('Tab')).toBe(false);
+  tab(input('color')); // Unit-level WebKit event contract; not a HID assertion.
   await flush();
   expect(document.activeElement).toBe(input('range'));
   expect(bridge.snapshot()).toMatchObject({
@@ -241,7 +241,8 @@ test('one scope accepts successive native Tab callbacks across color in both dir
   });
   expect(receive('Tab', true)).toBe(true);
   expect(document.activeElement).toBe(input('color'));
-  expect(receive('Tab', true)).toBe(true);
+  expect(receive('Tab', true)).toBe(false);
+  tab(input('color'), true);
   await flush();
   expect(document.activeElement).toBe(input('auto'));
   input('color').focus();
@@ -282,7 +283,8 @@ test('disposing in color mode cannot disable a replacement through a queued focu
   const scope = window.__paintingToolbarKeyboard!.snapshot().scope;
   await flush();
   expect(scope).not.toBe('');
-  expect(setScope).toHaveBeenLastCalledWith(scope, true);
+  expect(setScope).toHaveBeenLastCalledWith('', false);
+  expect(window.__paintingToolbarKeyboard!.snapshot().acknowledgedScope).toBe('');
 });
 
 test.each(['cancel', 'remove', 'dispose'])('%s invalidates pending panel focus', async (reason) => {

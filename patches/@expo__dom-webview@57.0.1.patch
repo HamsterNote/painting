@@ -1,5 +1,5 @@
 diff --git a/build/DomWebView.types.d.ts b/build/DomWebView.types.d.ts
-index 6ea41ff0152909ba1f1e8bc07de41afcecbcc278..92d21ca8fa3b91173365a7be97af50260ff6a450 100644
+index 6ea41ff0152909ba1f1e8bc07de41afcecbcc278..ec7ef5d7142d711b1b45c50bc11991f3c3b4bf3e 100644
 --- a/build/DomWebView.types.d.ts
 +++ b/build/DomWebView.types.d.ts
 @@ -246,6 +246,14 @@ export type DomWebViewRef = {
@@ -8,8 +8,8 @@ index 6ea41ff0152909ba1f1e8bc07de41afcecbcc278..92d21ca8fa3b91173365a7be97af5026
      }): void;
 +    /**
 +     * Enables scoped iOS toolbar Escape/Tab commands. Empty string disables.
-+     * tabOnly keeps Tab registered during color editing. Idle Chinese-IME Escape
-+     * may also bridge when the native editor confirms there is no marked text.
++     * Only non-editing controls may enable commands. The legacy tabOnly=true
++     * request disables commands; color editing uses WebKit's trusted key path.
 +     * The DOM receiver must reject stale scopes; events are untrusted.
 +     * @platform ios
 +     */
@@ -18,16 +18,16 @@ index 6ea41ff0152909ba1f1e8bc07de41afcecbcc278..92d21ca8fa3b91173365a7be97af5026
       * Injects a JavaScript string into the `WebView` and executes it.
       */
 diff --git a/ios/DomWebView.swift b/ios/DomWebView.swift
-index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..e4d7bd8a3ad598f2bcec044da6de119b725bbd95 100644
+index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..639e05a207fa625a00222f6d7e391cb2967550b0 100644
 --- a/ios/DomWebView.swift
 +++ b/ios/DomWebView.swift
-@@ -9,12 +9,306 @@ import WebKit
+@@ -9,12 +9,302 @@ import WebKit
  final class DomWKWebView: WKWebView {
    var hidesInputAccessoryView = false
  
-+  // Color editing keeps only Tab registered, so a held Tab does not change
-+  // delivery paths mid-press. Chinese IMEs can also swallow idle Escape;
-+  // enable that fallback only with no native marked text. Characters stay native.
++  // Commands are for non-editing controls only. The legacy tabOnly flag is
++  // retained for bridge compatibility but never grants editing authority.
++  // WKContentView is shared by DOM editors and cannot prove color ownership.
 +  // Public UIKit commands consume once; do not also forward raw presses.
 +  var toolbarKeyboardScope = "" {
 +    didSet { traceToolbarRoute("scope") }
@@ -175,7 +175,7 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..e4d7bd8a3ad598f2bcec044da6de119b
 +  }
 +
 +  fileprivate func toolbarActionAllowed(_ action: Selector) -> Bool {
-+    guard !toolbarKeyboardScope.isEmpty, window?.isKeyWindow == true,
++    guard !toolbarKeyboardScope.isEmpty, !toolbarKeyboardTabOnly, window?.isKeyWindow == true,
 +      window?.windowScene?.activationState == .foregroundActive,
 +      let responder = toolbarFirstResponder(in: self) else { return false }
 +    // Expo scope receipts can lag native focus and IME updates. Check UIKit's
@@ -183,14 +183,10 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..e4d7bd8a3ad598f2bcec044da6de119b
 +    // including Tab. DOM callback rejection cannot return an already-taken key.
 +    if let textInput = responder as? UITextInput {
 +      guard textInput.markedTextRange == nil else { return false }
-+      // A live caret/selection is an editing (or text-selection) owner. Only
-+      // the explicit color mode permits it; normal menu scopes must yield.
-+      guard toolbarKeyboardTabOnly || textInput.selectedTextRange == nil else { return false }
-+    } else if toolbarKeyboardTabOnly {
-+      return false // Color editing without readable native text state is unknown.
++      // Keep the normal-menu selection guard; there is no color exception.
++      guard textInput.selectedTextRange == nil else { return false }
 +    }
-+    return !toolbarKeyboardTabOnly || action == #selector(toolbarTab(_:))
-+      || toolbarColorEscapeState().enabled
++    return true
 +  }
 +
 +  override var keyCommands: [UIKeyCommand]? {
@@ -328,19 +324,20 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..e4d7bd8a3ad598f2bcec044da6de119b
    // Created on first prop sync — `WKWebViewConfiguration` is copied at init,
    // so init-only props need to land before `WKWebView()` is called.
    private(set) var webView: DomWKWebView?
-@@ -192,6 +486,11 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
+@@ -192,6 +482,12 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
      webView?.scrollView.setContentOffset(offset, animated: animated)
    }
  
 +  func setToolbarKeyboardScope(_ scope: String, tabOnly: Bool) {
 +    webView?.toolbarKeyboardTabOnly = tabOnly
-+    webView?.toolbarKeyboardScope = scope
++    // A delayed request from an older DOM bundle must not re-arm color editing.
++    webView?.toolbarKeyboardScope = tabOnly ? "" : scope
 +  }
 +
    func injectJavaScript(_ script: String) {
      DispatchQueue.main.async { [weak self] in
        self?.webView?.evaluateJavaScript(script)
-@@ -275,7 +574,12 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
+@@ -275,7 +571,12 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
  
    // MARK: - WKNavigationDelegate implementations
  
@@ -383,7 +380,7 @@ index 3a07ac938325385dc7e314f0e6d557068bc6f622..e35b8435f892540debd5d2833b3f0264
          reload: () => viewRef.current?.reload(),
        }),
 diff --git a/src/DomWebView.types.ts b/src/DomWebView.types.ts
-index 8e89c59fa2dc3f60813ad764d3101b1f04c070c0..f40be55fbb0df7f6acc3b002dc7d85231bd00cc1 100644
+index 8e89c59fa2dc3f60813ad764d3101b1f04c070c0..16d8f323fa3a835ca3acf7ad07c3115c9519c996 100644
 --- a/src/DomWebView.types.ts
 +++ b/src/DomWebView.types.ts
 @@ -270,6 +270,15 @@ export type DomWebViewRef = {
@@ -392,8 +389,8 @@ index 8e89c59fa2dc3f60813ad764d3101b1f04c070c0..f40be55fbb0df7f6acc3b002dc7d8523
  
 +  /**
 +   * Enables scoped iOS toolbar Escape/Tab commands. Empty string disables.
-+   * tabOnly keeps Tab registered during color editing. Idle Chinese-IME Escape
-+   * may also bridge when the native editor confirms there is no marked text.
++   * Only non-editing controls may enable commands. The legacy tabOnly=true
++   * request disables commands; color editing uses WebKit's trusted key path.
 +   * The DOM receiver must reject stale scopes; events are untrusted.
 +   * @platform ios
 +   */

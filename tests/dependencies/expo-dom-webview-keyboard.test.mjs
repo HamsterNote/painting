@@ -44,11 +44,10 @@ test('installed native commands share the live text guard at registration, valid
     .split('override var inputAccessoryView')[0];
   assert.match(gate, /let responder = toolbarFirstResponder\(in: self\)/);
   assert.match(gate, /guard textInput\.markedTextRange == nil else \{ return false \}/);
-  assert.match(
-    gate,
-    /guard toolbarKeyboardTabOnly \|\| textInput\.selectedTextRange == nil else \{ return false \}/
-  );
-  assert.ok(gate.indexOf('markedTextRange') < gate.indexOf('action == #selector(toolbarTab'));
+  assert.match(gate, /guard textInput\.selectedTextRange == nil else \{ return false \}/);
+  assert.match(gate, /guard !toolbarKeyboardScope\.isEmpty, !toolbarKeyboardTabOnly,/);
+  assert.doesNotMatch(gate, /toolbarKeyboardTabOnly \|\||#selector\(toolbarTab/);
+  assert.match(swift, /toolbarKeyboardScope = tabOnly \? "" : scope/);
   assert.match(registration, /toolbarCommands\.filter/);
   for (const boundary of [registration, validation, delivery])
     assert.match(boundary, /toolbarActionAllowed\(action\)/);

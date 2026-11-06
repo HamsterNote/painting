@@ -105,6 +105,50 @@ test('color field preserves a single trusted Tab and traverses range/selected ra
   expect(await page.evaluate(() => (window as any).bridgeScope)).toBe('');
 });
 
+test('a delayed color transition receipt leaves native disabled while ordinary text owns Tab', async ({
+  page,
+}) => {
+  await page.setContent(`<div class="hn-painting-panel">
+    <input id="color" type="text" data-toolbar-color-field="true" aria-label="Color">
+  </div><textarea id="editor" aria-label="Document text"></textarea><button>After editor</button>`);
+  await page.addScriptTag({ content: tabbable });
+  await page.addScriptTag({
+    content: `(() => { ${helper}\n
+    window.scopeCalls = []; window.textKeys = [];
+    installNativeToolbarKeyboard(document, (scope, tabOnly) => {
+      window.scopeCalls.push({scope, tabOnly});
+      window.nativeScope = scope;
+      if (document.activeElement.id === 'color')
+        return new Promise(resolve => { window.releaseColorReceipt = resolve; });
+      return Promise.resolve();
+    });
+    document.getElementById('editor').addEventListener('keydown', e =>
+      window.textKeys.push({key: e.key, trusted: e.isTrusted, prevented: e.defaultPrevented}));
+  })();`,
+  });
+  await page.getByRole('textbox', { name: 'Color', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).scopeCalls.length)).toBe(2);
+  await page.getByRole('textbox', { name: 'Document text' }).click();
+  expect(await page.evaluate(() => (window as any).scopeCalls)).toEqual([
+    { scope: '', tabOnly: false },
+    { scope: '', tabOnly: false },
+  ]);
+  expect(await page.evaluate(() => (window as any).nativeScope)).toBe('');
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'After editor' })).toBeFocused();
+  expect(await page.evaluate(() => (window as any).textKeys)).toEqual([
+    { key: 'Tab', trusted: true, prevented: false },
+  ]);
+  // The native callback receipt remains blocked throughout the real browser key.
+  expect(await page.evaluate(() => (window as any).scopeCalls.length)).toBe(2);
+  await page.evaluate(() => (window as any).releaseColorReceipt());
+  await expect.poll(() => page.evaluate(() => (window as any).scopeCalls.length)).toBe(3);
+  expect(await page.evaluate(() => (window as any).scopeCalls[2])).toEqual({
+    scope: '',
+    tabOnly: false,
+  });
+});
+
 test('touch drag from a focused color editor changes range and hands focus over after release outside', async ({
   page,
 }) => {

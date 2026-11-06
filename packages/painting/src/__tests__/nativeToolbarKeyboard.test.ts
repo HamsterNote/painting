@@ -1,7 +1,7 @@
 import { installNativeToolbarKeyboard } from '../../../../apps/playground/src/layered-editor/nativeToolbarKeyboard';
 
 let dispose: () => void;
-let setScope: jest.Mock<Promise<void>, [string]>;
+let setScope: jest.Mock<Promise<void>, [string, boolean]>;
 let releaseHeldReset: (() => void) | undefined;
 const button = () => document.querySelector<HTMLButtonElement>('#item')!;
 const flush = async () => {
@@ -199,7 +199,7 @@ test.each(['editor', 'composition', 'dispose'] as const)(
   }
 );
 
-test('pending color modes coalesce to the live mode even when scope is reused', async () => {
+test('pending color modes coalesce to revocation even when scope is reused', async () => {
   const release = await holdReset();
   const color = document.createElement('input');
   color.type = 'text';
@@ -216,9 +216,48 @@ test('pending color modes coalesce to the live mode even when scope is reused', 
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
   expect(setScope.mock.calls).toEqual([
     ['', false],
-    [scope, true],
+    ['', false],
   ]);
 });
+
+test.each(['editor', 'composition'] as const)(
+  'color transition receipt held after native application cannot authorize Tab when %s takes over',
+  async (transition) => {
+    await flush();
+    setScope.mockClear();
+    let release!: () => void;
+    let nativeState = { scope: 'not-called', tabOnly: true };
+    // Apply the actual boundary arguments immediately, then hold only its receipt.
+    // On 6b1fc0a this is a nonempty color enable, not a delayed initial reset.
+    setScope.mockImplementationOnce((scope, tabOnly) => {
+      nativeState = { scope, tabOnly };
+      return new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    });
+    const color = document.createElement('input');
+    color.type = 'text';
+    color.dataset.toolbarColorField = 'true';
+    button().parentElement!.append(color);
+    color.focus();
+    await flush();
+    releaseHeldReset = release;
+    expect(setScope).toHaveBeenCalledTimes(1);
+    if (transition === 'editor') document.querySelector('textarea')!.focus();
+    else color.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+    await flush();
+    // No receive(false) proxy: at this moment native has only this request and
+    // no acknowledgement/queued follow-up. It must already have zero authority.
+    expect(setScope.mock.calls).toEqual([['', false]]);
+    expect(nativeState).toEqual({ scope: '', tabOnly: false });
+    release();
+    await flush();
+    expect(setScope.mock.calls).toEqual([
+      ['', false],
+      ['', false],
+    ]);
+  }
+);
 
 test('queued color enable never reaches native after composition starts', async () => {
   const release = await holdReset();
