@@ -31,7 +31,7 @@ export default function LayeredEditorDom(props: {
   nativeMessage?: PencilkitDemoMessage;
   onNativeState?: (state: PencilkitDemoState) => Promise<void>;
   onNativeReply?: (reply: PencilkitDemoReply) => Promise<void>;
-  onToolbarKeyboardScope?: (scope: string) => Promise<void>;
+  onToolbarKeyboardScope?: (scope: string, tabOnly: boolean) => Promise<void>;
 }) {
   const keyboardAction = useRef(props.onToolbarKeyboardScope);
   useLayoutEffect(() => {
@@ -41,8 +41,8 @@ export default function LayeredEditorDom(props: {
   useEffect(() => {
     const initialAction = keyboardAction.current;
     if (hasKeyboardAction && initialAction)
-      return installNativeToolbarKeyboard(document, async (scope) => {
-        await (keyboardAction.current ?? initialAction)(scope);
+      return installNativeToolbarKeyboard(document, async (scope, tabOnly) => {
+        await (keyboardAction.current ?? initialAction)(scope, tabOnly);
       });
   }, [hasKeyboardAction]);
   const [receive, setReceive] = useState<(message: PencilkitDemoMessage) => void>();

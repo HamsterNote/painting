@@ -33,17 +33,18 @@ test('iOS waits for the DOM action and keeps the same WebView across prop update
   const result = await render(<NativeLayeredEditorDom editorParams={{ fixture: 'mixed' }} />);
   expect(setToolbarKeyboardScope).not.toHaveBeenCalled();
   const request = result.getByTestId('dom-boundary').props.onToolbarKeyboardScope;
-  await act(() => request('scope-1'));
+  await act(() => request('scope-1', false));
   expect(setToolbarKeyboardScope).toHaveBeenCalledTimes(1);
-  expect(setToolbarKeyboardScope).toHaveBeenLastCalledWith('scope-1');
+  expect(setToolbarKeyboardScope).toHaveBeenLastCalledWith('scope-1', false);
   await result.rerender(<NativeLayeredEditorDom editorParams={{ fixture: 'resources' }} />);
   expect(result.getByTestId('dom-boundary').props.onToolbarKeyboardScope).toBe(request);
   expect(setToolbarKeyboardScope).toHaveBeenCalledTimes(1);
-  expect(setToolbarKeyboardScope).toHaveBeenLastCalledWith('scope-1');
-  await act(() => request('scope-1'));
+  expect(setToolbarKeyboardScope).toHaveBeenLastCalledWith('scope-1', false);
+  await act(() => request('scope-1', true));
   expect(setToolbarKeyboardScope).toHaveBeenCalledTimes(2);
+  expect(setToolbarKeyboardScope).toHaveBeenLastCalledWith('scope-1', true);
   await result.unmount();
-  await request('scope-1');
+  await request('scope-1', false);
   expect(setToolbarKeyboardScope).toHaveBeenCalledTimes(2);
 });
 

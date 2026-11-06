@@ -17,8 +17,8 @@ const DomComponent = LayeredEditorDom as unknown as ComponentType<
 
 export default function NativeLayeredEditorDom(props: LayeredEditorDomProps) {
   const webView = useRef<DomWebViewRef>(null);
-  const setKeyboardScope = useCallback(async (scope: string) => {
-    await webView.current?.setToolbarKeyboardScope(scope);
+  const setKeyboardScope = useCallback(async (scope: string, tabOnly: boolean) => {
+    await webView.current?.setToolbarKeyboardScope(scope, tabOnly);
   }, []);
   return (
     <DomComponent

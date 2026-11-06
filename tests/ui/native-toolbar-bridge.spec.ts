@@ -104,3 +104,68 @@ test('color field preserves a single trusted Tab and traverses range/selected ra
   await expect(page.getByRole('textbox', { name: 'Document text' })).toHaveValue('a');
   expect(await page.evaluate(() => (window as any).bridgeScope)).toBe('');
 });
+
+test('touch drag from a focused color editor changes range and hands focus over after release outside', async ({
+  page,
+}) => {
+  await page.setContent(`<style>
+    .hn-painting-panel { width: 400px; padding: 30px; }
+    input { display:block; margin:20px; }
+    input[type=range] { width:300px; height:44px; touch-action:none; }
+  </style><div class="hn-painting-panel">
+    <input type="text" data-toolbar-color-field="true" aria-label="Color" value="#123456">
+    <input type="range" aria-label="Opacity" min="0" max="1" step="0.01" value="0.95">
+    <input type="checkbox" aria-label="Ruler">
+  </div><textarea aria-label="Document text"></textarea>`);
+  await install(page);
+  const color = page.getByRole('textbox', { name: 'Color', exact: true });
+  const range = page.getByRole('slider');
+  await color.click();
+  await page.evaluate(() => {
+    (window as any).dragEvents = [];
+    for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'input', 'change']) {
+      document.addEventListener(type, (event) => {
+        (window as any).dragEvents.push({
+          type,
+          trusted: event.isTrusted,
+          active: document.activeElement?.getAttribute('aria-label'),
+          value: (event.target as HTMLInputElement).value,
+        });
+      });
+    }
+  });
+  const box = (await range.boundingBox())!;
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    const touch = async (type: 'touchStart' | 'touchMove', x: number, y: number) =>
+      cdp.send('Input.dispatchTouchEvent', { type, touchPoints: [{ x, y, id: 1 }] });
+    const y = box.y + box.height / 2;
+    await touch('touchStart', box.x + 8 + (box.width - 16) * 0.95, y);
+    await expect(color).toBeFocused(); // Exercise WebKit's retained editing focus, not BODY.
+    for (const value of [0.8, 0.6, 0.45, 0.25, 0.1])
+      await touch('touchMove', box.x + 8 + (box.width - 16) * value, y);
+    await touch('touchMove', box.x + 8 + (box.width - 16) * 0.1, box.y + box.height + 20);
+    await expect(color).toBeFocused();
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  } finally {
+    await cdp.detach();
+  }
+  await expect(range).toBeFocused();
+  await expect(range).toHaveValue('0.1');
+  const events = await page.evaluate(() => (window as any).dragEvents);
+  expect(events.filter((event: { type: string }) => event.type === 'pointercancel')).toHaveLength(
+    0
+  );
+  expect(events).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ type: 'pointerdown', active: 'Color', trusted: true }),
+      expect.objectContaining({ type: 'pointerup', active: 'Color', trusted: true }),
+      expect.objectContaining({ type: 'change', value: '0.1', trusted: true }),
+    ])
+  );
+  expect(
+    await page.evaluate(() => (window as any).__paintingToolbarKeyboard.snapshot())
+  ).toMatchObject({ tabOnly: false, acknowledgedTabOnly: false });
+  expect(await key(page, 'Tab')).toBe(true);
+  await expect(page.getByRole('checkbox')).toBeFocused();
+});

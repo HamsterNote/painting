@@ -18,6 +18,8 @@ declare global {
       snapshot: () => {
         scope: string;
         acknowledgedScope: string;
+        tabOnly: boolean;
+        acknowledgedTabOnly: boolean;
         composingConnected: boolean;
         activeTag: string | null;
       };
@@ -28,15 +30,20 @@ declare global {
 /** iOS-only fallback for WKWebView's missing non-editing hardware key delivery. */
 export function installNativeToolbarKeyboard(
   doc: Document,
-  setNativeScope: (scope: string) => Promise<void>
+  setNativeScope: (scope: string, tabOnly: boolean) => Promise<void>
 ) {
   const view = doc.defaultView!;
   let panel: Element | null | undefined;
   let scope = '';
   let acknowledgedScope = '';
+  let tabOnly = false;
+  let acknowledgedTabOnly = false;
   let sequence = 0;
   let composing: Element | null = null;
   let disposed = false;
+  const isColorField = (target: Element | null) =>
+    target instanceof HTMLInputElement &&
+    target.matches('input[type=text][data-toolbar-color-field="true"]');
   const isEditing = (target: Element | null) =>
     target instanceof HTMLElement &&
     (target.isContentEditable ||
@@ -45,11 +52,12 @@ export function installNativeToolbarKeyboard(
         'textarea,input:not([type=button]):not([type=submit]):not([type=reset]):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color])'
       ));
   // Serialize the async Expo action so an old enable cannot overtake a disable.
-  const publish = (value: string) => {
+  const publish = (value: string, onlyTab = false) => {
     const update = (nativeUpdates.get(doc) ?? Promise.resolve())
       .then(async () => {
-        await setNativeScope(value);
+        await setNativeScope(value, onlyTab);
         acknowledgedScope = value;
+        acknowledgedTabOnly = onlyTab;
       })
       .catch((error: unknown) => {
         console.warn(
@@ -71,21 +79,28 @@ export function installNativeToolbarKeyboard(
       !(target instanceof HTMLElement)
     )
       return null;
-    if (isEditing(target)) return null;
+    // Keep Tab on the same UIKit command path across the color field, including
+    // hardware repeats. Characters/Escape still belong to WebKit's editor.
+    if (isEditing(target) && !isColorField(target)) return null;
     return target.closest('.hn-painting-panel');
   };
   const sync = () => {
+    if (disposed) return;
     const next = currentPanel();
-    if (next === panel) return;
+    const nextTabOnly = Boolean(next && isColorField(doc.activeElement));
+    if (next === panel && nextTabOnly === tabOnly) return;
+    const changedPanel = next !== panel;
     panel = next;
+    tabOnly = nextTabOnly;
     // Expo development pages can use plain HTTP on the LAN. randomUUID is
     // secure-context-only; getRandomValues also works on that development URL.
-    scope = next
-      ? Array.from(view.crypto.getRandomValues(new Uint8Array(16)), (byte) =>
-          byte.toString(16).padStart(2, '0')
-        ).join('')
-      : '';
-    publish(scope);
+    if (changedPanel)
+      scope = next
+        ? Array.from(view.crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+            byte.toString(16).padStart(2, '0')
+          ).join('')
+        : '';
+    publish(scope, tabOnly);
   };
   const moveTab = (target: HTMLElement, backwards: boolean) => {
     // Share the same order for bridged keys and the real WebKit color-field Tab.
@@ -101,6 +116,8 @@ export function installNativeToolbarKeyboard(
     snapshot: () => ({
       scope,
       acknowledgedScope,
+      tabOnly,
+      acknowledgedTabOnly,
       composingConnected: Boolean(composing?.isConnected),
       activeTag: doc.activeElement?.tagName ?? null,
     }),
@@ -113,6 +130,7 @@ export function installNativeToolbarKeyboard(
         !Number.isSafeInteger(message.sequence) ||
         message.sequence <= sequence ||
         !['Escape', 'Tab'].includes(message.key) ||
+        (tabOnly && message.key !== 'Tab') ||
         typeof message.shiftKey !== 'boolean'
       )
         return false;
@@ -169,7 +187,15 @@ export function installNativeToolbarKeyboard(
     });
   };
   let focusFrame = 0;
-  let touched: { control: HTMLInputElement; pointer: number } | undefined;
+  let focusVersion = 0;
+  type Touch = {
+    control: HTMLInputElement;
+    pointer: number;
+    origin: Element | null;
+    focusVersion: number;
+    released: boolean;
+  };
+  let touched: Touch | undefined;
   const cancelFocus = () => {
     view.cancelAnimationFrame(focusFrame);
     focusFrame = 0;
@@ -184,13 +210,21 @@ export function installNativeToolbarKeyboard(
       ? control
       : null;
   };
-  const restoreTouchedFocus = (control: HTMLInputElement) => {
+  const restoreTouchedFocus = (touch: Touch) => {
     cancelFocus();
+    const { control, origin } = touch;
     const owner = control.closest('.hn-painting-panel');
     // Finish the touch default actions first: UIKit blurs radio/range to BODY.
     focusFrame = view.requestAnimationFrame(() => {
       focusFrame = 0;
       const active = doc.activeElement;
+      // iOS range dragging can leave the pre-existing color editor focused.
+      // Only that unchanged focus may yield; a newer editor must never lose it.
+      const oldColor =
+        active === origin &&
+        touch.focusVersion === focusVersion &&
+        isColorField(origin) &&
+        origin?.closest('.hn-painting-panel') === owner;
       if (
         disposed ||
         doc.visibilityState !== 'visible' ||
@@ -200,7 +234,7 @@ export function installNativeToolbarKeyboard(
         control.closest('.hn-painting-panel') !== owner ||
         (active !== doc.body &&
           active !== control &&
-          (isEditing(active) || active?.closest('.hn-painting-panel') !== owner))
+          ((isEditing(active) && !oldColor) || active?.closest('.hn-painting-panel') !== owner))
       )
         return;
       control.focus({ preventScroll: true });
@@ -210,12 +244,20 @@ export function installNativeToolbarKeyboard(
   const pointerDown = (event: PointerEvent) => {
     cancelFocus(); // A new interaction, including text/canvas, cancels old work.
     const control = touchControl(event.target);
-    touched = control ? { control, pointer: event.pointerId } : undefined;
+    touched = control
+      ? {
+          control,
+          pointer: event.pointerId,
+          origin: doc.activeElement,
+          focusVersion,
+          released: false,
+        }
+      : undefined;
   };
   const pointerUp = (event: PointerEvent) => {
-    if (touched && touched.pointer === event.pointerId) {
-      restoreTouchedFocus(touched.control);
-      touched = undefined;
+    if (touched && !touched.released && touched.pointer === event.pointerId) {
+      touched.released = true;
+      restoreTouchedFocus(touched);
     }
   };
   const pointerCancel = () => {
@@ -223,9 +265,23 @@ export function installNativeToolbarKeyboard(
     cancelFocus();
   };
   const click = (event: MouseEvent) => {
+    // The click completing this pointer gesture may target an ancestor when a
+    // drag ends outside. Do not discard its origin or cancel its pending focus.
+    if (touched?.released && event.detail > 0) {
+      touched = undefined;
+      return;
+    }
+    touched = undefined;
     cancelFocus();
     const control = touchControl(event.target);
-    if (control) restoreTouchedFocus(control); // Includes a label/AX activation.
+    if (control)
+      restoreTouchedFocus({
+        control,
+        origin: doc.activeElement,
+        focusVersion,
+        pointer: -1,
+        released: true,
+      }); // Label/AX activation without a pointer.
   };
   const keyDown = (event: KeyboardEvent) => {
     touched = undefined;
@@ -233,6 +289,10 @@ export function installNativeToolbarKeyboard(
     colorTab(event);
   };
   const focusOut = () => queueMicrotask(sync);
+  const focusIn = () => {
+    focusVersion++;
+    sync();
+  };
   const compositionStart = (event: CompositionEvent) => {
     composing = event.target instanceof Element ? event.target : null;
     sync();
@@ -244,7 +304,7 @@ export function installNativeToolbarKeyboard(
   // No pointermove work and no mutation during input sampling.
   const observer = new MutationObserver(sync);
   observer.observe(doc.body, { childList: true, subtree: true });
-  doc.addEventListener('focusin', sync);
+  doc.addEventListener('focusin', focusIn);
   doc.addEventListener('focusout', focusOut);
   doc.addEventListener('visibilitychange', sync);
   doc.addEventListener('compositionstart', compositionStart);
@@ -260,10 +320,11 @@ export function installNativeToolbarKeyboard(
     disposed = true;
     panel = null;
     scope = '';
+    tabOnly = false;
     cancelFocus();
     touched = undefined;
     observer.disconnect();
-    doc.removeEventListener('focusin', sync);
+    doc.removeEventListener('focusin', focusIn);
     doc.removeEventListener('focusout', focusOut);
     doc.removeEventListener('visibilitychange', sync);
     doc.removeEventListener('compositionstart', compositionStart);

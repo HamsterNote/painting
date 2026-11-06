@@ -1,63 +1,80 @@
 diff --git a/build/DomWebView.types.d.ts b/build/DomWebView.types.d.ts
-index 6ea41ff0152909ba1f1e8bc07de41afcecbcc278..b053967865e0d46df9f4fddd9f1c2bef4a22f18b 100644
+index 6ea41ff0152909ba1f1e8bc07de41afcecbcc278..79f1903780405df2ef2daaf77218578c34d9fc91 100644
 --- a/build/DomWebView.types.d.ts
 +++ b/build/DomWebView.types.d.ts
-@@ -246,6 +246,12 @@ export type DomWebViewRef = {
+@@ -246,6 +246,13 @@ export type DomWebViewRef = {
          y?: number | undefined;
          animated?: boolean | undefined;
      }): void;
 +    /**
 +     * Enables scoped iOS toolbar Escape/Tab commands. Empty string disables.
++     * tabOnly keeps Tab registered during color editing; Escape stays in WebKit.
 +     * The DOM receiver must reject stale scopes; events are untrusted.
 +     * @platform ios
 +     */
-+    setToolbarKeyboardScope: (scope: string) => Promise<void>;
++    setToolbarKeyboardScope: (scope: string, tabOnly: boolean) => Promise<void>;
      /**
       * Injects a JavaScript string into the `WebView` and executes it.
       */
 diff --git a/ios/DomWebView.swift b/ios/DomWebView.swift
-index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..0d960f9a263f6103b8dc39625ceffba266a49c27 100644
+index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..df0fd36d9dbc69259c43b56da4350ba4ca418545 100644
 --- a/ios/DomWebView.swift
 +++ b/ios/DomWebView.swift
-@@ -9,6 +9,55 @@ import WebKit
+@@ -9,6 +9,71 @@ import WebKit
  final class DomWKWebView: WKWebView {
    var hidesInputAccessoryView = false
  
-+  // Opt-in only while the DOM toolbar owns non-editing focus. Public UIKit
-+  // commands consume the shortcut once; do not also forward raw presses.
++  // Color editing keeps only Tab registered, so a held Tab does not change
++  // delivery paths mid-press. Characters/Escape still use WebKit's editor.
++  // Public UIKit commands consume once; do not also forward raw presses.
 +  var toolbarKeyboardScope = ""
++  var toolbarKeyboardTabOnly = false
 +  private var toolbarKeySequence = 0
 +
-+  override var keyCommands: [UIKeyCommand]? {
-+    guard !toolbarKeyboardScope.isEmpty else { return super.keyCommands }
++  // Reuse the same command objects across focus changes and repeat callbacks.
++  private lazy var toolbarCommands: [UIKeyCommand] = {
 +    let commands = [
 +      UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(toolbarKey(_:))),
-+      UIKeyCommand(input: "\t", modifierFlags: [], action: #selector(toolbarKey(_:))),
-+      UIKeyCommand(input: "\t", modifierFlags: .shift, action: #selector(toolbarKey(_:)))
++      UIKeyCommand(input: "\t", modifierFlags: [], action: #selector(toolbarTab(_:))),
++      UIKeyCommand(input: "\t", modifierFlags: .shift, action: #selector(toolbarTab(_:)))
 +    ]
 +    for command in commands {
 +      command.wantsPriorityOverSystemBehavior = true
 +    }
++    return commands
++  }()
++
++  override var keyCommands: [UIKeyCommand]? {
++    guard !toolbarKeyboardScope.isEmpty else { return super.keyCommands }
++    let commands = toolbarKeyboardTabOnly
++      ? toolbarCommands.filter { $0.input == "\t" } : toolbarCommands
 +    return commands + (super.keyCommands ?? [])
 +  }
 +
 +  override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
-+    if action == #selector(toolbarKey(_:)) {
++    if action == #selector(toolbarTab(_:)) || action == #selector(toolbarKey(_:)) {
 +      return !toolbarKeyboardScope.isEmpty && window?.isKeyWindow == true
++        && (!toolbarKeyboardTabOnly || action == #selector(toolbarTab(_:)))
 +    }
 +    return super.canPerformAction(action, withSender: sender)
++  }
++
++  @objc private func toolbarTab(_ command: UIKeyCommand) {
++    toolbarKey(command)
 +  }
 +
 +  @objc private func toolbarKey(_ command: UIKeyCommand) {
 +    guard !toolbarKeyboardScope.isEmpty, window?.isKeyWindow == true,
 +      window?.windowScene?.activationState == .foregroundActive,
 +      let input = command.input,
-+      input == "\t" || input == UIKeyCommand.inputEscape else { return }
++      input == "\t" || input == UIKeyCommand.inputEscape,
++      !toolbarKeyboardTabOnly || input == "\t" else { return }
 +    toolbarKeySequence += 1
 +    let payload: [String: Any] = [
 +      "scope": toolbarKeyboardScope, "sequence": toolbarKeySequence,
 +      "key": input == "\t" ? "Tab" : "Escape",
-+      "shiftKey": command.modifierFlags.contains(.shift), "source": "ios-key-command"
++      "shiftKey": command.modifierFlags.contains(.shift), "source": "ios-key-command",
++      "tabOnly": toolbarKeyboardTabOnly
 +    ]
 +    guard let data = try? JSONSerialization.data(withJSONObject: payload),
 +      let json = String(data: data, encoding: .utf8) else { return }
@@ -75,18 +92,19 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..0d960f9a263f6103b8dc39625ceffba2
    override var inputAccessoryView: UIView? {
      hidesInputAccessoryView ? nil : super.inputAccessoryView
    }
-@@ -192,6 +241,10 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
+@@ -192,6 +257,11 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
      webView?.scrollView.setContentOffset(offset, animated: animated)
    }
  
-+  func setToolbarKeyboardScope(_ scope: String) {
++  func setToolbarKeyboardScope(_ scope: String, tabOnly: Bool) {
++    webView?.toolbarKeyboardTabOnly = tabOnly
 +    webView?.toolbarKeyboardScope = scope
 +  }
 +
    func injectJavaScript(_ script: String) {
      DispatchQueue.main.async { [weak self] in
        self?.webView?.evaluateJavaScript(script)
-@@ -275,7 +328,12 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
+@@ -275,7 +345,12 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
  
    // MARK: - WKNavigationDelegate implementations
  
@@ -100,48 +118,49 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..0d960f9a263f6103b8dc39625ceffba2
      onContentProcessDidTerminate(createBaseEventPayload())
    }
 diff --git a/ios/DomWebViewModule.swift b/ios/DomWebViewModule.swift
-index 811a3924dd76f365fc8cecbd94cd1fdf62609ae9..f2ab8368bbef02d214205c9222fc40f35ecdd626 100644
+index 811a3924dd76f365fc8cecbd94cd1fdf62609ae9..8634046c809dcbd135b6373172732ab57b68cd9e 100644
 --- a/ios/DomWebViewModule.swift
 +++ b/ios/DomWebViewModule.swift
 @@ -130,6 +130,10 @@ public final class DomWebViewModule: Module {
          view.scrollTo(offset: CGPoint(x: param.x, y: param.y), animated: param.animated)
        }
  
-+      AsyncFunction("setToolbarKeyboardScope") { (view: DomWebView, scope: String) in
-+        view.setToolbarKeyboardScope(scope)
++      AsyncFunction("setToolbarKeyboardScope") { (view: DomWebView, scope: String, tabOnly: Bool) in
++        view.setToolbarKeyboardScope(scope, tabOnly: tabOnly)
 +      }
 +
        AsyncFunction("injectJavaScript") { (view: DomWebView, script: String) in
          view.injectJavaScript(script)
        }
 diff --git a/src/DomWebView.tsx b/src/DomWebView.tsx
-index 3a07ac938325385dc7e314f0e6d557068bc6f622..e1f6907a8de5f753d3961d1fca80d406d872881b 100644
+index 3a07ac938325385dc7e314f0e6d557068bc6f622..e35b8435f892540debd5d2833b3f0264db7b92ff 100644
 --- a/src/DomWebView.tsx
 +++ b/src/DomWebView.tsx
 @@ -23,6 +23,9 @@ const WebView = React.forwardRef<DomWebViewRef, DomWebViewProps>(
        ref,
        () => ({
          scrollTo: (params) => viewRef.current?.scrollTo(params),
-+        setToolbarKeyboardScope: async (scope: string) => {
-+          await viewRef.current?.setToolbarKeyboardScope(scope);
++        setToolbarKeyboardScope: async (scope: string, tabOnly: boolean) => {
++          await viewRef.current?.setToolbarKeyboardScope(scope, tabOnly);
 +        },
          injectJavaScript: (script: string) => viewRef.current?.injectJavaScript(script),
          reload: () => viewRef.current?.reload(),
        }),
 diff --git a/src/DomWebView.types.ts b/src/DomWebView.types.ts
-index 8e89c59fa2dc3f60813ad764d3101b1f04c070c0..dc341e544d2068cb1b7eb1dd8513de72e85804b7 100644
+index 8e89c59fa2dc3f60813ad764d3101b1f04c070c0..60d8a64b46faf502ae98732aae7e3acac8ddd227 100644
 --- a/src/DomWebView.types.ts
 +++ b/src/DomWebView.types.ts
-@@ -270,6 +270,13 @@ export type DomWebViewRef = {
+@@ -270,6 +270,14 @@ export type DomWebViewRef = {
      animated?: boolean | undefined;
    }): void;
  
 +  /**
 +   * Enables scoped iOS toolbar Escape/Tab commands. Empty string disables.
++   * tabOnly keeps Tab registered during color editing; Escape stays in WebKit.
 +   * The DOM receiver must reject stale scopes; events are untrusted.
 +   * @platform ios
 +   */
-+  setToolbarKeyboardScope: (scope: string) => Promise<void>;
++  setToolbarKeyboardScope: (scope: string, tabOnly: boolean) => Promise<void>;
 +
    /**
     * Injects a JavaScript string into the `WebView` and executes it.

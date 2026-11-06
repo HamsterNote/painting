@@ -311,3 +311,25 @@ Mac按更新runbook先无LLDB跑原18项，逐步确认完整遍历；重点增�
 本机无xcrun/Apple LLDB，新候选仍待Mac验证。原可信度门槛与spec不改，HAM-175保持blocked、PR #46保持Draft，4.2/4.3未勾。
 
 本轮Linux检查：Jest102套件/1341项、responder9项、配置3项通过；typecheck、库/Web build通过，lint 0 errors/原有32 warnings。Chromium46项通过（独立5296端口、2 workers）：原45项保留，新增独立颜色字段契约用真实浏览器键盘确认Tab到range、Shift+Tab回已选radio，各保留一个可信事件，没有重发；这不是iOS HID验收。新增Jest覆盖radio/label、range无click、触摸取消/卸载/移除、快切文字/画布、键盘优先于过期触摸、颜色组合态与preventDefault保护；原Toolbar集成用例取消手工focus模拟，改为触发颜色Tab并断言实际移到range。原HID观察器/判定和既有UI断言未改。格式/diff检查通过；未执行新的Swift或原生设备验证。
+
+### HAM-175 Mac `c21d53f`（2026-11-06）：基础行为通过，两个交接缺口
+
+Mac从 `c21d53f5b10ee2255dc9d8f91dae648570c0ee02` 重建安装，iPhone17 Pro / **iOS26.5模拟器，idb脚本HID及模拟触摸**，全轮无LLDB。Debug构建0 errors，主程序/debug dylib安装哈希与构建一致；原输入、观察、矩阵和可信度判定脚本逐字节保留。不是实体键盘、真机或Apple Pencil验收。
+
+关闭/焦点归还及完整遍历18/18，非编辑态radio/range/checkbox触摸后紧接按键32/32。44个单键HID对应44个DOM keydown（42 false / 2 true），无双发；包含补充检查的146个原生命令均accepted=1/error=nil。原可信度门槛下正式仍 **0/18**。颜色双向逐键Tab、真实HEX与颜色Escape、快速菜单→文字a/Tab/Escape首键、英文/IME提交取消/一次撤销、PencilKit点击/横滚所测通过。
+
+补充检查仍有两个缺口：默认/PencilKit × 画笔/矩形持续按住Tab1.5秒，均只有首个桥回调，进入颜色后停止；颜色保持编辑焦点时实际拖动range，默认/PencilKit均0.95→0.1、有pointerup/change、无pointercancel，600ms后焦点仍在颜色、scope/ack均空。非编辑态同滑块正常。不能用逐键通过推导长按，也不能将颜色可信Escape关闭当作range已获焦点。原始证据见issue附件 `HAM-175-c21d53f-ios-validation.md` / `HAM-175-c21d53f-ios-evidence.zip`，无效点位和辅助监听重复的采集限制保留在报告中。
+
+### HAM-175 新候选：旧颜色焦点交出与 Tab 命令连续性
+
+触摸恢复记录操作开始时的颜色焦点及focus版本。完整pointerup后，只允许同面板、一直未变化的旧颜色编辑器让焦给实际操作控件；控件外抬起及其祖先click也保留这一手势身份。新交互、重新进入颜色/文字、取消、隐藏、移除仍拒绝旧恢复，不改变range数值。
+
+长按候选在颜色字段保留同一scope，原生配置切到tabOnly，仅接管Tab/Shift+Tab；离开颜色到range切回完整命令。同一批UIKeyCommand对象贯穿往返，每次键仍由真实UIKit action驱动，无重复定时器、raw presses双路转发或伪造repeat/keyup。普通文字编辑/组合态关闭桥；颜色字符输入与Escape继续交给WebKit。**颜色Tab也可能变为isTrusted=false**，这是明确的路径变化，不修改原观察器、判定或spec来消除失败。
+
+Swift补丁/API与lockfile同步更新，必须由Mac重建安装，不能只刷新Metro。本机没有xcrun，未编译Swift，长按修复尚未得到原生证明。只读snapshot新增tabOnly/acknowledgedTabOnly；原生命令payload带tabOnly，便于按scope/sequence与原DOM事件对应。Mac先无LLDB跑原18项，再做颜色焦点下range从滑块真正拖动（控件内/外抬起、紧接按键）及**持续按住**Tab1.5秒跨颜色，双向、松开静默和再按均保留；复测原32项、HEX/Escape、快切文字首键、IME与PencilKit，步骤详见 `ios-keyboard-trace.md`。
+
+新增Chromium回归通过CDP真实触摸输入，在颜色仍获焦时把range从0.95拖到0.1、控件外抬起，确认可信input/change、完整pointerup且无cancel，随后range焦点与scope恢复、Tab前进。相同用例换回c21d53f helper明确失败在range获焦断言，新实现通过；没有用提前blur或手工focus规避。它证明DOM交接，不证明iOS长按或硬件验收。Jest补充旧颜色/新编辑焦点竞争、同scope连续Tab往返及颜色Escape/组合态拒绝；宿主契约同步覆盖新增tabOnly参数。
+
+HAM-175保持blocked，PR #46保持Draft，4.2/4.3未勾。接受桥事件可信度差异的口径仍待修勾决定，不代替人类调整验收范围。
+
+本轮Linux验证：Jest全量102套件/1345项、responder9项、依赖配置3项通过；最终追加颜色模式卸载/重挂载回归后，桥相关2套件/22项通过（含新增1项）。Chromium47项通过（独立5296端口、2 workers），含新增真实触摸拖动；旧helper对照在range获焦断言失败。typecheck、库/Web build、frozen install、代码格式/diff检查通过；lint 0 errors/原有32 warnings，最终生命周期改动定向lint通过。宿主/Toolbar单测同步新API和颜色Tab命令契约，原Mac HID输入/观察器/可信度断言均未修改。无本机Swift编译或新iOS原生验收结论。

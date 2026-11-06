@@ -76,17 +76,88 @@ test('radio/label activation restores the touched control after UIKit leaves BOD
   expect(state.acknowledgedScope).toBe(state.scope);
 });
 
-test('range drag ending without click restores focus without changing its value', async () => {
+test('range drag hands the unchanged color focus over, including release outside without click', async () => {
   input('color').focus();
   pointer(input('range'), 'pointerdown');
   input('range').value = '37';
   input('range').dispatchEvent(new Event('input', { bubbles: true }));
-  input('color').blur();
-  pointer(input('range'), 'pointerup');
+  pointer(document.body, 'pointerup');
+  expect(document.activeElement).toBe(input('color'));
   await paint();
   expect(document.activeElement).toBe(input('range'));
   expect(input('range').value).toBe('37');
   expect(window.__paintingToolbarKeyboard!.snapshot().scope).not.toBe('');
+});
+
+test('the completing drag click on an ancestor preserves the touch origin', async () => {
+  input('color').focus();
+  pointer(input('range'), 'pointerdown');
+  pointer(document.body, 'pointerup');
+  document.body.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+  await paint();
+  expect(document.activeElement).toBe(input('range'));
+});
+
+test.each(['same color', 'document text'])(
+  'a newer %s focus cannot be stolen by the old drag',
+  async (target) => {
+    input('color').focus();
+    pointer(input('range'), 'pointerdown');
+    pointer(document.body, 'pointerup');
+    input('color').blur();
+    const editor = input(target === 'same color' ? 'color' : 'editor');
+    editor.focus();
+    await paint();
+    expect(document.activeElement).toBe(editor);
+  }
+);
+
+test('one scope accepts successive native Tab callbacks across color in both directions, but never color Escape', async () => {
+  input('auto').focus();
+  await flush();
+  const bridge = window.__paintingToolbarKeyboard!;
+  const scope = bridge.snapshot().scope;
+  let sequence = 0;
+  const receive = (key: 'Tab' | 'Escape', shiftKey = false) =>
+    bridge.receive({
+      scope,
+      sequence: ++sequence,
+      key,
+      shiftKey,
+      source: 'ios-key-command',
+    });
+  expect(receive('Tab')).toBe(true);
+  expect(document.activeElement).toBe(input('color'));
+  await flush();
+  expect(bridge.snapshot()).toMatchObject({
+    scope,
+    acknowledgedScope: scope,
+    tabOnly: true,
+    acknowledgedTabOnly: true,
+  });
+  expect(receive('Escape')).toBe(false);
+  expect(document.activeElement).toBe(input('color'));
+  expect(receive('Tab')).toBe(true);
+  await flush();
+  expect(document.activeElement).toBe(input('range'));
+  expect(bridge.snapshot()).toMatchObject({
+    scope,
+    acknowledgedScope: scope,
+    tabOnly: false,
+    acknowledgedTabOnly: false,
+  });
+  expect(receive('Tab', true)).toBe(true);
+  expect(document.activeElement).toBe(input('color'));
+  expect(receive('Tab', true)).toBe(true);
+  await flush();
+  expect(document.activeElement).toBe(input('auto'));
+  input('color').focus();
+  input('color').dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+  expect(receive('Tab')).toBe(false);
+  expect(bridge.snapshot().scope).toBe('');
+  input('editor').focus();
+  expect(receive('Tab')).toBe(false);
+  expect(bridge.snapshot().scope).toBe('');
 });
 
 test('new text/canvas interaction cancels a queued touch focus, including an AX click', async () => {
@@ -103,6 +174,22 @@ test('new text/canvas interaction cancels a queued touch focus, including an AX 
   document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   await paint();
   expect(document.activeElement).toBe(document.body);
+});
+
+test('disposing in color mode cannot disable a replacement through a queued focusout', async () => {
+  dispose();
+  const setScope = jest.fn(async (_scope: string, _tabOnly: boolean) => {});
+  input('color').focus();
+  dispose = installNativeToolbarKeyboard(document, setScope);
+  await flush();
+  input('color').blur();
+  dispose();
+  input('color').focus();
+  dispose = installNativeToolbarKeyboard(document, setScope);
+  const scope = window.__paintingToolbarKeyboard!.snapshot().scope;
+  await flush();
+  expect(scope).not.toBe('');
+  expect(setScope).toHaveBeenLastCalledWith(scope, true);
 });
 
 test.each(['cancel', 'remove', 'dispose'])('%s invalidates pending panel focus', async (reason) => {

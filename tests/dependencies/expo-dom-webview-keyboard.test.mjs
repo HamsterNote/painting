@@ -12,10 +12,13 @@ test('installed Expo patch exposes the same scoped keyboard action at every boun
   assert.match(read('ios/DomWebViewModule.swift'), /AsyncFunction\("setToolbarKeyboardScope"\)/);
   assert.match(
     read('src/DomWebView.tsx'),
-    /await viewRef\.current\?\.setToolbarKeyboardScope\(scope\)/
+    /await viewRef\.current\?\.setToolbarKeyboardScope\(scope, tabOnly\)/
   );
   for (const file of ['src/DomWebView.types.ts', 'build/DomWebView.types.d.ts']) {
-    assert.match(read(file), /setToolbarKeyboardScope: \(scope: string\) => Promise<void>/);
+    assert.match(
+      read(file),
+      /setToolbarKeyboardScope: \(scope: string, tabOnly: boolean\) => Promise<void>/
+    );
   }
   const swift = read('ios/DomWebView.swift');
   assert.match(swift, /override var keyCommands/);

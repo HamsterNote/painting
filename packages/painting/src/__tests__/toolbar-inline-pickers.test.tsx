@@ -60,7 +60,7 @@ test('reopening settings focuses the selected radio, which participates in Tab o
   expect(document.activeElement).toBe(screen.getByLabelText('强制手写笔绘制'));
 });
 
-test('settings bridge Escape closes; Tab hands color editing to WebKit and resumes afterwards', async () => {
+test('settings bridge keeps only Tab across color, preserves its traversal and closes on range Escape', async () => {
   jest.spyOn(HTMLElement.prototype, 'getClientRects').mockImplementation(function (
     this: HTMLElement
   ) {
@@ -94,12 +94,18 @@ test('settings bridge Escape closes; Tab hands color editing to WebKit and resum
     expect(screen.queryByRole('dialog')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '设置' }));
     await settle();
+    const openedScope = scope;
     act(() => {
       expect(key('Tab')).toBe(true);
     });
     await settle();
     expect(document.activeElement).toBe(screen.getByRole('textbox', { name: '颜色' }));
-    expect(scope).toBe('');
+    expect(scope).toBe(openedScope);
+    expect(window.__paintingToolbarKeyboard!.snapshot()).toMatchObject({
+      tabOnly: true,
+      acknowledgedTabOnly: true,
+    });
+    expect(key('Escape')).toBe(false); // Color Escape belongs to WebKit, not the bridge.
     // Exercise the color Tab handler itself; do not supply the missing focus.
     const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
     fireEvent(screen.getByRole('textbox', { name: '颜色' }), tab);
