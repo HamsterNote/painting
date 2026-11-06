@@ -121,6 +121,7 @@ export default function LayeredEditorDom(props: {
     >
       <LayeredPaintingBoard
         controller={controller}
+        toolbarInlinePickers={hasKeyboardAction}
         nativePencilExperiment={nativeConnection}
         onGestureTrace={trace?.record}
         historyReadyDelayMs={

@@ -267,3 +267,23 @@ Mac按 [操作说明](ios-keyboard-trace.md) 重建新head：**先完全不附�
 本机没有xcrun / Apple LLDB，未编译Swift，未验证新的原生链路。此处交付的是候选，原生矩阵最新有效结果仍为e1b939a两轮18项全失败。HAM-175保持blocked、PR #46保持Draft；4.2 / 4.3保持未勾选，终点仍是原生矩阵通过。
 
 本轮Linux验证：Jest100套件/1326项、responder9项、原生配置3项、Python探针18项通过；typecheck、库/Web build、frozen install通过，lint 0 errors/原有32 warnings。原有四份Chromium spec的42项通过；新增独立桥契约3项在最终源码上通过（真实页面组件、模拟原生传输，明确验证isTrusted=false，不算HID验收）。桥契约覆盖三个面板Escape归还焦点和双向Tab离开，单测另覆盖编辑/IME、陈旧/重复消息、异步启停与effect重挂载。初轮新增用例发现并修复颜色控件错误禁用；一次并行构建导致Metro连接被拒，构建结束后独立启动服务复跑3项通过。原HID矩阵/观察器和既有UI断言未修改；旧focus实现单测随已证伪路径移除，替换为新桥契约检查，不把测试数量变化包装成原生进展。
+
+### HAM-175 Mac `c2f8700`（2026-11-06）：14项行为达成，4项行为失败，正式0/18
+
+Mac 实际重建 `c2f87007aebb0ef1ffc36b67ffaaad1b62b23b14`，Swift编译0 errors，构建/安装哈希一致。环境为iPhone17 Pro / **iOS26.5模拟器、idb脚本HID**，不是实体键盘或真机。完全未附加LLDB的18项中，14项满足关闭/退出条件但因isTrusted=false仍失败；默认/PencilKit设置Escape与Tab共4项另有行为失败。36次矩阵HID对应30个合成keydown/原生命令，无重复。原矩阵判定仍为0/18，没有调整可信度门槛。
+
+设置Escape前SELECT的程序化focus打开UIKit选项菜单，键没有到DOM；Tab首键由桥送达，focus到颜色输入，约3ms后颜色选择器使焦点变BODY，面板仍在、后续两键没有回调。其他面板Shift+Tab聚焦自由取色也会打开原生色板，这个副作用随原证据保留，不包装为完整功能通过。
+
+快速菜单→文字的a/Tab/Escape各只有一个可信事件且未走桥；英文/IME提交、取消、一次撤销、横滚和PencilKit点击所测通过。之后重进菜单Escape及三个面板1.5秒Tab均无事件/命令；前后台缺发键前快照，不能判通过。单次默认薄探针下，文字Tab/Escape正常、菜单只到UIApplication/WK try，stop/detach后相同；6条presses入口被符号校验拒绝，返回pending/discarded均0。完整依据在附件 `HAM-175-c2f8700-ios-validation.md` / `HAM-175-c2f8700-ios-evidence.zip`。
+
+### HAM-175 本轮修正：组合态生命周期与页面内设置控件
+
+从原始 `dom-events-all.json` 找到重进故障的具体触发：06:11:20.158开始第二次composition，06:11:25.690取消时只收到focusout，没有compositionend。旧桥的全局composing布尔值因此永久为true，禁用了所有后续面板。现在记录composition所属元素，在它失焦或移除后清除；保护仍在编辑的元素，后到的旧compositionend不清除其他编辑器的状态。新增缺失compositionend的回归覆盖重进、重复消息与快速回到文字时的拒绝行为。**没有修改原生responder、扩大命令集合或生成计时重复键**；真实1.5秒按住与自动重复仍待Mac验证。
+
+iOS桥宿主通过 `toolbarInlinePickers` 使用页面内控件：输入模式、压力、线型为有标签的radio组，颜色为#RRGGBB文字字段；所有原选项和任意24位颜色保留，仍调用原控制器，不增加文档历史。只有完整合法颜色提交，无效草稿离焦恢复。自由取色环打开同一设置面板，Tab聚焦不会弹系统色板。设置初始focus取已选radio，保证非默认模式也在实际Tab顺序里。Web/Android默认继续使用select/color。颜色字段由WebKit真实编辑路径处理Tab/Escape，离开后恢复非编辑桥；需要Mac确认软键盘布局和可信编辑事件。
+
+新增只读 `window.__paintingToolbarKeyboard.snapshot()` 提供请求scope、已返回的Expo配置scope、composition元素连接状态与activeTag；不调用focus、不发布状态，也不改原观察器。若新head仍失效，用它区分DOM禁用与原生后续边界，勿再次盲改responder。
+
+Mac按更新的 `ios-keyboard-trace.md` 重建/安装新head，先无LLDB跑原18项并复测“未选词IME取消→重进Escape→三个面板按住Tab”；保留快速菜单→文字首键和文字/IME/PencilKit回归，记录设置radio→颜色文字→range的逐步焦点、软键盘与事件可信度。原可信度门槛未变，是否接受桥的isTrusted=false由用户决定，不修改spec；4.2/4.3仍未勾。HAM-175保持blocked、PR #46保持Draft；本轮Swift补丁/探针未改，本机无xcrun/Apple LLDB，新候选没有原生运行结论。
+
+本轮本机检查：Jest101套件/1332项、responder9项、配置3项通过；typecheck、库/Web build通过；lint 0 errors/原有32 warnings。原四份Chromium UI 42项及既有桥契约3项共45项通过（独立5296端口、2 workers）；测试/原HID观察器未修改。新iOS页面内控件由真实Toolbar的Jest集成用例覆盖：初始/非默认radio焦点、控制器选项与颜色更新、无效颜色草稿、Escape、Tab移入文字交接和Shift+Tab离开；Chromium旧入口没有启用iOS能力标志，不能据这45项推导新控件的iOS效果。格式/diff检查通过；未执行新的Swift或原生HID验收。

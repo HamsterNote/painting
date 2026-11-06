@@ -13,7 +13,15 @@ type NativeToolbarKey = {
 
 declare global {
   interface Window {
-    __paintingToolbarKeyboard?: { receive: (key: NativeToolbarKey) => boolean };
+    __paintingToolbarKeyboard?: {
+      receive: (key: NativeToolbarKey) => boolean;
+      snapshot: () => {
+        scope: string;
+        acknowledgedScope: string;
+        composingConnected: boolean;
+        activeTag: string | null;
+      };
+    };
   }
 }
 
@@ -25,13 +33,17 @@ export function installNativeToolbarKeyboard(
   const view = doc.defaultView!;
   let panel: Element | null | undefined;
   let scope = '';
+  let acknowledgedScope = '';
   let sequence = 0;
-  let composing = false;
+  let composing: Element | null = null;
   let disposed = false;
   // Serialize the async Expo action so an old enable cannot overtake a disable.
   const publish = (value: string) => {
     const update = (nativeUpdates.get(doc) ?? Promise.resolve())
-      .then(() => setNativeScope(value))
+      .then(async () => {
+        await setNativeScope(value);
+        acknowledgedScope = value;
+      })
       .catch((error: unknown) => {
         console.warn(
           'Unable to configure iOS toolbar keyboard commands; rebuild the client.',
@@ -42,6 +54,9 @@ export function installNativeToolbarKeyboard(
   };
   const currentPanel = () => {
     const target = doc.activeElement;
+    // WebKit may remove a cancelled IME editor without compositionend. A
+    // composition belongs to that editor, never to the whole document forever.
+    if (composing && (!composing.isConnected || !composing.contains(target))) composing = null;
     if (
       disposed ||
       composing ||
@@ -73,6 +88,13 @@ export function installNativeToolbarKeyboard(
     publish(scope);
   };
   const bridge = {
+    // Read-only diagnostics for failed transitions; never repairs state on read.
+    snapshot: () => ({
+      scope,
+      acknowledgedScope,
+      composingConnected: Boolean(composing?.isConnected),
+      activeTag: doc.activeElement?.tagName ?? null,
+    }),
     receive(message: NativeToolbarKey) {
       sync(); // Recheck live focus before consuming an async native callback.
       if (
@@ -112,12 +134,12 @@ export function installNativeToolbarKeyboard(
   };
   view.__paintingToolbarKeyboard = bridge;
   const focusOut = () => queueMicrotask(sync);
-  const compositionStart = () => {
-    composing = true;
+  const compositionStart = (event: CompositionEvent) => {
+    composing = event.target instanceof Element ? event.target : null;
     sync();
   };
-  const compositionEnd = () => {
-    composing = false;
+  const compositionEnd = (event: CompositionEvent) => {
+    if (event.target === composing) composing = null;
     sync();
   };
   // No per-point pointer listeners, and no DOM mutation during input sampling.

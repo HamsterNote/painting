@@ -100,6 +100,41 @@ test('composition and detached panels reject callbacks even before the async dis
   expect(receive(renewed, 2)).toBe(false);
 });
 
+test('cancelling an IME editor without compositionend does not disable every later panel', async () => {
+  const editor = document.querySelector('textarea')!;
+  editor.focus();
+  editor.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+  editor.remove(); // Observed WebKit cancellation: no compositionend on document.
+  button().focus();
+  await flush();
+  const scope = currentScope();
+  expect(scope).not.toBe('');
+  expect(window.__paintingToolbarKeyboard!.snapshot()).toMatchObject({
+    scope,
+    acknowledgedScope: scope,
+    composingConnected: false,
+  });
+  expect(receive(scope)).toBe(true);
+  // Repeated native deliveries must stay enabled while focus remains in-panel.
+  button().addEventListener('keydown', (event) => event.preventDefault());
+  for (let sequence = 2; sequence < 8; sequence++)
+    expect(receive(scope, sequence, 'Tab')).toBe(true);
+});
+
+test('leaving a composition owner clears its guard while keeping text-first handoff disabled', async () => {
+  const editor = document.querySelector('textarea')!;
+  editor.focus();
+  editor.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+  button().focus();
+  await flush();
+  const scope = currentScope();
+  expect(receive(scope)).toBe(true);
+  editor.focus(); // A rapid return to typing must still reject queued menu keys.
+  expect(receive(scope, 2)).toBe(false);
+  await flush();
+  expect(currentScope()).toBe('');
+});
+
 test('serializes native enables/disables and cleans up after an in-flight enable', async () => {
   await flush();
   setScope.mockClear();

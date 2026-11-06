@@ -104,7 +104,12 @@ export function ToolbarPanel({
     view.visualViewport?.addEventListener('scroll', place);
     if (menu)
       element.querySelector<HTMLElement>('[role="menuitemradio"], [role="menuitem"]')?.focus();
-    else element.querySelector<HTMLElement>('input,select,button')?.focus();
+    else
+      element
+        .querySelector<HTMLElement>(
+          'input:not([type="radio"]),input[type="radio"]:checked,select,button'
+        )
+        ?.focus();
     return () => {
       view.clearTimeout(tabExit);
       observer?.disconnect();

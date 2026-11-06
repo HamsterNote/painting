@@ -2,9 +2,17 @@ import type { LayeredDrawingSurfaceProps } from './DrawingSurface';
 import { LayeredDrawingSurface } from './DrawingSurface';
 import { Toolbar } from './Toolbar';
 
-export type LayeredPaintingBoardProps = LayeredDrawingSurfaceProps & { toolbar?: boolean };
+export type LayeredPaintingBoardProps = LayeredDrawingSurfaceProps & {
+  toolbar?: boolean;
+  /** Keep keyboard focus in the page on hosts that open native pickers on focus. */
+  toolbarInlinePickers?: boolean;
+};
 
-export function LayeredPaintingBoard({ toolbar = true, ...props }: LayeredPaintingBoardProps) {
+export function LayeredPaintingBoard({
+  toolbar = true,
+  toolbarInlinePickers = false,
+  ...props
+}: LayeredPaintingBoardProps) {
   return (
     <div
       data-painting-board="true"
@@ -20,7 +28,13 @@ export function LayeredPaintingBoard({ toolbar = true, ...props }: LayeredPainti
       }}
     >
       <LayeredDrawingSurface {...props} />
-      {toolbar ? <Toolbar controller={props.controller} placement="floating" /> : null}
+      {toolbar ? (
+        <Toolbar
+          controller={props.controller}
+          placement="floating"
+          inlinePickers={toolbarInlinePickers}
+        />
+      ) : null}
     </div>
   );
 }

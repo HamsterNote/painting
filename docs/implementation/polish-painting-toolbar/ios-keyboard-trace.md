@@ -9,6 +9,19 @@ PR #46 保持 Draft，HAM-175 保持 blocked，4.2 / 4.3 不勾选。本轮选�
 - `e1b939a`：hasFocus 前后都是 true；工具/缩放 `_tryToHandlePressesEvent:` false，设置 Escape began true / ended false；delegate / WK entry / proxy send 无命中。探针开启和 detach 后两套18项均失败。文字态 inputDelegate / asyncInputDelegate 为 `_UIKeyboardStateManager`、keyboard-required=true；菜单态 delegate=nil、keyboard-required=false。`window.focus()` 也被证伪。
 - 先试验了页面 focus sink：Chromium 147 的透明裁剪 textarea / contenteditable 加 `aria-hidden=true`、`tabindex=-1`，确实收到可信 keydown，但 CDP AX 树仍包含 focused/editable 节点，`ignored=false`。inert / display:none / visibility:hidden 排除 AX 后又不能聚焦。见 [原始结果](focus-sink-chromium.json)，复现命令 `node scripts/ios/probe_focus_sink.mjs`。**证伪的是这些 sink 在 Chromium 下满足无障碍约束的能力，不是宣称做过 iOS sink 路由实验。** 不将一个辅助技术仍能看到的隐形编辑器放入产品。
 
+## c2f8700 回归后：本轮具体修正
+
+Mac 已重建 `c2f8700`，14项关闭/退出行为达成但因isTrusted=false仍判失败；设置Escape/Tab在默认和PencilKit下的4项另有行为失败。无重复键，快速菜单→文字a/Tab/Escape首键均可信且未走桥。本轮不修改可信度判定或spec，也不扩展原生命令集合。
+
+两处故障有不同原因：
+
+- 原始DOM日志在06:11:20.158开始第二次组合输入，06:11:25.690取消时只有focusout、没有compositionend。桥保存的文档级composing=true永久禁用了后续面板；从此重进Escape与1.5秒Tab的首个命令都没有。改为记录具体composition owner，移除或失焦后清除，仅当前编辑器仍受保护。后到的旧compositionend不会清掉另一个编辑器的状态。**不添加responder刷新或模拟重复定时器。**
+- 设置打开就focus到SELECT，唤起UIKit选项菜单；Tab再focus到color，原生颜色选择器在约3ms内使DOM焦点变BODY。仅iOS桥宿主开启页面内picker模式：输入模式/压力/线型用radio组，颜色用可编辑的#RRGGBB字段，合法完整颜色才提交；无效草稿离焦恢复。自由取色环变成打开同一设置面板的按钮，Tab聚焦它不会打开系统色板。面板初始focus取radio组已选项，不跳到不可Tab的未选项。Web/Android默认保持原控件；能力和控制器更新语义保留。
+
+颜色字段属于真实文字编辑器，桥在它获得focus时关闭，Tab/Escape预期由WebKit投递可信事件，离开到非编辑控件后恢复桥；这一往返须由Mac实测。单测的重复payload只覆盖桥状态，不代表系统长按/自动重复通过。
+
+本轮Swift补丁和LLDB探针未改；Mac先前已成功编译c2f8700，不能据此代替新head的运行验证。若仍有丢键，可通过独立只读evaluate保存 `window.__paintingToolbarKeyboard?.snapshot()`：scope为DOM请求值、acknowledgedScope为Expo action已返回值、composingConnected和activeTag为即时读数。snapshot不修复/发布状态，不改原观察器。两个scope相同只证明配置调用返回，不证明UIKit命令已被查询。
+
 ## 候选的行为与限制
 
 移除已证伪的 requestFocus / window.focus 路径。pnpm 补丁在 DomWKWebView 通过公开 UIKit `UIKeyCommand` 注册 Escape、Tab、Shift+Tab，只在 DOM 面板持有非文字编辑焦点时启用。命令有系统优先级，由 UIKit action 触发一次；不同时监听 raw presses 再复制一次。Android/Web 不安装原生桥。
@@ -25,7 +38,7 @@ DOM 通过 Expo action 提交随机 scope，原生回传 scope、单调 sequence
 2. 使用原 iPhone 17 Pro / iOS26.5 **模拟器**，默认入口、diagnostics关闭。沿用原 `drive.py` / `matrix.py` / `observe.js` / `metrics.js` 与 idb HID 命令，**不改断言或日志过滤、不由测试调用桥、不用 evaluate/dispatchEvent 代替 HID**。公开说明输入为脚本HID，不能写成实体键盘/真机验收。
 3. 完全未附加 LLDB 时先运行原18项：工具/缩放/设置 × Escape/Tab/Shift+Tab × 默认/PencilKit。保存每行 open/result、DOM events、焦点、截图和原 matrix-summary。桥结果应如实为 isTrusted=false；原判定若要求可信而判失败，保留失败，不重写成绿。单独报告功能行为、可信度差异，不能把浏览器桥契约测试算作这18项。
 4. 并行保存 app console 的 `[HAM175 keyboard]` 日志，含原生 UIKeyCommand payload、accepted 和 error。按 scope / sequence / UTC 与同一 HID 操作和原 DOM 事件对应：每次命令至多一个 keydown、不得混入测试注入。日志是原生 action 入口证据，单凭 source 字符串不证明实体硬件来源。
-5. 保留英文、中文IME选词、完成/取消/一次撤销、文字 Tab/Escape、横滚、软键盘布局、PencilKit点击。增加菜单→文字框快速切换后首键、开关/离开重进、同进程前后台首键与长按Tab检查。文字键仍应可信且不经过桥；若有吞键、双键、软键盘误弹，记录失败。
+5. 优先复测两条已定位链路：取消尚未选词的IME草稿（允许没有compositionend）→真实触摸重进工具菜单→Escape；然后三个面板各按住Tab1.5秒。每组发键前保存独立snapshot，scope应重新启用。设置中逐步记录radio→颜色文字字段→不透明度的焦点、软键盘及原DOM可信度，颜色字段必须走WebKit真实编辑路径，不能由脚本调用receive补键；重新进入设置时也测非默认输入模式、画笔/形状两类。保留英文、中文IME选词、完成/取消/一次撤销、文字 Tab/Escape、横滚、软键盘布局、PencilKit点击。增加菜单→文字框快速切换后首键、开关/离开重进、同进程前后台首键与长按Tab检查。文字键仍应可信且不经过桥；若有吞键、双键、软键盘误弹，记录失败。
 
 ## 可选诊断：单键、薄探针、独立日志
 
