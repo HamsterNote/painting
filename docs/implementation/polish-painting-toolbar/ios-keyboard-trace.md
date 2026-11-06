@@ -2,6 +2,57 @@
 
 PR #46 保持 Draft，HAM-175 保持 blocked，4.2 / 4.3 不勾选。本轮选择授权的 **(b) 原生→DOM 转发桥**。这是待 Mac 重建的候选；本机没有 xcrun / Apple LLDB，没有 Swift 编译或原生通过结论。
 
+## 96625b6 回归后：拼音命令选择诊断候选
+
+这版只增加默认关闭的原生路由记录与独立证据检查器，**尚未修复拼音 Escape**。不继续修改已放行的语言门控，不把未定位的命令选择故障写成修复。Mac在96625b6上实际重建通过，原18/32/12/8组和颜色label16/16均行为达成；拼音空闲/组合结束/先选拼音再新建scope仍6次无投递。英文同字段可信Escape正常。详见validation及issue附件。
+
+已核对原始日志：默认拼音空闲在11:58:08.459Z的scope/ack非空，11:58:09.182687Z有`zh-Hans / marked=false / escapeBridge=true`，截至11:58:09.891Z仍零DOM事件。默认组合中在11:58:29.321Z的scope/ack都空、composing=true；真实Escape产生可信compositionend，随后新scope恢复。**DOM在compositionstart主动撤销命令是现有保护，不是组合残留；这条记录不能单独证明Swift marked gate有效。** 不为取证而在组合态保留命令。
+
+`[HAM175 command-route]`是Debug构建的可选JSON日志。只有以`-HAM175KeyboardRouteTrace YES`启动进程才启用，每个WebView最多4096条，下一条明确记overflow。它不调用子响应者的keyCommands、不主动执行target/canPerformAction查询、不发送action、不设置focus；读公开的first responder、next链、输入法及marked状态，因此仍须做开启/关闭对照，不能宣称零扰动。
+
+| stage                                                        | 实际观测边界                                                                                                                              |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| scope                                                        | Expo配置/导航清理后的scope和tabOnly；组合态与DOM snapshot对齐                                                                             |
+| commands                                                     | 此WebView实际返回的Escape/Tab命令及从super得到的同键命令，含对象身份、selector、modifier和priority；空scope直接保留super路径，不记此stage |
+| validate                                                     | 此WebView实际收到的toolbarKey/toolbarTab或颜色cancelOperation校验及原返回值                                                               |
+| target                                                       | 此WebView实际收到的对应target查询与super原返回对象，绝不替换target                                                                        |
+| action-enter                                                 | toolbarKey在任何guard之前的入口；与“JS成功回调才打印”的旧日志区分                                                                         |
+| action-reject-context / action-reject-color / action-forward | action入口后的拒绝点或进入原JS转发路径；最终payload/accepted仍看原keyboard日志                                                            |
+
+每行含owner/firstResponder对象身份、firstResponder的next链及ownerInChain、scope、tabOnly、language、marked（未知为null）、keyWindow、时间和traceSequence。命令记录只留Escape/Tab，不记输入字符。**super.keyCommands仅代表WKWebView继承实现，不是WKContentView/IME全部命令；target缺席也不证明UIKit没查询其他响应者。** 不凭祖先关系就断言该命令能被中文输入法选中。
+
+### Mac执行用例：门控开、命令未执行不能算通过
+
+1. frozen install后真实重建安装，保存源码SHA、Swift构建/安装哈希。先不带LLDB、以`-HAM175KeyboardRouteTrace NO`运行原18/32/12/8/16及快速菜单→文字首键、HEX/英文Escape/IME/PencilKit保留组。新版本未在Linux编译Swift。
+2. 仅重启本任务App并开启诊断，不改原输入、observe、metrics、matrix脚本：
+
+   ```sh
+   xcrun simctl launch --terminate-running-process "$HAM175_SIMULATOR" "$HAM175_BUNDLE_ID" -HAM175KeyboardRouteTrace YES
+   ```
+
+   保存原始`log stream --style ndjson`输出及原actions.log。沿用96625b6附件的`color_routes.py`、`pinyin_fresh_entry.py`与原`state.py`只读snapshot。默认/PencilKit各做拼音合法HEX空闲、真实nihao组合中、实际选词结束、先选拼音再关闭重开新scope、英文同字段对照。真实HID Escape只发一次；不得调用toolbarKey、sendAction或DOM receive来模拟命令执行。组合中需保存发键前scope/ack为空及compositionend后的恢复，而不只保存Swift日志。
+
+3. 每个用例保留`route-…-before-state.json`、`-after-state.json`、`-after.json`（原observation.events）、原生NDJSON和实际HID动作。追加检查命令示例：
+
+   ```sh
+   python3 scripts/ios/check_color_escape.py --evidence "$HAM175_EVIDENCE" --prefix route-default-pinyin-idle --native "$HAM175_EVIDENCE/native-keyboard.jsonl" --expect pinyin
+   ```
+
+   空闲/结束后/新scope使用`--expect pinyin`，组合取消用`--expect composing`，英文用`--expect english`。脚本只读文件；失败退出1，数据格式错误非零。门控开但零action/DOM保持失败，commands/validate/target命中不算投递；孤立false事件没有匹配payload也失败，重复事件失败。即使行为达成，结果也明确是`bridged-behavior-only`并保留isTrusted=false，**不修改原矩阵正式判定**。完整原始记录仍要人工对齐真实HID次数，检查器不证明输入来源。
+
+   也可在**真实原生切到拼音并聚焦颜色字段后**执行新增单键回归入口；它复用原harness的只读snapshot/observer与idb，不修改任何原脚本，不自行聚焦、切语言或调用桥。默认/PencilKit、空闲/组合结束/新scope各用独立prefix：
+
+   ```sh
+   python3 scripts/ios/probe_color_escape_hid.py --harness "$HAM175_EVIDENCE" --udid "$HAM175_SIMULATOR" --prefix command-default-pinyin-idle --native "$HAM175_EVIDENCE/native-keyboard.jsonl" --expect pinyin
+   ```
+
+   它校验DOM准备状态后只发一次真实HID Escape，保存原格式before/after和检查结果；已有prefix拒绝覆盖。非macOS拒绝运行。语言/marked最终必须由对应原生日志证明，英文或缺少日志不能通过pinyin断言。若日志尚未完整落盘导致解析错误，只重跑离线check，勿再次发键覆盖现场。
+
+4. 按scope、命令id和时间分段读数：返回Escape且owner在next链，但没有validate/target/action，只能说明尚未观测到此响应者的选择/调用；validate=false或target不符则看对应状态；action-enter存在则看guard和最终JS结果。不能从旧color-route或一条commands日志跳到“IME吞action”的结论。必须有scope启动记录、连续traceSequence、无overflow，才可讨论新日志中的缺席；日志溢出则重启短用例。
+5. 若仍需确认系统选择了谁，仅在上述无LLDB复现后使用已有app侧`trace_keyboard.py`采UIApplication action/keyboard manager/delegate与寄存器调用栈，与相同时间的command-route对齐。无需等待WebContent附加；不在断点回调执行ObjC getter。随后关闭诊断重新启动并重做拼音失败及英文对照，单独保存结果，防止探针扰动文字Escape。
+
+仓库`fixtures/color-escape-96625b6.json`是上述**真实Mac失败/组合取消记录的最小投影**，附原ZIP哈希，不含输入文字。8项Python离线回归防止将“中文门控放行却没命令”、英文代偿、仅查询成功或孤立合成事件误判为成功。它不是UIKit/中文IME执行测试；Linux没有此执行能力。对完整旧包运行检查，6个拼音失败保持失败，两种入口的组合取消和英文对照分别成立。下一版是否修复仍以Mac真实HID为准。
+
 ## 选择依据
 
 - `b50496f`：WKContentView 本已是 first responder，18项失败；补 `becomeFirstResponder` 无效。

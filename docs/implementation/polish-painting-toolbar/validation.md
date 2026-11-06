@@ -377,3 +377,21 @@ iOS宿主改用原生will/did frame通知和measureInWindow的同一坐标系限
 本轮Linux：Jest103套件/1358项、responder9项、配置3项通过；Chromium50项通过（独立5296端口、2 workers）。最终宿主generation清理调整后，iOS宿主3项定向复测通过。typecheck、库/Web build、frozen install、代码格式/diff检查通过。新增可选`trace_toolbar_handoff.js`被动记录低频事件及下一帧/resize几何，不读取输入值；浏览器smoke确认不妨碍checked默认动作、包含矩形、无输入文本、stop后不再记录。此脚本仅用于原矩阵之后的诊断，原HID输入与observe/matrix/metrics均未修改。
 
 最终lint为0 errors/原有32 warnings，新增宿主的cleanup告警已修正并定向验证，最终playground类型检查通过。
+
+### HAM-175 Mac 96625b6：只剩拼音颜色Escape投递，正式判定仍未通过
+
+Mac真实重建安装96625b64569dd53b753fa1a1ea8932ac9dc5b520，Swift编译482 warnings / 0 errors，主程序/debug dylib安装哈希匹配。iPhone17 Pro / **iOS26.5模拟器、idb脚本HID/触摸**，全程无LLDB；不是实体键盘、真机或Apple Pencil验收。原18项行为18/18、触摸32/32、range12/12、真正双向长按1.5秒8/8且松开无补发；颜色→radio input/固定点位label16/16，原失败点位恢复实际label默认改选。44次矩阵HID对应44原生命令/DOM事件，全部isTrusted=false、无双发，原正式判定仍 **0/18**。
+
+拼音空闲/组合结束后4次，加先选拼音再新scope2次，均zh-Hans、marked=false、escapeBridge=true，scope/ack非空但零命令投递/DOM keydown，面板不关闭；这是行为失败，不能归入仅可信度失败。英文同字段和HEX可信Escape正常。组合中DOM已经主动清空scope/ack，Escape产生可信compositionend并恢复新scope，不能单独把“没桥关闭”归功于Swift门控。原始报告及ZIP见issue附件`HAM-175-96625b6-ios-validation.md`、`HAM-175-96625b6-ios-evidence.zip`（SHA256 7a61d0c65d9f11df0af0005d0818f256598acbb61f7fd309a3a722dca1b287e5）。
+
+PencilKit颜色往返的稳定遮挡未复现：键盘显示时DOM/canvas280高，工具栏底部在键盘上24点；隐藏后622。宿主中间有约15/18ms未限制maxHeight状态，DOM没有记到中间全高；不能据稳定截图保证逐帧没有遮挡。快速菜单→文字首键、HEX、英文/真实拼音提交取消撤销、未选词取消重进、PencilKit点击横滚所测保留。
+
+### HAM-175 新候选：命令选择分段取证，尚未修复拼音Escape
+
+当前color-route是共享门控函数的状态日志，不能区分keyCommands查询、canPerformAction、target选择与真正action入口。本候选只增加默认关闭的Debug `HAM175KeyboardRouteTrace`，记录实际返回命令/对象身份/priority、公开responder next链、校验返回、super原target、guard前action入口及拒绝/转发边界。所有原返回值、命令集、中文门控、DOM组合scope和触摸交接保持原逻辑；不做无证据的responder替换，不加入raw presses双发路径。日志有上限与显式overflow，诊断开启/关闭须独立复测。
+
+新增`check_color_escape.py`读取原Mac观察器产物与native NDJSON，另行核对拼音门控、实际投递、关闭归还、重复事件及组合scope；不改原输入/观察/矩阵断言。真实96625b6记录裁剪为离线回归fixture：zh-Hans门控已开但没有action/DOM仍判失败，英文不能代偿。完整原包复核6次拼音失败、2次组合取消和2次英文对照与报告一致。离线测试是证据判定器验证，不是中文IME或Swift执行。
+
+新补丁/lockfile需Mac真实重建；本机无xcrun，未编译Swift、未获得新原生结果。Mac步骤见`ios-keyboard-trace.md`：先诊断关闭跑保留组，再诊断开启按默认/PencilKit重复拼音空闲/组合/结束/新scope及英文，保存scope、commands/validate/target/action、原DOM与真实HID时序，再关闭诊断对照。HAM-175保持blocked、PR #46保持Draft；spec及4.2/4.3不改，可信度验收口径仍待用户决定。
+
+Linux本轮验证：Python26项（新增证据判定回归8项）、桥接/宿主Jest4套件36项、依赖契约3项、frozen install、新增文档片段/fixture格式与diff检查通过。新增Mac单键入口`probe_color_escape_hid.py`复用原harness，只发一次idb HID Escape，校验实际拼音日志而非英文代偿；本机只能验证参数入口及拒绝非macOS，未执行此原生用例。本轮未改DOM/宿主交互代码，未重复声称浏览器或原生保留组通过。
