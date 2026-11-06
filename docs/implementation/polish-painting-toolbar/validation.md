@@ -245,3 +245,25 @@ Mac 实际重建安装 `bb06548e85779ab2f26186290d6c9b2f0fcac714`，主程序 / 
 Mac步骤见更新后的 [诊断说明](ios-keyboard-trace.md)：**移除WebContent附加门槛**，以app侧文字阳性/工具菜单对照、返回值及页面focus快照推进，随后执行原18项矩阵并在无探针状态复核。WebContent限制不再作为等待条件。`--details`兼容性和新候选的原生效果仍需Mac实际执行；本机无xcrun/Apple LLDB，未编译Swift，不声称原生通过。PR #46保持Draft，HAM-175保持blocked，4.2 / 4.3均未勾选。
 
 本轮Linux检查：Python探针逻辑14项通过（含BOOL返回寄存器、线程/栈匹配、递归调用、清理临时断点与getter表达式约束）；Jest101套件/1325项、responder9项、原生配置4项通过。新增页面focus单测覆盖同步请求、当前控件保持、编辑/隐藏/已有focus时跳过、重入和卸载；旧单测仅为jsdom缺失的window.focus提供mock，未放宽断言。typecheck、库/Web build通过，lint 0 errors/原有32 warnings。四份原有Chromium spec共42项通过（独立5296端口、2 workers、1.1分钟）；未修改UI断言或HID验收脚本。Python语法、变更文件格式与diff检查通过，未执行新的原生/Swift验收。
+
+### HAM-175 Mac `e1b939a` 结果（2026-11-06）：页面 focus 候选不通过
+
+实际 head `e1b939a838d0b4928be99aa7924c6d88615819ab`，iPhone 17 Pro / **iOS26.5模拟器，idb脚本HID**。Mac 已真实重建安装并核对构建身份。hasFocus 前后均 true，工具/缩放 `_tryToHandlePressesEvent:` 返回false；设置Escape began true/ended false，但同样没有delegate / WK entry / proxy send。菜单态两个input delegate为nil、keyboard-required=false，文字态为 `_UIKeyboardStateManager` / true。补 `window.focus()` 无效，不再继续该路线。
+
+探针下原18项全部失败，stop/detach后重新跑18项也全部失败。文字Escape在探针下只有隐藏键盘，detach后可信DOM Escape正常取消，说明探针存在扰动；不得把探针下文字回退当成候选产品回退。英文/中文IME提交、取消、一次撤销、横滚、PencilKit点击的本轮所测操作通过，仍不代表实体键盘/真机/Apple Pencil验收。原始证据见本单附件 `HAM-175-e1b939a-diagnostics.md` / `HAM-175-e1b939a-ios-diagnostics.zip`。
+
+本轮检查还发现旧探针的错误符号归属：`page.active/page.focused` 部分断点实际落在 `updateActivityState/setCursor/updateBackingStoreDiscardableState` 等外层函数。旧日志的110/121/51条未匹配返回必须保留为观测缺口，不从这些错误标签推导页面focus。页面hasFocus结论来自独立DOM快照。
+
+### HAM-175 新候选：原生 UIKeyCommand 桥，尚待 Mac 重建
+
+按优先顺序先验证页面focus sink。Chromium147中，透明裁剪textarea / contenteditable设 `aria-hidden=true` 和 `tabindex=-1`，聚焦后虽收到可信keydown，CDP辅助功能树仍有focused/editable节点（ignored=false）；inert / display:none / visibility:hidden可以隐藏节点，但无法持有焦点。脚本 `scripts/ios/probe_focus_sink.mjs` 与 [原始JSON](focus-sink-chromium.json) 已保存。这证伪所试sink满足“不可访问”的要求，**未声称在iOS上验证过sink能否转发**。
+
+因此选择授权的(b)，移除已证伪的requestFocus/window.focus路径：仅iOS、仅打开面板的非文字编辑焦点，通过DomWKWebView公开UIKeyCommand响应Escape/Tab/Shift+Tab，再回传scope/sequence/key到DOM。事件如实为 **isTrusted=false**；不修改观察脚本、不将浏览器注入冒充HID。Escape复用现有关闭/归还焦点逻辑；Tab未被preventDefault时使用tabbable遍历实际控件，保留原先Tab离开关闭补充。文字/IME不启用桥；陈旧/重复回调拒绝，启停串行化，卸载/导航/内容进程退出清理。默认入口、PencilKit开关、Android/Web均保留原有宿主范围。
+
+探针增加物理函数名/入口PC/非内联检查，默认关闭高频getter入口，只跟踪WK try返回；栈已退出/复用或5秒超时的临时断点会清理，但记录为return-unobserved并累计discardedReturns，不当成成功匹配。`--details`不再在按键回调内执行getter，改用显式暂停的 `ham175-focus` 快照，以降低文字Escape扰动。新的匹配与扰动效果仍须Mac实测。
+
+Mac按 [操作说明](ios-keyboard-trace.md) 重建新head：**先完全不附加LLDB，执行原18项矩阵**，保存原DOM日志/矩阵结果和 `[HAM175 keyboard]` 原生action日志，核对每次真实HID至多一条keydown、焦点与关闭行为。单独标注isTrusted差异；若原判定因可信度失败，保留原始失败，不能改成绿。再检查快速菜单→文字首键、长按Tab、select/颜色控件、同进程前后台与离开重进，保留文字/IME/一次撤销和PencilKit最小回归。需要定位时另开薄探针单键日志，不等待WebContent附加。
+
+本机没有xcrun / Apple LLDB，未编译Swift，未验证新的原生链路。此处交付的是候选，原生矩阵最新有效结果仍为e1b939a两轮18项全失败。HAM-175保持blocked、PR #46保持Draft；4.2 / 4.3保持未勾选，终点仍是原生矩阵通过。
+
+本轮Linux验证：Jest100套件/1326项、responder9项、原生配置3项、Python探针18项通过；typecheck、库/Web build、frozen install通过，lint 0 errors/原有32 warnings。原有四份Chromium spec的42项通过；新增独立桥契约3项在最终源码上通过（真实页面组件、模拟原生传输，明确验证isTrusted=false，不算HID验收）。桥契约覆盖三个面板Escape归还焦点和双向Tab离开，单测另覆盖编辑/IME、陈旧/重复消息、异步启停与effect重挂载。初轮新增用例发现并修复颜色控件错误禁用；一次并行构建导致Metro连接被拒，构建结束后独立启动服务复跑3项通过。原HID矩阵/观察器和既有UI断言未修改；旧focus实现单测随已证伪路径移除，替换为新桥契约检查，不把测试数量变化包装成原生进展。

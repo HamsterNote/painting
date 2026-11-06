@@ -17,14 +17,14 @@ const DomComponent = LayeredEditorDom as unknown as ComponentType<
 
 export default function NativeLayeredEditorDom(props: LayeredEditorDomProps) {
   const webView = useRef<DomWebViewRef>(null);
-  const requestKeyboardFocus = useCallback(async () => {
-    await webView.current?.requestFocus();
+  const setKeyboardScope = useCallback(async (scope: string) => {
+    await webView.current?.setToolbarKeyboardScope(scope);
   }, []);
   return (
     <DomComponent
       {...props}
       ref={webView}
-      onRequestKeyboardFocus={Platform.OS === 'ios' ? requestKeyboardFocus : undefined}
+      onToolbarKeyboardScope={Platform.OS === 'ios' ? setKeyboardScope : undefined}
     />
   );
 }

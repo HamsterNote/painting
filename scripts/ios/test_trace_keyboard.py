@@ -70,6 +70,7 @@ class KeyboardTraceTests(unittest.TestCase):
         target, discovery, location, start = Mock(), Mock(), Mock(), Mock()
         address = location.GetAddress.return_value
         address.GetFunction.return_value.IsValid.return_value = True
+        address.GetFunction.return_value.GetName.return_value = "pattern"
         address.GetFunction.return_value.GetStartAddress.return_value = start
         start.GetLoadAddress.return_value = 4096
         discovery.__iter__ = Mock(return_value=iter([location, location]))
@@ -80,7 +81,7 @@ class KeyboardTraceTests(unittest.TestCase):
             rows = trace.install(target, "entry-test")
         target.BreakpointCreateBySBAddress.assert_called_once_with(start)
         self.assertEqual(rows[0]["coverage"], "resolved")
-        self.assertEqual(trace._session["owned"], {10: "probe"})
+        self.assertEqual(trace._session["owned"], {10: {"probe": "probe", "pattern": "pattern", "pc": 4096}})
 
     def test_cleanup_deletes_only_owned_breakpoints(self):
         target, log = Mock(), io.StringIO()
@@ -91,28 +92,30 @@ class KeyboardTraceTests(unittest.TestCase):
         self.assertTrue(log.closed)
         self.assertIsNone(trace._session)
 
-    def test_expression_error_is_recorded_without_claiming_missing_event(self):
+    def test_details_does_not_run_getters_inside_keyboard_delivery(self):
         target, log = Mock(), io.StringIO()
-        trace._session = {"target": target, "owned": {1: "webkit.entry"}, "file": log,
+        trace._session = {"target": target, "owned": {1: {"probe": "webkit.entry", "pattern": "WKContentView", "pc": 4096}}, "file": log,
                           "details": True, "triple": "arm64-apple-ios", "errors": 0,
                           "sequence": 0, "pid": 123, "role": "app"}
         frame, location = Mock(), Mock()
         location.GetBreakpoint.return_value.GetID.return_value = 1
         frame.GetFunctionName.return_value = "-[WKContentView handleKeyWebEvent:]"
         frame.GetPC.return_value = 4096
+        frame.IsInlined.return_value = False
         thread = Mock()
         thread.GetThreadID.return_value = 12
         thread.GetProcess.return_value.GetProcessID.return_value = 123
         thread.__iter__ = Mock(return_value=iter([]))
         frame.GetThread.return_value = thread
         with patch.object(trace, "arguments", return_value=[1, 2, 3, 4, 5, 6]), \
-                patch.object(trace, "details", side_effect=ValueError("getter unavailable")):
+                patch.object(trace, "evaluate_json", side_effect=AssertionError("getter during key")) as evaluate:
             self.assertFalse(trace.observe(frame, location, {}))
         entry = json.loads(log.getvalue())
         self.assertEqual(entry["kind"], "hit")
-        self.assertEqual(entry["error"], "getter unavailable")
+        evaluate.assert_not_called()
+        self.assertNotIn("error", entry)
         self.assertEqual(entry["pid"], 123)
-        self.assertEqual(trace._session["errors"], 1)
+        self.assertEqual(trace._session["errors"], 0)
         self.assertNotIn("details", entry)
 
     def test_restarted_process_cannot_silently_reuse_old_identity(self):
@@ -208,6 +211,61 @@ class KeyboardTraceTests(unittest.TestCase):
         trace._session["returns"] = {20: {"probe": "webkit.presses"}}
         trace.cleanup()
         self.assertEqual([c.args[0] for c in target.BreakpointDelete.call_args_list], [1, 20])
+
+
+    def test_inline_discovery_never_moves_a_probe_to_an_unrelated_caller(self):
+        address, target = Mock(), Mock()
+        function = address.GetFunction.return_value
+        function.IsValid.return_value = True
+        for name in ("WebKit::WebPageProxy::updateActivityState()",
+                     "WebKit::PageClientImpl::setCursor()",
+                     "WebKit::WebPageProxy::updateBackingStoreDiscardableState()"):
+            function.GetName.return_value = name
+            start, rejection = trace.physical_entry(address, target, r"^WebKit::PageClientImpl::isViewFocused")
+            self.assertIsNone(start)
+            self.assertEqual(rejection["reason"], "enclosing-function-mismatch")
+        function.GetStartAddress.assert_not_called()
+
+    def test_wrong_entry_hit_is_rejected_before_reading_registers(self):
+        _, log, frame, location = self.return_session()
+        trace._session["owned"][20] = {"probe": "page.active", "pattern": "isViewWindowActive", "pc": 4096}
+        frame.GetFunctionName.return_value = "WebKit::WebPageProxy::updateActivityState()"
+        frame.GetPC.return_value = 4096
+        frame.IsInlined.return_value = False
+        with patch.object(trace, "arguments") as arguments:
+            trace.observe(frame, location, {})
+        arguments.assert_not_called()
+        self.assertEqual(json.loads(log.getvalue())["kind"], "entry-rejected")
+        self.assertEqual(trace._session["returns"], {})
+
+    def test_stale_and_unwound_returns_are_logged_as_unobserved_and_removed(self):
+        target, log, frame, _ = self.return_session()
+        trace._session["returns"][20] = {"probe": "webkit.presses", "callSequence": 1,
+            "thread": 12, "expectedSP": 4096, "armedAt": 0}
+        with patch.object(trace.time, "monotonic", return_value=10):
+            trace.expire_returns()
+        self.assertEqual(json.loads(log.getvalue())["reason"], "expired")
+        self.assertEqual(trace._session["discardedReturns"], 1)
+        self.assertEqual(trace._session["returns"], {})
+        target.BreakpointDelete.assert_called_once_with(20)
+        log.seek(0)
+        log.truncate()
+        trace._session["returns"][21] = {"probe": "webkit.presses", "callSequence": 2,
+            "thread": 12, "expectedSP": 4096}
+        with patch.object(trace, "read_register", return_value=4104):
+            trace.expire_returns(frame)
+        self.assertEqual(json.loads(log.getvalue())["reason"], "stack-unwound")
+        self.assertEqual(trace._session["returns"], {})
+
+    def test_reused_stack_slot_does_not_accumulate_return_breakpoints(self):
+        target, log, frame, _ = self.return_session()
+        trace._session["returns"][19] = {"probe": "webkit.presses", "callSequence": 1,
+            "thread": 12, "expectedSP": 4096}
+        with patch.object(trace, "read_register", return_value=4096):
+            trace.arm_return(frame, "webkit.presses", 2, 99)
+        self.assertEqual(list(trace._session["returns"]), [20])
+        self.assertEqual(json.loads(log.getvalue())["reason"], "stack-slot-reused")
+        target.BreakpointDelete.assert_called_once_with(19)
 
 
 if __name__ == "__main__":

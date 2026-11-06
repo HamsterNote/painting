@@ -1,0 +1,198 @@
+{
+  "browser": "147.0.7727.15",
+  "results": [
+    {
+      "variant": "textarea",
+      "active": "sink",
+      "ax": {
+        "ignored": false,
+        "role": {
+          "type": "role",
+          "value": "textbox"
+        },
+        "properties": [
+          {
+            "name": "invalid",
+            "value": {
+              "type": "token",
+              "value": "false"
+            }
+          },
+          {
+            "name": "focusable",
+            "value": {
+              "type": "booleanOrUndefined",
+              "value": true
+            }
+          },
+          {
+            "name": "focused",
+            "value": {
+              "type": "booleanOrUndefined",
+              "value": true
+            }
+          },
+          {
+            "name": "editable",
+            "value": {
+              "type": "token",
+              "value": "plaintext"
+            }
+          },
+          {
+            "name": "settable",
+            "value": {
+              "type": "booleanOrUndefined",
+              "value": true
+            }
+          },
+          {
+            "name": "multiline",
+            "value": {
+              "type": "boolean",
+              "value": true
+            }
+          },
+          {
+            "name": "readonly",
+            "value": {
+              "type": "boolean",
+              "value": false
+            }
+          },
+          {
+            "name": "required",
+            "value": {
+              "type": "boolean",
+              "value": false
+            }
+          }
+        ]
+      },
+      "after": {
+        "active": "after",
+        "keys": [
+          {
+            "key": "Escape",
+            "target": "sink",
+            "isTrusted": true
+          },
+          {
+            "key": "Tab",
+            "target": "sink",
+            "isTrusted": true
+          }
+        ]
+      }
+    },
+    {
+      "variant": "contenteditable",
+      "active": "sink",
+      "ax": {
+        "ignored": false,
+        "role": {
+          "type": "role",
+          "value": "generic"
+        },
+        "properties": [
+          {
+            "name": "focusable",
+            "value": {
+              "type": "booleanOrUndefined",
+              "value": true
+            }
+          },
+          {
+            "name": "focused",
+            "value": {
+              "type": "booleanOrUndefined",
+              "value": true
+            }
+          },
+          {
+            "name": "editable",
+            "value": {
+              "type": "token",
+              "value": "richtext"
+            }
+          }
+        ]
+      },
+      "after": {
+        "active": "after",
+        "keys": [
+          {
+            "key": "Escape",
+            "target": "sink",
+            "isTrusted": true
+          },
+          {
+            "key": "Tab",
+            "target": "sink",
+            "isTrusted": true
+          }
+        ]
+      }
+    },
+    {
+      "variant": "inert",
+      "active": "",
+      "ax": null,
+      "after": {
+        "active": "before",
+        "keys": [
+          {
+            "key": "Escape",
+            "target": "",
+            "isTrusted": true
+          },
+          {
+            "key": "Tab",
+            "target": "",
+            "isTrusted": true
+          }
+        ]
+      }
+    },
+    {
+      "variant": "display-none",
+      "active": "",
+      "ax": null,
+      "after": {
+        "active": "before",
+        "keys": [
+          {
+            "key": "Escape",
+            "target": "",
+            "isTrusted": true
+          },
+          {
+            "key": "Tab",
+            "target": "",
+            "isTrusted": true
+          }
+        ]
+      }
+    },
+    {
+      "variant": "visibility-hidden",
+      "active": "",
+      "ax": null,
+      "after": {
+        "active": "before",
+        "keys": [
+          {
+            "key": "Escape",
+            "target": "",
+            "isTrusted": true
+          },
+          {
+            "key": "Tab",
+            "target": "",
+            "isTrusted": true
+          }
+        ]
+      }
+    }
+  ]
+}

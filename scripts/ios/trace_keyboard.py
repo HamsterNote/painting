@@ -1,13 +1,14 @@
 """Opt-in LLDB probes for HAM-175. See docs/implementation/polish-painting-toolbar/ios-keyboard-trace.md.
 
 Importing registers commands only. No swizzling, event injection, focus changes,
-or replacement return values. --details uses read-only ObjC getters; without it
-callbacks only read registers/stacks. This module runs in Xcode's LLDB Python.
+or replacement return values. Callbacks read registers/stacks only. --details
+permits an explicit ham175-focus snapshot; getters never run during key delivery. This module runs in Xcode's LLDB Python.
 """
 
 import argparse
 import datetime
 import json
+import re
 from pathlib import Path
 import shlex
 import time
@@ -53,12 +54,13 @@ PROBES = {
     ],
 }
 
-# All these functions return BOOL/bool. Entry alone does not prove consumption,
-# enqueue success, or focus. Read the real ABI return register at the caller PC.
-BOOL_RETURNS = {"webkit.presses", "webkit.requires", "webkit.keyboard-required",
-                "webkit.async", "webkit.ime", "proxy.enqueue", "page.focused", "page.active"}
-DETAIL_PROBES = {"application.receive", "application.dispatch", "application.action",
-                 "webkit.presses", "webkit.entry", "webkit.completion"}
+# Keep return probes to the one Objective-C BOOL boundary under investigation.
+# Hot getters and optimized C++/inline functions are entry-only, verbose opt-in.
+BOOL_RETURNS = {"webkit.presses"}
+VERBOSE_PROBES = {"responder.commands", "webkit.requires", "webkit.keyboard-required",
+                  "webkit.async", "webkit.ime", "page.focused", "page.active"}
+RETURN_TTL_SECONDS = 5
+MAX_RETURNS = 32
 
 _session = None
 
@@ -235,21 +237,27 @@ def return_abi(triple):
 
 def arm_return(frame, probe, call_id, receiver):
     s = _session
-    if len(s["returns"]) >= 128:
-        raise ValueError("128 pending returns; stop/start trace and inspect unmatched calls")
+    expire_returns(frame)
+    if len(s["returns"]) >= MAX_RETURNS:
+        raise ValueError("32 pending returns; return not observed (see inventory)")
     stack_register, _, pop_bytes = return_abi(s["triple"])
     # The unwinder gives a code address without arm64e pointer authentication bits.
     caller = frame.GetThread().GetFrameAtIndex(1)
     if not caller.IsValid() or caller.GetPC() in (0, lldb.LLDB_INVALID_ADDRESS):
         raise ValueError("Caller PC unavailable; return is unobserved")
     expected_sp = read_register(frame, stack_register) + pop_bytes
+    thread_id = frame.GetThread().GetThreadID()
+    for identifier, pending in list(s["returns"].items()):
+        if pending["thread"] == thread_id and pending["expectedSP"] == expected_sp:
+            discard_return(identifier, "stack-slot-reused")
     bp = s["target"].BreakpointCreateByAddress(caller.GetPC())
     if not bp.IsValid() or bp.GetNumResolvedLocations() == 0:
         s["target"].BreakpointDelete(bp.GetID())
         raise ValueError("Return breakpoint did not resolve")
     s["returns"][bp.GetID()] = {"probe": probe, "callSequence": call_id,
                                 "expectedSP": expected_sp, "receiver": receiver,
-                                "thread": frame.GetThread().GetThreadID()}
+                                "thread": thread_id, "returnPC": caller.GetPC(),
+                                "armedAt": time.monotonic()}
     bp.SetThreadID(frame.GetThread().GetThreadID())
     bp.SetScriptCallbackFunction(__name__ + ".observe_return")
 
@@ -267,13 +275,42 @@ def same_process(frame):
     return False
 
 
-def capture_focus(frame, entry, receiver):
-    # Isolate optional focus getters so they cannot erase event metadata.
+def discard_return(identifier, reason):
+    pending = _session["returns"].pop(identifier)
+    _session["target"].BreakpointDelete(identifier)
+    _session["discardedReturns"] = _session.get("discardedReturns", 0) + 1
+    write({"kind": "return-unobserved", **pending, "reason": reason})
+
+
+def expire_returns(frame=None):
+    now = time.monotonic()
+    for identifier, pending in list(_session.get("returns", {}).items()):
+        if now - pending.get("armedAt", now) > RETURN_TTL_SECONDS:
+            discard_return(identifier, "expired")
+        elif frame is not None and frame.GetThread().GetThreadID() == pending["thread"]:
+            stack_register, _, _ = return_abi(_session["triple"])
+            if read_register(frame, stack_register) > pending["expectedSP"]:
+                discard_return(identifier, "stack-unwound")
+
+
+def focus(debugger, command, result, internal_dict):
+    if _session is None or not _session["details"]:
+        result.SetError("Start with --details to allow an explicit paused snapshot")
+        return
     try:
-        entry["focus"] = evaluate_json(frame, focus_body(receiver))
+        if not re.fullmatch(r"0x[0-9a-fA-F]+", command.strip()):
+            raise ValueError("Usage: ham175-focus 0xWKContentViewAddress (from hit arguments[0])")
+        process = _session["target"].GetProcess()
+        if process.GetState() != lldb.eStateStopped:
+            raise ValueError("Pause before taking a snapshot; do not call during HID delivery")
+        frame = process.GetSelectedThread().GetFrameAtIndex(0)
+        data = evaluate_json(frame, focus_body(int(command.strip(), 16)))
+        write({"kind": "focus-snapshot", "receiver": command.strip(), "focus": data})
+        result.AppendMessage(json.dumps(data, ensure_ascii=False))
     except Exception as error:
-        entry["focusError"] = str(error)
         _session["errors"] += 1
+        write({"kind": "focus-error", "error": str(error)})
+        result.SetError(str(error))
 
 
 def observe_return(frame, bp_loc, internal_dict):
@@ -294,8 +331,6 @@ def observe_return(frame, bp_loc, internal_dict):
         raw = read_register(frame, result_register)
         entry["rawReturn"] = hex(raw)
         entry["value"] = bool(raw & 0xff)  # BOOL/bool occupies the low byte.
-        if s["details"] and pending["probe"] == "webkit.presses":
-            capture_focus(frame, entry, pending["receiver"])
     except Exception as error:
         entry["error"] = str(error)
         s["errors"] += 1
@@ -309,12 +344,18 @@ def observe(frame, bp_loc, internal_dict):
     s = _session
     if s is None or not same_process(frame):
         return False
-    probe = s["owned"][bp_loc.GetBreakpoint().GetID()]
+    configured = s["owned"][bp_loc.GetBreakpoint().GetID()]
+    probe = configured["probe"]
     point = frame.GetFunctionName() or ""
     entry = {"kind": "hit", "probe": probe, "point": point,
              "thread": frame.GetThread().GetThreadID(), "pc": hex(frame.GetPC())}
+    if frame.IsInlined() or not re.search(configured["pattern"], point) or frame.GetPC() != configured["pc"]:
+        s["errors"] += 1
+        write({**entry, "kind": "entry-rejected", "error": "Not the requested physical function entry"})
+        return False
     args = None
     try:
+        expire_returns(frame)
         args = arguments(frame, s["triple"])
         entry["arguments"] = [hex(value) for value in args]
         entry["stack"] = [
@@ -322,15 +363,9 @@ def observe(frame, bp_loc, internal_dict):
              "module": f.GetModule().GetFileSpec().GetFilename()}
             for f in list(frame.GetThread())[:12]
         ]
-        # keyCommands is queried hundreds of times per key; keep those probes
-        # register/stack-only so metadata getters do not dominate input timing.
-        if s["details"] and probe in DETAIL_PROBES:
-            entry["details"] = details(frame, point, args)
     except Exception as error:
         s["errors"] += 1
         entry["error"] = str(error)
-    if s["details"] and probe == "webkit.presses" and args is not None:
-        capture_focus(frame, entry, args[0])
     # Completion's handled argument is available even if getter compilation fails.
     if probe == "webkit.completion" and args is not None:
         entry["handled"] = bool(args[3] & 0xff)
@@ -345,32 +380,49 @@ def observe(frame, bp_loc, internal_dict):
     return False  # Observe and resume; never consume or forward the input.
 
 
+def physical_entry(address, target, pattern):
+    # Regex discovery includes inlined instances. Never relocate those to an
+    # unrelated enclosing function and then decode its arguments/return ABI.
+    function, symbol = address.GetFunction(), address.GetSymbol()
+    owner = function if function.IsValid() else symbol
+    name = owner.GetName() if owner.IsValid() else ""
+    if not name or not re.search(pattern, name):
+        return None, {"function": name, "reason": "enclosing-function-mismatch"}
+    start = owner.GetStartAddress()
+    if start.GetLoadAddress(target) == lldb.LLDB_INVALID_ADDRESS:
+        return None, {"function": name, "reason": "unloaded-entry"}
+    return start, None
+
+
 def install(target, role):
     inventory = []
     for probe, pattern in PROBES[role]:
+        if probe in VERBOSE_PROBES and not _session.get("verbose", False):
+            inventory.append({"probe": probe, "pattern": pattern, "breakpoints": [], "coverage": "disabled"})
+            continue
         # Use regex for discovery, then break at the actual symbol entry so ABI
         # argument registers have not been overwritten by a function prologue.
         discovery = target.BreakpointCreateByRegex(pattern)
         discovery.SetEnabled(False)
         addresses = {}
+        rejected = []
         try:
             for location in discovery:
-                address = location.GetAddress()
-                function, symbol = address.GetFunction(), address.GetSymbol()
-                start = function.GetStartAddress() if function.IsValid() else symbol.GetStartAddress()
-                load = start.GetLoadAddress(target)
-                if load != lldb.LLDB_INVALID_ADDRESS:
-                    addresses[load] = start
+                start, rejection = physical_entry(location.GetAddress(), target, pattern)
+                if rejection:
+                    rejected.append(rejection)
+                else:
+                    addresses[start.GetLoadAddress(target)] = start
         finally:
             target.BreakpointDelete(discovery.GetID())
         ids = []
         for start in addresses.values():
             bp = target.BreakpointCreateBySBAddress(start)
-            _session["owned"][bp.GetID()] = probe
+            _session["owned"][bp.GetID()] = {"probe": probe, "pattern": pattern, "pc": start.GetLoadAddress(target)}
             bp.SetScriptCallbackFunction(__name__ + ".observe")
             ids.append(bp.GetID())
         inventory.append({"probe": probe, "pattern": pattern, "breakpoints": ids,
-                          "coverage": "resolved" if ids else "unavailable"})
+                          "coverage": "resolved" if ids else "unavailable", "rejected": rejected})
     return inventory
 
 
@@ -378,13 +430,15 @@ def status(debugger, command, result, internal_dict):
     if _session is None:
         result.SetError("No active HAM-175 trace")
         return
+    expire_returns()
     rows = []
     for item in _session["inventory"]:
         bps = [_session["target"].FindBreakpointByID(i) for i in item["breakpoints"]]
         rows.append({**item, "locations": sum(b.GetNumResolvedLocations() for b in bps),
                      "hits": sum(b.GetHitCount() for b in bps)})
     record = {"kind": "inventory", "probes": rows, "errors": _session["errors"],
-              "pendingReturns": list(_session.get("returns", {}).values())}
+              "pendingReturns": list(_session.get("returns", {}).values()),
+              "discardedReturns": _session.get("discardedReturns", 0)}
     write(record)
     result.AppendMessage(json.dumps(record, ensure_ascii=False, indent=2))
 
@@ -406,7 +460,8 @@ def start(debugger, command, result, internal_dict):
     parser = argparse.ArgumentParser(prog="ham175-start")
     parser.add_argument("--role", choices=PROBES, required=True)
     parser.add_argument("--output", required=True)
-    parser.add_argument("--details", action="store_true")
+    parser.add_argument("--details", action="store_true", help="Allow manual paused focus snapshots only")
+    parser.add_argument("--verbose", action="store_true", help="Enable hot getter/keyCommands entry probes")
     try:
         args = parser.parse_args(shlex.split(command))
         target = debugger.GetSelectedTarget()
@@ -420,9 +475,9 @@ def start(debugger, command, result, internal_dict):
         output.parent.mkdir(parents=True, exist_ok=True)
         log = output.open("x", encoding="utf-8")
         _session = {"target": target, "role": args.role, "pid": process.GetProcessID(),
-                    "triple": triple, "details": args.details, "file": log,
+                    "triple": triple, "details": args.details, "verbose": args.verbose, "file": log,
                     "owned": {}, "returns": {}, "sequence": 0, "errors": 0, "inventory": []}
-        write({"kind": "start", "triple": triple, "details": args.details,
+        write({"kind": "start", "triple": triple, "details": args.details, "verbose": args.verbose,
                "lldb": debugger.GetVersionString(), "executable": str(target.GetExecutable())})
         _session["inventory"] = install(target, args.role)
         status(debugger, "", result, internal_dict)
@@ -449,12 +504,14 @@ def stop(debugger, command, result, internal_dict):
         return
     try:
         status(debugger, "", result, internal_dict)
+        for identifier in list(_session["returns"]):
+            discard_return(identifier, "trace-stopped")
         write({"kind": "stop"})
     finally:
         cleanup()  # Only our breakpoints; leave other debugger work intact.
 
 
 def __lldb_init_module(debugger, internal_dict):
-    for name, function in (("start", start), ("status", status), ("mark", mark), ("stop", stop)):
+    for name, function in (("start", start), ("status", status), ("mark", mark), ("focus", focus), ("stop", stop)):
         debugger.HandleCommand(f"command script add -f {__name__}.{function.__name__} ham175-{name}")
     print("HAM-175 commands registered; no probes enabled. Use ham175-start explicitly.")

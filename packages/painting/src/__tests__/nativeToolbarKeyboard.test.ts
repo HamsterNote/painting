@@ -1,0 +1,145 @@
+import { installNativeToolbarKeyboard } from '../../../../apps/playground/src/layered-editor/nativeToolbarKeyboard';
+
+let dispose: () => void;
+let setScope: jest.Mock<Promise<void>, [string]>;
+const button = () => document.querySelector<HTMLButtonElement>('#item')!;
+const flush = async () => {
+  for (let i = 0; i < 12; i++) await Promise.resolve();
+};
+const currentScope = () => setScope.mock.calls.at(-1)![0];
+const receive = (scope: string, sequence = 1, key: 'Escape' | 'Tab' = 'Escape', shiftKey = false) =>
+  window.__paintingToolbarKeyboard!.receive({
+    scope,
+    sequence,
+    key,
+    shiftKey,
+    source: 'ios-key-command',
+  });
+
+beforeEach(() => {
+  document.body.innerHTML =
+    '<button id="before">Trigger</button><div class="hn-painting-panel"><button id="item">Item</button><button hidden>Hidden</button><button disabled>Disabled</button><select><option>A</option></select><textarea></textarea></div><button id="after">After</button>';
+  jest.spyOn(HTMLElement.prototype, 'getClientRects').mockImplementation(function (
+    this: HTMLElement
+  ) {
+    return (this.hidden ? [] : [new DOMRect(0, 0, 40, 40)]) as unknown as DOMRectList;
+  });
+  setScope = jest.fn(async () => {});
+  dispose = installNativeToolbarKeyboard(document, setScope);
+});
+afterEach(async () => {
+  dispose();
+  await flush();
+  jest.restoreAllMocks();
+  document.body.innerHTML = '';
+});
+
+test('only an open panel with non-editing focus enables commands; real input is untouched', async () => {
+  await flush();
+  expect(currentScope()).toBe(''); // Clear native state left by a full DOM reload.
+  button().focus();
+  await flush();
+  expect(currentScope()).not.toBe('');
+  const old = currentScope();
+  const input = document.querySelector('textarea')!;
+  input.focus();
+  input.value = '中文';
+  await flush();
+  expect(currentScope()).toBe('');
+  expect(receive(old)).toBe(false);
+  expect(input.value).toBe('中文');
+  expect(document.activeElement).toBe(input);
+});
+
+test('delivers once to the focused element, honestly untrusted, and rejects stale scopes', async () => {
+  button().focus();
+  await flush();
+  const old = currentScope();
+  const events: KeyboardEvent[] = [];
+  button().addEventListener('keydown', (event) => events.push(event));
+  expect(receive(old)).toBe(true);
+  expect(receive(old)).toBe(false);
+  expect(events).toHaveLength(1);
+  expect(events[0].isTrusted).toBe(false);
+  document.querySelector<HTMLButtonElement>('#before')!.focus();
+  button().focus();
+  await flush();
+  expect(currentScope()).not.toBe(old);
+  expect(receive(old, 2)).toBe(false);
+  expect(receive(currentScope(), 2)).toBe(true);
+  dispose();
+  expect(window.__paintingToolbarKeyboard).toBeUndefined();
+});
+
+test('Tab skips unavailable controls; Shift+Tab exits; preventDefault suppresses traversal', async () => {
+  button().focus();
+  await flush();
+  receive(currentScope(), 1, 'Tab');
+  expect(document.activeElement).toBe(document.querySelector('select'));
+  button().focus();
+  await flush();
+  const prevent = (event: Event) => event.preventDefault();
+  button().addEventListener('keydown', prevent);
+  receive(currentScope(), 2, 'Tab');
+  expect(document.activeElement).toBe(button());
+  button().removeEventListener('keydown', prevent);
+  receive(currentScope(), 3, 'Tab', true);
+  expect(document.activeElement?.id).toBe('before');
+});
+
+test('composition and detached panels reject callbacks even before the async disable arrives', async () => {
+  button().focus();
+  await flush();
+  const scope = currentScope();
+  button().dispatchEvent(new Event('compositionstart', { bubbles: true }));
+  expect(receive(scope)).toBe(false);
+  button().dispatchEvent(new Event('compositionend', { bubbles: true }));
+  await flush();
+  const renewed = currentScope();
+  document.querySelector('.hn-painting-panel')!.remove();
+  expect(receive(renewed, 2)).toBe(false);
+});
+
+test('serializes native enables/disables and cleans up after an in-flight enable', async () => {
+  await flush();
+  setScope.mockClear();
+  let resolve!: () => void;
+  setScope.mockImplementationOnce(
+    () =>
+      new Promise<void>((done) => {
+        resolve = done;
+      })
+  );
+  button().focus();
+  await flush();
+  dispose();
+  await flush();
+  expect(setScope).toHaveBeenCalledTimes(1);
+  resolve();
+  await flush();
+  expect(currentScope()).toBe('');
+});
+
+test('a queued focusout from a disposed bridge cannot disable its replacement', async () => {
+  button().focus();
+  await flush();
+  const oldBridge = window.__paintingToolbarKeyboard!;
+  const oldScope = currentScope();
+  button().blur();
+  dispose();
+  button().focus();
+  dispose = installNativeToolbarKeyboard(document, setScope);
+  await flush();
+  expect(currentScope()).not.toBe('');
+  expect(currentScope()).not.toBe(oldScope);
+  expect(
+    oldBridge.receive({
+      scope: oldScope,
+      sequence: 1,
+      key: 'Escape',
+      shiftKey: false,
+      source: 'ios-key-command',
+    })
+  ).toBe(false);
+  expect(receive(currentScope())).toBe(true);
+});

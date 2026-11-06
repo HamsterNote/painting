@@ -5,23 +5,23 @@ import NativeLayeredEditorDom from '../../../apps/playground/src/layered-editor/
 jest.mock('../../../apps/playground/src/layered-editor/LayeredEditorDom', () => {
   const React = require('react');
   const { Text } = require('react-native');
-  const requestFocus = jest.fn();
+  const setToolbarKeyboardScope = jest.fn();
   return {
     __esModule: true,
     default: React.forwardRef(function MockLayeredEditorDom(props: object, ref: object) {
-      React.useImperativeHandle(ref, () => ({ requestFocus }));
+      React.useImperativeHandle(ref, () => ({ setToolbarKeyboardScope }));
       return React.createElement(Text, { ...props, testID: 'dom-boundary' });
     }),
-    requestFocus,
+    setToolbarKeyboardScope,
   };
 });
 
-const { requestFocus } = jest.requireMock(
+const { setToolbarKeyboardScope } = jest.requireMock(
   '../../../apps/playground/src/layered-editor/LayeredEditorDom'
-) as { requestFocus: jest.Mock };
+) as { setToolbarKeyboardScope: jest.Mock };
 
 beforeEach(() => {
-  requestFocus.mockClear();
+  setToolbarKeyboardScope.mockClear();
 });
 
 afterEach(() => {
@@ -31,24 +31,26 @@ afterEach(() => {
 test('iOS waits for the DOM action and keeps the same WebView across prop updates', async () => {
   jest.replaceProperty(Platform, 'OS', 'ios');
   const result = await render(<NativeLayeredEditorDom editorParams={{ fixture: 'mixed' }} />);
-  expect(requestFocus).not.toHaveBeenCalled();
-  const request = result.getByTestId('dom-boundary').props.onRequestKeyboardFocus;
-  await act(() => request());
-  expect(requestFocus).toHaveBeenCalledTimes(1);
+  expect(setToolbarKeyboardScope).not.toHaveBeenCalled();
+  const request = result.getByTestId('dom-boundary').props.onToolbarKeyboardScope;
+  await act(() => request('scope-1'));
+  expect(setToolbarKeyboardScope).toHaveBeenCalledTimes(1);
+  expect(setToolbarKeyboardScope).toHaveBeenLastCalledWith('scope-1');
   await result.rerender(<NativeLayeredEditorDom editorParams={{ fixture: 'resources' }} />);
-  expect(result.getByTestId('dom-boundary').props.onRequestKeyboardFocus).toBe(request);
-  expect(requestFocus).toHaveBeenCalledTimes(1);
-  await act(() => request());
-  expect(requestFocus).toHaveBeenCalledTimes(2);
+  expect(result.getByTestId('dom-boundary').props.onToolbarKeyboardScope).toBe(request);
+  expect(setToolbarKeyboardScope).toHaveBeenCalledTimes(1);
+  expect(setToolbarKeyboardScope).toHaveBeenLastCalledWith('scope-1');
+  await act(() => request('scope-1'));
+  expect(setToolbarKeyboardScope).toHaveBeenCalledTimes(2);
   await result.unmount();
-  await request();
-  expect(requestFocus).toHaveBeenCalledTimes(2);
+  await request('scope-1');
+  expect(setToolbarKeyboardScope).toHaveBeenCalledTimes(2);
 });
 
 test('Android editor does not use the iOS responder route', async () => {
   jest.replaceProperty(Platform, 'OS', 'android');
   const result = await render(<NativeLayeredEditorDom />);
-  expect(result.getByTestId('dom-boundary').props.onRequestKeyboardFocus).toBeUndefined();
-  expect(requestFocus).not.toHaveBeenCalled();
+  expect(result.getByTestId('dom-boundary').props.onToolbarKeyboardScope).toBeUndefined();
+  expect(setToolbarKeyboardScope).not.toHaveBeenCalled();
   await result.unmount();
 });
