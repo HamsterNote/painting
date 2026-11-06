@@ -287,3 +287,27 @@ iOS桥宿主通过 `toolbarInlinePickers` 使用页面内控件：输入模式�
 Mac按更新的 `ios-keyboard-trace.md` 重建/安装新head，先无LLDB跑原18项并复测“未选词IME取消→重进Escape→三个面板按住Tab”；保留快速菜单→文字首键和文字/IME/PencilKit回归，记录设置radio→颜色文字→range的逐步焦点、软键盘与事件可信度。原可信度门槛未变，是否接受桥的isTrusted=false由用户决定，不修改spec；4.2/4.3仍未勾。HAM-175保持blocked、PR #46保持Draft；本轮Swift补丁/探针未改，本机无xcrun/Apple LLDB，新候选没有原生运行结论。
 
 本轮本机检查：Jest101套件/1332项、responder9项、配置3项通过；typecheck、库/Web build通过；lint 0 errors/原有32 warnings。原四份Chromium UI 42项及既有桥契约3项共45项通过（独立5296端口、2 workers）；测试/原HID观察器未修改。新iOS页面内控件由真实Toolbar的Jest集成用例覆盖：初始/非默认radio焦点、控制器选项与颜色更新、无效颜色草稿、Escape、Tab移入文字交接和Shift+Tab离开；Chromium旧入口没有启用iOS能力标志，不能据这45项推导新控件的iOS效果。格式/diff检查通过；未执行新的Swift或原生HID验收。
+
+### HAM-175 Mac `dfccc31`（2026-11-06）：设置完整遍历仍失败
+
+Mac从 `dfccc314c2957eaada725819c693abcaf3c2f223` 重建安装，iPhone17 Pro / **iOS26.5模拟器，idb脚本HID**，全轮无LLDB。Swift构建0 errors，主程序/debug dylib安装哈希与构建一致；该head未改Swift，哈希和前轮相同，新source/Metro与radio/HEX/snapshot记录JS身份。
+
+18项均打开并最终关闭/退出，Escape归还触发器；但默认/PencilKit的设置Tab均radio→颜色→BODY，未经过range，关闭条件18/18不能代替完整遍历16/18。原可信度门槛下正式0/18。34次单键HID对应34个keydown（32 false / 2 true），无双发；全轮54个原生命令均accepted=1/error=nil。原结果及补充检查都保留。
+
+未选词IME取消仍无compositionend，但composingConnected已清除，重进菜单首个Escape有效。工具/缩放/文字工具设置按住Tab1.5秒分别有8/1/4次回调；画笔/矩形设置只有1次，进入颜色文字后停止，不推导长按已全部通过。桥repeat=false不改写成实体键盘重复验收。
+
+剩余两种缺陷：触摸radio或range更新值后落BODY、没有新focusin，request/ack scope均空，后续Escape/Tab无命令；颜色→已选radio同样失效。颜色文字实际可输入HEX、Escape可信且正常，但可信Tab默认遍历提前退出，跳过range。重开设置能聚焦已选finger。桥对象仍在，失效的是焦点与scope，不是已证明的UIKit缓存故障。
+
+快速菜单→文字a/Tab/Escape各单次、可信、零桥命令；英文/IME提交取消/一次撤销、PencilKit点击与横滚所测通过。同进程回前台时菜单在发键前已消失，重开首个Escape有效，因果不混记。原始证据见附件 `HAM-175-dfccc31-ios-validation.md` / `HAM-175-dfccc31-ios-evidence.zip`；实体键盘、真机、Pencil仍未验。
+
+### HAM-175 本轮候选：恢复触摸控件焦点，接管颜色 Tab 的默认遍历
+
+iOS DOM helper在面板radio/checkbox/range的pointerup或click后，等待触摸默认操作完成，再恢复实际操作控件的focus，由现有sync发布新scope；支持label与range无click的拖动结束。新的交互会取消旧恢复，移除/卸载/隐藏/取消触摸或已进入文字、其他区域均不抢焦点。不在BODY保留旧scope，不阻止控件值更新，也不逐点发桥消息。
+
+设置颜色字段的非组合态Tab/Shift+Tab保留原KeyboardEvent，仅preventDefault掉WebKit跳BODY的默认移动，微任务沿现有tabbable顺序前往range或已选radio。事件仍为原事件，可信度不改，不再dispatch第二次；面板离开关闭检查仍能看到原始焦点。外部文字编辑器、Escape、输入和IME处理保持原路径。Swift/命令集合/探针、本轮之前已验证的composition清理与scope/序号契约均未改。
+
+Mac按更新runbook先无LLDB跑原18项，逐步确认完整遍历；重点增加radio改值/已选项、range拖动、checkbox触摸后紧接Escape/Tab，以及颜色→radio/range恢复和颜色Tab/Shift+Tab。保存真实触摸→focusin→request/ack→命令/DOM的顺序；快切文字/画布、触摸取消不得被迟到focus夺回。持续按住跨颜色字段另列，不以分次Tab通过推导。
+
+本机无xcrun/Apple LLDB，新候选仍待Mac验证。原可信度门槛与spec不改，HAM-175保持blocked、PR #46保持Draft，4.2/4.3未勾。
+
+本轮Linux检查：Jest102套件/1341项、responder9项、配置3项通过；typecheck、库/Web build通过，lint 0 errors/原有32 warnings。Chromium46项通过（独立5296端口、2 workers）：原45项保留，新增独立颜色字段契约用真实浏览器键盘确认Tab到range、Shift+Tab回已选radio，各保留一个可信事件，没有重发；这不是iOS HID验收。新增Jest覆盖radio/label、range无click、触摸取消/卸载/移除、快切文字/画布、键盘优先于过期触摸、颜色组合态与preventDefault保护；原Toolbar集成用例取消手工focus模拟，改为触发颜色Tab并断言实际移到range。原HID观察器/判定和既有UI断言未改。格式/diff检查通过；未执行新的Swift或原生设备验证。

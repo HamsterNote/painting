@@ -100,12 +100,13 @@ test('settings bridge Escape closes; Tab hands color editing to WebKit and resum
     await settle();
     expect(document.activeElement).toBe(screen.getByRole('textbox', { name: '颜色' }));
     expect(scope).toBe('');
-    // jsdom has no keyboard default action: explicitly model the trusted text
-    // Tab's next focus target. Native delivery is reserved for the Mac matrix.
-    act(() => {
-      screen.getByRole('slider', { name: '不透明度' }).focus();
-    });
+    // Exercise the color Tab handler itself; do not supply the missing focus.
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    fireEvent(screen.getByRole('textbox', { name: '颜色' }), tab);
+    expect(tab.defaultPrevented).toBe(true);
     await settle();
+    expect(document.activeElement).toBe(screen.getByRole('slider', { name: '不透明度' }));
+    expect(screen.getByRole('dialog')).toBeTruthy();
     expect(scope).not.toBe('');
     act(() => {
       expect(key('Escape')).toBe(true);

@@ -37,6 +37,13 @@ export function installNativeToolbarKeyboard(
   let sequence = 0;
   let composing: Element | null = null;
   let disposed = false;
+  const isEditing = (target: Element | null) =>
+    target instanceof HTMLElement &&
+    (target.isContentEditable ||
+      target.closest('[contenteditable="true"]') !== null ||
+      target.matches(
+        'textarea,input:not([type=button]):not([type=submit]):not([type=reset]):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color])'
+      ));
   // Serialize the async Expo action so an old enable cannot overtake a disable.
   const publish = (value: string) => {
     const update = (nativeUpdates.get(doc) ?? Promise.resolve())
@@ -64,14 +71,7 @@ export function installNativeToolbarKeyboard(
       !(target instanceof HTMLElement)
     )
       return null;
-    if (
-      target.isContentEditable ||
-      target.closest('[contenteditable="true"]') ||
-      target.matches(
-        'textarea,input:not([type=button]):not([type=submit]):not([type=reset]):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color])'
-      )
-    )
-      return null;
+    if (isEditing(target)) return null;
     return target.closest('.hn-painting-panel');
   };
   const sync = () => {
@@ -86,6 +86,15 @@ export function installNativeToolbarKeyboard(
         ).join('')
       : '';
     publish(scope);
+  };
+  const moveTab = (target: HTMLElement, backwards: boolean) => {
+    // Share the same order for bridged keys and the real WebKit color-field Tab.
+    const order = tabbable(doc.body);
+    const index = order.indexOf(target);
+    const next = order[index + (backwards ? -1 : 1)];
+    if (index >= 0 && next) next.focus();
+    else target.blur(); // End of document: leave the panel; never trap/wrap.
+    sync();
   };
   const bridge = {
     // Read-only diagnostics for failed transitions; never repairs state on read.
@@ -122,17 +131,107 @@ export function installNativeToolbarKeyboard(
       if (message.key === 'Tab' && allowDefault && doc.activeElement === target) {
         // Untrusted Tab has no default action. Use real tab order, including
         // disabled/hidden controls, positive tabindex, and radio groups.
-        const order = tabbable(doc.body);
-        const index = order.indexOf(target);
-        const next = order[index + (message.shiftKey ? -1 : 1)];
-        if (index >= 0 && next) next.focus();
-        else target.blur(); // End of document: leave the panel; never trap/wrap.
+        moveTab(target, message.shiftKey);
       }
       sync();
       return true;
     },
   };
   view.__paintingToolbarKeyboard = bridge;
+  const colorTab = (event: KeyboardEvent) => {
+    const target = event.target;
+    if (
+      event.key !== 'Tab' ||
+      event.defaultPrevented ||
+      event.isComposing ||
+      composing ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      !(target instanceof HTMLInputElement) ||
+      !target.matches('[data-toolbar-color-field="true"]') ||
+      !target.closest('.hn-painting-panel') ||
+      doc.activeElement !== target
+    )
+      return;
+    // iOS's editing traversal can jump straight to BODY, skipping the range.
+    // Keep this original trusted event; cancel only its incorrect default move.
+    event.preventDefault();
+    queueMicrotask(() => {
+      // Let ToolbarPanel observe the key at its original target before moving.
+      if (
+        !disposed &&
+        target.isConnected &&
+        doc.activeElement === target &&
+        doc.visibilityState === 'visible'
+      )
+        moveTab(target, event.shiftKey);
+    });
+  };
+  let focusFrame = 0;
+  let touched: { control: HTMLInputElement; pointer: number } | undefined;
+  const cancelFocus = () => {
+    view.cancelAnimationFrame(focusFrame);
+    focusFrame = 0;
+  };
+  const touchControl = (target: EventTarget | null) => {
+    if (!(target instanceof Element)) return null;
+    const control = target.closest('input') ?? target.closest('label')?.control;
+    return control instanceof HTMLInputElement &&
+      control.matches('input[type=radio],input[type=checkbox],input[type=range]') &&
+      !control.disabled &&
+      control.closest('.hn-painting-panel')
+      ? control
+      : null;
+  };
+  const restoreTouchedFocus = (control: HTMLInputElement) => {
+    cancelFocus();
+    const owner = control.closest('.hn-painting-panel');
+    // Finish the touch default actions first: UIKit blurs radio/range to BODY.
+    focusFrame = view.requestAnimationFrame(() => {
+      focusFrame = 0;
+      const active = doc.activeElement;
+      if (
+        disposed ||
+        doc.visibilityState !== 'visible' ||
+        !control.isConnected ||
+        control.disabled ||
+        !owner ||
+        control.closest('.hn-painting-panel') !== owner ||
+        (active !== doc.body &&
+          active !== control &&
+          (isEditing(active) || active?.closest('.hn-painting-panel') !== owner))
+      )
+        return;
+      control.focus({ preventScroll: true });
+      sync();
+    });
+  };
+  const pointerDown = (event: PointerEvent) => {
+    cancelFocus(); // A new interaction, including text/canvas, cancels old work.
+    const control = touchControl(event.target);
+    touched = control ? { control, pointer: event.pointerId } : undefined;
+  };
+  const pointerUp = (event: PointerEvent) => {
+    if (touched && touched.pointer === event.pointerId) {
+      restoreTouchedFocus(touched.control);
+      touched = undefined;
+    }
+  };
+  const pointerCancel = () => {
+    touched = undefined;
+    cancelFocus();
+  };
+  const click = (event: MouseEvent) => {
+    cancelFocus();
+    const control = touchControl(event.target);
+    if (control) restoreTouchedFocus(control); // Includes a label/AX activation.
+  };
+  const keyDown = (event: KeyboardEvent) => {
+    touched = undefined;
+    cancelFocus(); // A completed keyboard move must not be undone by an old tap.
+    colorTab(event);
+  };
   const focusOut = () => queueMicrotask(sync);
   const compositionStart = (event: CompositionEvent) => {
     composing = event.target instanceof Element ? event.target : null;
@@ -142,7 +241,7 @@ export function installNativeToolbarKeyboard(
     if (event.target === composing) composing = null;
     sync();
   };
-  // No per-point pointer listeners, and no DOM mutation during input sampling.
+  // No pointermove work and no mutation during input sampling.
   const observer = new MutationObserver(sync);
   observer.observe(doc.body, { childList: true, subtree: true });
   doc.addEventListener('focusin', sync);
@@ -150,18 +249,30 @@ export function installNativeToolbarKeyboard(
   doc.addEventListener('visibilitychange', sync);
   doc.addEventListener('compositionstart', compositionStart);
   doc.addEventListener('compositionend', compositionEnd);
+  doc.addEventListener('keydown', keyDown);
+  doc.addEventListener('pointerdown', pointerDown, true);
+  doc.addEventListener('pointerup', pointerUp, true);
+  doc.addEventListener('pointercancel', pointerCancel, true);
+  doc.addEventListener('click', click);
   sync();
   return () => {
     if (disposed) return;
     disposed = true;
     panel = null;
     scope = '';
+    cancelFocus();
+    touched = undefined;
     observer.disconnect();
     doc.removeEventListener('focusin', sync);
     doc.removeEventListener('focusout', focusOut);
     doc.removeEventListener('visibilitychange', sync);
     doc.removeEventListener('compositionstart', compositionStart);
     doc.removeEventListener('compositionend', compositionEnd);
+    doc.removeEventListener('keydown', keyDown);
+    doc.removeEventListener('pointerdown', pointerDown, true);
+    doc.removeEventListener('pointerup', pointerUp, true);
+    doc.removeEventListener('pointercancel', pointerCancel, true);
+    doc.removeEventListener('click', click);
     if (view.__paintingToolbarKeyboard === bridge) delete view.__paintingToolbarKeyboard;
     publish('');
   };

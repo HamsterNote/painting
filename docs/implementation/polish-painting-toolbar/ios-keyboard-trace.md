@@ -22,6 +22,19 @@ Mac 已重建 `c2f8700`，14项关闭/退出行为达成但因isTrusted=false仍
 
 本轮Swift补丁和LLDB探针未改；Mac先前已成功编译c2f8700，不能据此代替新head的运行验证。若仍有丢键，可通过独立只读evaluate保存 `window.__paintingToolbarKeyboard?.snapshot()`：scope为DOM请求值、acknowledgedScope为Expo action已返回值、composingConnected和activeTag为即时读数。snapshot不修复/发布状态，不改原观察器。两个scope相同只证明配置调用返回，不证明UIKit命令已被查询。
 
+## dfccc31 回归后：触摸焦点与颜色 Tab
+
+Mac本轮确认IME取消残留已消失，重进Escape有效；工具/缩放/文字工具设置的1.5秒Tab有8/1/4次命令。原18项的关闭条件全部达成，但默认/PencilKit设置Tab都走radio→颜色→BODY、跳过range，完整遍历只有16/18，原可信度判定仍0/18。34次单键对应34个keydown（32 false / 2 true），无双发。
+
+剩余失效已能从DOM侧解释：触摸radio/range完成值更新后只有旧控件focusout，没有新控件focusin；activeElement=BODY、请求/ack scope均空，桥对象仍存在。颜色Tab则已有真实可信WebKit keydown，随后默认遍历跳BODY；不是需要新增原生命令。
+
+本轮只改iOS安装的DOM helper：
+
+- radio/checkbox/range在pointerup或click后，用下一帧恢复被操作控件的真实focus，再由现有focusin/sync重新发布scope。支持label点击和range拖动无click的结束，不改触摸默认值、不逐点发送桥消息。新的pointerdown、click或键盘操作取消旧恢复；pointercancel、卸载、控件移除、页面隐藏、焦点转到文字或其他区域均不抢回。不是在BODY上保留旧scope。
+- 只有带专用标记的设置颜色文字字段，其非组合态Tab/Shift+Tab取消默认焦点移动，沿与桥一致的tabbable顺序前进/后退。原KeyboardEvent继续冒泡，不创建第二个事件、不改isTrusted。微任务在面板观察到原焦点后移动，以保留离开关闭规则。Escape、字母、组合输入、外部文字编辑器仍走原路径。
+
+本轮Swift、命令集合、既有scope/sequence及composition生命周期、LLDB探针均未改。真实触摸完成到首键之间的时序、可信颜色Tab是否到range、持续按住跨颜色字段是否继续仍需Mac实测，不能用浏览器或逐键结果推导长按。
+
 ## 候选的行为与限制
 
 移除已证伪的 requestFocus / window.focus 路径。pnpm 补丁在 DomWKWebView 通过公开 UIKit `UIKeyCommand` 注册 Escape、Tab、Shift+Tab，只在 DOM 面板持有非文字编辑焦点时启用。命令有系统优先级，由 UIKit action 触发一次；不同时监听 raw presses 再复制一次。Android/Web 不安装原生桥。
@@ -38,7 +51,7 @@ DOM 通过 Expo action 提交随机 scope，原生回传 scope、单调 sequence
 2. 使用原 iPhone 17 Pro / iOS26.5 **模拟器**，默认入口、diagnostics关闭。沿用原 `drive.py` / `matrix.py` / `observe.js` / `metrics.js` 与 idb HID 命令，**不改断言或日志过滤、不由测试调用桥、不用 evaluate/dispatchEvent 代替 HID**。公开说明输入为脚本HID，不能写成实体键盘/真机验收。
 3. 完全未附加 LLDB 时先运行原18项：工具/缩放/设置 × Escape/Tab/Shift+Tab × 默认/PencilKit。保存每行 open/result、DOM events、焦点、截图和原 matrix-summary。桥结果应如实为 isTrusted=false；原判定若要求可信而判失败，保留失败，不重写成绿。单独报告功能行为、可信度差异，不能把浏览器桥契约测试算作这18项。
 4. 并行保存 app console 的 `[HAM175 keyboard]` 日志，含原生 UIKeyCommand payload、accepted 和 error。按 scope / sequence / UTC 与同一 HID 操作和原 DOM 事件对应：每次命令至多一个 keydown、不得混入测试注入。日志是原生 action 入口证据，单凭 source 字符串不证明实体硬件来源。
-5. 优先复测两条已定位链路：取消尚未选词的IME草稿（允许没有compositionend）→真实触摸重进工具菜单→Escape；然后三个面板各按住Tab1.5秒。每组发键前保存独立snapshot，scope应重新启用。设置中逐步记录radio→颜色文字字段→不透明度的焦点、软键盘及原DOM可信度，颜色字段必须走WebKit真实编辑路径，不能由脚本调用receive补键；重新进入设置时也测非默认输入模式、画笔/形状两类。保留英文、中文IME选词、完成/取消/一次撤销、文字 Tab/Escape、横滚、软键盘布局、PencilKit点击。增加菜单→文字框快速切换后首键、开关/离开重进、同进程前后台首键与长按Tab检查。文字键仍应可信且不经过桥；若有吞键、双键、软键盘误弹，记录失败。
+5. **本轮优先**：设置中真实触摸切换radio、触摸已选radio、拖动range（含拖出控件范围后抬起）和checkbox。每次保留触摸前后snapshot，active应落对应控件、request/ack scope非空，紧接Escape或Tab应有一条有效命令；从颜色触摸回radio/range也须恢复。颜色内真实Tab应到不透明度range，Shift+Tab应回已选radio，面板内还有控件时不得跳BODY；保存原可信keydown，确认没有合成双发。再完整遍历至checkbox/离开，分别做画笔/矩形、默认/PencilKit和非默认输入模式。快切到文字/画布或取消触摸不得被延迟focus抢回。1.5秒持续Tab跨颜色字段另记结果，若没有后续真实keydown仍是缺口，不用定时器补。继续复测两条已定位链路：取消尚未选词的IME草稿（允许没有compositionend）→真实触摸重进工具菜单→Escape；然后三个面板各按住Tab1.5秒。每组发键前保存独立snapshot，scope应重新启用。设置中逐步记录radio→颜色文字字段→不透明度的焦点、软键盘及原DOM可信度，颜色字段必须走WebKit真实编辑路径，不能由脚本调用receive补键；重新进入设置时也测非默认输入模式、画笔/形状两类。保留英文、中文IME选词、完成/取消/一次撤销、文字 Tab/Escape、横滚、软键盘布局、PencilKit点击。增加菜单→文字框快速切换后首键、开关/离开重进、同进程前后台首键与长按Tab检查。文字键仍应可信且不经过桥；若有吞键、双键、软键盘误弹，记录失败。
 
 ## 可选诊断：单键、薄探针、独立日志
 

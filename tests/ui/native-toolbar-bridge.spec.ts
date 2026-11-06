@@ -74,3 +74,33 @@ for (const trigger of ['工具菜单', '缩放比例', '设置']) {
     expect(events.every((e: { trusted: boolean }) => !e.trusted)).toBe(true);
   });
 }
+
+test('color field preserves a single trusted Tab and traverses range/selected radio', async ({
+  page,
+}) => {
+  // Isolated browser contract fixture; this does not run or replace the Mac matrix.
+  await page.setContent(`<div class="hn-painting-panel">
+    <input type="radio" name="mode" aria-label="Auto">
+    <input type="radio" name="mode" aria-label="Finger" checked>
+    <input type="text" data-toolbar-color-field="true" aria-label="Color" value="#123456">
+    <input type="range" aria-label="Opacity"><input type="checkbox" aria-label="Ruler">
+  </div><textarea aria-label="Document text"></textarea>`);
+  await install(page);
+  const color = page.getByRole('textbox', { name: 'Color', exact: true });
+  await color.click();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('slider')).toBeFocused();
+  expect(await page.evaluate(() => (window as any).bridgeScope)).not.toBe('');
+  await color.click();
+  await page.keyboard.press('Shift+Tab');
+  await expect(page.getByRole('radio', { name: 'Finger' })).toBeFocused();
+  expect(await page.evaluate(() => (window as any).bridgeEvents)).toEqual([
+    { key: 'Tab', trusted: true },
+    { key: 'Shift', trusted: true },
+    { key: 'Tab', trusted: true },
+  ]);
+  await page.getByRole('textbox', { name: 'Document text' }).click();
+  await page.keyboard.type('a');
+  await expect(page.getByRole('textbox', { name: 'Document text' })).toHaveValue('a');
+  expect(await page.evaluate(() => (window as any).bridgeScope)).toBe('');
+});

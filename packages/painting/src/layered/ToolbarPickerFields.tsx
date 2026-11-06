@@ -69,6 +69,7 @@ export function ToolbarHexColorField({
       自定义颜色
       <input
         type="text"
+        data-toolbar-color-field="true"
         aria-label="颜色"
         aria-invalid={!valid}
         placeholder="#RRGGBB"
