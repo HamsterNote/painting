@@ -2,10 +2,13 @@ import { installNativeKeyboardFocus } from '../../../../apps/playground/src/laye
 
 beforeEach(() => {
   jest.useFakeTimers();
+  // jsdom has no window activation; page-focus behavior has its own unit cases.
+  jest.spyOn(window, 'focus').mockImplementation(() => {});
   document.body.innerHTML =
     '<div data-interactive="true"><button>Tools</button><input type="range" /></div><textarea></textarea><canvas></canvas>';
 });
 afterEach(() => {
+  jest.restoreAllMocks();
   jest.useRealTimers();
   document.body.innerHTML = '';
 });

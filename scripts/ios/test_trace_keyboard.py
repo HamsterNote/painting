@@ -127,6 +127,88 @@ class KeyboardTraceTests(unittest.TestCase):
         self.assertEqual(entry["actualPid"], 456)
         target.FindBreakpointByID.return_value.SetEnabled.assert_called_once_with(False)
 
+    def test_getter_expression_avoids_reported_apple_symbol_and_return_type_errors(self):
+        points = ["-[UIApplication sendEvent:]", "-[UIApplication sendAction:to:from:forEvent:]",
+                  "-[WKContentView _tryToHandlePressesEvent:]",
+                  "-[WKContentView _didHandleKeyEvent:eventWasHandled:]"]
+        bodies = [trace.detail_body(p, [1, 2, 3, 4, 5, 6]) for p in points]
+        bodies.append(trace.focus_body(1))
+        for body in bodies:
+            expression = trace.json_expression(body)
+            self.assertNotRegex(expression, r"\b(?:d|key|event|receiver|sender|target|press|chain)\s*=")
+            self.assertNotRegex(expression, r"if\s*\(\s*\[.*respondsToSelector:")
+            self.assertNotRegex(expression, r"NSStringFromClass\(\[")
+            self.assertIn("ham175_trace_record", expression)
+
+    def return_session(self, triple="arm64-apple-ios"):
+        target, log, frame, location = Mock(), io.StringIO(), Mock(), Mock()
+        trace._session = {"target": target, "file": log, "returns": {}, "owned": {},
+                          "details": False, "triple": triple, "errors": 0,
+                          "sequence": 0, "pid": 123, "role": "app"}
+        thread = frame.GetThread.return_value
+        thread.GetThreadID.return_value = 12
+        thread.GetProcess.return_value.GetProcessID.return_value = 123
+        thread.GetFrameAtIndex.return_value.IsValid.return_value = True
+        thread.GetFrameAtIndex.return_value.GetPC.return_value = 8192
+        target.BreakpointCreateByAddress.return_value.GetID.return_value = 20
+        target.BreakpointCreateByAddress.return_value.GetNumResolvedLocations.return_value = 1
+        location.GetBreakpoint.return_value.GetID.return_value = 20
+        return target, log, frame, location
+
+    def test_return_uses_unwound_caller_pc_and_x86_ret_stack_adjustment(self):
+        for triple, expected_sp in [("arm64e-apple-ios", 4096), ("x86_64-apple-ios", 4104)]:
+            target, _, frame, _ = self.return_session(triple)
+            with patch.object(trace, "read_register", return_value=4096):
+                trace.arm_return(frame, "webkit.presses", 7, 99)
+            target.BreakpointCreateByAddress.assert_called_once_with(8192)
+            self.assertEqual(trace._session["returns"][20]["expectedSP"], expected_sp)
+            target.BreakpointCreateByAddress.return_value.SetThreadID.assert_called_once_with(12)
+            trace.cleanup()
+
+    def test_recursive_or_other_thread_return_does_not_consume_outer_call(self):
+        target, log, frame, location = self.return_session()
+        trace._session["returns"][20] = {"probe": "webkit.presses", "callSequence": 7,
+                                         "expectedSP": 4096, "receiver": 99, "thread": 12}
+        with patch.object(trace, "read_register", return_value=4000):
+            self.assertFalse(trace.observe_return(frame, location, {}))
+        frame.GetThread.return_value.GetThreadID.return_value = 13
+        with patch.object(trace, "read_register", return_value=4096):
+            self.assertFalse(trace.observe_return(frame, location, {}))
+        self.assertIn(20, trace._session["returns"])
+        self.assertEqual(log.getvalue(), "")
+        target.BreakpointDelete.assert_not_called()
+
+    def test_boolean_return_preserves_call_identity_and_only_uses_low_byte(self):
+        for raw, expected in [(0x100, False), (0x101, True)]:
+            target, log, frame, location = self.return_session()
+            trace._session["returns"][20] = {"probe": "webkit.presses", "callSequence": 7,
+                                             "expectedSP": 4096, "receiver": 99, "thread": 12}
+            with patch.object(trace, "read_register", side_effect=[4096, raw]):
+                self.assertFalse(trace.observe_return(frame, location, {}))
+            event = json.loads(log.getvalue())
+            self.assertIs(event["value"], expected)
+            self.assertEqual(event["callSequence"], 7)
+            self.assertEqual(trace._session["returns"], {})
+            target.BreakpointDelete.assert_called_once_with(20)
+            trace.cleanup()
+
+    def test_unreadable_return_is_an_error_not_a_false_return(self):
+        _, log, frame, location = self.return_session()
+        trace._session["returns"][20] = {"probe": "webkit.presses", "callSequence": 7,
+                                         "expectedSP": 4096, "receiver": 99, "thread": 12}
+        with patch.object(trace, "read_register", side_effect=[4096, ValueError("no result register")]):
+            self.assertFalse(trace.observe_return(frame, location, {}))
+        event = json.loads(log.getvalue())
+        self.assertNotIn("value", event)
+        self.assertIn("error", event)
+
+    def test_cleanup_includes_pending_return_breakpoints(self):
+        target, _, _, _ = self.return_session()
+        trace._session["owned"] = {1: "application.dispatch"}
+        trace._session["returns"] = {20: {"probe": "webkit.presses"}}
+        trace.cleanup()
+        self.assertEqual([c.args[0] for c in target.BreakpointDelete.call_args_list], [1, 20])
+
 
 if __name__ == "__main__":
     unittest.main()

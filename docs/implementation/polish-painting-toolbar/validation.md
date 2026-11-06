@@ -220,3 +220,28 @@ Mac 的完整操作、符号检查、文字阳性对照、两个进程的日志�
 本轮 Linux 没有 xcrun，没有编译 Swift，也没有运行 Apple LLDB / UIKit / WebContent 探针。Python 检查只能验证探针的宿主侧逻辑，不能证明 Apple 私有符号存在或事件路由通过。Mac 重建采集结果回传前，PR #46 保持 Draft，HAM-175 尚未完成，4.2 / 4.3 均保持未勾选。
 
 本轮本机检查：`python3 -B -m unittest discover -s scripts/ios -p 'test_*.py' -v` 的 8 项通过，覆盖 ABI / 读取错误、函数入口断点、符号缺失、进程身份变化及只清理自有断点；`pnpm test` 100 套件 / 1322 项、responder 9 项、原生配置 4 项通过。typecheck、库 / Web build 通过，lint 0 errors / 原有 32 warnings。原有四份相关 Chromium spec 共 42 项通过（独立 5296 端口，2 workers，1.6 分钟），只调整临时服务配置，未修改测试断言。frozen install、Python 语法与 diff 检查通过。这些结果均不代表新的 iOS 模拟器或 Android 设备验收。
+
+### HAM-175 Mac app 侧对照（2026-11-06，bb06548）：非编辑态仍失败
+
+Mac 实际重建安装 `bb06548e85779ab2f26186290d6c9b2f0fcac714`，主程序 / debug dylib 的安装与构建哈希一致。环境为 macOS27.2 / Xcode27.2 / Apple LLDB2103.0.34.407，iPhone17 Pro / **iOS26.5模拟器**、默认入口、dev client0.1.0(1)，输入为 **idb脚本HID**。未修改业务或原 HID / DOM 观测脚本。
+
+| 本轮操作 / 观测 | 结果 |
+| --- | --- |
+| 非组合输入的英文文字 Tab / Escape | 可信 DOM 事件正常；命中 WK `handleKeyEntry` / 内部 handler 与 proxy enqueue/send，分别移到字号和取消草稿 |
+| 工具菜单同一单键 | UIApplication 与 WK `_tryToHandlePressesEvent:` 命中，WK entry / proxy enqueue/send 无命中，DOM 无 keydown，菜单仍开；所有探针 stop/detach 后复现 |
+| app 探针 | 正式纯寄存器/栈会话1028命中、0读取错误；12类解析成功，proxy.completion unavailable。`--details` 在初始会话因短变量名d冲突、动态getter返回类型问题编译失败，保留原始错误；未取得_try返回值、HID元数据或handled解码 |
+| WebContent | 现有WebView地址确认PID22141，app22062；kernel因hardened、无get-task-allow拒绝附加。没有接收侧JSONL，不据此判定接收方丢事件 |
+| 非键盘最小回归 | 英文及系统拼音“你好”的提交/一次撤销、英文取消/组合输入取消所测通过；PencilKit原生接管时菜单HID点击、默认及原生接管横滚通过，起笔/提交计数0。仅开关设置使用AX press |
+| 正式18项矩阵 | **未运行**：原流程双进程门槛未满足。缩放/设置、Shift+Tab、PencilKit键盘矩阵等均未验；不将b50496f的18项失败冒充为本SHA结果 |
+
+证据为本单附件 `HAM-175-bb06548-diagnostics.md` / `HAM-175-bb06548-ios-diagnostics.zip`，包含 app JSONL、`single-key-summary.json`、PID映射、符号清单、getter错误、kernel拒绝日志、DOM/open-result及关闭探针对照。原生缺陷仍存在，HAM-175保持blocked。
+
+### HAM-175 下一候选：选择(a)，补页面 frame focus 并完成 app 侧返回值取证
+
+本轮选择(a)，不启用原生→DOM事件桥。iOS非编辑控件交互期间，仅在页面可见、无编辑元素且 `document.hasFocus()` 为false时，通过公开 `window.focus()` 同步请求frame focus；不重设activeElement、不调用隐藏输入、不增加becomeFirstResponder、不合成键盘事件。原先 first responder 已有的事实不足以确认DOM frame与系统keyboard delegate全部正确；这是待Mac证伪的候选，不写成根因或修复通过。若页面本来已有focus，候选按设计不执行；若补齐后仍无可信DOM事件，就不能继续以此假设推进。
+
+修正LLDB表达式的唯一局部变量名与显式动态返回类型，新增 `_tryToHandlePressesEvent:` / keyboard-required / async / 入队等BOOL返回采样，按线程、caller PC、SP与入口序号对应；`handled`直接读取寄存器，即便getter失败也不丢此读数。补充UIKit keyboard manager/delegate探针，以及WK已持有的inputDelegate/asyncInputDelegate、keyWindow/scene/focus状态；不调用可能创建键盘状态的singleton accessor。新增独立只读 `scripts/ios/page_focus.js`，不改原观察器和矩阵断言。
+
+Mac步骤见更新后的 [诊断说明](ios-keyboard-trace.md)：**移除WebContent附加门槛**，以app侧文字阳性/工具菜单对照、返回值及页面focus快照推进，随后执行原18项矩阵并在无探针状态复核。WebContent限制不再作为等待条件。`--details`兼容性和新候选的原生效果仍需Mac实际执行；本机无xcrun/Apple LLDB，未编译Swift，不声称原生通过。PR #46保持Draft，HAM-175保持blocked，4.2 / 4.3均未勾选。
+
+本轮Linux检查：Python探针逻辑14项通过（含BOOL返回寄存器、线程/栈匹配、递归调用、清理临时断点与getter表达式约束）；Jest101套件/1325项、responder9项、原生配置4项通过。新增页面focus单测覆盖同步请求、当前控件保持、编辑/隐藏/已有focus时跳过、重入和卸载；旧单测仅为jsdom缺失的window.focus提供mock，未放宽断言。typecheck、库/Web build通过，lint 0 errors/原有32 warnings。四份原有Chromium spec共42项通过（独立5296端口、2 workers、1.1分钟）；未修改UI断言或HID验收脚本。Python语法、变更文件格式与diff检查通过，未执行新的原生/Swift验收。

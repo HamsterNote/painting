@@ -1,96 +1,77 @@
-# HAM-175 iOS 键盘分层诊断
+# HAM-175 iOS 键盘：页面 focus 候选与 app 侧取证
 
-这是 PR #46 的诊断候选，**没有声称修复原生键盘路由**。保持 Draft；终点仍是原生 18 项矩阵通过。产品代码沿用 Mac 已构建的 `b50496f`，包括已整合的 Tab 离开关闭处理；本轮不再增加 `becomeFirstResponder` 调用。`bf4611c` 的 Mac 验收记录已采纳至同一分支。
+PR #46 保持 Draft，HAM-175 保持 blocked，4.2 / 4.3 不勾选。当前选择 **(a) 通过公开页面 focus API 恢复 WebKit 的正常键盘路径**，未启用原生→DOM 合成事件桥。是否有效必须由 Mac 的真实 HID / `isTrusted` 证据确认；本机没有 xcrun / Apple LLDB。
 
-## 已知事实与待验证假设
+## 依据、候选和证伪条件
 
-2026-11-05，iPhone 17 Pro / iOS 26.5 **模拟器**、dev client 0.1.0(1)、idb 脚本 HID 输入：工具 / 缩放 / 设置 × Escape / Tab / Shift+Tab × PencilKit 关 / 开，18 项全部失败。84 条按下 / 抬起记录均有同一 WebView 的 WKContentView first responder；DOM 没有对应 keydown。文字框内同一路径产生可信 Tab / Escape，英文 / 系统拼音所测通过。完整事实见 [validation.md](validation.md) 的 Mac 回归节与 HAM-175 两个附件。
+`b50496f` 的18项矩阵失败时，WKContentView 已是 first responder。`bb06548` 进一步确认：文字 Tab / Escape 命中 `handleKeyEntry:withCompletionHandler:` → `_internalHandleKeyWebEvent:` → `WebPageProxy::handleKeyboardEvent` / `sendKeyEvent`，DOM 可信；工具菜单同键命中 UIApplication 和 `_tryToHandlePressesEvent:`，上述 entry / proxy 没有命中，detach 后一致。
 
-原 `native_trace.py` 只观察 UIApplication 的 `_handleKeyUIEvent:` / `sendEvent:` 和 `becomeFirstResponder`。调用栈证明焦点补丁运行，没有记录 presses、keyCommands、WebKit 键盘处理或跨进程接收，不能从这些日志判定具体断点。
+这定位到了非编辑态交接范围，尚未证明 `_tryToHandlePressesEvent:` 返回 false，也没有证明 UIKit keyboard input delegate / 页面 frame focus 正确。`bb06548` 的 `--details` 因短变量名 `d` 与内部符号冲突、动态 getter 未标注返回类型而编译失败。WebContent hardened 且无 get-task-allow，kernel 拒绝附加。**不再要求双进程阳性门槛，不等待或绕过该限制。**
 
-WebKit 上游源码提供以下待核对路径（仅用于选择探针，**不代表 Apple iOS 26.5 二进制与当前上游相同**）：
+本候选在现有 iOS DOM 控件 focusin / 非编辑控件 pointerdown 内同步执行 `doc.defaultView.focus()`，条件为页面可见、`document.hasFocus() === false`、没有正在编辑的元素。保持当前 activeElement，不调用 `.blur()`、隐藏输入框、private setter 或新的 `becomeFirstResponder`。重入保护避免 focus 通知递归；画布笔迹、文本/数字输入、select、contenteditable、隐藏页面不触发；Android/Web 不安装这一 iOS hook。原 Tab 离开关闭逻辑与 HID 验收断言不变。
 
-- [WKContentViewInteraction.mm](https://github.com/WebKit/WebKit/blob/main/Source/WebKit/UIProcess/ios/WKContentViewInteraction.mm)：`pressesBegan/Ended` → `_tryToHandlePressesEvent:` 检查 `_hidEvent`、first responder、编辑状态 / input peripheral；键盘回调经 `handleKeyWebEvent:` / `_internalHandleKeyWebEvent:` 或 BrowserEngineKit 的 `handleKeyEntry:withCompletionHandler:`。这些是不同分支，不能要求每个事件经过所有方法。
-- [WebPageProxy.cpp](https://github.com/WebKit/WebKit/blob/main/Source/WebKit/UIProcess/WebPageProxy.cpp)：`handleKeyboardEvent` 排队、`sendKeyEvent` 发送、`keyEventHandlingCompleted` 确认。入口命中不等于已经发送。
-- [WebPage.cpp](https://github.com/WebKit/WebKit/blob/main/Source/WebKit/WebProcess/WebPage/WebPage.cpp) / [WebFrame.cpp](https://github.com/WebKit/WebKit/blob/main/Source/WebKit/WebProcess/WebPage/WebFrame.cpp)：`WebPage::keyEvent` → `WebFrame::handleKeyEvent` → `WebCore::EventHandler::keyEvent`，最后与既有 DOM capture 监听器对照。
+依据是 [WebKit LocalDOMWindow::focus](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/page/LocalDOMWindow.cpp) 请求 `focusDocumentView()`，而 [WKContentView 的 first responder 路径](https://github.com/WebKit/WebKit/blob/main/Source/WebKit/UIProcess/ios/WKContentViewInteraction.mm) 更新宿主响应者与活动状态。这是公开的 frame focus 补齐候选，不是已证实根因；上游 main 也不代表 Apple iOS 26.5 的精确版本。
 
-优先区分 UIKit responder/command 分发、WebKit 非编辑态输入处理、UI 进程队列 / IPC、WebContent 接收 / DOM 分发。`_hidEvent` 为 nil、输入法接管、未收到发送确认都只是待观测的分支，尚无根因结论。
+**证伪条件**：若同一非编辑态样本的 `document.hasFocus()` 原本已为 true，候选按设计不会调用 focus；若从 false 恢复 true 后同键仍无 WebKit entry / 可信 DOM，则“补页面 frame focus 可恢复路由”这个候选失败。记录结果，不再添加同类调用。再结合 `_try` 返回、keyboard-required / async 状态、input delegate 与 keyWindow 判断是否推进授权的 (b)；本候选不自动切换 (b)，不伪造可信度。
 
-## Mac 操作步骤
+## Mac 运行步骤
 
-1. 从 PR #46 的 `agent/agent/16ee970f929f` 取最新 head，记录完整 SHA 和干净工作树。按既有流程 frozen install、准备库产物、prebuild、pod install、**重建安装 Debug dev client**。保存 build/install SHA-256 与 Xcode、模拟器、Expo 版本。默认入口、产品 diagnostics 关闭。不要只刷新旧客户端。
-2. 沿用原附件的 `drive.py` / `matrix.py` / `observe.js` 和 HID 输入命令、断言，另开一份证据目录。不要编辑这些脚本或其判过条件；新脚本仅增加原生观测。安装既有 DOM 监听器并读一次快照，确认连接的是当前 app / 页面。
-3. WebView 加载完成后，用 LLDB attach 到**本次 app 的准确 PID**，暂停并导入下列模块。把示例路径替换为当前仓库 / 本轮证据目录；日志文件必须尚不存在，防止串入上一轮。
+1. 取 PR #46 分支 `agent/agent/16ee970f929f` 最新 head，记录完整 SHA、工作树、Xcode / 系统版本和构建安装身份。按现有流程 frozen install、准备库产物、prebuild / pod install、重建安装 dev client。使用 iPhone 17 Pro / iOS 26.5 **模拟器**、默认入口、产品 diagnostics 关闭；不是实体键盘或真机验收。
+2. 沿用附件的 `drive.py` / `matrix.py` / `observe.js` / `metrics.js` 及原 idb HID 命令，不改输入、事件监听和判过条件。通过原 Inspector 的只读 evaluate 通道执行 `scripts/ios/page_focus.js`，保存独立 `*-page-focus.json`。脚本只读 hasFocus / visibility / active 元素类型 / 页面 URL，不聚焦、不安装监听、不改原 DOM 日志。
+3. **先不开探针**，做英文非组合输入文字框 Tab / Escape 与工具菜单同一单键的对照。每组在真实触摸打开/聚焦前、打开后、HID 按键后各取一次 page_focus 快照与原 open/result 证据；它是时间点读数，不冒充事件期间状态。勿用 `.focus()` / JS click 设置测试前置。文字 Tab 后须实际触摸重新聚焦 textarea 才发 Escape。
+4. WebView 加载后 attach **本次 app 的准确 PID**，暂停。旧进程 PID、其他任务的 WebView 不能用于采样。替换示例路径；日志必须尚不存在。
 
 ```text
 (lldb) command script import /path/to/painting/scripts/ios/trace_keyboard.py
 (lldb) expression -l objective-c++ -- @import UIKit
-(lldb) ham175-start --role app --output /path/to/evidence/app-keyboard.jsonl --details
-(lldb) ham175-mark cold-start-ready
+(lldb) ham175-start --role app --output /path/to/evidence/app-details.jsonl --details
+(lldb) ham175-mark english-text-ready
 (lldb) continue
 ```
 
-导入只注册命令，`ham175-start` 才启用探针。它从已加载符号发现方法，在函数入口下断点，避免函数序言覆盖参数寄存器；支持 arm64 / arm64e 与 x86_64，不支持的 ABI 会拒绝运行。模块晚加载、页面 / 进程重建后需 stop，再 start 到新的日志文件；不会假装自动追踪另一个进程。
-
-`--details` 在暂停点读取只读 ObjC getter：UIEvent 地址 / timestamp / type / `_hidEvent` 是否存在、**全部** press 的 HID keyCode / phase / modifiers，WKContentView 的实际类 / first responder / 视图祖先，以及 UIApplication 实际发送的 action / target / UIKeyCommand input。不记录文字输入内容。`keyCommands` 记录谁被查询及调用栈，**不会主动调用 getter、添加 command，也不声称查询等于选中或处理**；以 `application.action` 确认实际 action 分发。WebEvent 的 `webKeyCode` 与 UIPress 的 HID code 不保证同一编码，不能直接比较数值。
-
-每个命中含 UTC / host monotonic 时间、PID、线程、序号、原始参数和最多 12 层栈。C++ 参数只保留原始寄存器，不按未知版本的对象布局解引用。表达式限制 250ms、屏蔽递归断点；失败记 `error`，不会记成事件未到。若 getter 不可用，先保存错误，再 stop / 另开日志去掉 `--details`，收纯寄存器与调用栈；不要为让日志好看而吞掉错误。
-
-4. 检查 start 输出的 inventory，记录每个 probe 的实际 locations。至少核实 `application.dispatch`、`responder.presses`、`responder.commands`、`webkit.entry`、`proxy.enqueue` / `proxy.send`。`coverage: unavailable` 或 locations=0 表示**观测缺口**。私有方法可能被改名 / 内联 / 去符号；保存以下查找输出交回，不能把零命中写成产品丢事件：
-
-```text
-(lldb) image lookup -r -n 'WKContentView.*(presses|keyCommands|KeyWebEvent|KeyEntry|requiresKeyEvents)'
-(lldb) image lookup -r -n 'WebPageProxy::(handleKeyboardEvent|sendKeyEvent|keyEventHandlingCompleted)'
-(lldb) image list -u -f
-```
-
-5. 先用文字框发 **单个 Tab，再触摸重新聚焦文字框发单个 Escape**，记录可信 DOM 事件作阳性对照。然后打开工具菜单发同样的键，逐键操作并等待事件处理完毕，分别保存 open/result 快照及时间窗口；不能把累计日志中的文字事件算到菜单上。保留按下 / 抬起与 Shift press；不可只取 `allPresses.anyObject`，那会漏掉组合键。首轮只需要这两组来确定哪段缺日志，再扩到原 18 项矩阵。
-6. 用 app 日志里的 Expo DomWKWebView 地址核实所属 WebContent PID。在 app 暂停时，可读取已有对象的只读私有 PID getter（先确认 selector 存在），或用现有 Web Inspector 的进程映射。不要直接选择进程列表中第一个 WebContent：
-
-```text
-(lldb) expression -l objective-c++ -- (BOOL)[(id)0xWEBVIEW respondsToSelector:@selector(_webProcessIdentifier)]
-(lldb) expression -l objective-c++ -- (int)[(id)0xWEBVIEW _webProcessIdentifier]
-```
-
-保存地址 → PID 映射，在**另一个 LLDB 会话** attach 这个 PID，WebView app 会话保持运行。WebContent 会话：
-
-```text
-(lldb) command script import /path/to/painting/scripts/ios/trace_keyboard.py
-(lldb) ham175-start --role webcontent --output /path/to/evidence/webcontent-keyboard.jsonl
-(lldb) ham175-mark paired-process-ready
-(lldb) continue
-```
-
-在两个进程探针都挂好后，再做文字阳性对照和工具菜单单键对照。`WebCore::EventDispatcher::dispatchEvent` 是通用分发点，命中可能来自 focus / pointer / timer；**只有同一线程栈包含 keyEvent 的命中才能归入同步键盘分发**，最终仍以既有 DOM 记录器的 `isTrusted` 为准。WebContent attach 被系统拒绝或 WebCore 符号不存在时，完整保留错误 / inventory，明确该段未观测，不把 UI 进程发送端当成 WebContent 已收到。
-
-7. 每组前后可暂停、`ham175-mark 场景名`、`ham175-status` 后 continue。分组标记需与原矩阵的 open/result UTC 窗口对应；暂停会延迟事件，不用 47/55ms 作为成功门槛。记录 instrumented 的完整矩阵后，在**两个会话**分别暂停并结束：
+5. 重复文字 / 工具菜单单键对照并确认新读数有效。每次 HID 只发一个键，等待处理完成；保存全部按下/抬起和 Shift press，不用 `allPresses.anyObject`。用 UTC 窗口、event 地址 / timestamp、线程、`callSequence` 关联入口与返回，不能把累计文字日志算到菜单。定点暂停后可 `ham175-mark 场景名` / `ham175-status`，随后 continue；暂停会改变延迟，不用旧的47/55ms当门槛。
+6. app 侧阳性成立后运行原18项矩阵：工具/缩放/设置 × Escape/Tab/Shift+Tab × 默认/PencilKit。**WebContent 无法附加不再阻止矩阵执行。** 候选无效仍记录真实失败和范围；未执行项写未验。保留文字/IME/完成/取消/一次撤销、横滚、PencilKit 点击最小回归。
+7. 暂停并 stop / detach，然后重复文字和失败场景；若宣称修复，**完整矩阵必须也在无探针状态通过**。不把重启当作同进程前后台恢复。
 
 ```text
 (lldb) ham175-stop
 (lldb) process detach
 ```
 
-stop 写入最终 inventory / 命中数 / 错误数并只删除本模块创建的断点，不删其他断点。Detach 后继续用原脚本复验失败场景与文字阳性对照，保留无探针结果排除观测时序影响。不要在回归过程中终止并重启 app 来充当前后台恢复。
+## 新读数与限制
 
-## 每一段日志回答什么
+导入只注册命令，start 才启用。正则发现已加载方法后，在函数入口采样，避免序言覆盖参数寄存器。支持 arm64 / arm64e / x86_64；未知 ABI 拒绝运行。进程变化会停止本模块采样，必须另开日志；cleanup 只移除自己的入口和临时返回断点。
 
-| 对照结果（符号已解析、阳性对照证明观测有效）                                    | 下一步定位范围                                                                                                                 |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| UIApplication 有事件，WKContentView 无 presses / keyboard entry                 | UIKit responder / command / gesture 路由；检查继承的 UIResponder presses 命中的 receiver 类与 action target，不据此断言是 Expo |
-| WK presses 到达，`_tryToHandlePressesEvent` 有入口，但 WebKit keyboard entry 无 | 对照 `_hidEvent`、编辑态 / 非编辑态、keyCommands 查询和 action；入口命中不提供 `_try` 的返回值，必要时再做针对该分支的单步     |
-| keyboard entry 有，proxy enqueue 无                                             | WebKit 输入法 / internal handler 分支；检查 `webkit.ime`、实际栈与 completion 的 handled 值                                    |
-| proxy enqueue 有，send 无                                                       | 队列等待 / 页面状态；对照先前 completion，不能声称 IPC 已发出                                                                  |
-| proxy send 有，正确 WebContent PID 的 receive 无                                | 发送 / IPC / 进程或 frame 生命周期；确认 PID 没换、对应点阳性命中过后再定位                                                    |
-| WebContent receive / frame / WebCore key 有，DOM 无                             | WebCore 到目标文档 / frame 的分发；核对 DOM 记录器页面身份与同步 dispatch 栈                                                   |
-| 任一必需点 unavailable，getter 报错，或阳性对照也不命中                         | 诊断覆盖不足；回传错误和符号列表，不给该边界通过 / 失败结论                                                                    |
+| 记录                                                    | 含义                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `application.receive/dispatch/action`                   | UIApplication 入口、event/type/timestamp、全部 press 的 HID code/phase/modifiers，以及实际发送的 command action                                                                                                                                                                                          |
+| `responder.presses/commands`                            | 原方法 receiver 地址和调用栈；keyCommands 查询不等于选中 command。高频查询保持纯寄存器采样，避免 getter 延迟                                                                                                                                                                                             |
+| `webkit.presses` 的 hit + return                        | `_tryToHandlePressesEvent:` 的真实 BOOL，`callSequence` 对应入口。true 表示该调用处理了 press，false 表示调用方可继续；false 不等于已到 DOM 入口                                                                                                                                                         |
+| `webkit.keyboard-required/requires/async/ime` 的 return | 系统自然调用时的 BOOL。`--details` 的 `focus` 另读即时状态；两者来源不同，分别保留                                                                                                                                                                                                                       |
+| `keyboard.manager/delegate`                             | 阳性栈中的 `_UIKeyboardStateManager handleKeyEvent:` / `UIKBInputDelegateManager handleKeyWebEvent:`，区分 UIKit 键盘管理器与 WK entry 交接                                                                                                                                                              |
+| `webkit.completion.handled`                             | 直接读取 `_didHandleKeyEvent:eventWasHandled:` 参数寄存器，即便 getter 编译失败仍保留                                                                                                                                                                                                                    |
+| `proxy.enqueue` 的 return / `proxy.send`                | 入队 BOOL 及发送入口；不代替 WebContent 接收证据                                                                                                                                                                                                                                                         |
+| `focus`（WK try 入口与返回）                            | keyWindow、sceneActivationState、UIFocusSystem focusedItem 地址/类、可读取的 WKContentView 已持有的 inputDelegate / asyncInputDelegate 地址/类，以及 requiresKeyEvents / keyboard-required / async / focused-element 状态。delegate 可能是包装对象，地址不同不单独判错；focusedItem=nil 也不单独证明故障 |
+| `page.focused/active` 的 return                         | app 侧 PageClient 自然查询的 BOOL（如果该版本有符号且命中）。DOM 页面状态由 page_focus.js 提供，不相互冒充                                                                                                                                                                                               |
 
-路径存在分支：编辑态未必经过 `pressesBegan`，非编辑态也未必走 `keyCommands`。缺少某个可选入口不能单独当成失败。上述表是缩小范围的依据，不是自动判绿的测试。
+返回探针使用 LLDB 展开的 caller PC，不手动解引用带 PAC 的 LR；核对线程与返回时 SP（x86_64 计入 ret 弹栈），读取 x0/rax 低字节，不改寄存器、返回值或控制流。同一调用点的嵌套调用不会消耗外层返回探针。异常展开/尾调用/缺符号可能导致缺失：`return-unavailable`、`pendingReturns`、error 都须保留，**无返回记录不能当成 false**。最多128个未匹配调用，达到上限明确报错；回传后 stop/start，不无限增加断点。
 
-## 必须回传
+`--details` 已改用唯一前缀局部变量并显式转换动态 getter 返回类型，分别保留 `error` 与 `focusError`。表达式限制250ms、屏蔽递归断点，不记录输入文字。只读 WKContentView 已持有的 inputDelegate / asyncInputDelegate，不调用可能初始化键盘状态的 singleton accessor；`webkit.delegate-change` 记录系统原有 setter 的参数，探针不调用 setter。Mac 仍须验证 Apple 表达式兼容性。失败时先保存原始错误，stop 后另开不带 `--details` 的日志；**返回值与 handled 不依赖 getter**，可继续定位。
 
-- 完整构建 SHA、build/install 身份、系统和设备型号，明确 **模拟器 / idb 脚本输入**。
-- app / WebContent JSONL，start/end inventory、未解析的符号查找、对应 image UUID 列表、WebView 地址 → WebContent PID 映射；未能 attach 的原始错误。
-- 原有 `native-events.jsonl`、`dom-events-all.json`、18 项 `matrix-summary.json`、open/result 快照和截图，不修改输入或判定脚本。标出文字阳性与非编辑态每次按键的 UTC 窗口和探针开 / 关状态。
-- 文字 / IME / 提交 / 取消 / 撤销、横滚、PencilKit 所测操作的回归结果；未操作项记未验。
+保存 start/end inventory 的 coverage 与 locations。`proxy.completion` 在 `bb06548` 未解析，不据零命中判丢失。WebContent 模式保留供受支持环境使用，本轮不附加、不改签名或系统权限、不等待它。必要的 app 符号清单：
 
-本轮 Linux 只检查 Python 逻辑和仓库自动化；没有 xcrun、Swift 编译、LLDB/Apple 私有符号运行或新的模拟器结论。4.2 / 4.3 保持未勾选。
+```text
+(lldb) image lookup -r -n 'WKContentView.*(presses|KeyWebEvent|KeyEntry|requiresKeyEvents|requiresKeyboard|AsyncInteractions)'
+(lldb) image lookup -r -n 'UIKeyboardStateManager.*handleKeyEvent|UIKBInputDelegateManager.*handleKeyWebEvent'
+(lldb) image lookup -r -n 'WebPageProxy::(handleKeyboardEvent|sendKeyEvent)|PageClientImpl::isView'
+(lldb) image list -u -f
+```
+
+## 交回什么、如何判断
+
+- 构建/安装 SHA 与版本；app JSONL、inventory / image UUID、原始 getter/return 错误、逐组 page_focus 快照、原 DOM/矩阵/open-result/截图证据，明确探针开/关与 UTC 窗口。
+- 先回答 `_try` 返回 true 还是 false；false 时 keyboard-required / async / delegate / keyWindow 与文字阳性有何差异；UIKit keyboard manager / delegate 到哪层停止；页面 focus 候选有无补齐可观测缺口。
+- 若非编辑态始终 hasFocus=true 且路由仍断，明确本次(a)候选无效。结合 app 读数决定后续授权的桥接方案，届时须如实记录 `isTrusted=false` 及 Tab 默认遍历等契约影响。
+- 单键通过不代替18项矩阵；没有原生证据不勾4.3。`bb06548` 只有单键对照与非键盘最小回归，18行是 not_run；`b50496f` 才是18项全失败，不混用两个SHA。
+
+本机检查：`python3 -B -m unittest discover -s scripts/ios -p 'test_*.py' -v` 验证探针宿主逻辑，不能证明 Apple getter 编译、Swift 或原生链路通过。最终结果回填 [validation.md](validation.md)。
