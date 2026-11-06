@@ -1,12 +1,14 @@
 # 工具栏验证
 
-## HAM-175 收口定稿：诊断已停止，待修勾选择验收口径
+## HAM-175 收口定稿：已采用A，iOS宿主子项行为通过
 
-最终结论为**内部终止层未定；现有UIKeyCommand方案下，拼音输入法＋颜色字段的Escape不可达**。有界轮次已经结束，不追加取证、不再修改产品代码。PR #46保持Draft、不合并；HAM-175保持blocked。4.2/4.3仍未勾选，spec未改，以下两种决策措辞均未生效。
+修勾于2026-11-06在本单评论`01a1b164-b31a-746c-8d2f-10db6d9c4efc`选择 **A：接受行为验收**。4.3的本次iOS宿主子项按行为通过记录：弹层关闭、焦点归还及完整遍历18/18，触摸交接32/32，颜色焦点下range拖动12/12，双向长按Tab跨颜色8/8且松开无补发。原生桥事件`isTrusted=false`作为已接受的实现方式差异，拼音输入法＋颜色字段Escape在现有UIKeyCommand方案下不可达、内部终止层未定作为已接受的平台限制；二者不列为本次A口径的未满足项。
 
-统一证据口径：**iOS 26.5模拟器 / idb脚本输入 / 非真机**。具体为iPhone17 Pro模拟器、当前Expo DOM宿主及默认/PencilKit入口；不是实体键盘或真实Apple Pencil验收，不外推其他iOS版本、真机或Android。最终实测源码为`39fd473e1822b9068dec060c159ee2946bbcd003`，Mac arm64 / Xcode27.2一次原生构建安装成功，188.107秒、0编译错误，主程序/debug dylib构建与安装哈希一致。本次收口仅整理文档，不产生新的运行结论。
+有界诊断已结束，不追加取证、不再修改产品代码。PR #46进入代码评审，不合并；4.2/4.3仍未勾选，spec未改。4.2仍需实体笔验收，4.3的整体勾选留给修勾在HAM-164决定，本次子项行为通过不表示完整4.3或真机验收通过。
 
-### 已达成行为与正式判定
+统一原生证据口径：**iOS 26.5模拟器 / idb脚本输入 / 非真机**。具体为iPhone17 Pro模拟器、当前Expo DOM宿主及默认/PencilKit入口；不是实体键盘或真实Apple Pencil验收，不外推其他iOS版本、真机或Android。最后一次Mac实测源码为`39fd473e1822b9068dec060c159ee2946bbcd003`，Mac arm64 / Xcode27.2一次原生构建安装成功，188.107秒、0编译错误，主程序/debug dylib构建与安装哈希一致。本次采用A仅修改文档；最终head的Linux单测、类型、构建、UI及依赖/格式检查结果记录在PR #46描述中，不替代原生证据。
+
+### 已达成行为与保留的原始判定
 
 下表均来自该SHA在无LLDB、诊断关闭、默认webview owner下的保留组；未放宽原输入、观察器或判定。
 
@@ -17,15 +19,15 @@
 | 颜色焦点下真实range拖动；pointerup/change、拖后焦点与紧接按键                      | 12/12       | boundary-summary.json及原始拖动记录                     |
 | 真正双向持续按住Tab 1.5秒跨颜色；松开后约1.48–1.51秒静默                           | 8/8，无补发 | boundary-summary.json及长按/释放记录                    |
 
-**原18项矩阵的正式判定仍为0/18，唯一失败原因是桥事件`isTrusted=false`。** 该矩阵44次HID对应44次原生投递和44个false DOM keydown，无重复；整个保留阶段184次命令包含准备和其他组，不能替代矩阵键数。这个“唯一原因”仅指原18项矩阵；追加的拼音颜色Escape存在独立的无投递/不关闭行为失败，不可归为仅可信度问题。
+**原18项矩阵的原始正式判定保留为0/18，唯一失败原因是桥事件`isTrusted=false`。** 该矩阵44次HID对应44次原生投递和44个false DOM keydown，无重复；整个保留阶段184次命令包含准备和其他组，不能替代矩阵键数。这个“唯一原因”仅指原18项矩阵；追加的拼音颜色Escape原始读数为无投递/不关闭，不可归为仅可信度问题。选择A后按行为通过并记录两条已知限制，不改写原始结果或原检查器。
 
-### 已知限制一：原生桥事件的可信度
+### 已接受的实现方式差异：原生桥事件的可信度
 
 在已测宿主的非编辑态，真实脚本HID到达UIApplication/WK处理路径，但WebKit没有向DOM投递keydown。公开UIKeyCommand接管后，经JS桥创建的KeyboardEvent按平台语义为`isTrusted=false`；桥行为达成并不使事件成为WebKit可信事件。没有覆盖isTrusted、伪装来源或修改原观察器/矩阵来通过判定。
 
 三个焦点方向均未形成满足本单约束的方案，但证据范围必须区分：`becomeFirstResponder`（b50496f）和页面`window.focus()`（e1b939a）在**iOS模拟器原生重建回归**中无效；页面focus sink的透明textarea/contenteditable实验在**Chromium 147**里虽有可信键，却仍暴露focused/editable AX节点，`aria-hidden`/tabindex=-1不满足无障碍约束，见[原始记录](focus-sink-chromium.json)。不存在这第三条的iOS实测证据，不能写成“三套焦点方案均已实机排除”；这些记录更不代表真机结论。
 
-### 已知限制二：拼音颜色Escape仍不可达，内部终止层未定
+### 已接受的平台限制：拼音颜色Escape仍不可达，内部终止层未定
 
 最后一轮A/B共20个有效单键窗口：12个非组合拼音窗口均无原生投递/DOM Escape，颜色焦点和面板保持；4个组合取消、4个英文同字段可信Escape对照成立。中文gate已放行、marked=false、scope/ack一致；B的validate=true、target确实移到既有DomWebView容器，行为仍未改善。关闭探针后的A/B拼音空闲仍失败，英文对照正常。
 
@@ -43,7 +45,15 @@
 
 前轮证据用于解释方案来源，不拼接为本SHA新通过项；例如96625b6的label16/16、文字编辑回归及键盘稳定遮挡结果并未全部在39fd473重跑。真机/实体键盘、真实Apple Pencil压感倾斜和跨边界、完整VoiceOver、其他机型/系统、4.3的Android及完整设备验收不由本单模拟器结果覆盖。原[有界计划](ios-pinyin-escape-final-round.md)和[诊断记录](ios-keyboard-trace.md)均已转为历史资料，不再作为下一轮执行请求。
 
-### 待选择的收口措辞：只替换这一段
+### 已采用的A收口措辞
+
+> 4.3的本次iOS宿主子项按行为通过记录：接受iOS 26.5模拟器、idb脚本输入下弹层关闭/焦点归还/遍历18/18、触摸交接32/32、range拖动12/12、双向长按8/8的行为结果；原生桥事件isTrusted=false与拼音输入法＋颜色字段Escape在现有UIKeyCommand方案下不可达、内部终止层未定，分别作为已接受的实现方式差异与平台限制并列记录，不列为本次未满足项。保留原矩阵0/18及全部未覆盖项，不表示真机或完整4.3通过；4.2/4.3仍未勾选，整体4.3由修勾在HAM-164决定。
+
+## 历史验证记录
+
+以下保留各轮当时的备选口径、实现、待验计划和结果；“待选择/保持Draft/blocked/本轮/新候选/待Mac重建”等历史措辞不覆盖上面的A验收结论，也不构成继续取证或改代码的授权。
+
+### e7b0c69收口备选记录（选择A之前）
 
 以上证据、两条限制、输入口径和未覆盖范围是共同记录；以下A/B仅替换决策段，不改变历史结果、原0/18判定或任务勾选。**还差修勾一句话：选择A“接受行为验收＋两条已知限制”，或选择B“按平台限制降级记录”。** 当前没有代为选择，也没有新的Mac取证任务等待执行。
 
@@ -54,10 +64,6 @@
 **B：修勾选择降级时采用（待确认）**
 
 > 4.3的本次iOS宿主子项按平台限制降级记录：保留iOS 26.5模拟器、idb脚本输入下18/32/12/8的行为证据，将原生桥事件isTrusted=false，以及拼音输入法＋颜色字段的Escape在现有UIKeyCommand方案下不可达、内部终止层未定列为未满足项，不据此承诺完整键盘支持。此口径保留原矩阵0/18及全部未覆盖项，不表示真机或完整4.3通过；4.2/4.3仍未勾选。
-
-## 历史验证记录
-
-以下保留各轮当时的实现、待验计划和结果；“本轮/新候选/待Mac重建”等历史措辞不覆盖上面的最终收口状态，也不构成继续取证或改代码的授权。
 
 对应 HAM-156 / OpenSpec change `polish-painting-toolbar` / PR #44。本轮在同一 change 和分支落实已采纳的第四轮三条验收意见，先更新 spec/design 并严格校验后实施。
 
@@ -102,59 +108,58 @@
 - iOS/Android Expo DOM：安全区、横滚、系统软键盘、弹层和焦点。
 - 显式启用iOS PencilKit原型：原生覆盖层不吞工具栏。
 
-
 ## HAM-164 设备发现与 HAM-167 修复（2026-11-04）
 
 原始设备侧基线为 `e97f9fe`。以下记录来源为 HAM-164 的 Mac 操作员评论与附件 `HAM-164-device-validation.md` / `HAM-164-evidence.zip`（13 张截图、AX 摘录、崩溃日志）。**这是修复前的实际观察，不代表修复后的设备通过结果。**
 
 Mac 为 arm64 / macOS 27.2 (26B123) / Xcode 27.2 (27B52)。原生宿主为 Painting Playground development build 0.1.0 (1)，Expo 57.0.24、React Native 0.86.3、expo-dev-client 57.0.20、@expo/dom-webview 57.0.1。
 
-| 设备 / 系统 / 浏览器或宿主 | 输入来源 | 待验项与实际判定 |
-| --- | --- | --- |
-| iPhone 18 Pro 模拟器 / iOS 27.2 / 上述 dev client | 启动请求、深链接 | **失败**：UIKit 报 `UIScene life cycle is required for apps built with this SDK`，SIGTRAP，未进入编辑器；构建成功不等于启动通过 |
-| iPhone 17 Pro 模拟器 / iOS 26.5 / 上述 dev client | idb 注入模拟触摸、HID 键盘 | **安全区 / 胶囊未通过**：状态行 y=10 与系统状态栏重叠；初次胶囊 AX 宽 26pt、仅露左缘，后续 x=16 / 宽 370pt；稳定底部位置仍需复验 |
-| 同一 iPhone 17 Pro 模拟器 | 同上 | **内部横滚所测操作通过**：可从工具组滚到画布操作与调色板；独立收起按钮保留 |
-| 同一 iPhone 17 Pro 模拟器 | 同上 | **键盘 / 文字部分通过、有缺陷**：能聚焦、显示英文软键盘、输入 `nihao` 并完成保留；靠右创建文字时完成按钮中心 x=430.5，超出 402pt 屏宽 |
-| 同一 iPhone 17 Pro 模拟器 | 同上 | **弹层 / 焦点部分通过**：菜单打开、选择文字、聚焦成功；Tab / Escape / 焦点返回完整矩阵未覆盖 |
-| 同一 iPhone 17 Pro 模拟器 / `pencilkit=1` | 模拟触摸；原生笔输入计数均为 0 | **PencilKit 工具栏触摸子项通过**：`gesture-ancestor` 状态可打开菜单、切文字，所测点击未吞；无法推导原生笔书写、压力、跨边界通过 |
-| iPad Pro 11-inch (M5) 模拟器 / iPadOS 27.2 / Safari 27.2 (AppleWebKit 605.1.15) | idb 模拟触摸、HID 键盘，`pointerType=touch` / `pen=0` | **中文 IME 模拟器部分通过**：输入 `nihao` 出现“你好”候选，触摸选词并完成后保留；系统取色器面板外观通过，颜色提交未验 |
-| 实体 iPad / 发现为离线设备，系统 18.7.11，型号与 Safari 版本无法读取 | 无可操作设备 / Apple Pencil | **无法验证**：30 笔快速短笔、跨工具栏边界、系统选词后首击、真机中文 IME 与原生取色器均待设备 |
-| Android / 第一轮无在线 adb 设备、无 emulator 与 AVD | 无 | **第一轮无法验证**：第二轮已建立 API 36 AVD，最新结果见下表；不等待 Android 才交付 iOS 修复 |
+| 设备 / 系统 / 浏览器或宿主                                                      | 输入来源                                              | 待验项与实际判定                                                                                                                      |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| iPhone 18 Pro 模拟器 / iOS 27.2 / 上述 dev client                               | 启动请求、深链接                                      | **失败**：UIKit 报 `UIScene life cycle is required for apps built with this SDK`，SIGTRAP，未进入编辑器；构建成功不等于启动通过       |
+| iPhone 17 Pro 模拟器 / iOS 26.5 / 上述 dev client                               | idb 注入模拟触摸、HID 键盘                            | **安全区 / 胶囊未通过**：状态行 y=10 与系统状态栏重叠；初次胶囊 AX 宽 26pt、仅露左缘，后续 x=16 / 宽 370pt；稳定底部位置仍需复验      |
+| 同一 iPhone 17 Pro 模拟器                                                       | 同上                                                  | **内部横滚所测操作通过**：可从工具组滚到画布操作与调色板；独立收起按钮保留                                                            |
+| 同一 iPhone 17 Pro 模拟器                                                       | 同上                                                  | **键盘 / 文字部分通过、有缺陷**：能聚焦、显示英文软键盘、输入 `nihao` 并完成保留；靠右创建文字时完成按钮中心 x=430.5，超出 402pt 屏宽 |
+| 同一 iPhone 17 Pro 模拟器                                                       | 同上                                                  | **弹层 / 焦点部分通过**：菜单打开、选择文字、聚焦成功；Tab / Escape / 焦点返回完整矩阵未覆盖                                          |
+| 同一 iPhone 17 Pro 模拟器 / `pencilkit=1`                                       | 模拟触摸；原生笔输入计数均为 0                        | **PencilKit 工具栏触摸子项通过**：`gesture-ancestor` 状态可打开菜单、切文字，所测点击未吞；无法推导原生笔书写、压力、跨边界通过       |
+| iPad Pro 11-inch (M5) 模拟器 / iPadOS 27.2 / Safari 27.2 (AppleWebKit 605.1.15) | idb 模拟触摸、HID 键盘，`pointerType=touch` / `pen=0` | **中文 IME 模拟器部分通过**：输入 `nihao` 出现“你好”候选，触摸选词并完成后保留；系统取色器面板外观通过，颜色提交未验                  |
+| 实体 iPad / 发现为离线设备，系统 18.7.11，型号与 Safari 版本无法读取            | 无可操作设备 / Apple Pencil                           | **无法验证**：30 笔快速短笔、跨工具栏边界、系统选词后首击、真机中文 IME 与原生取色器均待设备                                          |
+| Android / 第一轮无在线 adb 设备、无 emulator 与 AVD                             | 无                                                    | **第一轮无法验证**：第二轮已建立 API 36 AVD，最新结果见下表；不等待 Android 才交付 iOS 修复                                           |
 
 第二轮 Mac 验证（HAM-164 评论 `01a1a5aa-d3b1-72b5-a78b-f7a36c3a4a9f`，2026-11-04，仍为修复前 `e97f9fe`）：
 
-| 设备 / 系统 / 宿主 | 输入来源 | 实际判定 |
-| --- | --- | --- |
-| Pixel 7 配置 AVD / Android 16 API 36 ARM64 / Playground 0.1.0 (1)，Expo 57.0.24、RN 0.86.3、System WebView 133.0.6943.137 | ADB 模拟触摸与键盘，Gboard；Temurin 17 构建、ADB 安装并连接 `dev:native` Metro | **默认入口安全区 / 胶囊失败**：画布宽 0、胶囊仅露左缘 |
-| 同一 Android AVD，诊断入口 | 同上 | **内部横滚子项通过**：scrollLeft 0→254→0，页面横向滚动为 0；不能替代默认入口验收 |
-| 同一 Android AVD，默认入口 | 同上 | **文字提交子项通过、布局失败**：提交 `Android57` 成功；文字框右缘约 602px，屏宽约 412px，完成按钮在屏外并被键盘遮挡 |
-| 同一 Android AVD | ADB 键盘 | **所测焦点子项通过**：Escape 关闭工具菜单 / 缩放弹层并回各自触发按钮；Tab 可遍历，末项离开并关闭，无弹层闭环 |
-| iPhone 17 Pro / iOS 26.5 | idb HID 输入通道 | **无法验证键盘矩阵**：`dtuhidd connection ... invalidated`，换工具 / 重启仍无可信响应；不是产品通过或失败结论 |
+| 设备 / 系统 / 宿主                                                                                                        | 输入来源                                                                       | 实际判定                                                                                                            |
+| ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| Pixel 7 配置 AVD / Android 16 API 36 ARM64 / Playground 0.1.0 (1)，Expo 57.0.24、RN 0.86.3、System WebView 133.0.6943.137 | ADB 模拟触摸与键盘，Gboard；Temurin 17 构建、ADB 安装并连接 `dev:native` Metro | **默认入口安全区 / 胶囊失败**：画布宽 0、胶囊仅露左缘                                                               |
+| 同一 Android AVD，诊断入口                                                                                                | 同上                                                                           | **内部横滚子项通过**：scrollLeft 0→254→0，页面横向滚动为 0；不能替代默认入口验收                                    |
+| 同一 Android AVD，默认入口                                                                                                | 同上                                                                           | **文字提交子项通过、布局失败**：提交 `Android57` 成功；文字框右缘约 602px，屏宽约 412px，完成按钮在屏外并被键盘遮挡 |
+| 同一 Android AVD                                                                                                          | ADB 键盘                                                                       | **所测焦点子项通过**：Escape 关闭工具菜单 / 缩放弹层并回各自触发按钮；Tab 可遍历，末项离开并关闭，无弹层闭环        |
+| iPhone 17 Pro / iOS 26.5                                                                                                  | idb HID 输入通道                                                               | **无法验证键盘矩阵**：`dtuhidd connection ... invalidated`，换工具 / 重启仍无可信响应；不是产品通过或失败结论       |
 
 第二轮结束已停止 Metro、AVD、代理与 iPhone 17 Pro，保留单一 API 36 AVD 和 dev client 供新 head 回归。以上均为模拟器结果，不替代实体设备结论。
 
 第三轮设备回归（HAM-164 评论 `01a1a60a-7f4f-7925-ba00-ec1bcaabdb3d`，附件 `HAM-164-round3-validation.md`，head `7e7d062`）：
 
-| 设备 / 项目 | 实际判定 |
-| --- | --- |
-| 同一 Pixel 7 AVD / Android 16 API 36 / System WebView 133，默认入口 | **所测布局恢复**：画布 412.19×839.24 CSS px，胶囊 x16、宽380.19、底823.24；内部横滚通过、外页 scrollX=0。顶部系统状态文字对比不足，未据此宣告安全区全部通过 |
-| 同一 Android AVD / 弹层与焦点 | **Escape 与归还通过**：工具、缩放、设置分别关闭并回触发按钮；Tab 经过实际控件后离开并关闭，无层内闭环 |
-| 同一 Android AVD / 系统键盘 | **仍失败**：Gboard 实际可见时 innerHeight / visualViewport 高仍约839.24，右下 textarea / 完成 / 取消被覆盖；退出再进默认页后仍复现。横向限位已通过，隐藏键盘后可完成提交 |
-| 同一 Android AVD / 两处 P2 | **专项通过**：25% 提交并重开100个“汉”，文档与内容高度均300px；祖先仅 translate(20px,30px)，resize事件0，浮层同步移动。输入来自CDP，不是系统中文IME结论 |
-| iPhone 17 Pro / iOS 26.5、iPhone 18 Pro / iOS 27.2 / 新 dev client | **构建与所测启动通过、稳定布局改善**：iOS27.2不再启动即SIGTRAP；实际进入默认编辑器，稳定画面的安全区与胶囊正常，26.5胶囊x16、宽370、底824。尚未覆盖全部冷启动瞬时首帧 |
-| iOS 26.5 / 横滚、软键盘、焦点与 PencilKit 点击 | **无法验证，输入通道问题**：HID触摸 / Tab / Escape连接失效，Simulator前台System Events仍超时。PencilKit已启用并收到gesture-ancestor配置回执，但不能用AX激活替代真实点击结论；由人工或恢复通道后补验，不在本次Android修复范围 |
+| 设备 / 项目                                                         | 实际判定                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 同一 Pixel 7 AVD / Android 16 API 36 / System WebView 133，默认入口 | **所测布局恢复**：画布 412.19×839.24 CSS px，胶囊 x16、宽380.19、底823.24；内部横滚通过、外页 scrollX=0。顶部系统状态文字对比不足，未据此宣告安全区全部通过                                                                  |
+| 同一 Android AVD / 弹层与焦点                                       | **Escape 与归还通过**：工具、缩放、设置分别关闭并回触发按钮；Tab 经过实际控件后离开并关闭，无层内闭环                                                                                                                        |
+| 同一 Android AVD / 系统键盘                                         | **仍失败**：Gboard 实际可见时 innerHeight / visualViewport 高仍约839.24，右下 textarea / 完成 / 取消被覆盖；退出再进默认页后仍复现。横向限位已通过，隐藏键盘后可完成提交                                                     |
+| 同一 Android AVD / 两处 P2                                          | **专项通过**：25% 提交并重开100个“汉”，文档与内容高度均300px；祖先仅 translate(20px,30px)，resize事件0，浮层同步移动。输入来自CDP，不是系统中文IME结论                                                                       |
+| iPhone 17 Pro / iOS 26.5、iPhone 18 Pro / iOS 27.2 / 新 dev client  | **构建与所测启动通过、稳定布局改善**：iOS27.2不再启动即SIGTRAP；实际进入默认编辑器，稳定画面的安全区与胶囊正常，26.5胶囊x16、宽370、底824。尚未覆盖全部冷启动瞬时首帧                                                        |
+| iOS 26.5 / 横滚、软键盘、焦点与 PencilKit 点击                      | **无法验证，输入通道问题**：HID触摸 / Tab / Escape连接失效，Simulator前台System Events仍超时。PencilKit已启用并收到gesture-ancestor配置回执，但不能用AX激活替代真实点击结论；由人工或恢复通道后补验，不在本次Android修复范围 |
 
 第四轮 Android Gboard 续修验证（HAM-164 评论 `01a1a61d-f7f7-7202-a2d4-b8c819c9e5f4`，附件 `HAM-164-round4-validation.md` / `HAM-164-round4-evidence.zip`，head `a97818e16a15b046eaabffe7cbd394799a2e33fb`）：
 
 环境为 Pixel 7 配置 AVD / Android 16 / API 36 ARM64，Playground development client 0.1.0 (1)，Expo 57.0.24 / RN 0.86.3 / @expo/dom-webview 57.0.1，System WebView 133.0.6943.137，Gboard 15.1.08.726012951-preload-arm64-v8a。默认入口已确认加载新 Metro Android / DOM bundle，未启用 diagnostics，也未改写视口或 CSS。输入为 ADB 模拟触摸（含 Gboard 按键、完成 / 取消 / 撤销）与文本注入，菜单选文字使用 CDP 点击。**以下仅为模拟器所测场景通过，非 Android 真机、非中文 IME 或手写验收。**
 
-| 场景 | 第四轮实际判定与证据 |
-| --- | --- |
-| 字母键盘 / 表情面板高度切换 | **通过**：无键盘 innerHeight / visualViewport.height 为839 / 839.238 CSS px，字母模式527 / 527.238，表情模式403 / 403.048。原生外层仍为完整高度，内部宿主及直接 WebView 底边实际从2337→1517→1192设备像素，缩至键盘上方；以稳定态记录，不宣告所有过渡帧无延迟或闪动。证据 `typed.*`、`keyboard-stable.png`、`emoji-stable.*` |
-| 键盘可见时完成 / 一次撤销 | **通过**：完成 / 取消均在可见区域内并可实际触摸；完成提交恰一段 `AndroidRound4g`，一次撤销后对象归零、撤销禁用且重做可用。证据 `committed.*`、`undone.*` |
-| 键盘可见时取消 | **通过**：新建 `CancelRound4` 草稿后实际触摸取消，编辑器关闭、对象仍零、撤销仍禁用且重做仍可用，未新增对象或历史。证据 `cancel-draft.*`、`cancelled.*` |
-| 高度变化、隐藏 / 重开期间草稿与焦点 | **通过**：隐藏后高度恢复839，重开字母键盘回到527；同一 textarea 和页面观测标记保留，草稿不变、焦点持续为“文字内容”，未收到 focusout。完成 / 取消后 textarea 正常销毁、焦点 BODY，不描述为回到工具按钮。证据 `hidden.*`、`reopened.*` 及焦点观测 |
-| 退出 / 重进默认页 | **行为已确认**：带 `LeaveDraft` 离开至另一原生路由再返回后，创建新编辑器、观测标记消失、未提交草稿不恢复，焦点 BODY、对象与历史均空；再次编辑可唤起 Gboard、缩至527并取消。不是跨页面草稿持久化通过。证据 `before-leave.*`、`away.*`、`reenter-default.*`、`reenter-keyboard.*` |
+| 场景                                | 第四轮实际判定与证据                                                                                                                                                                                                                                                                                                        |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 字母键盘 / 表情面板高度切换         | **通过**：无键盘 innerHeight / visualViewport.height 为839 / 839.238 CSS px，字母模式527 / 527.238，表情模式403 / 403.048。原生外层仍为完整高度，内部宿主及直接 WebView 底边实际从2337→1517→1192设备像素，缩至键盘上方；以稳定态记录，不宣告所有过渡帧无延迟或闪动。证据 `typed.*`、`keyboard-stable.png`、`emoji-stable.*` |
+| 键盘可见时完成 / 一次撤销           | **通过**：完成 / 取消均在可见区域内并可实际触摸；完成提交恰一段 `AndroidRound4g`，一次撤销后对象归零、撤销禁用且重做可用。证据 `committed.*`、`undone.*`                                                                                                                                                                    |
+| 键盘可见时取消                      | **通过**：新建 `CancelRound4` 草稿后实际触摸取消，编辑器关闭、对象仍零、撤销仍禁用且重做仍可用，未新增对象或历史。证据 `cancel-draft.*`、`cancelled.*`                                                                                                                                                                      |
+| 高度变化、隐藏 / 重开期间草稿与焦点 | **通过**：隐藏后高度恢复839，重开字母键盘回到527；同一 textarea 和页面观测标记保留，草稿不变、焦点持续为“文字内容”，未收到 focusout。完成 / 取消后 textarea 正常销毁、焦点 BODY，不描述为回到工具按钮。证据 `hidden.*`、`reopened.*` 及焦点观测                                                                             |
+| 退出 / 重进默认页                   | **行为已确认**：带 `LeaveDraft` 离开至另一原生路由再返回后，创建新编辑器、观测标记消失、未提交草稿不恢复，焦点 BODY、对象与历史均空；再次编辑可唤起 Gboard、缩至527并取消。不是跨页面草稿持久化通过。证据 `before-leave.*`、`away.*`、`reenter-default.*`、`reenter-keyboard.*`                                             |
 
 第四轮未扩大为全部4.3或真机结论。iOS26.5交互仍需人工 / 恢复输入通道，实体iPad + Apple Pencil仍缺；4.2 / 4.3保持未勾选，HAM-164继续 `blocked`。
 
@@ -168,16 +173,16 @@ Mac 为 arm64 / macOS 27.2 (26B123) / Xcode 27.2 (27B52)。原生宿主为 Paint
 
 修复执行环境为 Linux / Node 24.15.0 / pnpm 10.28.2。调用模拟器工具返回 `spawn xcrun ENOENT`，本机没有 Xcode / iOS 运行时，**未在本机执行 iOS 26.5 / 27.2 启动与系统键盘自查**。Mac 第三轮已覆盖所测构建 / 启动，第四轮已在 `a97818e` 覆盖 Android Gboard 续修场景，结果见上；iOS交互输入通道缺口仍保留。各轮设备结果以各自 head 为准，`19a7d46` 仅作基线。浏览器测试使用独立 5276 端口，避免复用 HAM-156 的旧服务。
 
-| 本轮命令 / 检查 | 结果 |
-| --- | --- |
-| `pnpm test` | 98 套件 / 1318 项通过（含新增 Android 键盘事件 2 项），responder 9 项通过，Expo 模板迁移 / 重复执行 / 异常模板测试 2 项通过 |
-| `pnpm typecheck` | painting / painting-board / playground 全部通过 |
-| `pnpm lint` | 0 errors，已有 32 warnings |
-| `pnpm build` | 库构建 / 类型产物 / Expo Web export 全部通过；不等同原生 Swift 编译或设备启动 |
-| iOS `expo prebuild --platform ios --no-install`，再次执行并比较哈希 | 通过：生成的 AppDelegate / Info.plist 重复生成不变；RN 仅由 Expo scene delegate 启动 |
-| Chromium 专项 UI | 既有38项通过；新增Android宿主高度回归1项修正撤销版本号断言后单独重跑通过，共39项覆盖。`mobile-editor-layout`、`painting-toolbar`、`toolbar-round4`、`interaction-feedback` 四份 spec，2 workers |
-| `pnpm --filter @hamster-note/painting-playground build:android` | 通过：Android Hermes bundle 与 Expo DOM bundle 均已导出；不等同 API 36 Gboard 设备验收 |
-| WebKit 专项 UI | **无法运行**：默认 Ubuntu 26.04 不支持安装；下载 Ubuntu 24.04 兼容构建 WebKit 26.4 后仍缺 ICU74、libxml2、libevent、libflite、libavif、libmanette、libwoff、GStreamer 等宿主库。13 项在浏览器启动前失败，无页面行为结论 |
+| 本轮命令 / 检查                                                     | 结果                                                                                                                                                                                                                    |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm test`                                                         | 98 套件 / 1318 项通过（含新增 Android 键盘事件 2 项），responder 9 项通过，Expo 模板迁移 / 重复执行 / 异常模板测试 2 项通过                                                                                             |
+| `pnpm typecheck`                                                    | painting / painting-board / playground 全部通过                                                                                                                                                                         |
+| `pnpm lint`                                                         | 0 errors，已有 32 warnings                                                                                                                                                                                              |
+| `pnpm build`                                                        | 库构建 / 类型产物 / Expo Web export 全部通过；不等同原生 Swift 编译或设备启动                                                                                                                                           |
+| iOS `expo prebuild --platform ios --no-install`，再次执行并比较哈希 | 通过：生成的 AppDelegate / Info.plist 重复生成不变；RN 仅由 Expo scene delegate 启动                                                                                                                                    |
+| Chromium 专项 UI                                                    | 既有38项通过；新增Android宿主高度回归1项修正撤销版本号断言后单独重跑通过，共39项覆盖。`mobile-editor-layout`、`painting-toolbar`、`toolbar-round4`、`interaction-feedback` 四份 spec，2 workers                         |
+| `pnpm --filter @hamster-note/painting-playground build:android`     | 通过：Android Hermes bundle 与 Expo DOM bundle 均已导出；不等同 API 36 Gboard 设备验收                                                                                                                                  |
+| WebKit 专项 UI                                                      | **无法运行**：默认 Ubuntu 26.04 不支持安装；下载 Ubuntu 24.04 兼容构建 WebKit 26.4 后仍缺 ICU74、libxml2、libevent、libflite、libavif、libmanette、libwoff、GStreamer 等宿主库。13 项在浏览器启动前失败，无页面行为结论 |
 
 UI 使用本地临时配置继承 `playwright.config.ts`，仅改 baseURL / webServer 为 5276、`reuseExistingServer=false`；测试本身已纳入标准 Chromium 配置，新布局 spec 同时加入 WebKit 配置。Chromium 是 147.0.7727.15。首轮新增 4 项覆盖：320 / 402px 右侧文字输入的可见视口缩小与平移、焦点与草稿保留、完成与撤销；零宽宿主恢复后首帧胶囊宽度与内部横滚；旋转 / 缩放祖先下编辑控件可达及取消不改对象。本轮另增 6 项：25% / 50% / 200% 输入 100 个“汉”后提交、重开与改字号，实际渲染高度不超过对象边界；仅改变祖先类名做平移 / 缩放 / 旋转，不派发 resize，检查实际位置、控件可达、草稿与焦点保留、取消不写历史。这里直接输入中文字符串并模拟 viewport 事件，只证明 DOM 布局与会话行为，不冒充系统中文 IME 或软键盘。
 
@@ -197,21 +202,20 @@ Web / Expo DOM 浮层使用已有 ReactDOM renderer；包显式声明可选 `rea
 6. 复用现有 Android API 36 AVD，在默认入口完整重跑安全区、胶囊首帧 / 横滚、系统键盘、文字限位、弹层与焦点，不能以诊断入口替代。每项回传实际设备型号 / OS / 宿主版本 / 构建 SHA / 输入来源、步骤、判定与截图或录屏，含未通过原因。4.2 / 4.3 保持未勾选，直到父任务有完整设备证据。
 7. Android右下文字续修已在第四轮 `a97818e` 完成所测场景：Gboard字母 / 表情模式下内部宿主和WebView实际收缩至527 / 403 CSS px，完成 / 取消可点，草稿与焦点在高度变化、隐藏 / 重开期间保留，提交后一次撤销；键盘可见时取消不写对象 / 历史。退出重进创建新编辑器、未提交草稿不恢复。详见第四轮记录；本轮未新增原生模块或修改Android工程配置，iOS交互缺项仍交由人工 / 恢复输入通道后补验。
 
-
 ## HAM-175：iOS 非编辑态键盘路由（2026-11-05）
 
 ### B 轮设备事实（修复前）
 
 基线 `main 0116d23`，iPhone 17 Pro / iOS 26.5 **模拟器**，Playground Expo development client 0.1.0 (1)，Expo 57.0.24 / RN 0.86.3 / @expo/dom-webview 57.0.1。输入全部来自 idb 脚本触摸、英文文本与 HID 键注入，**不是人工手点、真实 iPhone / iPad、Apple Pencil 或系统中文 IME 的验收**。来源为 HAM-164 评论 `01a1abdb-89de-7c48-be47-369b437bd198` 与 `01a1abe3-f9b1-7d6e-aa1c-7f6504781fdd`，附件 `HAM-164-ios-input-validation.md` / `HAM-164-ios-evidence.zip`、`HAM-164-key-routing-result.md` / `native-events.jsonl` / `dom-events-all.json` / `HAM-164-key-routing-evidence.zip`。
 
-| 子项 | B 轮实际结论 |
-| --- | --- |
-| 胶囊内部横滚 | **所测场景通过**：scrollLeft 0→457→601→0，外页 scrollX / scrollY 始终为0 |
-| 系统键盘与文字框 | **所测场景通过**：脚本触摸聚焦、输入英文；键盘出现时 innerHeight / visualViewport 722→353，完成 / 取消均可触摸；完成后一次撤销移除，取消另一草稿不新增历史 |
-| PencilKit 不吞工具栏点击 | **所测点击通过**：显式启用并收到 `gesture-ancestor`，脚本触摸可打开工具菜单、缩放并横滚；原生笔计数0，不推导实体笔通过 |
+| 子项                            | B 轮实际结论                                                                                                                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 胶囊内部横滚                    | **所测场景通过**：scrollLeft 0→457→601→0，外页 scrollX / scrollY 始终为0                                                                                                                                |
+| 系统键盘与文字框                | **所测场景通过**：脚本触摸聚焦、输入英文；键盘出现时 innerHeight / visualViewport 722→353，完成 / 取消均可触摸；完成后一次撤销移除，取消另一草稿不新增历史                                              |
+| PencilKit 不吞工具栏点击        | **所测点击通过**：显式启用并收到 `gesture-ancestor`，脚本触摸可打开工具菜单、缩放并横滚；原生笔计数0，不推导实体笔通过                                                                                  |
 | 工具菜单、缩放弹层 Escape / Tab | **不通过，已定位为产品缺陷**：原生 UIApplication 已接收 Escape（keyCode41）/ Tab（43），DOM 无 keydown，弹层保持打开，焦点停在菜单项或 BODY。触摸缩放滑条重试仍复现。不是“按键未进入模拟器”的工具链缺口 |
-| 文字框 Escape / Tab 阳性对照 | **通过**：同一注入命令与记录器，Tab / Escape 到 DOM 约55 / 47ms，`isTrusted=true`；分别移到字号、取消草稿。不能推广为弹层键盘通过 |
-| 设置弹层键盘、系统中文 IME | **本轮未覆盖** |
+| 文字框 Escape / Tab 阳性对照    | **通过**：同一注入命令与记录器，Tab / Escape 到 DOM 约55 / 47ms，`isTrusted=true`；分别移到字号、取消草稿。不能推广为弹层键盘通过                                                                       |
+| 设置弹层键盘、系统中文 IME      | **本轮未覆盖**                                                                                                                                                                                          |
 
 ### b50496f 首版实现与验证边界（历史记录，后续原生回归已失败）
 
@@ -225,16 +229,16 @@ DOM 侧跳过正在输入的 textarea、文本 / 数字 input、select 和 conte
 
 本机为 Linux / Node 24.15.0 / pnpm 10.28.2。模拟器工具实际返回 `spawn xcrun ENOENT`，没有执行 iOS Swift 编译或 iPhone 17 Pro / iOS 26.5 回归。因此本次状态为：**修复实现已提交验证；修复后弹层键盘路由尚待模拟器确认，不能记为通过**。下列自动化只证明桥契约与浏览器行为，不证明原生按键可达。
 
-| 本机检查 | 结果 |
-| --- | --- |
-| `pnpm test` | 100套件 / 1322项通过；responder 9项；原生配置 / 补丁依赖检查4项通过。包含真实 Expo action registry / ref 转发、DOM就绪请求、非编辑交互、编辑态保护、异步请求清理和原生侧JS守卫；不等于Swift运行测试 |
-| `pnpm typecheck` | painting / painting-board / playground 通过 |
-| `pnpm lint` | 0 errors，已有32 warnings |
-| `pnpm build` | 两库构建与 Expo Web export 通过 |
-| Chromium 专项 UI | 42项通过（既有39项及新增三类弹层Escape焦点归还 / Tab离开关闭）；使用独立5285端口，未复用其他任务服务。包括文字composition提交 / 取消、一次撤销、Android宿主高度变化和笔迹 / 工具栏回归 |
-| iOS / Android `expo export` | 两端Hermes与DOM bundle均导出通过；只验证静态依赖解析，不证明Swift编译或原生运行 |
-| WebKit | 无页面结论：本机缺少本版本所需的webkit-2272；安装命令失败，`Playwright does not support webkit on ubuntu26.04-x64`，不把其他已安装WebKit版本当作本版本测试 |
-| `pnpm install --frozen-lockfile` / `git diff --check` | 通过；4.2 / 4.3仍未勾选，未改规格 |
+| 本机检查                                              | 结果                                                                                                                                                                                                |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm test`                                           | 100套件 / 1322项通过；responder 9项；原生配置 / 补丁依赖检查4项通过。包含真实 Expo action registry / ref 转发、DOM就绪请求、非编辑交互、编辑态保护、异步请求清理和原生侧JS守卫；不等于Swift运行测试 |
+| `pnpm typecheck`                                      | painting / painting-board / playground 通过                                                                                                                                                         |
+| `pnpm lint`                                           | 0 errors，已有32 warnings                                                                                                                                                                           |
+| `pnpm build`                                          | 两库构建与 Expo Web export 通过                                                                                                                                                                     |
+| Chromium 专项 UI                                      | 42项通过（既有39项及新增三类弹层Escape焦点归还 / Tab离开关闭）；使用独立5285端口，未复用其他任务服务。包括文字composition提交 / 取消、一次撤销、Android宿主高度变化和笔迹 / 工具栏回归              |
+| iOS / Android `expo export`                           | 两端Hermes与DOM bundle均导出通过；只验证静态依赖解析，不证明Swift编译或原生运行                                                                                                                     |
+| WebKit                                                | 无页面结论：本机缺少本版本所需的webkit-2272；安装命令失败，`Playwright does not support webkit on ubuntu26.04-x64`，不把其他已安装WebKit版本当作本版本测试                                          |
+| `pnpm install --frozen-lockfile` / `git diff --check` | 通过；4.2 / 4.3仍未勾选，未改规格                                                                                                                                                                   |
 
 ### Mac 必须补齐的修复后回归
 
@@ -251,16 +255,16 @@ DOM 侧跳过正在输入的 textarea、文本 / 数字 input、select 和 conte
 
 输入为idb HID模拟触摸、Escape(41)、Tab(43)、Shift+Tab；中文来自系统拼音软键与候选实际点击。PencilKit开关用accessibility press完成设置，其后的工具栏点击均为HID触摸。DOM仅安装只读事件监听和读取快照，原生LLDB只观察事件、responder及调用栈；没有构造DOM键盘事件、强制焦点或修改产品视口/CSS。
 
-| 本轮项目 | 实际结果 |
-| --- | --- |
-| 默认入口：工具 / 缩放 / 设置，各Escape、Tab、Shift+Tab | **9项全部失败**：确认弹层已打开后发键，DOM无keydown、弹层不关闭。工具停在画笔菜单项，缩放停在range；设置Escape后BODY、Tab两向停在输入模式select，未完成遍历或焦点归还 |
-| PencilKit开启后同一键盘矩阵 | **9项全部失败**，与默认入口一致。两组共84条原生Escape/Tab按下/抬起记录，失效时均找到WKContentView first responder及所属Expo DomWKWebView |
-| 英文及文字框键盘阳性对照 | **所测通过**：H175Alpha完整保留；相同HID路径Tab/Escape以isTrusted=true到达DOM，分别移到文字字号、取消草稿。Commit175完成后可一次撤销；取消另一草稿未新增历史 |
-| 系统中文IME / 完成 / 撤销 / 取消 | **所测通过**：实际点拼音n/i/h/a/o，出现“你好”候选，可信compositionstart/update/end；点击选词后textarea为“你好”。完成生成恰一个“你好”对象，一次撤销归零，取消另一草稿仍零且未新增历史 |
-| 软键盘布局 | **所测通过**：无键盘宿主高722，英文键盘353、中文约352；textarea / 完成 / 取消均在可见范围并可实际点击；不代表全部过渡帧或真机结论 |
-| PencilKit点击与横滚 | **所测通过**：收到gesture-ancestor、canvas402×622，原生起笔0；可实际点击打开三类弹层，内部横滚scrollLeft601→187、外页scrollX=0。不推导Apple Pencil书写通过 |
-| 前后台、离开 / 重进后的首键 | **未验**：前后台launch自动化45秒超时，其工具命令带terminate-running-process，后续为新PID，未形成有效同进程对照；离开重进步骤未执行 |
-| Android / iOS27.2 / 实体iPad与Apple Pencil | **本轮未验** |
+| 本轮项目                                               | 实际结果                                                                                                                                                                             |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 默认入口：工具 / 缩放 / 设置，各Escape、Tab、Shift+Tab | **9项全部失败**：确认弹层已打开后发键，DOM无keydown、弹层不关闭。工具停在画笔菜单项，缩放停在range；设置Escape后BODY、Tab两向停在输入模式select，未完成遍历或焦点归还                |
+| PencilKit开启后同一键盘矩阵                            | **9项全部失败**，与默认入口一致。两组共84条原生Escape/Tab按下/抬起记录，失效时均找到WKContentView first responder及所属Expo DomWKWebView                                             |
+| 英文及文字框键盘阳性对照                               | **所测通过**：H175Alpha完整保留；相同HID路径Tab/Escape以isTrusted=true到达DOM，分别移到文字字号、取消草稿。Commit175完成后可一次撤销；取消另一草稿未新增历史                         |
+| 系统中文IME / 完成 / 撤销 / 取消                       | **所测通过**：实际点拼音n/i/h/a/o，出现“你好”候选，可信compositionstart/update/end；点击选词后textarea为“你好”。完成生成恰一个“你好”对象，一次撤销归零，取消另一草稿仍零且未新增历史 |
+| 软键盘布局                                             | **所测通过**：无键盘宿主高722，英文键盘353、中文约352；textarea / 完成 / 取消均在可见范围并可实际点击；不代表全部过渡帧或真机结论                                                    |
+| PencilKit点击与横滚                                    | **所测通过**：收到gesture-ancestor、canvas402×622，原生起笔0；可实际点击打开三类弹层，内部横滚scrollLeft601→187、外页scrollX=0。不推导Apple Pencil书写通过                           |
+| 前后台、离开 / 重进后的首键                            | **未验**：前后台launch自动化45秒超时，其工具命令带terminate-running-process，后续为新PID，未形成有效同进程对照；离开重进步骤未执行                                                   |
+| Android / iOS27.2 / 实体iPad与Apple Pencil             | **本轮未验**                                                                                                                                                                         |
 
 新的证据表明补丁已经执行，**仅补becomeFirstResponder不足以修复问题**。失效时已有 `WKContentView: 0x1026a3800`，祖先含同一 `ExpoDomWebView.DomWKWebView: 0x102688a00`；具体WebKit/UIKit传递根因仍未定，不应继续把“没有响应者”记作已证实原因。文字操作后关闭所有原生断点再试工具Escape仍失败，已保留DOM快照。
 
@@ -284,14 +288,14 @@ Mac 的完整操作、符号检查、文字阳性对照、两个进程的日志�
 
 Mac 实际重建安装 `bb06548e85779ab2f26186290d6c9b2f0fcac714`，主程序 / debug dylib 的安装与构建哈希一致。环境为 macOS27.2 / Xcode27.2 / Apple LLDB2103.0.34.407，iPhone17 Pro / **iOS26.5模拟器**、默认入口、dev client0.1.0(1)，输入为 **idb脚本HID**。未修改业务或原 HID / DOM 观测脚本。
 
-| 本轮操作 / 观测 | 结果 |
-| --- | --- |
-| 非组合输入的英文文字 Tab / Escape | 可信 DOM 事件正常；命中 WK `handleKeyEntry` / 内部 handler 与 proxy enqueue/send，分别移到字号和取消草稿 |
-| 工具菜单同一单键 | UIApplication 与 WK `_tryToHandlePressesEvent:` 命中，WK entry / proxy enqueue/send 无命中，DOM 无 keydown，菜单仍开；所有探针 stop/detach 后复现 |
-| app 探针 | 正式纯寄存器/栈会话1028命中、0读取错误；12类解析成功，proxy.completion unavailable。`--details` 在初始会话因短变量名d冲突、动态getter返回类型问题编译失败，保留原始错误；未取得_try返回值、HID元数据或handled解码 |
-| WebContent | 现有WebView地址确认PID22141，app22062；kernel因hardened、无get-task-allow拒绝附加。没有接收侧JSONL，不据此判定接收方丢事件 |
-| 非键盘最小回归 | 英文及系统拼音“你好”的提交/一次撤销、英文取消/组合输入取消所测通过；PencilKit原生接管时菜单HID点击、默认及原生接管横滚通过，起笔/提交计数0。仅开关设置使用AX press |
-| 正式18项矩阵 | **未运行**：原流程双进程门槛未满足。缩放/设置、Shift+Tab、PencilKit键盘矩阵等均未验；不将b50496f的18项失败冒充为本SHA结果 |
+| 本轮操作 / 观测                   | 结果                                                                                                                                                                                                              |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 非组合输入的英文文字 Tab / Escape | 可信 DOM 事件正常；命中 WK `handleKeyEntry` / 内部 handler 与 proxy enqueue/send，分别移到字号和取消草稿                                                                                                          |
+| 工具菜单同一单键                  | UIApplication 与 WK `_tryToHandlePressesEvent:` 命中，WK entry / proxy enqueue/send 无命中，DOM 无 keydown，菜单仍开；所有探针 stop/detach 后复现                                                                 |
+| app 探针                          | 正式纯寄存器/栈会话1028命中、0读取错误；12类解析成功，proxy.completion unavailable。`--details` 在初始会话因短变量名d冲突、动态getter返回类型问题编译失败，保留原始错误；未取得_try返回值、HID元数据或handled解码 |
+| WebContent                        | 现有WebView地址确认PID22141，app22062；kernel因hardened、无get-task-allow拒绝附加。没有接收侧JSONL，不据此判定接收方丢事件                                                                                        |
+| 非键盘最小回归                    | 英文及系统拼音“你好”的提交/一次撤销、英文取消/组合输入取消所测通过；PencilKit原生接管时菜单HID点击、默认及原生接管横滚通过，起笔/提交计数0。仅开关设置使用AX press                                                |
+| 正式18项矩阵                      | **未运行**：原流程双进程门槛未满足。缩放/设置、Shift+Tab、PencilKit键盘矩阵等均未验；不将b50496f的18项失败冒充为本SHA结果                                                                                         |
 
 证据为本单附件 `HAM-175-bb06548-diagnostics.md` / `HAM-175-bb06548-ios-diagnostics.zip`，包含 app JSONL、`single-key-summary.json`、PID映射、符号清单、getter错误、kernel拒绝日志、DOM/open-result及关闭探针对照。原生缺陷仍存在，HAM-175保持blocked。
 
