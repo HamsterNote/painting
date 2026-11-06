@@ -76,6 +76,61 @@ test('radio/label activation restores the touched control after UIKit leaves BOD
   expect(state.acknowledgedScope).toBe(state.scope);
 });
 
+test.each(['finger', 'check'])(
+  'compatibility click restores %s after the pointerup frame has already run',
+  async (id) => {
+    input('color').focus();
+    const control = input(id);
+    pointer(control, 'pointerdown');
+    pointer(control, 'pointerup');
+    await paint();
+    expect(document.activeElement).toBe(control);
+    control.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, detail: 1 }));
+    control.blur(); // UIKit compatibility default after the first restoration.
+    await flush();
+    expect(window.__paintingToolbarKeyboard!.snapshot().scope).toBe('');
+    control.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    await paint();
+    expect(document.activeElement).toBe(control);
+    expect(control.checked).toBe(true);
+    const state = window.__paintingToolbarKeyboard!.snapshot();
+    expect(state.scope).not.toBe('');
+    expect(state.acknowledgedScope).toBe(state.scope);
+  }
+);
+
+test.each(['color', 'editor'])(
+  'post-click restoration keeps the original gesture and cannot steal newer %s focus',
+  async (id) => {
+    input('color').focus();
+    pointer(input('check'), 'pointerdown');
+    pointer(input('check'), 'pointerup');
+    await paint();
+    input(id).focus();
+    input('check').dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    await paint();
+    expect(document.activeElement).toBe(input(id));
+  }
+);
+
+test.each(['cancel', 'remove', 'dispose'])(
+  '%s also invalidates a post-click restoration',
+  async (reason) => {
+    const control = input('check');
+    pointer(control, 'pointerdown');
+    pointer(control, 'pointerup');
+    await paint();
+    control.blur();
+    control.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    const focus = jest.spyOn(control, 'focus');
+    if (reason === 'cancel') pointer(control, 'pointercancel');
+    if (reason === 'remove') control.closest('.hn-painting-panel')!.remove();
+    if (reason === 'dispose') dispose();
+    await paint();
+    expect(focus).not.toHaveBeenCalled();
+  }
+);
+
 test('range drag hands the unchanged color focus over, including release outside without click', async () => {
   input('color').focus();
   pointer(input('range'), 'pointerdown');

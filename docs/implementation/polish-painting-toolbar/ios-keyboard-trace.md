@@ -45,6 +45,16 @@ Mac 的 iPhone17 Pro / iOS26.5 **模拟器、idb脚本HID** 无探针结果：�
 
 **必须重建安装新原生包**：`setToolbarKeyboardScope`现在含第二个Bool参数。只读snapshot新增 `tabOnly/acknowledgedTabOnly`；颜色应为同一非空scope且两项true，range应同scope且两项false，普通文字编辑器/composition应scope空。ack只证明Expo调用返回。原生payload附tabOnly，保持scope/sequence/accepted/error；原观察器及输入/判定脚本不变。
 
+## 11893ba 回归后：兼容鼠标阶段再次失焦
+
+Mac已真实重建安装 `11893ba48cc7d81678ad2db71b03bac9a02e659a`，Swift/API编译0 errors。环境仍为iPhone17 Pro / iOS26.5 **模拟器、idb脚本HID/触摸**，全程无LLDB。颜色焦点下range拖动12/12、双向持续Tab跨颜色8/8行为达成，松开后约1.5秒无补发。原矩阵行为18/18，44次单键对应44次原生命令/DOM keydown，全部false，正式0/18。全轮213次回调均sequence唯一、accepted=1/error=nil。
+
+但radio/checkbox触摸交接回退24项：原32项为7项达成、24项失败、1项pointercancel；取消项另以完整滑块手势重做达成，原记录保留。700ms仍BODY/scope空、后续键无效，重启且仅保留原观察器也复现。`diagnosis-default-checkbox-nonediting-order.json`显示09:30:37.000 pointerup，37.001 focusin checkbox，37.002 mousedown→focusout→mouseup→click，37.007 input/change仍BODY；颜色→radio也同序。证据在issue附件 `HAM-175-11893ba-ios-validation.md` / `HAM-175-11893ba-ios-evidence.zip`。
+
+本候选在released-click分支使用**原Touch记录**再次安排下一帧恢复，覆盖click默认动作结束后的状态。pointerup继续负责没有click的range拖动；同一手势的控件外祖先click也保留原origin/focusVersion。不会在click处重新采集编辑器身份，因此新进入的颜色/文字仍能阻止过期恢复；取消、移除、卸载检查继续生效。本轮产品改动仅在该DOM分支，Swift/原生API/长按命令路径沿用已构建版本。
+
+新增radio、checkbox浏览器回归显式重放Mac的兼容事件顺序：先等待产品pointerup恢复完成，再模拟UIKit mousedown默认blur，最后click实际更新checked、产品再次恢复焦点/scope。Chromium本身不实现这段UIKit默认动作，fixture的失焦重放明确不是HID验收；不会手工focus控件使结果通过。两项在旧helper均失败于click后获焦断言，新候选通过，既有真实触摸range用例也通过。
+
 ## 候选的行为与限制
 
 移除已证伪的 requestFocus / window.focus 路径。pnpm 补丁在 DomWKWebView 通过公开 UIKit `UIKeyCommand` 注册 Escape、Tab、Shift+Tab，在 DOM 面板持有非文字编辑焦点时启用；唯一编辑态例外是带专用标记的颜色字段，只保留Tab两向。命令有系统优先级，由 UIKit action 触发一次；不同时监听 raw presses 再复制一次。Android/Web 不安装原生桥。
@@ -61,9 +71,10 @@ DOM 通过 Expo action 提交随机 scope和tabOnly，原生回传 scope、单�
 2. 使用原 iPhone 17 Pro / iOS26.5 **模拟器**，默认入口、diagnostics关闭。沿用原 `drive.py` / `matrix.py` / `observe.js` / `metrics.js` 与 idb HID 命令，**不改断言或日志过滤、不由测试调用桥、不用 evaluate/dispatchEvent 代替 HID**。公开说明输入为脚本HID，不能写成实体键盘/真机验收。
 3. 完全未附加 LLDB 时先运行原18项：工具/缩放/设置 × Escape/Tab/Shift+Tab × 默认/PencilKit。保存每行 open/result、DOM events、焦点、截图和原 matrix-summary。桥结果应如实为 isTrusted=false；原判定若要求可信而判失败，保留失败，不重写成绿。单独报告功能行为、可信度差异，不能把浏览器桥契约测试算作这18项。
 4. 并行保存 app console 的 `[HAM175 keyboard]` 日志，含原生 UIKeyCommand payload、accepted 和 error。按 scope / sequence / UTC 与同一 HID 操作和原 DOM 事件对应：每次命令至多一个 keydown、不得混入测试注入。日志是原生 action 入口证据，单凭 source 字符串不证明实体硬件来源。
-5. **本轮优先，默认/PencilKit × 画笔/矩形**：颜色已获编辑焦点时，从当前滑块0.95真正拖到0.1，分别在控件内、控件外抬起；保存pointerdown/up/cancel、input/change、焦点与scope/mode，抬起后应为range、tabOnly=false、scope/ack相等且非空，紧接Tab/Escape应有效。不要先blur颜色，不把颜色可信Escape关闭算作range交接通过。对照非编辑态同手势；保留radio/checkbox等已通过的32项。快切文字/画布、重新获焦颜色或pointercancel不得被迟到恢复抢回。
-6. **真正持续按住Tab 1.5秒跨颜色**，使用原idb长按命令，另测Shift+Tab跨颜色及松开后重新按键。应由radio经过颜色、range、后续控件退出，不能以逐键代替。保存每次原生命令及DOM对应、scope不换、颜色阶段tabOnly=true、松开后的静默区间；不得有额外重复/双发。原生UIKeyCommand未提供repeat元数据，桥仍不伪造repeat/keyup。若只首个回调，完整记录失败，勿以JS计时补键。
-7. 保留颜色逐键双向Tab、真实HEX输入和Escape：本版颜色Tab可能为桥的false，字符/Escape应可信且零桥命令；composition期间不接管Tab。复测快速菜单→文字a/Tab/Escape首键、英文/中文选词/完成/取消/一次撤销、未选词取消后重进Escape、横滚/软键盘/PencilKit、同进程前后台与重开首键。任何吞键、双发、编辑被抢均记失败；原18项判定与4.2/4.3不改。
+5. **本轮优先，默认/PencilKit × 画笔/矩形**：重跑原32项，重点是radio改值、已选radio、checkbox触摸后紧接Escape/Tab的24项回退；另测颜色→radio、label激活。保留pointerup→focusin→mousedown→focusout→click→再次focusin的原始顺序和scope/ack，click后应落实际操作控件、scope非空，随后单键有效。先做不加等待的按键操作，700ms快照仅用于解释失败，不轮询等待scope后才发键。
+6. 保留已通过的12项颜色焦点下range真实拖动：从当前滑块改值，控件内/外抬起及立即按键；保存input/change、pointerup/cancel、焦点与scope/mode。不要先blur颜色，不把颜色可信Escape关闭算作range交接成功。对照非编辑态同手势。快切文字/画布、重新获焦颜色、pointercancel、移除/卸载不得被click后的迟到恢复抢回。
+7. **真正持续按住Tab 1.5秒跨颜色**，使用原idb长按命令，另测Shift+Tab跨颜色及松开后重新按键。应由radio经过颜色、range、后续控件退出，不能以逐键代替。保存每次原生命令及DOM对应、scope不换、颜色阶段tabOnly=true、松开后的静默区间；不得有额外重复/双发。原生UIKeyCommand未提供repeat元数据，桥仍不伪造repeat/keyup。若只首个回调，完整记录失败，勿以JS计时补键。
+8. 保留颜色逐键双向Tab、真实HEX输入和Escape：本版颜色Tab可能为桥的false，字符/Escape应可信且零桥命令；composition期间不接管Tab。复测快速菜单→文字a/Tab/Escape首键、英文/中文选词/完成/取消/一次撤销、未选词取消后重进Escape、横滚/软键盘/PencilKit、同进程前后台与重开首键。任何吞键、双发、编辑被抢均记失败；原18项判定与4.2/4.3不改。
 
 ## 可选诊断：单键、薄探针、独立日志
 

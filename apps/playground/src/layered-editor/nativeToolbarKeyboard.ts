@@ -265,9 +265,11 @@ export function installNativeToolbarKeyboard(
     cancelFocus();
   };
   const click = (event: MouseEvent) => {
-    // The click completing this pointer gesture may target an ancestor when a
-    // drag ends outside. Do not discard its origin or cancel its pending focus.
+    // UIKit's compatibility mousedown can blur a control after the pointerup
+    // frame already restored it. Restore again after click defaults, keeping
+    // the original gesture/old-editor guard even for a drag's ancestor click.
     if (touched?.released && event.detail > 0) {
+      restoreTouchedFocus(touched);
       touched = undefined;
       return;
     }

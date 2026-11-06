@@ -333,3 +333,23 @@ Swift补丁/API与lockfile同步更新，必须由Mac重建安装，不能只刷
 HAM-175保持blocked，PR #46保持Draft，4.2/4.3未勾。接受桥事件可信度差异的口径仍待修勾决定，不代替人类调整验收范围。
 
 本轮Linux验证：Jest全量102套件/1345项、responder9项、依赖配置3项通过；最终追加颜色模式卸载/重挂载回归后，桥相关2套件/22项通过（含新增1项）。Chromium47项通过（独立5296端口、2 workers），含新增真实触摸拖动；旧helper对照在range获焦断言失败。typecheck、库/Web build、frozen install、代码格式/diff检查通过；lint 0 errors/原有32 warnings，最终生命周期改动定向lint通过。宿主/Toolbar单测同步新API和颜色Tab命令契约，原Mac HID输入/观察器/可信度断言均未修改。无本机Swift编译或新iOS原生验收结论。
+
+### HAM-175 Mac `11893ba`（2026-11-06）：range与长按通过，兼容click恢复回退
+
+Mac真实重建安装 `11893ba48cc7d81678ad2db71b03bac9a02e659a`，Swift/API编译482 warnings / 0 errors，主程序/debug dylib构建与安装哈希一致。环境为iPhone17 Pro / **iOS26.5模拟器、idb脚本HID/触摸**，全程无LLDB。原输入/观察/判定脚本逐字节沿用。
+
+默认/PencilKit × 画笔/矩形的颜色焦点下range完整拖动12/12行为达成，内/外抬起、立即按键均有pointerup/change、无cancel，range获焦且tabOnly/ack=false。真实双向持续按住Tab1.5秒8/8跨颜色退出，同scope、颜色模式true、range模式false；松开后1.485–1.576秒窗口内无DOM或原生补发。原矩阵行为18/18，44个单键对应44个原生命令/DOM keydown、全部isTrusted=false，无双发，正式仍0/18；全轮213个命令均sequence唯一、accepted=1/error=nil。
+
+radio/checkbox触摸交接回退24项：原32项为7项达成、24项失败、1项pointercancel；取消项另用完整手势重做达成，原取消记录不改。24项触摸后BODY、scope/ack空，700ms后仍不恢复、紧接Escape/Tab无效。原生重启、只留原观察器亦复现。原始顺序为pointerup→产品恢复focusin→兼容mousedown再次blur→mouseup/click→input/change仍BODY，released-click提前返回遗漏了后一次恢复。
+
+颜色逐键双向Tab、HEX/可信Escape、快速菜单→文字首键、英文/IME提交取消撤销及未选词取消后重进Escape、PencilKit点击/横滚所测通过。颜色→checkbox诊断目标被软键盘裁剪，未验；不混入有效失败。原始报告/证据见issue附件 `HAM-175-11893ba-ios-validation.md` / `HAM-175-11893ba-ios-evidence.zip`。真机、实体键盘、真实Pencil及完整VoiceOver仍未验。
+
+### HAM-175 新候选：click后复用原手势再次恢复
+
+产品修复仅在released-click分支：以原Touch的origin/focusVersion再次安排下一帧恢复，覆盖兼容鼠标默认动作之后的状态。pointerup仍覆盖没有click的range拖动；祖先click也保留原手势，旧颜色让焦和新编辑焦点保护使用同一记录，取消/移除/卸载仍能作废恢复。原生命令、Swift/API和持续Tab路径沿用11893ba版本。
+
+新增radio与checkbox各一条浏览器时序回归：等待pointerup恢复完成，重放Mac的兼容mousedown默认失焦，click实际更新checked后断言产品再次恢复焦点/scope并可Tab前进。旧helper两项均失败在click后获焦，新候选通过。Chromium不实现UIKit这段默认行为，fixture明确模拟失焦；不手工focus目标、不作为原生HID结果。既有CDP真实触摸range外抬起用例继续通过。单测另覆盖click后新颜色/文字获焦、pointercancel、移除及卸载保护。
+
+Mac按runbook先无LLDB跑原18项，再重跑32项触摸及颜色→radio/label，保存pointerup恢复、兼容mousedown失焦、click后再次恢复和scope/命令的顺序；保留range12项、双向长按8项与松开静默、快切文字首键和IME/PencilKit。原判定不变，HAM-175保持blocked，PR #46仍Draft，4.2/4.3未勾；本机无xcrun，不声称验证Swift或新原生行为。
+
+本轮Linux验证：Jest102套件/1353项、responder9项、依赖配置3项通过；Chromium49项通过（独立5296端口、2 workers）。新增两条兼容时序用例在11893ba上失败、新候选通过；既有真实触摸range外抬起及工具栏回归通过。typecheck、库/Web build、代码格式/diff检查通过，lint 0 errors/原有32 warnings。原HID输入、观察器、可信度判定、Swift/API和spec均未改。浏览器fixture的显式失焦重放只证明DOM恢复逻辑，iOS兼容事件及立即按键时序仍需Mac实测。

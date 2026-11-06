@@ -169,3 +169,68 @@ test('touch drag from a focused color editor changes range and hands focus over 
   expect(await key(page, 'Tab')).toBe(true);
   await expect(page.getByRole('checkbox')).toBeFocused();
 });
+
+for (const type of ['radio', 'checkbox'] as const) {
+  test(`UIKit compatibility replay: ${type} restores again after pointerup focus is blurred by mousedown`, async ({
+    page,
+  }) => {
+    await page.setContent(`<div class="hn-painting-panel">
+      <input type="text" data-toolbar-color-field="true" aria-label="Color" value="#123456">
+      <input id="control" type="${type}" aria-label="Control">
+      <button>Next</button>
+    </div>`);
+    await install(page);
+    await page.getByRole('textbox').focus();
+    const control = page.getByRole(type, { name: 'Control' });
+    // Chromium does not implement UIKit's delayed compatibility-mouse blur.
+    // Replay that recorded ordering explicitly; only product code restores
+    // focus. These fixture events are not native HID acceptance evidence.
+    await page.evaluate(() => {
+      const input = document.querySelector<HTMLInputElement>('#control')!;
+      (window as any).compatibilityEvents = [];
+      for (const type of ['pointerup', 'focusin', 'mousedown', 'focusout', 'click', 'change']) {
+        document.addEventListener(type, () => {
+          (window as any).compatibilityEvents.push({
+            type,
+            active: document.activeElement === input ? 'control' : document.activeElement?.tagName,
+          });
+        });
+      }
+      for (const type of ['pointerdown', 'pointerup'])
+        input.dispatchEvent(
+          new PointerEvent(type, { bubbles: true, pointerId: 7, pointerType: 'touch' })
+        );
+    });
+    await expect(control).toBeFocused(); // The pointerup RAF has already run.
+    expect(await page.evaluate(() => (window as any).bridgeScope)).not.toBe('');
+    await page.evaluate(() => {
+      const input = document.querySelector<HTMLInputElement>('#control')!;
+      input.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, detail: 1 }));
+      input.blur(); // Replay the observed UIKit default, never supply the correct focus.
+    });
+    await expect(page.locator('body')).toBeFocused();
+    await expect.poll(() => page.evaluate(() => (window as any).bridgeScope)).toBe('');
+    await page.evaluate(() => {
+      const input = document.querySelector<HTMLInputElement>('#control')!;
+      for (const type of ['mouseup', 'click'])
+        input.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, detail: 1 }));
+    });
+    await expect(control).toBeFocused(); // Requires the post-click restoration too.
+    await expect(control).toBeChecked(); // Preserve the click's default value update.
+    const state = await page.evaluate(() => (window as any).__paintingToolbarKeyboard.snapshot());
+    expect(state.scope).not.toBe('');
+    expect(state.acknowledgedScope).toBe(state.scope);
+    expect(await page.evaluate(() => (window as any).compatibilityEvents)).toEqual([
+      { type: 'pointerup', active: 'INPUT' },
+      { type: 'focusout', active: 'BODY' },
+      { type: 'focusin', active: 'control' },
+      { type: 'mousedown', active: 'control' },
+      { type: 'focusout', active: 'BODY' },
+      { type: 'click', active: 'BODY' },
+      { type: 'change', active: 'BODY' },
+      { type: 'focusin', active: 'control' },
+    ]);
+    expect(await key(page, 'Tab')).toBe(true);
+    await expect(page.getByRole('button', { name: 'Next' })).toBeFocused();
+  });
+}
