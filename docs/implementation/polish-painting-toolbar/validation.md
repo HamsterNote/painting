@@ -154,9 +154,9 @@ Web / Expo DOM 浮层使用已有 ReactDOM renderer；包显式声明可选 `rea
 | 文字框 Escape / Tab 阳性对照 | **通过**：同一注入命令与记录器，Tab / Escape 到 DOM 约55 / 47ms，`isTrusted=true`；分别移到字号、取消草稿。不能推广为弹层键盘通过 |
 | 设置弹层键盘、系统中文 IME | **本轮未覆盖** |
 
-### 本次实现与验证边界
+### b50496f 首版实现与验证边界（历史记录，后续原生回归已失败）
 
-已有日志确认了原生→DOM传递中断，但没有记录失效时的 first responder；“需要补原生响应者”是本次候选修复方向，尚不能写成已证实的具体根因。Mac回归须记录实际响应者类名及所属WebView；若失效时已有WKContentView响应者，应继续定位而非沿用此假设。
+首版依据的 B 轮日志确认了原生→DOM传递中断，但当时没有记录失效时的 first responder；“需要补原生响应者”只是首版假设。下文 Mac 回归已确认失效时存在 WKContentView responder，首版假设不足以解释缺陷，不再沿此方向追加调用。
 
 通过 pnpm 的 `@expo/dom-webview@57.0.1` 补丁增加 iOS 原生 `requestFocus` 方法，调用公开 `WKWebView.becomeFirstResponder()`，由 WebKit 将响应者交给内容视图。原生路由在 DOM 挂载就绪、非编辑控件 focusin 或工具栏 / 面板 pointerdown 后请求焦点；同一事件循环合并请求，非交互画布笔迹不产生逐点桥调用。监听卸载时清理，不替换 WebKit 的键盘事件或构造 DOM keydown。Android 不注册该 iOS action，Web 保留直接 DOM 入口。
 
@@ -208,3 +208,15 @@ DOM 侧跳过正在输入的 textarea、文本 / 数字 input、select 和 conte
 HAM-175评论附件 `HAM-175-b50496f-ios-evidence.zip` / `HAM-175-ios-validation.md` 保存原生 `native-events.jsonl`、18项 `matrix-summary.json`、各项open/result DOM快照与截图、可信文字/IME事件、原生调用栈、构建和安装身份及操作脚本。正式默认矩阵使用 `rerun-*`（工具/缩放）和 `settings-settled-*`（设置），PencilKit矩阵使用 `pencil-*`；初始观测表达式错误已修正并重跑，不以探索快照作为最终判定。
 
 结论：HAM-175原生键盘回归不通过，PR #46继续Draft，开发agent需据此继续定位；HAM-164不能据此解除iOS键盘阻塞，归档4.2 / 4.3保持未勾选。
+
+### HAM-175 分层诊断候选（2026-11-06）：等待 Mac 采集，未修复
+
+已采纳 Mac 文档提交 `bf4611c`，继续使用 PR #46 / `agent/agent/16ee970f929f`。产品路径保留已构建的 `b50496f` 基线及 Tab 离开关闭逻辑，本轮没有新增焦点请求或合成 DOM 键盘事件，也没有修改既有 HID 输入 / 矩阵 / DOM 观测脚本。原生 18 项矩阵的最新有效结论仍为上节的 **全部失败**，不是待合并即可验收。
+
+新增 `scripts/ios/trace_keyboard.py`，由 Mac 显式导入 LLDB 并启用。分别采集 UIApplication 分发 / action、WKContentView 与继承 responder 的 presses / keyCommands 查询、WebKit 内部入口 / 输入法分支 / completion、WebPageProxy 排队 / 发送 / 确认，以及正确 WebContent PID 内的接收 / WebCore 键盘分发。记录原始参数、时间、线程、调用栈、符号覆盖与读取错误；不改返回值、不消费或转发键盘事件。私有符号缺失或 getter 失败均是观测缺口，不能作为“该层没有事件”的证据。
+
+Mac 的完整操作、符号检查、文字阳性对照、两个进程的日志对应、探针关闭后复测和必需回传项见 [iOS 键盘分层诊断](ios-keyboard-trace.md)。先用文字框与工具菜单的同一单键定位，再扩原 18 项矩阵；保留默认入口 / PencilKit 两组、真实 HID 输入、可信 DOM 事件与焦点判定。设备口径继续是 **iPhone 17 Pro / iOS 26.5 模拟器，idb 脚本输入**，不是实体键盘 / 真机 / Apple Pencil 验收。
+
+本轮 Linux 没有 xcrun，没有编译 Swift，也没有运行 Apple LLDB / UIKit / WebContent 探针。Python 检查只能验证探针的宿主侧逻辑，不能证明 Apple 私有符号存在或事件路由通过。Mac 重建采集结果回传前，PR #46 保持 Draft，HAM-175 尚未完成，4.2 / 4.3 均保持未勾选。
+
+本轮本机检查：`python3 -B -m unittest discover -s scripts/ios -p 'test_*.py' -v` 的 8 项通过，覆盖 ABI / 读取错误、函数入口断点、符号缺失、进程身份变化及只清理自有断点；`pnpm test` 100 套件 / 1322 项、responder 9 项、原生配置 4 项通过。typecheck、库 / Web build 通过，lint 0 errors / 原有 32 warnings。原有四份相关 Chromium spec 共 42 项通过（独立 5296 端口，2 workers，1.6 分钟），只调整临时服务配置，未修改测试断言。frozen install、Python 语法与 diff 检查通过。这些结果均不代表新的 iOS 模拟器或 Android 设备验收。
