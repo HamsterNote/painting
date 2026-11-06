@@ -42,6 +42,7 @@ export function installNativeToolbarKeyboard(
   let sequence = 0;
   let composing: Element | null = null;
   let disposed = false;
+  let publication = 0;
   const isColorField = (target: Element | null) =>
     target instanceof HTMLInputElement &&
     target.matches('input[type=text][data-toolbar-color-field="true"]');
@@ -52,10 +53,18 @@ export function installNativeToolbarKeyboard(
       target.matches(
         'textarea,input:not([type=button]):not([type=submit]):not([type=reset]):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color])'
       ));
-  // Serialize the async Expo action so an old enable cannot overtake a disable.
+  // Keep in-flight calls ordered, but never send a superseded queued enable.
+  // Rejecting its callback in receive() is too late: UIKit already took the key.
   const publish = (value: string, onlyTab = false) => {
+    const version = ++publication;
     const update = (nativeUpdates.get(doc) ?? Promise.resolve())
       .then(async () => {
+        if (value) {
+          // Focus/visibility/removal can change while an earlier Expo receipt is
+          // pending, including before the corresponding observer has run.
+          sync();
+          if (disposed || version !== publication || value !== scope || onlyTab !== tabOnly) return;
+        }
         await setNativeScope(value, onlyTab);
         acknowledgedScope = value;
         acknowledgedTabOnly = onlyTab;

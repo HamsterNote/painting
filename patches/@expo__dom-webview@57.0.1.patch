@@ -18,10 +18,10 @@ index 6ea41ff0152909ba1f1e8bc07de41afcecbcc278..92d21ca8fa3b91173365a7be97af5026
       * Injects a JavaScript string into the `WebView` and executes it.
       */
 diff --git a/ios/DomWebView.swift b/ios/DomWebView.swift
-index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..31ceab654b64c977b60a47f916a4599205844cd4 100644
+index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..e4d7bd8a3ad598f2bcec044da6de119b725bbd95 100644
 --- a/ios/DomWebView.swift
 +++ b/ios/DomWebView.swift
-@@ -9,12 +9,291 @@ import WebKit
+@@ -9,12 +9,306 @@ import WebKit
  final class DomWKWebView: WKWebView {
    var hidesInputAccessoryView = false
  
@@ -157,7 +157,7 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..31ceab654b64c977b60a47f916a45992
 +  // The same command instance/selector, native gate and final delivery guard apply.
 +  fileprivate var toolbarContainerEscapeCommand: UIKeyCommand? {
 +    #if DEBUG
-+    guard !toolbarKeyboardScope.isEmpty else { return nil }
++    guard toolbarActionAllowed(#selector(toolbarKey(_:))) else { return nil }
 +    switch toolbarContainerExperiment {
 +    case "color-container":
 +      guard toolbarKeyboardTabOnly, toolbarColorEscapeState().enabled else { return nil }
@@ -175,14 +175,30 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..31ceab654b64c977b60a47f916a45992
 +  }
 +
 +  fileprivate func toolbarActionAllowed(_ action: Selector) -> Bool {
-+    !toolbarKeyboardScope.isEmpty && window?.isKeyWindow == true
-+      && (!toolbarKeyboardTabOnly || action == #selector(toolbarTab(_:)) || toolbarColorEscapeState().enabled)
++    guard !toolbarKeyboardScope.isEmpty, window?.isKeyWindow == true,
++      window?.windowScene?.activationState == .foregroundActive,
++      let responder = toolbarFirstResponder(in: self) else { return false }
++    // Expo scope receipts can lag native focus and IME updates. Check UIKit's
++    // current text state before advertising/validating *any* priority command,
++    // including Tab. DOM callback rejection cannot return an already-taken key.
++    if let textInput = responder as? UITextInput {
++      guard textInput.markedTextRange == nil else { return false }
++      // A live caret/selection is an editing (or text-selection) owner. Only
++      // the explicit color mode permits it; normal menu scopes must yield.
++      guard toolbarKeyboardTabOnly || textInput.selectedTextRange == nil else { return false }
++    } else if toolbarKeyboardTabOnly {
++      return false // Color editing without readable native text state is unknown.
++    }
++    return !toolbarKeyboardTabOnly || action == #selector(toolbarTab(_:))
++      || toolbarColorEscapeState().enabled
 +  }
 +
 +  override var keyCommands: [UIKeyCommand]? {
 +    guard !toolbarKeyboardScope.isEmpty else { return super.keyCommands }
-+    let commands = toolbarKeyboardTabOnly && !toolbarColorEscapeState().enabled
-+      ? toolbarCommands.filter { $0.input == "\t" } : toolbarCommands
++    let commands = toolbarCommands.filter { command in
++      guard let action = command.action else { return false }
++      return toolbarActionAllowed(action)
++    }
 +    let localCommands = toolbarContainerEscapeCommand == nil
 +      ? commands : commands.filter { $0.input != UIKeyCommand.inputEscape }
 +    let inherited = super.keyCommands ?? []
@@ -223,8 +239,7 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..31ceab654b64c977b60a47f916a45992
 +  @objc fileprivate func toolbarKey(_ command: UIKeyCommand) {
 +    // Entry is recorded before any guard, unlike the successful JS callback log.
 +    traceToolbarRoute("action-enter", action: command.action, sender: command)
-+    guard !toolbarKeyboardScope.isEmpty, window?.isKeyWindow == true,
-+      window?.windowScene?.activationState == .foregroundActive,
++    guard let action = command.action, toolbarActionAllowed(action),
 +      let input = command.input,
 +      input == "\t" || input == UIKeyCommand.inputEscape else {
 +      traceToolbarRoute("action-reject-context", sender: command)
@@ -313,7 +328,7 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..31ceab654b64c977b60a47f916a45992
    // Created on first prop sync — `WKWebViewConfiguration` is copied at init,
    // so init-only props need to land before `WKWebView()` is called.
    private(set) var webView: DomWKWebView?
-@@ -192,6 +471,11 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
+@@ -192,6 +486,11 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
      webView?.scrollView.setContentOffset(offset, animated: animated)
    }
  
@@ -325,7 +340,7 @@ index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..31ceab654b64c977b60a47f916a45992
    func injectJavaScript(_ script: String) {
      DispatchQueue.main.async { [weak self] in
        self?.webView?.evaluateJavaScript(script)
-@@ -275,7 +559,12 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
+@@ -275,7 +574,12 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
  
    // MARK: - WKNavigationDelegate implementations
  

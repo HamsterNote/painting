@@ -26,3 +26,33 @@ test('installed Expo patch exposes the same scoped keyboard action at every boun
   assert.match(swift, /window\.__paintingToolbarKeyboard\?\.receive/);
   assert.doesNotMatch(swift, /becomeFirstResponder|func requestFocus/);
 });
+
+test('installed native commands share the live text guard at registration, validation and delivery', () => {
+  // This checks the installed patch contract, not UIKit execution or compilation.
+  const swift = read('ios/DomWebView.swift');
+  const gate = swift
+    .split('fileprivate func toolbarActionAllowed')[1]
+    .split('override var keyCommands')[0];
+  const registration = swift
+    .split('override var keyCommands')[1]
+    .split('override func canPerformAction')[0];
+  const validation = swift
+    .split('override func canPerformAction')[1]
+    .split('override func target')[0];
+  const delivery = swift
+    .split('@objc fileprivate func toolbarKey')[1]
+    .split('override var inputAccessoryView')[0];
+  assert.match(gate, /let responder = toolbarFirstResponder\(in: self\)/);
+  assert.match(gate, /guard textInput\.markedTextRange == nil else \{ return false \}/);
+  assert.match(
+    gate,
+    /guard toolbarKeyboardTabOnly \|\| textInput\.selectedTextRange == nil else \{ return false \}/
+  );
+  assert.ok(gate.indexOf('markedTextRange') < gate.indexOf('action == #selector(toolbarTab'));
+  assert.match(registration, /toolbarCommands\.filter/);
+  for (const boundary of [registration, validation, delivery])
+    assert.match(boundary, /toolbarActionAllowed\(action\)/);
+  assert.ok(
+    delivery.indexOf('toolbarActionAllowed(action)') < delivery.indexOf('evaluateJavaScript')
+  );
+});

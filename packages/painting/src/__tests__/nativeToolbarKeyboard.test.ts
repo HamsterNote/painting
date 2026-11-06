@@ -2,9 +2,27 @@ import { installNativeToolbarKeyboard } from '../../../../apps/playground/src/la
 
 let dispose: () => void;
 let setScope: jest.Mock<Promise<void>, [string]>;
+let releaseHeldReset: (() => void) | undefined;
 const button = () => document.querySelector<HTMLButtonElement>('#item')!;
 const flush = async () => {
   for (let i = 0; i < 12; i++) await Promise.resolve();
+};
+const holdReset = async () => {
+  dispose();
+  await flush();
+  setScope.mockClear();
+  let release!: () => void;
+  setScope.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      })
+  );
+  dispose = installNativeToolbarKeyboard(document, setScope);
+  await flush();
+  releaseHeldReset = release;
+  expect(setScope.mock.calls).toEqual([['', false]]);
+  return release;
 };
 const currentScope = () => setScope.mock.calls.at(-1)![0];
 const receive = (scope: string, sequence = 1, key: 'Escape' | 'Tab' = 'Escape', shiftKey = false) =>
@@ -28,6 +46,8 @@ beforeEach(() => {
   dispose = installNativeToolbarKeyboard(document, setScope);
 });
 afterEach(async () => {
+  releaseHeldReset?.();
+  releaseHeldReset = undefined;
   dispose();
   await flush();
   jest.restoreAllMocks();
@@ -153,6 +173,114 @@ test('serializes native enables/disables and cleans up after an in-flight enable
   resolve();
   await flush();
   expect(currentScope()).toBe('');
+});
+
+test.each(['editor', 'composition', 'dispose'] as const)(
+  'a delayed reset receipt cannot send a queued enable after %s takes ownership',
+  async (transition) => {
+    const release = await holdReset();
+    button().focus();
+    const queued = window.__paintingToolbarKeyboard!.snapshot().scope;
+    expect(queued).not.toBe('');
+    if (transition === 'editor') document.querySelector('textarea')!.focus();
+    else if (transition === 'composition')
+      button().dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+    else dispose();
+    await flush();
+    expect(setScope.mock.calls).toEqual([['', false]]);
+    release();
+    await flush();
+    // Assert the native boundary, not receive(false) after UIKit consumed a key.
+    expect(setScope.mock.calls).toEqual([
+      ['', false],
+      ['', false],
+    ]);
+    expect(setScope.mock.calls.some(([value]) => value === queued)).toBe(false);
+  }
+);
+
+test('pending color modes coalesce to the live mode even when scope is reused', async () => {
+  const release = await holdReset();
+  const color = document.createElement('input');
+  color.type = 'text';
+  color.dataset.toolbarColorField = 'true';
+  button().parentElement!.append(color);
+  button().focus();
+  const scope = window.__paintingToolbarKeyboard!.snapshot().scope;
+  color.focus();
+  button().focus();
+  color.focus();
+  expect(window.__paintingToolbarKeyboard!.snapshot()).toMatchObject({ scope, tabOnly: true });
+  release();
+  // Drain all four queued mode publications, including skipped promise links.
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  expect(setScope.mock.calls).toEqual([
+    ['', false],
+    [scope, true],
+  ]);
+});
+
+test('queued color enable never reaches native after composition starts', async () => {
+  const release = await holdReset();
+  const color = document.createElement('input');
+  color.type = 'text';
+  color.dataset.toolbarColorField = 'true';
+  button().parentElement!.append(color);
+  color.focus();
+  expect(window.__paintingToolbarKeyboard!.snapshot().tabOnly).toBe(true);
+  color.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+  release();
+  await flush();
+  expect(setScope.mock.calls).toEqual([
+    ['', false],
+    ['', false],
+  ]);
+});
+
+test('queued color enable is discarded when focus moves to an ordinary editor', async () => {
+  const release = await holdReset();
+  const color = document.createElement('input');
+  color.type = 'text';
+  color.dataset.toolbarColorField = 'true';
+  button().parentElement!.append(color);
+  color.focus();
+  document.querySelector('textarea')!.focus();
+  release();
+  await flush();
+  expect(setScope.mock.calls).toEqual([
+    ['', false],
+    ['', false],
+  ]);
+});
+
+test('queued enable rechecks live visibility before its observer notification', async () => {
+  const release = await holdReset();
+  button().focus();
+  jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+  // Deliberately no visibilitychange event: the send boundary must check it.
+  release();
+  await flush();
+  expect(setScope.mock.calls).toEqual([
+    ['', false],
+    ['', false],
+  ]);
+});
+
+test('an old installation cannot enable native commands after replacement', async () => {
+  const release = await holdReset();
+  button().focus();
+  const old = window.__paintingToolbarKeyboard!.snapshot().scope;
+  dispose();
+  dispose = installNativeToolbarKeyboard(document, setScope);
+  const replacement = window.__paintingToolbarKeyboard!.snapshot().scope;
+  expect(replacement).not.toBe(old);
+  release();
+  await flush();
+  expect(setScope.mock.calls).toEqual([
+    ['', false],
+    ['', false],
+    [replacement, false],
+  ]);
 });
 
 test('a queued focusout from a disposed bridge cannot disable its replacement', async () => {

@@ -4,9 +4,19 @@
 
 修勾于2026-11-06在本单评论`01a1b164-b31a-746c-8d2f-10db6d9c4efc`选择 **A：接受行为验收**。4.3的本次iOS宿主子项按行为通过记录：弹层关闭、焦点归还及完整遍历18/18，触摸交接32/32，颜色焦点下range拖动12/12，双向长按Tab跨颜色8/8且松开无补发。原生桥事件`isTrusted=false`作为已接受的实现方式差异，拼音输入法＋颜色字段Escape在现有UIKeyCommand方案下不可达、内部终止层未定作为已接受的平台限制；二者不列为本次A口径的未满足项。
 
-有界诊断已结束，不追加取证、不再修改产品代码。PR #46进入代码评审，不合并；4.2/4.3仍未勾选，spec未改。4.2仍需实体笔验收，4.3的整体勾选留给修勾在HAM-164决定，本次子项行为通过不表示完整4.3或真机验收通过。
+有界诊断已结束，不追加取证；代码评审后按要求修正队列失效与原生编辑保护P2，见下节。PR #46等待复审，不合并；4.2/4.3仍未勾选，spec未改。4.2仍需实体笔验收，4.3的整体勾选留给修勾在HAM-164决定，本次子项行为通过不表示完整4.3或真机验收通过。
 
-统一原生证据口径：**iOS 26.5模拟器 / idb脚本输入 / 非真机**。具体为iPhone17 Pro模拟器、当前Expo DOM宿主及默认/PencilKit入口；不是实体键盘或真实Apple Pencil验收，不外推其他iOS版本、真机或Android。最后一次Mac实测源码为`39fd473e1822b9068dec060c159ee2946bbcd003`，Mac arm64 / Xcode27.2一次原生构建安装成功，188.107秒、0编译错误，主程序/debug dylib构建与安装哈希一致。本次采用A仅修改文档；最终head的Linux单测、类型、构建、UI及依赖/格式检查结果记录在PR #46描述中，不替代原生证据。
+统一原生证据口径：**iOS 26.5模拟器 / idb脚本输入 / 非真机**。具体为iPhone17 Pro模拟器、Expo DOM宿主及默认/PencilKit入口；不是实体键盘或真实Apple Pencil验收，不外推其他iOS版本、真机或Android。最后一次Mac实测源码为`39fd473e1822b9068dec060c159ee2946bbcd003`，Mac arm64 / Xcode27.2一次原生构建安装成功，188.107秒、0编译错误，主程序/debug dylib构建与安装哈希一致。采用A的`8e2f803`仅修改文档；此后P2修正已改变DOM队列和Swift门控，下表仍是原实测SHA证据，不继承为新Swift实现的原生通过结果。最终head的Linux单测、类型、构建、UI及依赖/格式检查结果记录在PR #46描述中，不替代原生证据。
+
+### 代码评审P2：发送前失效检查与实时原生编辑保护
+
+审核`8e2f803`发现：前一个Expo调用回执延迟时，面板enable排队后焦点进入编辑器/开始组合，旧enable仍会发送；DOM拒收回调已经晚于UIKit消费按键。修正后仍串行等待在途调用和清理，但非空发布在真正调用`setNativeScope`前执行`sync()`，核对请求版本、scope、颜色模式及卸载状态；被后续状态替代的enable直接跳过。空scope清理保留顺序，覆盖effect重挂载。
+
+Swift的`keyCommands`、`canPerformAction`、action入口和Debug容器命令共用实时门控：前台/key window/所属first responder必须有效；`UITextInput.markedTextRange`存在时Escape、Tab、Shift+Tab全部让给IME；普通菜单模式遇到`selectedTextRange`非空也让给文字编辑/选区。颜色模式保留已接受的Tab路径和闲置中文Escape条件，但同样必须读取native text状态且无marked text。没有调用私有WebKit编辑接口，没有改变触摸交接或原HID观察器。
+
+新增8项队列回归直接断言Expo原生边界的`setNativeScope`调用，不以`receive=false`代偿：延迟reset回执后进入编辑器、开始组合、卸载；同scope颜色模式往返；颜色→组合/普通文字；隐藏状态尚未通知；旧effect被替换。换回`8e2f803` helper时8项均在调用序列断言失败，修正后新旧共16项通过。依赖测试仅静态核对已安装补丁的四处门控和public text读数，不宣称执行了UIKit。
+
+本机无xcrun；本次没有Swift编译或新的iOS原生按键结果。复审需注意新增`selectedTextRange`读取与颜色Tab例外在实际WKContentView上的行为，原生证据缺口保留，既有A验收口径不改。
 
 ### 已达成行为与保留的原始判定
 
