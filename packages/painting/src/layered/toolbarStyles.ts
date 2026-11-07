@@ -38,4 +38,8 @@ export const toolbarStyles = `
 .hn-painting-panel input:not([type="checkbox"]), .hn-painting-panel select { min-height:44px; min-width:44px; max-width:180px; font:inherit; color:inherit; }
 .hn-painting-panel input[type="checkbox"] { width:20px; height:20px; }
 .hn-painting-panel input[type="color"] { width:56px; }
+.hn-painting-choices { margin:0; padding:4px; border:0; min-width:0; }
+.hn-painting-choices legend { padding:0; font-weight:600; }
+.hn-painting-choices label { justify-content:flex-start; }
+.hn-painting-choices input[type="radio"] { min-width:20px; min-height:20px; width:20px; height:20px; margin:0; }
 `;

@@ -7,6 +7,49 @@ import {
   selectToolbarTool,
 } from './layered-helpers';
 
+for (const [triggerName, role, panelName] of [
+  ['工具菜单', 'menu', '工具'],
+  ['缩放比例', 'dialog', '缩放设置'],
+  ['设置', 'dialog', '绘图设置'],
+] as const) {
+  test(`${panelName} returns focus on Escape and closes after keyboard traversal`, async ({
+    page,
+  }) => {
+    // Default route, with no diagnostics or synthetic DOM keyboard events.
+    await page.goto('/layered-editor');
+    await expect(page.getByTestId('layered-drawing')).toBeVisible();
+    const trigger = page.getByRole('button', { name: triggerName, exact: true });
+    const panel = page.getByRole(role, { name: panelName, exact: true });
+    await trigger.click();
+    await expect(panel).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    for (const direction of ['Tab', 'Shift+Tab']) {
+      await trigger.focus();
+      await page.keyboard.press('Enter');
+      await expect(panel).toBeVisible();
+      // A following document control keeps forward traversal out of browser chrome.
+      await page.evaluate(() => {
+        document.getElementById('after-toolbar-panel')?.remove();
+        const next = document.createElement('button');
+        next.id = 'after-toolbar-panel';
+        next.textContent = 'After panel';
+        document.body.append(next);
+      });
+      const controls = panel.locator(
+        'button:not(:disabled),input:not(:disabled),select:not(:disabled)'
+      );
+      await (direction === 'Tab' ? controls.last() : controls.first()).focus();
+      await page.keyboard.press(direction);
+      await expect(panel).toHaveCount(0);
+      await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(await page.evaluate(() => document.activeElement?.isConnected)).toBe(true);
+      expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe('BODY');
+    }
+  });
+}
+
 for (const width of [320, 390, 768, 1024, 1280, 1440]) {
   test(`toolbar layout and keyboard reach at ${width}px`, async ({ page }, info) => {
     await page.setViewportSize({ width, height: 900 });

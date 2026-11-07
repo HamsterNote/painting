@@ -1,0 +1,298 @@
+{
+  "source": "HAM-175-96625b6-ios-evidence.zip",
+  "sha256": "7a61d0c65d9f11df0af0005d0818f256598acbb61f7fd309a3a722dca1b287e5",
+  "note": "Minimal projection of route-default-pinyin-idle / pinyin-composing before/after-state, after.observation.events and native-keyboard.jsonl; no key/value text retained. Real simulator idb input, not a generated UI test.",
+  "cases": [
+    {
+      "name": "pinyin-idle",
+      "expected": "pinyin",
+      "before": {
+        "at": "2026-11-06T11:58:08.459Z",
+        "bridge": {
+          "scope": "d4e4e697d42c5af04deeeb804e2c143c",
+          "acknowledgedScope": "d4e4e697d42c5af04deeeb804e2c143c",
+          "tabOnly": true,
+          "acknowledgedTabOnly": true,
+          "composingConnected": false,
+          "activeTag": "INPUT"
+        },
+        "active": {
+          "tag": "INPUT",
+          "type": "text",
+          "label": "颜色",
+          "panel": "绘图设置"
+        },
+        "controls": [
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          }
+        ],
+        "hasFocus": true,
+        "visibility": "visible"
+      },
+      "after": {
+        "at": "2026-11-06T11:58:09.891Z",
+        "bridge": {
+          "scope": "d4e4e697d42c5af04deeeb804e2c143c",
+          "acknowledgedScope": "d4e4e697d42c5af04deeeb804e2c143c",
+          "tabOnly": true,
+          "acknowledgedTabOnly": true,
+          "composingConnected": false,
+          "activeTag": "INPUT"
+        },
+        "active": {
+          "tag": "INPUT",
+          "type": "text",
+          "label": "颜色",
+          "panel": "绘图设置"
+        },
+        "controls": [
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          }
+        ],
+        "hasFocus": true,
+        "visibility": "visible"
+      },
+      "events": [],
+      "native": [
+        {
+          "at": 1793966284.728983,
+          "kind": "gate",
+          "data": {
+            "scope": "d4e4e697d42c5af04deeeb804e2c143c",
+            "language": "en-US",
+            "marked": false,
+            "escapeBridge": false
+          }
+        },
+        {
+          "at": 1793966289.182687,
+          "kind": "gate",
+          "data": {
+            "scope": "d4e4e697d42c5af04deeeb804e2c143c",
+            "language": "zh-Hans",
+            "marked": false,
+            "escapeBridge": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "pinyin-composing",
+      "expected": "composing",
+      "before": {
+        "at": "2026-11-06T11:58:29.321Z",
+        "bridge": {
+          "scope": "",
+          "acknowledgedScope": "",
+          "tabOnly": false,
+          "acknowledgedTabOnly": false,
+          "composingConnected": true,
+          "activeTag": "INPUT"
+        },
+        "active": {
+          "tag": "INPUT",
+          "type": "text",
+          "label": "颜色",
+          "panel": "绘图设置"
+        },
+        "controls": [
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          }
+        ],
+        "hasFocus": true,
+        "visibility": "visible"
+      },
+      "after": {
+        "at": "2026-11-06T11:58:30.769Z",
+        "bridge": {
+          "scope": "d3667af76a25b6992e0ddc75aa83ad78",
+          "acknowledgedScope": "d3667af76a25b6992e0ddc75aa83ad78",
+          "tabOnly": true,
+          "acknowledgedTabOnly": true,
+          "composingConnected": false,
+          "activeTag": "INPUT"
+        },
+        "active": {
+          "tag": "INPUT",
+          "type": "text",
+          "label": "颜色",
+          "panel": "绘图设置"
+        },
+        "controls": [
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          },
+          {
+            "panel": "绘图设置"
+          }
+        ],
+        "hasFocus": true,
+        "visibility": "visible"
+      },
+      "events": [
+        {
+          "at": "2026-11-06T11:58:30.068Z",
+          "type": "beforeinput",
+          "key": null,
+          "isTrusted": true
+        },
+        {
+          "at": "2026-11-06T11:58:30.071Z",
+          "type": "input",
+          "key": null,
+          "isTrusted": true
+        },
+        {
+          "at": "2026-11-06T11:58:30.071Z",
+          "type": "compositionend",
+          "key": null,
+          "isTrusted": true
+        }
+      ],
+      "native": [
+        {
+          "at": 1793966310.161821,
+          "kind": "gate",
+          "data": {
+            "scope": "d3667af76a25b6992e0ddc75aa83ad78",
+            "language": "zh-Hans",
+            "marked": false,
+            "escapeBridge": true
+          }
+        }
+      ]
+    }
+  ]
+}

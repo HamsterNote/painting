@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type PropsWithChildren } from 'react';
-import { Keyboard, KeyboardAvoidingView, Platform, View } from 'react-native';
+import { Keyboard, Platform, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { DOMProps } from 'expo/dom';
+import { IosKeyboardHost } from './IosKeyboardHost';
 
 // The native host consumes all insets; WebView must not add a second safe area.
 export const editorDOMProps: DOMProps = {
@@ -67,9 +68,7 @@ export function NativeEditorHost({ children, testID }: PropsWithChildren<{ testI
       {Platform.OS === 'android' ? (
         <AndroidKeyboardHost>{children}</AndroidKeyboardHost>
       ) : (
-        <KeyboardAvoidingView testID="layered-keyboard-host" style={{ flex: 1 }} behavior="padding">
-          {children}
-        </KeyboardAvoidingView>
+        <IosKeyboardHost>{children}</IosKeyboardHost>
       )}
     </SafeAreaView>
   );

@@ -8,6 +8,7 @@ import { PageIntegrationFixture } from './PageIntegrationFixture';
 import { createGestureTrace, type GestureTrace } from './gestureTrace';
 import { GestureTracePanel } from './GestureTracePanel';
 import { InputDeviceDiagnostics } from './InputDeviceDiagnostics';
+import { installNativeToolbarKeyboard } from './nativeToolbarKeyboard';
 import type { PencilkitDemoConnection } from '@hamster-note/painting/input/native/pencilkitDemoBridge';
 import type {
   PencilkitDemoMessage,
@@ -30,7 +31,20 @@ export default function LayeredEditorDom(props: {
   nativeMessage?: PencilkitDemoMessage;
   onNativeState?: (state: PencilkitDemoState) => Promise<void>;
   onNativeReply?: (reply: PencilkitDemoReply) => Promise<void>;
+  onToolbarKeyboardScope?: (scope: string, tabOnly: boolean) => Promise<void>;
 }) {
+  const keyboardAction = useRef(props.onToolbarKeyboardScope);
+  useLayoutEffect(() => {
+    keyboardAction.current = props.onToolbarKeyboardScope;
+  });
+  const hasKeyboardAction = Boolean(props.onToolbarKeyboardScope);
+  useEffect(() => {
+    const initialAction = keyboardAction.current;
+    if (hasKeyboardAction && initialAction)
+      return installNativeToolbarKeyboard(document, async (scope, tabOnly) => {
+        await (keyboardAction.current ?? initialAction)(scope, tabOnly);
+      });
+  }, [hasKeyboardAction]);
   const [receive, setReceive] = useState<(message: PencilkitDemoMessage) => void>();
   const { nativePencilEnabled, onNativeState, onNativeReply } = props;
   const actions = useRef({ onNativeState, onNativeReply });
@@ -107,6 +121,7 @@ export default function LayeredEditorDom(props: {
     >
       <LayeredPaintingBoard
         controller={controller}
+        toolbarInlinePickers={hasKeyboardAction}
         nativePencilExperiment={nativeConnection}
         onGestureTrace={trace?.record}
         historyReadyDelayMs={

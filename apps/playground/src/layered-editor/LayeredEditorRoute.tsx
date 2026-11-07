@@ -1,10 +1,10 @@
-import LayeredEditorDom from './LayeredEditorDom';
+import NativeLayeredEditorDom from './NativeLayeredEditorDom';
 import { NativeEditorHost, editorDOMProps } from './NativeEditorHost';
 
 export default function LayeredEditorRoute() {
   return (
     <NativeEditorHost>
-      <LayeredEditorDom dom={editorDOMProps} />
+      <NativeLayeredEditorDom dom={editorDOMProps} />
     </NativeEditorHost>
   );
 }

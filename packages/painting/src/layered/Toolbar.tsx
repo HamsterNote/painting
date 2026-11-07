@@ -9,6 +9,7 @@ import { writeInputModePreference } from './inputModePreference';
 import { ToolbarPanel } from './ToolbarPanel';
 import { toolbarStyles } from './toolbarStyles';
 import { ToolbarNumberField } from './ToolbarNumberField';
+import { ToolbarChoiceField, ToolbarHexColorField } from './ToolbarPickerFields';
 
 const SHAPES: readonly [LayeredEditorTool, string, IconName][] = [
   ['line', '直线', 'line'],
@@ -37,10 +38,12 @@ export type ToolbarProps = {
   controller: LayeredEditorController;
   /** floating is positioned within the nearest positioned parent (normally PaintingBoard). */
   placement?: 'inline' | 'floating';
+  /** Use page controls instead of focus-triggered native select/color pickers. */
+  inlinePickers?: boolean;
 };
 
 /** Low-frequency channels only; raw input never renders the toolbar. */
-export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
+export function Toolbar({ controller, placement = 'inline', inlinePickers = false }: ToolbarProps) {
   const inputReady = useInputInitialization(controller);
   const input = useEditorSnapshot(controller, 'input');
   const { activeTool, settings } = useEditorSnapshot(controller, 'tools');
@@ -357,23 +360,43 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
                 </button>
               );
             })}
-            <label
-              className="hn-painting-custom-color"
-              data-active={customColorActive}
-              title={customColorActive ? '自由取色，当前自定义颜色' : '自由取色'}
-              style={{ '--current-color': style.color } as CSSProperties}
-            >
-              <span aria-hidden="true" />
-              <input
-                type="color"
+            {inlinePickers ? (
+              <button
+                type="button"
+                className="hn-painting-color hn-painting-custom-color"
                 aria-label="自由取色"
+                title="自由取色"
+                aria-haspopup="dialog"
+                aria-expanded={openPanel === 'settings'}
+                aria-controls={openPanel === 'settings' ? panelId : undefined}
                 aria-description={customColorActive ? '当前自定义颜色' : '选择自定义颜色'}
-                value={style.color}
-                disabled={!freehand && !shape}
                 aria-describedby={`${descriptionId}-palette`}
-                onChange={(event) => updateStyle({ color: event.target.value })}
-              />
-            </label>
+                data-active={customColorActive}
+                disabled={!supportedColor}
+                style={{ '--current-color': style.color } as CSSProperties}
+                onClick={(event) => togglePanel('settings', event.currentTarget)}
+              >
+                <span aria-hidden="true" />
+              </button>
+            ) : (
+              <label
+                className="hn-painting-custom-color"
+                data-active={customColorActive}
+                title={customColorActive ? '自由取色，当前自定义颜色' : '自由取色'}
+                style={{ '--current-color': style.color } as CSSProperties}
+              >
+                <span aria-hidden="true" />
+                <input
+                  type="color"
+                  aria-label="自由取色"
+                  aria-description={customColorActive ? '当前自定义颜色' : '选择自定义颜色'}
+                  value={style.color}
+                  disabled={!freehand && !shape}
+                  aria-describedby={`${descriptionId}-palette`}
+                  onChange={(event) => updateStyle({ color: event.target.value })}
+                />
+              </label>
+            )}
           </div>
         </div>
       ) : null}
@@ -441,36 +464,39 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
           ) : null}
           {openPanel === 'settings' ? (
             <>
-              <label>
-                输入模式
-                <select
-                  aria-label="输入模式"
-                  title="输入模式"
-                  value={input.mode}
-                  style={{ maxWidth: '100%', minHeight: 34 }}
-                  onChange={(event) => {
-                    const mode = event.target.value;
-                    if (!isLayeredInputMode(mode)) return;
-                    if (controller.setInputMode(mode).ok) writeInputModePreference(mode);
-                  }}
-                >
-                  <option value="auto">自动</option>
-                  <option value="finger">强制手指绘制</option>
-                  <option value="pen">强制手写笔绘制</option>
-                </select>
-              </label>
+              <ToolbarChoiceField
+                inline={inlinePickers}
+                label="输入模式"
+                value={input.mode}
+                options={[
+                  ['auto', '自动'],
+                  ['finger', '强制手指绘制'],
+                  ['pen', '强制手写笔绘制'],
+                ]}
+                onChange={(mode) => {
+                  if (isLayeredInputMode(mode) && controller.setInputMode(mode).ok)
+                    writeInputModePreference(mode);
+                }}
+              />
               {freehand || shape ? (
                 <>
-                  <label>
-                    自定义颜色
-                    <input
-                      type="color"
-                      aria-label="颜色"
-                      title="颜色"
+                  {inlinePickers ? (
+                    <ToolbarHexColorField
                       value={style.color}
-                      onChange={(event) => updateStyle({ color: event.target.value })}
+                      onChange={(color) => updateStyle({ color })}
                     />
-                  </label>
+                  ) : (
+                    <label>
+                      自定义颜色
+                      <input
+                        type="color"
+                        aria-label="颜色"
+                        title="颜色"
+                        value={style.color}
+                        onChange={(event) => updateStyle({ color: event.target.value })}
+                      />
+                    </label>
+                  )}
                   <label>
                     不透明度{' '}
                     <input
@@ -487,42 +513,42 @@ export function Toolbar({ controller, placement = 'inline' }: ToolbarProps) {
                 </>
               ) : null}
               {freehand ? (
-                <label>
-                  压力{' '}
-                  <select
-                    aria-label="压力模式"
-                    value={settings.freehand.pressureMode}
-                    onChange={(event) =>
-                      controller.setFreehandSettings({
-                        ...settings.freehand,
-                        pressureMode: event.target.value as PressureMode,
-                      })
-                    }
-                  >
-                    <option value="auto">自动</option>
-                    <option value="real">真实</option>
-                    <option value="simulated">模拟</option>
-                    <option value="constant">恒定</option>
-                  </select>
-                </label>
+                <ToolbarChoiceField
+                  inline={inlinePickers}
+                  label="压力"
+                  ariaLabel="压力模式"
+                  value={settings.freehand.pressureMode}
+                  options={[
+                    ['auto', '自动'],
+                    ['real', '真实'],
+                    ['simulated', '模拟'],
+                    ['constant', '恒定'],
+                  ]}
+                  onChange={(pressureMode) =>
+                    controller.setFreehandSettings({
+                      ...settings.freehand,
+                      pressureMode: pressureMode as PressureMode,
+                    })
+                  }
+                />
               ) : null}
               {shape ? (
-                <label>
-                  线型{' '}
-                  <select
-                    aria-label="形状线型"
-                    value={settings.shape.dash?.length ? 'dash' : 'solid'}
-                    onChange={(event) =>
-                      controller.setShapeSettings({
-                        ...settings.shape,
-                        dash: event.target.value === 'dash' ? [8, 5] : [],
-                      })
-                    }
-                  >
-                    <option value="solid">实线</option>
-                    <option value="dash">虚线</option>
-                  </select>
-                </label>
+                <ToolbarChoiceField
+                  inline={inlinePickers}
+                  label="线型"
+                  ariaLabel="形状线型"
+                  value={settings.shape.dash?.length ? 'dash' : 'solid'}
+                  options={[
+                    ['solid', '实线'],
+                    ['dash', '虚线'],
+                  ]}
+                  onChange={(dash) =>
+                    controller.setShapeSettings({
+                      ...settings.shape,
+                      dash: dash === 'dash' ? [8, 5] : [],
+                    })
+                  }
+                />
               ) : null}
               <label>
                 <input

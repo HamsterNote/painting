@@ -3,6 +3,7 @@ import { useLocalSearchParams } from 'expo-router';
 import LayeredEditorRoute from '../../../apps/playground/src/layered-editor/LayeredEditorRoute';
 
 const mockInjectedScripts: string[] = [];
+const mockSetToolbarKeyboardScope = jest.fn(async () => {});
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: jest.fn(() => ({})),
@@ -27,6 +28,7 @@ jest.mock('../../../apps/playground/node_modules/expo/src/dom/webview/ExpoDOMWeb
     default: React.forwardRef(function MockDOMWebView(props: object, ref: object) {
       React.useImperativeHandle(ref, () => ({
         injectJavaScript: (script: string) => mockInjectedScripts.push(script),
+        setToolbarKeyboardScope: mockSetToolbarKeyboardScope,
       }));
       return React.createElement(View, { ...props, testID: 'actual-expo-dom-webview' });
     }),
@@ -54,6 +56,7 @@ test('Expo action names stay registered across initial-off, enable, disable and 
   expect(webview().props.injectedJavaScriptObject.initialProps.names).toEqual([
     'onNativeState',
     'onNativeReply',
+    'onToolbarKeyboardScope',
   ]);
   const state = {
     protocolVersion: 1,
@@ -64,7 +67,7 @@ test('Expo action names stay registered across initial-off, enable, disable and 
     scale: 1,
     brush: { color: '#000', nominalSize: 4, opacity: 1 },
   };
-  const send = (actionId: string, value: object) =>
+  const send = (actionId: string, value: unknown) =>
     fireEvent(webview(), 'message', {
       nativeEvent: {
         data: JSON.stringify({
@@ -73,6 +76,8 @@ test('Expo action names stay registered across initial-off, enable, disable and 
         }),
       },
     });
+  await send('onToolbarKeyboardScope', 'scope-1');
+  expect(mockSetToolbarKeyboardScope).toHaveBeenCalledTimes(1);
   jest.mocked(useLocalSearchParams).mockReturnValue({ pencilkit: '1' });
   await view.rerender(<LayeredEditorRoute />);
   await send('onNativeState', state);
@@ -99,7 +104,7 @@ test('native status renders do not retransmit an unacknowledged long stroke thro
   mockInjectedScripts.length = 0;
   const view = await render(<LayeredEditorRoute />);
   const canvas = () => view.getByTestId('layered-pencilkit-canvas');
-  const send = (actionId: string, value: object) =>
+  const send = (actionId: string, value: unknown) =>
     fireEvent(view.getByTestId('actual-expo-dom-webview'), 'message', {
       nativeEvent: {
         data: JSON.stringify({

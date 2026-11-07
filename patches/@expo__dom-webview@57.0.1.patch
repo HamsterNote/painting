@@ -1,0 +1,401 @@
+diff --git a/build/DomWebView.types.d.ts b/build/DomWebView.types.d.ts
+index 6ea41ff0152909ba1f1e8bc07de41afcecbcc278..ec7ef5d7142d711b1b45c50bc11991f3c3b4bf3e 100644
+--- a/build/DomWebView.types.d.ts
++++ b/build/DomWebView.types.d.ts
+@@ -246,6 +246,14 @@ export type DomWebViewRef = {
+         y?: number | undefined;
+         animated?: boolean | undefined;
+     }): void;
++    /**
++     * Enables scoped iOS toolbar Escape/Tab commands. Empty string disables.
++     * Only non-editing controls may enable commands. The legacy tabOnly=true
++     * request disables commands; color editing uses WebKit's trusted key path.
++     * The DOM receiver must reject stale scopes; events are untrusted.
++     * @platform ios
++     */
++    setToolbarKeyboardScope: (scope: string, tabOnly: boolean) => Promise<void>;
+     /**
+      * Injects a JavaScript string into the `WebView` and executes it.
+      */
+diff --git a/ios/DomWebView.swift b/ios/DomWebView.swift
+index d18e5cbc44dc3576d2a5ee0bf21b2a22f4010eee..639e05a207fa625a00222f6d7e391cb2967550b0 100644
+--- a/ios/DomWebView.swift
++++ b/ios/DomWebView.swift
+@@ -9,12 +9,302 @@ import WebKit
+ final class DomWKWebView: WKWebView {
+   var hidesInputAccessoryView = false
+ 
++  // Commands are for non-editing controls only. The legacy tabOnly flag is
++  // retained for bridge compatibility but never grants editing authority.
++  // WKContentView is shared by DOM editors and cannot prove color ownership.
++  // Public UIKit commands consume once; do not also forward raw presses.
++  var toolbarKeyboardScope = "" {
++    didSet { traceToolbarRoute("scope") }
++  }
++  var toolbarKeyboardTabOnly = false
++  private var toolbarKeySequence = 0
++  private var toolbarColorRouteDescription = ""
++
++  // Opt-in, app-side diagnostics. Do not query keyCommands/target/action here:
++  // doing so would create the very routing calls this trace is meant to observe.
++  #if DEBUG
++  private let toolbarRouteTraceEnabled = UserDefaults.standard.bool(forKey: "HAM175KeyboardRouteTrace")
++  private let toolbarContainerExperiment = UserDefaults.standard.string(forKey: "HAM175EscapeCommandOwner") ?? "webview"
++  private var toolbarRouteSequence = 0
++  private func toolbarObject(_ object: AnyObject?) -> String {
++    guard let object else { return "nil" }
++    return "\(type(of: object))@\(Unmanaged.passUnretained(object).toOpaque())"
++  }
++
++  private func toolbarCommandDescription(_ command: UIKeyCommand) -> [String: Any] {
++    // Never log typed text or arbitrary command input.
++    let key = command.input == UIKeyCommand.inputEscape ? "Escape" : command.input == "\t" ? "Tab" : "other"
++    return ["id": toolbarObject(command), "key": key,
++      "action": command.action.map { NSStringFromSelector($0) } ?? "nil", "modifiers": command.modifierFlags.rawValue,
++      "priority": command.wantsPriorityOverSystemBehavior]
++  }
++  #endif
++
++  fileprivate func traceToolbarRoute(_ stage: String, action: Selector? = nil,
++    sender: Any? = nil, target: Any? = nil, allowed: Bool? = nil,
++    commands: [UIKeyCommand]? = nil, inherited: [UIKeyCommand]? = nil,
++    owner: UIResponder? = nil) {
++    #if DEBUG
++    guard toolbarRouteTraceEnabled else { return }
++    toolbarRouteSequence += 1
++    // Bound hot command queries. An explicit overflow invalidates absence claims.
++    guard toolbarRouteSequence <= 4097 else { return }
++    let routeOwner = owner ?? self
++    var row: [String: Any] = ["stage": stage, "traceSequence": toolbarRouteSequence,
++      "atMs": Date().timeIntervalSince1970 * 1000, "uptime": ProcessInfo.processInfo.systemUptime,
++      "owner": toolbarObject(routeOwner), "scope": toolbarKeyboardScope,
++      "containerExperiment": toolbarContainerExperiment,
++      "tabOnly": toolbarKeyboardTabOnly, "keyWindow": window?.isKeyWindow == true]
++    if toolbarRouteSequence == 4097 {
++      row["stage"] = "overflow"
++    } else {
++      let responder = toolbarFirstResponder(in: self)
++      row["firstResponder"] = toolbarObject(responder)
++      row["language"] = responder?.textInputMode?.primaryLanguage ?? "unavailable"
++      if let textInput = responder as? UITextInput {
++        row["marked"] = textInput.markedTextRange != nil
++      } else {
++        row["marked"] = NSNull()
++      }
++      var chain: [String] = []
++      var current: UIResponder? = responder
++      var seen = Set<ObjectIdentifier>()
++      while let item = current, chain.count < 24, seen.insert(ObjectIdentifier(item)).inserted {
++        chain.append(toolbarObject(item))
++        current = item.next
++      }
++      row["chain"] = chain
++      row["ownerInChain"] = chain.contains(toolbarObject(routeOwner))
++      if let action { row["action"] = NSStringFromSelector(action) }
++      if let sender = sender as? UIKeyCommand { row["command"] = toolbarCommandDescription(sender) }
++      if stage == "target" { row["target"] = toolbarObject(target as AnyObject?) }
++      if let allowed { row["allowed"] = allowed }
++      let describe = { (items: [UIKeyCommand]) in
++        items.filter { $0.input == UIKeyCommand.inputEscape || $0.input == "\t" }
++          .map { self.toolbarCommandDescription($0) }
++      }
++      if let commands { row["returned"] = describe(commands) }
++      if let inherited { row["inherited"] = describe(inherited) }
++    }
++    if let data = try? JSONSerialization.data(withJSONObject: row, options: [.sortedKeys]),
++      let json = String(data: data, encoding: .utf8) {
++      NSLog("[HAM175 command-route] %@", json)
++    }
++    #endif
++  }
++
++  private func isToolbarRouteAction(_ action: Selector) -> Bool {
++    action == #selector(toolbarTab(_:)) || action == #selector(toolbarKey(_:))
++      || (toolbarKeyboardTabOnly && NSStringFromSelector(action) == "cancelOperation:")
++  }
++
++  private func toolbarFirstResponder(in view: UIView) -> UIView? {
++    if view.isFirstResponder { return view }
++    for child in view.subviews {
++      if let responder = toolbarFirstResponder(in: child) { return responder }
++    }
++    return nil
++  }
++
++  private func toolbarColorEscapeState() -> (enabled: Bool, language: String?, marked: Bool?) {
++    guard toolbarKeyboardTabOnly else { return (false, nil, nil) }
++    let responder = toolbarFirstResponder(in: self)
++    let textInput = responder as? UITextInput
++    let language = responder?.textInputMode?.primaryLanguage
++    let marked = textInput.map { $0.markedTextRange != nil }
++    // Unknown native editor state must not consume an IME cancellation key.
++    let enabled = language?.hasPrefix("zh") == true && marked == false
++    #if DEBUG
++    let description = "scope=\(toolbarKeyboardScope) language=\(language ?? "unavailable") marked=\(String(describing: marked)) escapeBridge=\(enabled)"
++    if description != toolbarColorRouteDescription {
++      toolbarColorRouteDescription = description
++      NSLog("[HAM175 color-route] %@", description)
++    }
++    #endif
++    return (enabled, language, marked)
++  }
++
++  // Reuse the same command objects across focus changes and repeat callbacks.
++  private lazy var toolbarCommands: [UIKeyCommand] = {
++    let commands = [
++      UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(toolbarKey(_:))),
++      UIKeyCommand(input: "\t", modifierFlags: [], action: #selector(toolbarTab(_:))),
++      UIKeyCommand(input: "\t", modifierFlags: .shift, action: #selector(toolbarTab(_:)))
++    ]
++    for command in commands {
++      command.wantsPriorityOverSystemBehavior = true
++    }
++    return commands
++  }()
++
++  // Bounded Debug A/B: relocate only the existing idle Chinese-color Escape.
++  // The same command instance/selector, native gate and final delivery guard apply.
++  fileprivate var toolbarContainerEscapeCommand: UIKeyCommand? {
++    #if DEBUG
++    guard toolbarActionAllowed(#selector(toolbarKey(_:))) else { return nil }
++    switch toolbarContainerExperiment {
++    case "color-container":
++      guard toolbarKeyboardTabOnly, toolbarColorEscapeState().enabled else { return nil }
++    case "menu-container-control":
++      // A separate real-HID positive control for the container action. Never
++      // used for the retained matrix or for color/composition measurements.
++      guard !toolbarKeyboardTabOnly else { return nil }
++    default:
++      return nil
++    }
++    return toolbarCommands.first
++    #else
++    return nil
++    #endif
++  }
++
++  fileprivate func toolbarActionAllowed(_ action: Selector) -> Bool {
++    guard !toolbarKeyboardScope.isEmpty, !toolbarKeyboardTabOnly, window?.isKeyWindow == true,
++      window?.windowScene?.activationState == .foregroundActive,
++      let responder = toolbarFirstResponder(in: self) else { return false }
++    // Expo scope receipts can lag native focus and IME updates. Check UIKit's
++    // current text state before advertising/validating *any* priority command,
++    // including Tab. DOM callback rejection cannot return an already-taken key.
++    if let textInput = responder as? UITextInput {
++      guard textInput.markedTextRange == nil else { return false }
++      // Keep the normal-menu selection guard; there is no color exception.
++      guard textInput.selectedTextRange == nil else { return false }
++    }
++    return true
++  }
++
++  override var keyCommands: [UIKeyCommand]? {
++    guard !toolbarKeyboardScope.isEmpty else { return super.keyCommands }
++    let commands = toolbarCommands.filter { command in
++      guard let action = command.action else { return false }
++      return toolbarActionAllowed(action)
++    }
++    let localCommands = toolbarContainerEscapeCommand == nil
++      ? commands : commands.filter { $0.input != UIKeyCommand.inputEscape }
++    let inherited = super.keyCommands ?? []
++    let result = localCommands + inherited
++    traceToolbarRoute("commands", commands: result, inherited: inherited)
++    return result
++  }
++
++  override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
++    if action == #selector(toolbarTab(_:)) || action == #selector(toolbarKey(_:)) {
++      let movedEscape = action == #selector(toolbarKey(_:)) && toolbarContainerEscapeCommand != nil
++      let allowed = !movedEscape && toolbarActionAllowed(action)
++      traceToolbarRoute("validate", action: action, sender: sender, allowed: allowed)
++      return allowed
++    }
++    let allowed = super.canPerformAction(action, withSender: sender)
++    if isToolbarRouteAction(action) {
++      traceToolbarRoute("validate", action: action, sender: sender, allowed: allowed)
++    }
++    return allowed
++  }
++
++  override func target(forAction action: Selector, withSender sender: Any?) -> Any? {
++    let movedEscape = action == #selector(toolbarKey(_:)) && toolbarContainerEscapeCommand != nil
++    let target = movedEscape
++      ? next?.target(forAction: action, withSender: sender)
++      : super.target(forAction: action, withSender: sender)
++    if isToolbarRouteAction(action) {
++      traceToolbarRoute("target", action: action, sender: sender, target: target)
++    }
++    return target
++  }
++
++  @objc private func toolbarTab(_ command: UIKeyCommand) {
++    toolbarKey(command)
++  }
++
++  @objc fileprivate func toolbarKey(_ command: UIKeyCommand) {
++    // Entry is recorded before any guard, unlike the successful JS callback log.
++    traceToolbarRoute("action-enter", action: command.action, sender: command)
++    guard let action = command.action, toolbarActionAllowed(action),
++      let input = command.input,
++      input == "\t" || input == UIKeyCommand.inputEscape else {
++      traceToolbarRoute("action-reject-context", sender: command)
++      return
++    }
++    let colorEscape = toolbarKeyboardTabOnly && input == UIKeyCommand.inputEscape
++    let colorState = toolbarColorEscapeState()
++    guard !colorEscape || colorState.enabled else {
++      traceToolbarRoute("action-reject-color", sender: command)
++      return
++    }
++    traceToolbarRoute("action-forward", sender: command)
++    toolbarKeySequence += 1
++    let payload: [String: Any] = [
++      "scope": toolbarKeyboardScope, "sequence": toolbarKeySequence,
++      "key": input == "\t" ? "Tab" : "Escape",
++      "shiftKey": command.modifierFlags.contains(.shift), "source": "ios-key-command",
++      "tabOnly": toolbarKeyboardTabOnly, "colorEscape": colorEscape,
++      "inputLanguage": colorState.language ?? "unavailable",
++      "markedText": colorState.marked.map { $0 ? "true" : "false" } ?? "unavailable"
++    ]
++    guard let data = try? JSONSerialization.data(withJSONObject: payload),
++      let json = String(data: data, encoding: .utf8) else { return }
++    // No isTrusted override: this fallback deliberately produces an untrusted
++    // DOM event. The command must originate in UIKit's real keyboard path.
++    let script = "window.__paintingToolbarKeyboard?.receive(\(json)) ?? false"
++    evaluateJavaScript(script) { result, error in
++      #if DEBUG
++      NSLog("[HAM175 keyboard] payload=%@ accepted=%@ error=%@", json,
++        String(describing: result), String(describing: error))
++      #endif
++    }
++  }
++
+   override var inputAccessoryView: UIView? {
+     hidesInputAccessoryView ? nil : super.inputAccessoryView
+   }
+ }
+ 
+ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler, RCTAutoInsetsProtocol {
++  #if DEBUG
++  // Already in WKContentView's next chain. Do not insert a new responder or
++  // change first responder; this experiment changes only the Escape owner.
++  override var keyCommands: [UIKeyCommand]? {
++    guard let command = webView?.toolbarContainerEscapeCommand else { return super.keyCommands }
++    let inherited = super.keyCommands ?? []
++    let commands = [command] + inherited
++    webView?.traceToolbarRoute("commands", commands: commands, inherited: inherited, owner: self)
++    return commands
++  }
++
++  override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
++    guard action == #selector(toolbarKey(_:)) else {
++      return super.canPerformAction(action, withSender: sender)
++    }
++    // Explicit false while disabled: merely implementing this selector must
++    // not turn the container into an alternative target for ordinary menu keys.
++    let allowed = webView?.toolbarContainerEscapeCommand != nil
++      && webView?.toolbarActionAllowed(action) == true
++    webView?.traceToolbarRoute("validate", action: action, sender: sender, allowed: allowed, owner: self)
++    return allowed
++  }
++
++  override func target(forAction action: Selector, withSender sender: Any?) -> Any? {
++    let target = super.target(forAction: action, withSender: sender)
++    if action == #selector(toolbarKey(_:)) {
++      webView?.traceToolbarRoute("target", action: action, sender: sender, target: target, owner: self)
++    }
++    return target
++  }
++
++  @objc private func toolbarKey(_ command: UIKeyCommand) {
++    guard let webView else { return }
++    webView.traceToolbarRoute("container-action-enter", action: command.action, sender: command, owner: self)
++    guard command.input == UIKeyCommand.inputEscape,
++      webView.toolbarContainerEscapeCommand != nil else {
++      webView.traceToolbarRoute("container-action-reject", sender: command, owner: self)
++      return
++    }
++    // Only a real UIKit action reaches this path; the unchanged WebView handler
++    // rechecks foreground/scope/marked state before the single bridge delivery.
++    webView.toolbarKey(command)
++  }
++  #endif
++
+   // Created on first prop sync — `WKWebViewConfiguration` is copied at init,
+   // so init-only props need to land before `WKWebView()` is called.
+   private(set) var webView: DomWKWebView?
+@@ -192,6 +482,12 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
+     webView?.scrollView.setContentOffset(offset, animated: animated)
+   }
+ 
++  func setToolbarKeyboardScope(_ scope: String, tabOnly: Bool) {
++    webView?.toolbarKeyboardTabOnly = tabOnly
++    // A delayed request from an older DOM bundle must not re-arm color editing.
++    webView?.toolbarKeyboardScope = tabOnly ? "" : scope
++  }
++
+   func injectJavaScript(_ script: String) {
+     DispatchQueue.main.async { [weak self] in
+       self?.webView?.evaluateJavaScript(script)
+@@ -275,7 +571,12 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
+ 
+   // MARK: - WKNavigationDelegate implementations
+ 
++  func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
++    self.webView?.toolbarKeyboardScope = ""
++  }
++
+   func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
++    self.webView?.toolbarKeyboardScope = ""
+     log.warn("WebView content process terminated")
+     onContentProcessDidTerminate(createBaseEventPayload())
+   }
+diff --git a/ios/DomWebViewModule.swift b/ios/DomWebViewModule.swift
+index 811a3924dd76f365fc8cecbd94cd1fdf62609ae9..8634046c809dcbd135b6373172732ab57b68cd9e 100644
+--- a/ios/DomWebViewModule.swift
++++ b/ios/DomWebViewModule.swift
+@@ -130,6 +130,10 @@ public final class DomWebViewModule: Module {
+         view.scrollTo(offset: CGPoint(x: param.x, y: param.y), animated: param.animated)
+       }
+ 
++      AsyncFunction("setToolbarKeyboardScope") { (view: DomWebView, scope: String, tabOnly: Bool) in
++        view.setToolbarKeyboardScope(scope, tabOnly: tabOnly)
++      }
++
+       AsyncFunction("injectJavaScript") { (view: DomWebView, script: String) in
+         view.injectJavaScript(script)
+       }
+diff --git a/src/DomWebView.tsx b/src/DomWebView.tsx
+index 3a07ac938325385dc7e314f0e6d557068bc6f622..e35b8435f892540debd5d2833b3f0264db7b92ff 100644
+--- a/src/DomWebView.tsx
++++ b/src/DomWebView.tsx
+@@ -23,6 +23,9 @@ const WebView = React.forwardRef<DomWebViewRef, DomWebViewProps>(
+       ref,
+       () => ({
+         scrollTo: (params) => viewRef.current?.scrollTo(params),
++        setToolbarKeyboardScope: async (scope: string, tabOnly: boolean) => {
++          await viewRef.current?.setToolbarKeyboardScope(scope, tabOnly);
++        },
+         injectJavaScript: (script: string) => viewRef.current?.injectJavaScript(script),
+         reload: () => viewRef.current?.reload(),
+       }),
+diff --git a/src/DomWebView.types.ts b/src/DomWebView.types.ts
+index 8e89c59fa2dc3f60813ad764d3101b1f04c070c0..16d8f323fa3a835ca3acf7ad07c3115c9519c996 100644
+--- a/src/DomWebView.types.ts
++++ b/src/DomWebView.types.ts
+@@ -270,6 +270,15 @@ export type DomWebViewRef = {
+     animated?: boolean | undefined;
+   }): void;
+ 
++  /**
++   * Enables scoped iOS toolbar Escape/Tab commands. Empty string disables.
++   * Only non-editing controls may enable commands. The legacy tabOnly=true
++   * request disables commands; color editing uses WebKit's trusted key path.
++   * The DOM receiver must reject stale scopes; events are untrusted.
++   * @platform ios
++   */
++  setToolbarKeyboardScope: (scope: string, tabOnly: boolean) => Promise<void>;
++
+   /**
+    * Injects a JavaScript string into the `WebView` and executes it.
+    */

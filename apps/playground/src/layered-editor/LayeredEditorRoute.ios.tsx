@@ -9,7 +9,7 @@ import {
   type PencilkitDemoReply,
   type PencilkitDemoState,
 } from '@hamster-note/painting/input/native';
-import LayeredEditorDom from './LayeredEditorDom';
+import NativeLayeredEditorDom from './NativeLayeredEditorDom';
 import { NativeEditorHost, editorDOMProps } from './NativeEditorHost';
 
 type Outgoing<T = PencilkitDemoMessage> = T extends PencilkitDemoMessage
@@ -160,7 +160,7 @@ export default function LayeredEditorRoute() {
   // Expo serializes every prop on every wrapper render, including an unacknowledged raw stroke.
   const editor = useMemo(
     () => (
-      <LayeredEditorDom
+      <NativeLayeredEditorDom
         dom={editorDOMProps}
         nativePencilEnabled={requested && available}
         editorParams={editorParams}
