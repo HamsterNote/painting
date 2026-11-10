@@ -79,21 +79,36 @@ export function ToolbarPanel({
         onClose(false);
     };
     let tabExit: number | undefined;
+    // Traversal past the document's last control blurs to BODY, which would leave
+    // a keyboard user without a landing point. Return to the trigger like Escape
+    // (and like the reverse direction's normal exit).
+    const leaveAfterTab = () => {
+      tabExit = undefined;
+      const active = doc.activeElement;
+      if (element.contains(active)) return;
+      onClose(!active || active === doc.body);
+    };
     const keyDown = (event: KeyboardEvent) => {
       if (event.key === 'Tab' && element.contains(doc.activeElement)) {
         // Preserve native traversal, then close even when it lands in this toolbar.
         // Pointer focus in the toolbar remains allowed by focusOutside above.
         view.clearTimeout(tabExit);
-        tabExit = view.setTimeout(() => {
-          if (!element.contains(doc.activeElement)) onClose(false);
-        }, 0);
+        tabExit = view.setTimeout(leaveAfterTab, 0);
         return;
       }
       if (event.key !== 'Escape') return;
       event.preventDefault();
       onClose(true);
     };
-    const blur = () => onClose(false);
+    const blur = () => {
+      // Leaving the document (e.g. to browser chrome) fires window blur before the
+      // traversal timer, so a pending Tab exit must still restore the trigger.
+      if (tabExit === undefined) onClose(false);
+      else {
+        view.clearTimeout(tabExit);
+        leaveAfterTab();
+      }
+    };
     doc.addEventListener('pointerdown', outside, true);
     doc.addEventListener('focusin', focusOutside);
     doc.addEventListener('keydown', keyDown);

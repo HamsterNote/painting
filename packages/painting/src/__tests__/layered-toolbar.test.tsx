@@ -22,7 +22,10 @@ function dismiss() {
   fireEvent.keyDown(document, { key: 'Escape' });
 }
 
-afterEach(() => localStorage.clear());
+afterEach(() => {
+  jest.useRealTimers();
+  localStorage.clear();
+});
 
 test('primary width follows tool parameters, committed object history and document reload', () => {
   const controller = makeLayeredController();
@@ -405,6 +408,73 @@ test('keyboard menu navigation, Escape, outside input and editable fields surviv
   fireEvent(window, new Event('blur'));
   expect(screen.queryByRole('dialog')).toBeNull();
   expect(screen.getByRole('toolbar').style.userSelect).toBe('none');
+});
+
+/** Traversal past a document edge blurs to BODY; a keyboard user must not lose focus. */
+function tabOutOfPanel(panel: HTMLElement, shiftKey: boolean, losesWindow = false) {
+  const controls = [...panel.querySelectorAll<HTMLElement>('button, input, select, textarea')].filter(
+    (control) => !(control as HTMLButtonElement).disabled
+  );
+  const edge = shiftKey ? controls[0] : controls[controls.length - 1];
+  edge.focus();
+  expect(document.activeElement).toBe(edge);
+  fireEvent.keyDown(edge, { key: 'Tab', shiftKey });
+  edge.blur();
+  // Browsers fire window blur when traversal leaves the document for browser chrome.
+  if (losesWindow) fireEvent(window, new Event('blur'));
+  act(() => jest.runOnlyPendingTimers());
+}
+
+test.each([
+  ['设置', false],
+  ['设置', true],
+  ['缩放比例', false],
+] as const)('%s: Tab past the panel edge (%s) restores its trigger', (triggerName, shiftKey) => {
+  const controller = makeLayeredController();
+  render(<Toolbar controller={controller} />);
+  jest.useFakeTimers();
+  const trigger = screen.getByRole('button', { name: triggerName });
+  fireEvent.click(trigger);
+  tabOutOfPanel(screen.getByRole('dialog'), shiftKey);
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+});
+
+test('window blur during Tab traversal still restores the trigger', () => {
+  const controller = makeLayeredController();
+  render(<Toolbar controller={controller} />);
+  jest.useFakeTimers();
+  const trigger = screen.getByRole('button', { name: '设置' });
+  fireEvent.click(trigger);
+  tabOutOfPanel(screen.getByRole('dialog'), false, true);
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+});
+
+test('color entry closes onto the 自由取色 button, the same target as Shift+Tab', () => {
+  const controller = makeLayeredController();
+  render(<Toolbar controller={controller} inlinePickers />);
+  jest.useFakeTimers();
+  const trigger = screen.getByRole('button', { name: '自由取色' });
+  fireEvent.click(trigger);
+  tabOutOfPanel(screen.getByRole('dialog'), false);
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+});
+
+test('closing after Tab does not steal focus that landed on another control', () => {
+  const controller = makeLayeredController();
+  render(<Toolbar controller={controller} />);
+  jest.useFakeTimers();
+  fireEvent.click(screen.getByRole('button', { name: '设置' }));
+  const edge = screen.getByRole('dialog').querySelector<HTMLElement>('select')!;
+  edge.focus();
+  fireEvent.keyDown(edge, { key: 'Tab' });
+  const outside = screen.getByRole('button', { name: '工具菜单' });
+  outside.focus();
+  act(() => jest.runOnlyPendingTimers());
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(document.activeElement).toBe(outside);
 });
 
 test('raw sample batches never reconcile the toolbar', () => {

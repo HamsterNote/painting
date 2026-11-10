@@ -48,6 +48,28 @@ for (const [triggerName, role, panelName] of [
       expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe('BODY');
     }
   });
+
+  test(`${panelName} returns to its trigger when Tab runs past the document`, async ({ page }) => {
+    // Regression: the panel is the document's last control, so forward traversal
+    // leaves the document and a plain implementation lands on BODY.
+    await page.goto('/layered-editor');
+    await expect(page.getByTestId('layered-drawing')).toBeVisible();
+    const trigger = page.getByRole('button', { name: triggerName, exact: true });
+    const panel = page.getByRole(role, { name: panelName, exact: true });
+    await trigger.focus();
+    await page.keyboard.press('Enter');
+    await expect(panel).toBeVisible();
+    const controls = panel.locator(
+      'button:not(:disabled),input:not(:disabled),select:not(:disabled)'
+    );
+    await controls.last().focus();
+    await page.keyboard.press('Tab');
+    await expect(panel).toHaveCount(0);
+    expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe('BODY');
+    // Traversal past the document edge leaves the page unfocused in Chromium, so
+    // assert the restored landing point rather than Playwright's page-focus check.
+    expect(await trigger.evaluate((el) => el === el.ownerDocument.activeElement)).toBe(true);
+  });
 }
 
 for (const width of [320, 390, 768, 1024, 1280, 1440]) {
