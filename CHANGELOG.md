@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 0.8.4 待发布
+
+- 新增无绘图运行时依赖的 `/toolbar` 公开子路径，供 reader/notes 共用 DOM 外壳、键盘弹层、文件菜单及请求/布局类型。
+- painting 工具栏与 PaintingBoard 新增可选文件、异步选择/移除、busy 和按栏 layout；文件按钮位于重做后，当前项由宿主控制，不新增历史或保存事务。
+- 受控 top/bottom、安全区与正文占位支持上下分栏，显式0覆盖环境安全区；旧宿主缺省行为保留。两个发布包同步至0.8.4，接入说明见 `docs/toolbar.md`。
+
 ## [0.7.0] - 2026-10-26
 
 `@hamster-note/painting` 与 `@hamster-note/painting-board` 同步发布。0.x 的破坏性 API 变更以次版本升级，消费方需要迁移到 schema 3 controller API。

@@ -1,22 +1,47 @@
+import { useCallback, useState } from 'react';
+import type {
+  ToolbarFileNavigationProps,
+  PaneToolbarLayout,
+  ToolbarOccupiedSpace,
+} from '../toolbar';
 import type { LayeredDrawingSurfaceProps } from './DrawingSurface';
 import { LayeredDrawingSurface } from './DrawingSurface';
 import { Toolbar } from './Toolbar';
 
-export type LayeredPaintingBoardProps = LayeredDrawingSurfaceProps & {
-  toolbar?: boolean;
-  /** Keep keyboard focus in the page on hosts that open native pickers on focus. */
-  toolbarInlinePickers?: boolean;
-};
+export type LayeredPaintingBoardProps = LayeredDrawingSurfaceProps &
+  ToolbarFileNavigationProps & {
+    layout?: PaneToolbarLayout;
+    toolbar?: boolean;
+    /** Keep keyboard focus in the page on hosts that open native pickers on focus. */
+    toolbarInlinePickers?: boolean;
+  };
 
 export function LayeredPaintingBoard({
   toolbar = true,
   toolbarInlinePickers = false,
+  files,
+  currentFileKey,
+  paneId,
+  busy,
+  onSelectFile,
+  onRequestRemove,
+  layout,
   ...props
 }: LayeredPaintingBoardProps) {
+  const [occupied, setOccupied] = useState<ToolbarOccupiedSpace>({ top: 0, bottom: 0 });
+  const reportOccupied = useCallback((space: ToolbarOccupiedSpace) => {
+    setOccupied((previous) =>
+      previous.top === space.top && previous.bottom === space.bottom ? previous : space
+    );
+  }, []);
   return (
     <div
       data-painting-board="true"
+      data-pane-toolbar-boundary="true"
       style={{
+        boxSizing: 'border-box',
+        paddingTop: toolbar && layout ? occupied.top : 0,
+        paddingBottom: toolbar && layout ? occupied.bottom : 0,
         display: 'flex',
         flexDirection: 'column',
         width: '100%',
@@ -27,10 +52,29 @@ export function LayeredPaintingBoard({
         isolation: 'isolate',
       }}
     >
-      <LayeredDrawingSurface {...props} />
+      <div
+        style={{
+          display: 'flex',
+          flex: 1,
+          minHeight: 0,
+          minWidth: 0,
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        <LayeredDrawingSurface {...props} />
+      </div>
       {toolbar ? (
         <Toolbar
           controller={props.controller}
+          files={files}
+          currentFileKey={currentFileKey}
+          paneId={paneId}
+          busy={busy}
+          onSelectFile={onSelectFile}
+          onRequestRemove={onRequestRemove}
+          layout={layout}
+          onOccupiedSpaceChange={layout ? reportOccupied : undefined}
           placement="floating"
           inlinePickers={toolbarInlinePickers}
         />

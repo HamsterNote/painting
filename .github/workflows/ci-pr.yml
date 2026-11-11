@@ -62,6 +62,7 @@ jobs:
         id: run-playwright-ui-tests
         run: |
           pnpm test:ui
+          pnpm test:toolbar
 
       - name: Run independent WebKit regressions
         id: run-playwright-webkit

@@ -1,6 +1,6 @@
 {
   "name": "@hamster-note/painting",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "private": false,
   "repository": {
     "type": "git",
@@ -96,7 +96,21 @@
         "default": "./lib/commonjs/ruler/index.js"
       }
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./toolbar": {
+      "react-native": {
+        "types": "./lib/typescript/module/toolbar/index.d.ts",
+        "default": "./src/toolbar/index.ts"
+      },
+      "import": {
+        "types": "./lib/typescript/module/toolbar/index.d.ts",
+        "default": "./lib/module/toolbar/index.js"
+      },
+      "require": {
+        "types": "./lib/typescript/commonjs/toolbar/index.d.ts",
+        "default": "./lib/commonjs/toolbar/index.js"
+      }
+    }
   },
   "files": [
     "lib",

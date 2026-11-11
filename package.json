@@ -22,7 +22,8 @@
     "ci:local": "pnpm install --frozen-lockfile && pnpm run lint && pnpm run test && pnpm run test:ui && pnpm run build && pnpm run pack:dry",
     "pack:dry": "cd packages/painting && npm pack --dry-run && cd ../painting-board && npm pack --dry-run",
     "dev": "pnpm --filter @hamster-note/painting-playground dev",
-    "test:native-config": "node --test tests/dependencies/expo-scene.test.mjs tests/dependencies/expo-dom-webview-keyboard.test.mjs"
+    "test:native-config": "node --test tests/dependencies/expo-scene.test.mjs tests/dependencies/expo-dom-webview-keyboard.test.mjs",
+    "test:toolbar": "playwright test --config=playwright.toolbar.config.ts"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.24.0",
@@ -37,6 +38,7 @@
     "@typescript-eslint/parser": "^8.8.0",
     "babel-jest": "^29.7.0",
     "babel-preset-expo": "57.0.12",
+    "esbuild": "0.28.0",
     "eslint": "^9.12.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-jest": "^27.9.0",
