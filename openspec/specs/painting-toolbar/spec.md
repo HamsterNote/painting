@@ -8,7 +8,7 @@
 
 ### Requirement: Floating toolbar has ordered groups and clear states
 
-画板默认工具栏 SHALL 在所属画板底部居中悬浮，依次显示撤销/重做、缩放比例、统一工具菜单、笔宽、设置/选择/橡皮擦/套索/移动/清空画布独立组、调色板；统一工具入口 SHALL 显示当前工具名称，选择/橡皮擦/套索/移动选中时仅对应独立按钮高亮。工具栏 SHALL 使用浅灰底、圆角胶囊、分组细竖线与紫底白字选中态，普通、悬停、按下、禁用、焦点和选中态 SHALL 可区分。默认激活工具与颜色 SHALL 来自当前编辑器状态，不为匹配示意图强制切换。
+画板默认工具栏 SHALL 在所属画板底部居中悬浮，依次显示撤销/重做、可选文件入口、缩放比例、统一工具菜单、笔宽、设置/选择/橡皮擦/套索/移动/清空画布独立组、调色板；统一工具入口 SHALL 显示当前工具名称，选择/橡皮擦/套索/移动选中时仅对应独立按钮高亮。工具栏 SHALL 使用浅灰底、圆角胶囊、分组细竖线与紫底白字选中态，普通、悬停、按下、禁用、焦点和选中态 SHALL 可区分。默认激活工具与颜色 SHALL 来自当前编辑器状态，不为匹配示意图强制切换。
 
 #### Scenario: Wide board presents the reference structure
 
@@ -178,3 +178,33 @@
 
 - **WHEN** 拖尾仍可见时切工具、取消输入、清空画布、撤销/重做、失焦、页面隐藏/离开或卸载
 - **THEN** 轨迹节点和到期计时器立即清理，未完成擦除沿用原取消语义，重新进入不残留旧拖尾
+
+### Requirement: Shared toolbar subpath and controlled file requests
+
+painting SHALL 提供无绘图 controller、解析器或原生运行时依赖的公开 `@hamster-note/painting/toolbar` 子路径，导出 ToolbarShell、ToolbarPopover、ToolbarFileMenu 及结构类型。painting 的 Toolbar 和 PaintingBoard SHALL 接收可选 files/currentFileKey/paneId/busy、异步 onSelectFile/onRequestRemove 以及 layout。未传 files SHALL 隐藏文件入口，传入时 SHALL 在重做之后使用文件图标及箭头，按原顺序展示列表、当前项、存储与路径，不生成身份或枚举文件。
+
+菜单 SHALL 固定打开时栏身份，每次请求带 fileKey/paneId/requestId，当前项和列表仅由宿主快照更新。当前项重复选择 SHALL 无操作，在途请求和 busy SHALL 禁止并行结构操作，取消及失败 SHALL 保持当前项并允许重试；失败展示错误。移除最后一项 SHALL 禁用，其余移除 SHALL 交宿主确认、保存和提交，不产生绘画/历史事务。文件按钮和菜单操作 SHALL 至少44×44px，支持键盘打开、方向键/Home/End、Escape焦点恢复和正常Tab退出。
+
+#### Scenario: Mixed files and async host ownership
+
+- **WHEN** 注入两存储同名 PDF、HNN 和 HPB，打开文件菜单并选择非当前项，等待宿主保存回执
+- **THEN** 同序列表可区分身份，回调只发一次且目标栏固定，成功前不提前标记当前项；失败保留原项，回调成功后也仅由宿主新快照改变当前项
+
+#### Scenario: Optional API and independent consumption
+
+- **WHEN** 旧画板宿主不提供文件列表，或 reader/notes 契约适配器仅导入公开 toolbar 编译入口
+- **THEN** 旧宿主工具和默认布局不变，适配器复用相同外壳和菜单且打包依赖图不含绘图运行时
+
+### Requirement: Controlled pane edge and occupied content space
+
+layout SHALL 使用宿主已解析 edge、四边有效 insets、headerContentInset 及可选 viewport bounds，不在库中判断分屏方向。显式0 SHALL 覆盖整屏 env，顶部避让 SHALL 取 top 与有效标题遮挡终点的较大值而不相加；底部仅消费 bottom。top 弹层优先向下、bottom 优先向上，均限制在所属栏与可见 viewport 交集中。外壳 SHALL 报告占位；受控画板 SHALL 在对应边预留真实空间并约束 surface。迁移边缘 SHALL 保留原 controller、笔画和撤销状态，不更改文档 key。
+
+#### Scenario: Safe area and top/bottom migration
+
+- **WHEN** 向画板传入 bottom=34、改为显式0，再改为 top=24/headerContentInset=44 的 top 布局
+- **THEN** 胶囊外壳底距依次为50、16，顶部外壳距为60；正文不被栏遮挡，弹层向内容区展开，笔画及历史不变且surface不重挂载
+
+#### Scenario: Side-by-side and vertical pane hosts
+
+- **WHEN** 宿主为左右两栏传bottom，为上下上栏传top、下栏传bottom，栏宽320px
+- **THEN** 三种内容消费者均采用传入边缘和有效安全区，不继承分隔线内侧屏幕 inset，文件菜单与工具可滚动到达且不越过所属栏

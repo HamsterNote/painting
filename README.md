@@ -101,3 +101,7 @@ Expo dev client 的构建、局域网连接与两条路由的设备验收步骤�
 ## 文档页接入（0.8.0）
 
 新增 `migrateLegacyDocument`、`createPageGeometry`、`createPageCoordinateSpace` 和 `PageDrawingSurface`，由库集中处理旧数据迁移、PDF 页面显示与输入逆变换。[接入说明](docs/page-integration.md) 包含 API、存储边界与可运行示例。
+
+## 共享文件工具栏（0.8.4）
+
+`@hamster-note/painting/toolbar` 提供轻量外壳、文件菜单、异步宿主请求与按栏 safe area 类型。painting 的 Toolbar / PaintingBoard 支持相同的可选文件与布局 props；旧宿主默认保持原样。见 [接入契约与验证](docs/toolbar.md)。
