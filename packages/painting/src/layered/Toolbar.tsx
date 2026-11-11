@@ -407,7 +407,7 @@ export function Toolbar({
         >
           <Icon name="redo" />
         </button>
-        <ToolbarFileMenu {...fileNavigation} layout={layout} />
+        <ToolbarFileMenu {...fileNavigation} layout={layout} onOpen={() => closePanel(false)} />
       </div>
       <span className="hn-painting-divider" aria-hidden="true" />
       <div className="hn-painting-group">{menuButton('zoom', '缩放比例')}</div>

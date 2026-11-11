@@ -2,7 +2,11 @@ import { useCallback, useId, useLayoutEffect, useRef, useState } from 'react';
 import { ToolbarPopover } from './ToolbarPopover';
 import type { PaneToolbarLayout, ToolbarFileNavigationProps } from './types';
 
-export type ToolbarFileMenuProps = ToolbarFileNavigationProps & { layout?: PaneToolbarLayout };
+export type ToolbarFileMenuProps = ToolbarFileNavigationProps & {
+  layout?: PaneToolbarLayout;
+  /** Close sibling tool panels before opening this menu. Outside focus/pointer closes it in reverse. */
+  onOpen?: () => void;
+};
 let requestSequence = 0;
 
 /** Controlled file navigation: only a host snapshot may change the current file or list. */
@@ -14,6 +18,7 @@ export function ToolbarFileMenu({
   onSelectFile,
   onRequestRemove,
   layout,
+  onOpen,
 }: ToolbarFileMenuProps) {
   const root = useRef<HTMLDivElement>(null);
   const anchor = useRef<HTMLButtonElement>(null);
@@ -40,6 +45,7 @@ export function ToolbarFileMenu({
   }, [openedPane, pending, busy, paneId]);
   const open = () => {
     if (!paneId || busy || locked.current) return;
+    onOpen?.();
     generation.current++;
     restoreAfterRequest.current = false;
     setError('');
@@ -132,6 +138,7 @@ export function ToolbarFileMenu({
               <button
                 type="button"
                 role="menuitemradio"
+                style={{ height: 'auto', minHeight: 44 }}
                 aria-checked={file.key === currentFileKey}
                 disabled={disabled || (!onSelectFile && file.key !== currentFileKey)}
                 onClick={() => void request(file.key, false)}

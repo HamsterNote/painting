@@ -27,6 +27,8 @@ function ContentToolbar(props: ToolbarFileNavigationProps & { layout: PaneToolba
 
 `ToolbarShell` 复用 60px 胶囊、44px 控件、横向滚动、聚焦可见处理及样式。`auxiliary` 可放独立收起按钮，`collapsed` 隐藏胶囊，`overlay` 可放自定义弹层。`toolbarProps` 用于工具组样式及属性。`ToolbarPopover` 是同一键盘/定位底座，支持 `menu`、`anchor`、`boundary`、`layout`、`onClose(restoreFocus)`。
 
+有兄弟工具弹层时，通过 `ToolbarFileMenu.onOpen` 在打开文件列表前关闭它们。反向打开工具弹层时，文件菜单现有的外部指针/焦点规则负责关闭文件列表；不要将文件菜单的 boundary 扩大到整个工具栏。文件行使用 `height:auto; min-height:44px`，长名称和存储路径换行后仍位于自身点击区域内。
+
 ## 文件契约
 
 `ToolbarFileNavigationProps` 在 `ToolbarFileMenu`、painting 的 `Toolbar` 和 `LayeredPaintingBoard`（含 painting-board 的 `PaintingBoard` 别名）使用相同名称，可直接传递：

@@ -161,3 +161,83 @@ test('shared pane layouts consume 24/34 once in side-by-side and vertical hosts'
   }
   await page.screenshot({ path: info.outputPath('vertical-safe-area.png') });
 });
+
+test('320px board: file and tool/settings/zoom panels exclude each other in both directions', async ({
+  page,
+}, info) => {
+  await page.setViewportSize({ width: 320, height: 900 });
+  await page.goto('/painting.html');
+  const toolbar = page.getByRole('toolbar');
+  const files = toolbar.getByRole('button', { name: '文件', exact: true });
+  const menu = page.getByRole('menu', { name: '文件列表' });
+  for (const name of ['设置', '工具菜单', '缩放比例']) {
+    const trigger = toolbar.getByRole('button', { name, exact: true });
+    await trigger.click();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await files.click();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await expect(menu).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('menu')).toHaveCount(1);
+    await menu.getByRole('menuitemradio').nth(1).click();
+    await expect(menu).toHaveCount(0);
+    await files.click();
+    await trigger.click();
+    await expect(menu).toHaveCount(0);
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    // Focus + keyboard opening must also close the sibling panel.
+    await files.focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await expect(menu).toBeVisible();
+    await page.keyboard.press('Escape');
+  }
+  await files.click();
+  await page.screenshot({ path: info.outputPath('exclusive-file-menu-320.png') });
+});
+
+for (const remove of [false, true]) {
+  test(`320px board: long Chinese names and storage paths stay inside file hit regions (remove=${remove})`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width: 320, height: 900 });
+    await page.goto(`/painting.html?long${remove ? '&remove' : ''}`);
+    await page.getByRole('button', { name: '文件', exact: true }).click();
+    const menu = page.getByRole('menu', { name: '文件列表' });
+    const measurements = await menu.getByRole('menuitemradio').evaluateAll((items) =>
+      items.map((item) => {
+        const button = item.getBoundingClientRect();
+        const text = item.querySelector('span')!.getBoundingClientRect();
+        const row = item.parentElement!.getBoundingClientRect();
+        return {
+          height: button.height,
+          textHeight: text.height,
+          contained:
+            text.top >= button.top &&
+            text.bottom <= button.bottom &&
+            text.left >= button.left &&
+            text.right <= button.right,
+          inRow: button.top >= row.top && button.bottom <= row.bottom,
+        };
+      })
+    );
+    expect(measurements[0].textHeight).toBeGreaterThan(44);
+    expect(measurements[1].textHeight).toBeGreaterThan(44);
+    for (const measured of measurements) {
+      expect(measured.height).toBeGreaterThanOrEqual(44);
+      expect(measured.contained).toBe(true);
+      expect(measured.inRow).toBe(true);
+    }
+    if (remove) {
+      const targets = menu.getByRole('menuitem', { name: /^移除 / });
+      await expect(targets).toHaveCount(4);
+      const box = (await targets.first().boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+    await page.screenshot({ path: info.outputPath(`long-file-menu-remove-${remove}.png`) });
+    // Scroll to a later row and confirm the preceding long name cannot intercept it.
+    await menu.getByRole('menuitemradio').nth(1).click();
+    await expect(menu).toHaveCount(0);
+  });
+}
