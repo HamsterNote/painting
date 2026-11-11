@@ -66,8 +66,11 @@ export function ToolbarPopover({
       const opposite = below ? rectTop - top : bottom - rectBottom;
       const down =
         preferred >= Math.min(100, element.scrollHeight) || preferred >= opposite ? below : !below;
-      const start = down ? rectBottom : top;
-      const end = down ? bottom : rectTop;
+      // A heavily clipped host may have no usable space on either side of the
+      // trigger. Keep the entire visible pane available for scrolling controls.
+      const clipped = Math.max(preferred, opposite) < Math.min(100, element.scrollHeight);
+      const start = clipped ? top : down ? rectBottom : top;
+      const end = clipped ? bottom : down ? bottom : rectTop;
       const maxHeight = Math.max(0, end - start);
       const height = Math.min(element.scrollHeight, maxHeight);
       setPosition({
