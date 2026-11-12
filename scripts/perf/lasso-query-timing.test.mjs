@@ -13,8 +13,8 @@ const mark = (event, time, version, pointCount, extra = {}) => ({
 const fixture = () => ({
   down: { index: 0, start: 0 },
   inputs: [
-    { index: 1, start: 1 },
-    { index: 2, start: 7 },
+    { index: 1, start: 1, due: 1 },
+    { index: 2, start: 7, due: 5 },
   ],
   up: { start: 50 },
   queryMarks: [
@@ -37,6 +37,7 @@ test('new input cannot borrow completion of an older in-flight path', () => {
   assert.equal(r.perInput[2].completeMs, 23);
   assert.equal(r.inputToSelectionP95, 25);
   assert.equal(r.inputToOpportunityP95, 28);
+  assert.equal(r.sourceToOpportunityP95, 30);
   assert.equal(r.liveQueryWallP95, 15);
 });
 test('missing live feedback stays in the percentile denominator; final up cannot fill it', () => {

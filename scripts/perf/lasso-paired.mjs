@@ -6,20 +6,23 @@ import { createHash } from 'node:crypto';
 import os from 'node:os';
 import { lassoMetrics } from './lasso-metrics.mjs';
 import { pairedLassoResult } from './lasso-paired-result.mjs';
+import { lassoQueryTiming } from './lasso-query-timing.mjs';
 
 const output = process.argv[2] ?? 'artifacts/research/lasso/paired-v2';
-const builds = [
-  {
-    name: 'baseline',
-    root: 'apps/playground/dist',
-    sha: '81bff35d05f6e353e2d35601aa395667fb89d046',
-  },
-  {
-    name: 'optimized',
-    root: 'artifacts/research/lasso/optimized-export',
-    sha: '8f6162249c15119e1234857f3db5fd37915e2809',
-  },
-];
+const builds = process.env.LASSO_BUILDS
+  ? JSON.parse(process.env.LASSO_BUILDS)
+  : [
+      {
+        name: 'baseline',
+        root: 'apps/playground/dist',
+        sha: '81bff35d05f6e353e2d35601aa395667fb89d046',
+      },
+      {
+        name: 'optimized',
+        root: 'artifacts/research/lasso/optimized-export',
+        sha: '8f6162249c15119e1234857f3db5fd37915e2809',
+      },
+    ];
 await mkdir(output, { recursive: true });
 for (const build of builds) {
   await cp(`${build.root}/_expo/static/js/web`, `${output}/bundles/${build.name}`, {
@@ -92,6 +95,14 @@ for (const [scenario, count] of cells) {
       for (const row of summary.results) {
         const raw = JSON.parse(await readFile(`${folder}/${row.id}.json`, 'utf8'));
         Object.assign(row, lassoMetrics(raw));
+        if (process.env.LASSO_QUERY_MARKS === '1') {
+          const timing = lassoQueryTiming(raw);
+          await writeFile(`${folder}/${row.id}.query-timing.json`, JSON.stringify(timing));
+          row.inputToQueryP95 = timing.inputToQueryP95;
+          row.inputToSelectionP95 = timing.inputToSelectionP95;
+          row.inputToOpportunityP95 = timing.inputToOpportunityP95;
+          row.liveQueryWallP95 = timing.liveQueryWallP95;
+        }
         if (raw.inputs.length !== 599 || !raw.unchangedDocument)
           throw new Error(`Invalid fixture: ${folder}/${row.id}`);
         row.raw = `${scenario}-${count}-r${round}/${build.name}/${row.id}.json`;

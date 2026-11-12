@@ -47,10 +47,16 @@ export function createSemanticWebAdapter(options: {
       pendingWork.delete(data);
       callback?.();
     };
+  const perfView = view as Window & {
+    __paintingTestLassoPerf?: (event: LassoPerformanceEvent) => void;
+  };
   const engine = createLayeredToolSession(controller, options.allocateId, {
     // Set by the performance runner before page load; absent in normal use.
-    onPerf: (view as Window & { __paintingTestLassoPerf?: (event: LassoPerformanceEvent) => void })
-      .__paintingTestLassoPerf,
+    onPerf:
+      perfView.__paintingTestLassoPerf ??
+      (new URLSearchParams(view.location.search).get('lassoPerf') === '1'
+        ? (event) => perfView.__paintingTestLassoPerf?.(event)
+        : undefined),
     scheduler: {
       frame: (callback) => {
         const id = view.requestAnimationFrame(callback);

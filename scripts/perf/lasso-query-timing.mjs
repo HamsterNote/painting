@@ -41,6 +41,21 @@ export function lassoQueryTiming(raw) {
       };
     });
   const samples = [{ ...raw.down, due: raw.down.start }, ...raw.inputs];
+  if (new Set(marks.filter((m) => m.event === 'input').map((m) => m.session)).size !== 1)
+    throw new Error('Timing record must contain one lasso gesture');
+  for (const input of samples) {
+    const prefix = (input.batchLast ?? input.index) + 2;
+    if (
+      !marks.some(
+        (m) =>
+          m.event === 'input' &&
+          m.pointCount === prefix &&
+          m.time >= input.start &&
+          (input.end === undefined || m.time <= input.end)
+      )
+    )
+      throw new Error(`Input ${input.index} does not match the accepted query prefix`);
+  }
   const perInput = samples.map((input) => {
     // A query's captured prefix, NOT the current input index when it completes.
     const end = live.find((m) => m.pointCount >= input.index + 2 && m.time >= input.start);
@@ -94,6 +109,15 @@ export function lassoQueryTiming(raw) {
     inputToQueryP95: percentile(perInput.map((s) => s.completeMs ?? Infinity)),
     inputToSelectionP95: percentile(perInput.map((s) => s.selectionMs ?? Infinity)),
     inputToOpportunityP95: percentile(perInput.map((s) => s.opportunityMs ?? Infinity)),
+    sourceToQueryP95: percentile(
+      perInput.map((s) => (s.queryCompleteTime !== null ? s.queryCompleteTime - s.due : Infinity))
+    ),
+    sourceToSelectionP95: percentile(
+      perInput.map((s) => (s.selectionTime !== null ? s.selectionTime - s.due : Infinity))
+    ),
+    sourceToOpportunityP95: percentile(
+      perInput.map((s) => (s.opportunityTime !== null ? s.opportunityTime - s.due : Infinity))
+    ),
     liveQueryWallP95: percentile(liveQueries.map((q) => q.duration)),
     completionToSubmissionP95: percentile(liveQueries.map((q) => q.submitMs ?? Infinity)),
     perInput,
