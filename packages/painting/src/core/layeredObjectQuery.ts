@@ -1275,13 +1275,15 @@ function canonicalLasso(ring: PolygonRing): ReturnType<typeof canonicalizeClosed
   return { ok: true, polygons: [{ outer: ring, holes: [] }] };
 }
 
-// Preserve the reference segment predicate (including its degenerate behavior).
-// Bounds only skip distance calculations after that predicate has returned false.
+// Preserve the reference segment predicate (including its degenerate behavior)
+// before bounds rejection. A negative distance result with overlapping edge
+// bounds still needs the reference boolean check for floating boundary cases.
 function withinLassoMargin(
   piece: PreparedPiece,
   lasso: PolygonBooleanMultiPolygon,
   margin: number
-): PieceHit {
+): PieceHit | 'overlapping-bounds' {
+  let overlappingBounds = false;
   for (const first of allRings(piece.polygons))
     for (const second of allRings(lasso)) {
       if (first.length < 2 || second.length < 2) return null;
@@ -1318,13 +1320,14 @@ function withinLassoMargin(
             Math.min(c.y, d.y) > maxY + margin
           )
             continue;
+          overlappingBounds = true;
           const distance = segmentSegmentDistance(a, b, c, d);
           if (distance === null) return null;
           if (distance <= margin) return true;
         }
       }
     }
-  return false;
+  return overlappingBounds ? 'overlapping-bounds' : false;
 }
 
 type LassoEdge = { a: Point; b: Point; minY: number; maxY: number; minX: number; maxX: number };
@@ -1392,10 +1395,12 @@ function fastPointInMulti(point: Point, multi: PolygonBooleanMultiPolygon) {
 function fastPieceIntersectsLasso(
   piece: PreparedPiece,
   lasso: PolygonBooleanMultiPolygon,
-  margin: number
+  margin: number,
+  fallback?: (reason: 'overlapping-bounds' | 'indeterminate') => PieceHit
 ): PieceHit {
   // Positive containment/contact checks avoid constructing an intersection.
-  // A negative fast result is not conclusive: boolean clipping can retain a
+  // A negative fast result with overlapping edge bounds is not conclusive:
+  // boolean clipping can retain a
   // boundary intersection lost by the point/distance predicates after floating
   // point canonicalization. Keep the unchanged reference as the fallback.
   for (const ring of allRings(piece.polygons))
@@ -1404,7 +1409,10 @@ function fastPieceIntersectsLasso(
   for (const ring of allRings(lasso))
     for (const point of ring) if (fastPointInMulti(point, piece.polygons)) return true;
   const contact = withinLassoMargin(piece, lasso, margin);
-  return contact === true ? true : pieceIntersectsLasso(piece, lasso, margin);
+  if (contact === true || contact === false) return contact;
+  return fallback
+    ? fallback(contact === null ? 'indeterminate' : 'overlapping-bounds')
+    : pieceIntersectsLasso(piece, lasso, margin);
 }
 
 export type LayeredLassoQueryWork = {
@@ -1418,7 +1426,16 @@ export type LayeredLassoQueryWork = {
 /** Internal incremental intersects query; callers own scheduling and session identity. */
 export function createLayeredLassoQuery(
   prepared: PreparedLayeredObjectQuery,
-  path: readonly Point[]
+  path: readonly Point[],
+  // Internal diagnostic runs only. Normal queries do not read a timing clock.
+  diagnostics?: {
+    now: () => number;
+    onFallback: (
+      objectId: string,
+      elapsedMs: number,
+      reason: 'overlapping-bounds' | 'indeterminate'
+    ) => void;
+  }
 ): LayeredObjectQueryResult<LayeredLassoQueryWork> {
   if (
     !isPreparedQuery(prepared) ||
@@ -1451,7 +1468,19 @@ export function createLayeredLassoQuery(
         if (index === entries.length) return (result = ok(Object.freeze(hits)));
         const entry = entries[index++]!;
         for (const piece of entry.pieces) {
-          const matched = fastPieceIntersectsLasso(piece, canonical.polygons, entry.margin);
+          const matched = fastPieceIntersectsLasso(
+            piece,
+            canonical.polygons,
+            entry.margin,
+            diagnostics
+              ? (reason) => {
+                  const start = diagnostics.now();
+                  const result = pieceIntersectsLasso(piece, canonical.polygons, entry.margin);
+                  diagnostics.onFallback(entry.objectId, diagnostics.now() - start, reason);
+                  return result;
+                }
+              : undefined
+          );
           if (matched === null) return (result = err('geometry-failed'));
           if (matched) {
             hits.push(makeHit(entry));

@@ -58,6 +58,48 @@ function complete(query: ReturnType<typeof createLayeredLassoQuery>) {
   return query.ok ? query.value.step(() => 0, Infinity)! : query;
 }
 
+test('segment bounds skip a separated negative candidate but preserve both compatibility cases', () => {
+  const separated = image('target', 43, 43, 14);
+  const lasso = [
+    [0, 0],
+    [100, 0],
+    [100, 20],
+    [20, 20],
+    [20, 100],
+    [0, 100],
+  ].map(([x, y]) => ({ x, y }));
+  const document = prepared([separated]);
+  const onFallback = jest.fn();
+  const query = createLayeredLassoQuery(document, lasso, { now: () => 0, onFallback });
+  expect(query.ok && query.value.candidateCount).toBe(1);
+  const result = complete(query);
+  const oracle = queryObjectLasso(document, lasso, 'intersects');
+  expect(result).toEqual(oracle);
+  expect(result.ok && result.value.map((hit) => hit.objectId)).toEqual([]);
+  expect(oracle.ok && oracle.value.map((hit) => hit.objectId)).toEqual([]);
+  expect(onFallback).not.toHaveBeenCalled();
+
+  const boundary = cases[0]!;
+  const boundaryQuery = createLayeredLassoQuery(prepared([boundary.target]), boundary.path, {
+    now: () => 0,
+    onFallback,
+  });
+  const boundaryResult = complete(boundaryQuery);
+  expect(boundaryResult.ok && boundaryResult.value.map((hit) => hit.objectId)).toEqual(['target']);
+  expect(onFallback).toHaveBeenCalledWith('target', 0, 'overlapping-bounds');
+
+  onFallback.mockClear();
+  const collinear = cases[1]!;
+  const legacy = complete(
+    createLayeredLassoQuery(prepared([collinear.target]), collinear.path, {
+      now: () => 0,
+      onFallback,
+    })
+  );
+  expect(legacy.ok && legacy.value.map((hit) => hit.objectId)).toEqual(['target']);
+  expect(onFallback).not.toHaveBeenCalled();
+});
+
 test.each(cases)(
   '$name: oracle and complete optimized query explicitly select target',
   ({ target, path }) => {
