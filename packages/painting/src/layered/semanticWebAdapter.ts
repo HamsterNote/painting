@@ -1,6 +1,10 @@
 import type { GetClientToLocal } from '../geometry/pageCoordinates';
 import type { LayeredEditorController } from '../core/layeredEditorController';
-import { createLayeredToolSession, type SelectionOperation } from '../core/layeredToolSession';
+import {
+  createLayeredToolSession,
+  type SelectionOperation,
+  type LassoPerformanceEvent,
+} from '../core/layeredToolSession';
 import type { Point } from '../model/document';
 import type { WebFreehandPolicy } from '../input/web/freehandWebAdapter';
 import { createEraserTrail } from './eraserTrail';
@@ -44,6 +48,9 @@ export function createSemanticWebAdapter(options: {
       callback?.();
     };
   const engine = createLayeredToolSession(controller, options.allocateId, {
+    // Set by the performance runner before page load; absent in normal use.
+    onPerf: (view as Window & { __paintingTestLassoPerf?: (event: LassoPerformanceEvent) => void })
+      .__paintingTestLassoPerf,
     scheduler: {
       frame: (callback) => {
         const id = view.requestAnimationFrame(callback);

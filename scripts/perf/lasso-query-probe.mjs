@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import os from 'node:os';
 
 const output = process.argv[2] ?? 'artifacts/research/lasso/query-probe-v2';
-const productSha = '8f6162249c15119e1234857f3db5fd37915e2809';
+const productSha = process.env.LASSO_PROBE_SHA ?? '8f6162249c15119e1234857f3db5fd37915e2809';
 const sourceDiff = execFileSync(
   'git',
   [

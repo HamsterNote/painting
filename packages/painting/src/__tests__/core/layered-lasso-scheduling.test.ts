@@ -1,4 +1,8 @@
-import { createLayeredToolSession, type LayeredToolScheduler } from '../../core/layeredToolSession';
+import {
+  createLayeredToolSession,
+  type LayeredToolScheduler,
+  type LassoPerformanceEvent,
+} from '../../core/layeredToolSession';
 import { layeredRect, makeLayeredController } from '../fixtures/layered';
 
 function scheduler() {
@@ -129,4 +133,58 @@ test('equivalent selection results already suppress notifications', () => {
   controller.setSelection(['rect', 'rect']);
   controller.setSelection(['rect']);
   expect(listener).toHaveBeenCalledTimes(1);
+});
+
+test('performance events retain the query input prefix while newer batches arrive', () => {
+  const controller = makeLayeredController(
+    Array.from({ length: 20 }, (_, i) => layeredRect(`r${i}`))
+  );
+  controller.setTool('lasso');
+  const clock = scheduler();
+  const events: LassoPerformanceEvent[] = [];
+  const session = createLayeredToolSession(controller, () => 'unused', {
+    scheduler: clock.adapter,
+    onPerf: (event) => events.push(event),
+  });
+  session.begin({ x: -20, y: -20 });
+  session.update(path);
+  clock.query(); // This query is still in flight.
+  const started = events.find((e) => e.event === 'query-start')!;
+  session.update([{ x: -20, y: -20 }]);
+  expect(events.filter((e) => e.event === 'input').at(-1)!.version).toBeGreaterThan(
+    started.version
+  );
+  clock.drain();
+  const completed = events.find((e) => e.event === 'query-complete' && e.ok)!;
+  const submitted = events.find((e) => e.event === 'selection-submit')!;
+  expect(completed).toMatchObject({
+    version: started.version,
+    pointCount: started.pointCount,
+    final: false,
+  });
+  expect(submitted).toMatchObject({
+    version: started.version,
+    pointCount: started.pointCount,
+    final: false,
+  });
+  expect(events.filter((e) => e.event === 'selection-submit').length).toBeGreaterThan(1);
+  session.end();
+  expect(events.at(-1)).toMatchObject({ event: 'selection-submit', final: true, pointCount: 6 });
+  expect(controller.getSnapshot('selection')).toHaveLength(20);
+  session.destroy();
+});
+
+test('a failing test performance observer cannot alter editing or cancellation', () => {
+  const controller = makeLayeredController([layeredRect()]);
+  controller.setTool('lasso');
+  const session = createLayeredToolSession(controller, () => 'unused', {
+    onPerf: () => {
+      throw new Error('observer');
+    },
+  });
+  session.begin({ x: -20, y: -20 });
+  session.update(path);
+  session.end();
+  expect(controller.getSnapshot('selection')).toEqual(['rect']);
+  session.destroy();
 });

@@ -30,8 +30,9 @@ type ToolGesture = {
   hidden: Set<string>;
   previousSelection: readonly string[];
   pathVersion: number;
+  perfSession: number;
   evaluatedVersion: number;
-  query?: { work: LayeredLassoQueryWork; version: number };
+  query?: { work: LayeredLassoQueryWork; version: number; pointCount: number };
   completed?: {
     version: number;
     result: LayeredObjectQueryResult<readonly LayeredObjectQueryHit[]>;
@@ -50,11 +51,25 @@ export type LayeredToolScheduler = {
   now(): number;
 };
 
+/** Internal, opt-in measurement hook. No clock/marks/observer runs unless installed by a test. */
+export type LassoPerformanceEvent = {
+  event: 'input' | 'query-start' | 'query-complete' | 'selection-submit' | 'cancel';
+  session: number;
+  version: number;
+  pointCount: number;
+  final: boolean;
+  ok?: boolean;
+};
+
 /** The same geometry-driven gesture path is used by DOM and future semantic batches. */
 export function createLayeredToolSession(
   controller: LayeredEditorController,
   allocateId: () => string,
-  options: { scheduler?: LayeredToolScheduler; onError?: (error: unknown) => void } = {}
+  options: {
+    scheduler?: LayeredToolScheduler;
+    onError?: (error: unknown) => void;
+    onPerf?: (event: LassoPerformanceEvent) => void;
+  } = {}
 ) {
   const cache = new FreehandGeometryCache();
   let gesture: ToolGesture | undefined;
@@ -63,6 +78,23 @@ export function createLayeredToolSession(
   let stopFrame: (() => void) | undefined;
   let stopWork: (() => void) | undefined;
   let destroyed = false;
+  let perfSession = 0;
+  const perf = (
+    current: ToolGesture,
+    event: LassoPerformanceEvent['event'],
+    final = false,
+    version = current.pathVersion,
+    pointCount = current.points.length,
+    ok?: boolean
+  ) => {
+    if (!options.onPerf || current.tool !== 'lasso') return;
+    // Diagnostics must never cancel or otherwise change a user's gesture.
+    try {
+      options.onPerf({ event, session: current.perfSession, version, pointCount, final, ok });
+    } catch {
+      /* Test observer errors are isolated from editing. */
+    }
+  };
   const scheduler = options.scheduler;
   const clearScheduled = () => {
     stopFrame?.();
@@ -77,6 +109,7 @@ export function createLayeredToolSession(
   };
   const cancel = () => {
     const previous = gesture;
+    if (previous) perf(previous, 'cancel');
     clearScheduled();
     gesture = undefined;
     if (
@@ -100,16 +133,21 @@ export function createLayeredToolSession(
     gesture === current &&
     current.revision === controller.getSnapshot('document').documentRevision &&
     !destroyed;
-  function evaluate(current: ToolGesture) {
+  function evaluate(current: ToolGesture, final = false) {
+    perf(current, 'query-start', final);
     const query = createLayeredLassoQuery(requireValue(prepared), current.points);
-    if (!query.ok) return query;
-    return query.value.step(() => 0, Infinity)!;
+    const result = query.ok ? query.value.step(() => 0, Infinity)! : query;
+    perf(current, 'query-complete', final, undefined, undefined, result.ok);
+    return result;
   }
   function scheduleLasso(current: ToolGesture) {
     if (!scheduler) {
       const result = evaluate(current);
       current.completed = { version: current.pathVersion, result };
-      if (result.ok) controller.setSelection(result.value.map((hit) => hit.objectId));
+      if (result.ok) {
+        controller.setSelection(result.value.map((hit) => hit.objectId));
+        perf(current, 'selection-submit', false, undefined, undefined, true);
+      }
       controller.setPreview({ objects: [], hiddenIds: [], path: current.points });
       return;
     }
@@ -136,21 +174,32 @@ export function createLayeredToolSession(
       safely(() => {
         if (!current.query) {
           if (current.evaluatedVersion === current.pathVersion) return;
+          perf(current, 'query-start');
           const query = createLayeredLassoQuery(requireValue(prepared), current.points);
           current.evaluatedVersion = current.pathVersion;
           if (!query.ok) {
             current.completed = { version: current.pathVersion, result: query };
+            perf(current, 'query-complete', false, undefined, undefined, false);
             return;
           }
-          current.query = { work: query.value, version: current.pathVersion };
+          current.query = {
+            work: query.value,
+            version: current.pathVersion,
+            pointCount: current.points.length,
+          };
         }
         const result = current.query.work.step(scheduler.now, 4);
         if (result) {
+          const { version, pointCount } = current.query;
+          perf(current, 'query-complete', false, version, pointCount, result.ok);
           current.completed = { version: current.query.version, result };
           current.query = undefined;
           // One query at a time: completed feedback is ordered by path version.
           // New samples accumulate independently; they never starve a query already in flight.
-          if (result.ok) controller.setSelection(result.value.map((hit) => hit.objectId));
+          if (result.ok) {
+            controller.setSelection(result.value.map((hit) => hit.objectId));
+            perf(current, 'selection-submit', false, version, pointCount, true);
+          }
         }
         if (current.query || current.evaluatedVersion !== current.pathVersion)
           stopWork = scheduler.work(work);
@@ -238,6 +287,7 @@ export function createLayeredToolSession(
       );
       for (const hit of hits) gesture.hidden.add(hit.objectId);
     } else if (tool === 'lasso') {
+      perf(gesture, 'input');
       scheduleLasso(gesture);
       return;
     } else if (tool === 'selection') {
@@ -299,10 +349,11 @@ export function createLayeredToolSession(
       const result =
         current.completed?.version === current.pathVersion
           ? current.completed.result
-          : evaluate(current);
+          : evaluate(current, true);
       if (result.ok) {
         const selected = result.value.map((hit) => hit.objectId);
         controller.setSelection(selected);
+        perf(current, 'selection-submit', true, undefined, undefined, true);
         // Ownership is already released: tool-change subscribers must not restore the old selection.
         if (selected.length) controller.setTool('selection');
       }
@@ -381,6 +432,7 @@ export function createLayeredToolSession(
         hidden: new Set(originals.map((object) => object.objectId)),
         previousSelection: controller.getSnapshot('selection'),
         pathVersion: 0,
+        perfSession: ++perfSession,
         evaluatedVersion: -1,
         ...(tool === 'polygon' || tool === 'bezier'
           ? {

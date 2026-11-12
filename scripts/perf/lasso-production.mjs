@@ -40,6 +40,18 @@ try {
     deviceScaleFactor: 1,
   });
   const page = await context.newPage();
+  if (process.env.LASSO_QUERY_MARKS === '1')
+    await page.addInitScript(() => {
+      window.__paintingTestLassoPerf = (detail) => {
+        const mark = performance.mark('painting:test:lasso', { detail });
+        if (detail.event === 'selection-submit')
+          requestAnimationFrame(() =>
+            performance.mark('painting:test:lasso', {
+              detail: { ...detail, event: 'selection-opportunity', submittedAt: mark.startTime },
+            })
+          );
+      };
+    });
   page.on('pageerror', (error) => console.error('PAGE ERROR', error.message));
   const metadata = {
     label,
@@ -61,6 +73,7 @@ try {
     input:
       'synthetic pen PointerEvent; 600 points / 5s; independent setTimeout; overdue samples coalesced; never rAF-paced',
     physicalPresentation: false,
+    queryMarks: process.env.LASSO_QUERY_MARKS === '1',
   };
   await writeFile(`${output}/environment.json`, JSON.stringify(metadata, null, 2));
   const results = [];
@@ -274,6 +287,9 @@ try {
                 selection,
                 methods,
                 scans,
+                queryMarks: performance
+                  .getEntriesByName('painting:test:lasso')
+                  .map(({ startTime, detail }) => ({ time: startTime, ...detail })),
                 down,
                 up,
                 start,
