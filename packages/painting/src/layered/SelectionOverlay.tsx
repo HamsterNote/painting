@@ -11,8 +11,8 @@ export function SelectionOverlay({ controller }: { controller: LayeredEditorCont
   const { viewport: v } = useEditorSnapshot(controller, 'viewport');
   const { activeTool } = useEditorSnapshot(controller, 'tools');
   const cache = useRef(new FreehandGeometryCache()).current;
-  cache.syncDocument(document);
   if (!selection.length || activeTool !== 'selection') return null;
+  cache.syncDocument(document);
   const bounds = document.objects
     .filter((object) => selection.includes(object.objectId))
     .map(

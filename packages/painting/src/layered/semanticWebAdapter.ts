@@ -32,7 +32,20 @@ export function createSemanticWebAdapter(options: {
   const view = host.ownerDocument.defaultView!;
   const zoomFeedback = createZoomFeedback(controller, view);
   const eraserTrail = createEraserTrail(host, controller);
-  const engine = createLayeredToolSession(controller, options.allocateId);
+  const engine = createLayeredToolSession(controller, options.allocateId, {
+    scheduler: {
+      frame: (callback) => {
+        const id = view.requestAnimationFrame(callback);
+        return () => view.cancelAnimationFrame(id);
+      },
+      work: (callback) => {
+        const id = view.setTimeout(callback, 0);
+        return () => view.clearTimeout(id);
+      },
+      now: () => view.performance.now(),
+    },
+    onError: options.onError,
+  });
   let owner: { id: number; source: string; start: Point; pan: boolean } | undefined;
   let snapshot = controller.getSnapshot('viewport');
   const screen = (event: PointerEvent): Point => {
@@ -273,6 +286,7 @@ export function createSemanticWebAdapter(options: {
     view.addEventListener('pointercancel', pointerCancel);
   }
   view.addEventListener('blur', cancel);
+  view.addEventListener('lostpointercapture', pointerCancel);
   view.addEventListener('pagehide', cancel);
   host.ownerDocument.addEventListener('visibilitychange', hidden);
   host.addEventListener('pointermove', hover);
@@ -300,6 +314,7 @@ export function createSemanticWebAdapter(options: {
       view.removeEventListener('pointerup', up);
       view.removeEventListener('pointercancel', pointerCancel);
       view.removeEventListener('blur', cancel);
+      view.removeEventListener('lostpointercapture', pointerCancel);
       view.removeEventListener('pagehide', cancel);
       view.removeEventListener('keydown', keyDown);
       host.ownerDocument.removeEventListener('visibilitychange', hidden);

@@ -1,4 +1,4 @@
-import { memo, useLayoutEffect, useRef } from 'react';
+import { memo, useCallback, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import type { LayeredEditorController } from '../core/layeredEditorController';
 import { commandsToSvgPath } from '../geometry/closedPath';
 import { FreehandGeometryCache } from '../geometry/freehandCache';
@@ -90,7 +90,61 @@ export const ObjectNode = memo(function ObjectNode({
   }
 });
 
-export function DisplayLayer({
+function useObjectPreview(controller: LayeredEditorController) {
+  const previous = useRef(controller.getSnapshot('preview'));
+  const subscribe = useCallback(
+    (listener: () => void) => controller.subscribe('preview', listener),
+    [controller]
+  );
+  const snapshot = useCallback(() => {
+    const next = controller.getSnapshot('preview');
+    const old = previous.current;
+    if (
+      next.objects.length !== old.objects.length ||
+      next.hiddenIds.length !== old.hiddenIds.length ||
+      next.objects.some((object, i) => object !== old.objects[i]) ||
+      next.hiddenIds.some((id, i) => id !== old.hiddenIds[i])
+    )
+      previous.current = next;
+    return previous.current;
+  }, [controller]);
+  return useSyncExternalStore(subscribe, snapshot, snapshot);
+}
+
+function PathPreview({ controller }: { controller: LayeredEditorController }) {
+  const { path } = useEditorSnapshot(controller, 'preview');
+  const { viewport } = useEditorSnapshot(controller, 'viewport');
+  return path.length > 1 ? (
+    <polyline
+      points={path.map((point) => `${point.x},${point.y}`).join(' ')}
+      fill="none"
+      stroke="#2563eb"
+      strokeWidth={1.5 / viewport.scale}
+      strokeDasharray={`${4 / viewport.scale} ${3 / viewport.scale}`}
+    />
+  ) : null;
+}
+
+export function DisplayLayer(props: Parameters<typeof HistoryDisplay>[0]) {
+  const { viewport } = useEditorSnapshot(props.controller, 'viewport');
+  return (
+    <svg
+      data-testid="layered-display"
+      width="100%"
+      height="100%"
+      style={{ position: 'absolute', inset: 0, overflow: 'visible', pointerEvents: 'none' }}
+    >
+      <HistoryDisplay {...props} />
+      <g
+        transform={`matrix(${viewport.scale} 0 0 ${viewport.scale} ${viewport.tx} ${viewport.ty})`}
+      >
+        <PathPreview controller={props.controller} />
+      </g>
+    </svg>
+  );
+}
+
+const HistoryDisplay = memo(function HistoryDisplay({
   controller,
   presentation,
   onRender,
@@ -104,9 +158,9 @@ export function DisplayLayer({
   interactive?: boolean;
 }) {
   const document = useEditorSnapshot(controller, 'document');
-  const preview = useEditorSnapshot(controller, 'preview');
+  const preview = useObjectPreview(controller);
   const { viewport } = useEditorSnapshot(controller, 'viewport');
-  const root = useRef<SVGSVGElement>(null);
+  const root = useRef<SVGGElement>(null);
   const cache = useRef(new FreehandGeometryCache()).current;
   onRender?.('display');
   useLayoutEffect(() => {
@@ -147,53 +201,37 @@ export function DisplayLayer({
     return () => cleanups.forEach((cleanup) => cleanup());
   }, [document, cache, presentation, preview, historyReadyDelayMs]);
   return (
-    <svg
+    <g
       ref={root}
-      data-testid="layered-display"
-      width="100%"
-      height="100%"
-      style={{ position: 'absolute', inset: 0, overflow: 'visible', pointerEvents: 'none' }}
+      transform={`matrix(${viewport.scale} 0 0 ${viewport.scale} ${viewport.tx} ${viewport.ty})`}
     >
-      <g
-        transform={`matrix(${viewport.scale} 0 0 ${viewport.scale} ${viewport.tx} ${viewport.ty})`}
-      >
-        {[
-          ...document.objects,
-          ...preview.objects.filter(
-            (object) => !document.objects.some((current) => current.objectId === object.objectId)
-          ),
-        ].map((original) => {
-          const object =
-            preview.objects.find((entry) => entry.objectId === original.objectId) ?? original;
-          const t = object.transform;
-          return (
-            <g
-              key={object.objectId}
-              data-object-id={object.objectId}
-              transform={`matrix(${t.a} ${t.b} ${t.c} ${t.d} ${t.tx} ${t.ty})`}
-              style={{
-                pointerEvents: interactive ? 'auto' : 'none',
-                visibility:
-                  presentation.isHidden(object.objectId) ||
-                  (preview.hiddenIds.includes(object.objectId) && !preview.objects.includes(object))
-                    ? 'hidden'
-                    : 'visible',
-              }}
-            >
-              <ObjectNode object={object} cache={cache} onRender={onRender} />
-            </g>
-          );
-        })}
-        {preview.path.length > 1 ? (
-          <polyline
-            points={preview.path.map((point) => `${point.x},${point.y}`).join(' ')}
-            fill="none"
-            stroke="#2563eb"
-            strokeWidth={1.5 / viewport.scale}
-            strokeDasharray={`${4 / viewport.scale} ${3 / viewport.scale}`}
-          />
-        ) : null}
-      </g>
-    </svg>
+      {[
+        ...document.objects,
+        ...preview.objects.filter(
+          (object) => !document.objects.some((current) => current.objectId === object.objectId)
+        ),
+      ].map((original) => {
+        const object =
+          preview.objects.find((entry) => entry.objectId === original.objectId) ?? original;
+        const t = object.transform;
+        return (
+          <g
+            key={object.objectId}
+            data-object-id={object.objectId}
+            transform={`matrix(${t.a} ${t.b} ${t.c} ${t.d} ${t.tx} ${t.ty})`}
+            style={{
+              pointerEvents: interactive ? 'auto' : 'none',
+              visibility:
+                presentation.isHidden(object.objectId) ||
+                (preview.hiddenIds.includes(object.objectId) && !preview.objects.includes(object))
+                  ? 'hidden'
+                  : 'visible',
+            }}
+          >
+            <ObjectNode object={object} cache={cache} onRender={onRender} />
+          </g>
+        );
+      })}
+    </g>
   );
-}
+});

@@ -9,11 +9,16 @@ import { lassoFixture, lassoTrajectory } from './lasso-fixture.mjs';
 const label = process.argv[2] ?? 'baseline';
 const engine = process.env.LASSO_BROWSER ?? 'chromium';
 const output = `artifacts/research/lasso/${label}-${engine}`;
+const exportRoot = process.env.LASSO_EXPORT_ROOT ?? 'apps/playground/dist';
 await mkdir(output, { recursive: true });
-await cp('apps/playground/dist/_expo/static/js/web', `${output}/bundles`, { recursive: true });
-const server = spawn(process.execPath, ['scripts/perf/static-spa-server.mjs'], {
-  stdio: ['ignore', 'pipe', 'inherit'],
-});
+await cp(`${exportRoot}/_expo/static/js/web`, `${output}/bundles`, { recursive: true });
+const server = spawn(
+  process.execPath,
+  ['scripts/perf/static-spa-server.mjs', '--root', exportRoot],
+  {
+    stdio: ['ignore', 'pipe', 'inherit'],
+  }
+);
 let browser;
 try {
   const lines = createInterface({ input: server.stdout });

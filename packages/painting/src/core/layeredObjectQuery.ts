@@ -19,6 +19,7 @@
  */
 
 import { difference, intersection } from 'polyclip-ts';
+import { orient2d } from 'robust-predicates';
 import type {
   AffineTransform,
   Bounds,
@@ -1177,4 +1178,286 @@ export function queryObjectLasso(
     }
   }
   return ok(Object.freeze(hits));
+}
+
+// The synchronous query above remains the reference implementation. These helpers
+// share its exact pieces, margins and fallback predicates, with bounded live work.
+type LassoBoundsNode = {
+  bounds: Bounds;
+  entries?: readonly PreparedEntry[];
+  left?: LassoBoundsNode;
+  right?: LassoBoundsNode;
+};
+const lassoIndexes = new WeakMap<PreparedLayeredObjectQuery, LassoBoundsNode>();
+function buildLassoIndex(entries: readonly PreparedEntry[]): LassoBoundsNode {
+  const bounds = {
+    minX: Math.min(...entries.map((e) => e.broadphase.minX - e.margin)),
+    minY: Math.min(...entries.map((e) => e.broadphase.minY - e.margin)),
+    maxX: Math.max(...entries.map((e) => e.broadphase.maxX + e.margin)),
+    maxY: Math.max(...entries.map((e) => e.broadphase.maxY + e.margin)),
+  };
+  if (entries.length <= 16) return { bounds, entries };
+  const axis = bounds.maxX - bounds.minX > bounds.maxY - bounds.minY ? 'minX' : 'minY';
+  const sorted = [...entries].sort((a, b) => a.broadphase[axis] - b.broadphase[axis]);
+  const middle = Math.floor(sorted.length / 2);
+  return {
+    bounds,
+    left: buildLassoIndex(sorted.slice(0, middle)),
+    right: buildLassoIndex(sorted.slice(middle)),
+  };
+}
+function lassoCandidates(prepared: PreparedLayeredObjectQuery, bounds: Bounds) {
+  if (!prepared.entries.length) return [];
+  let root = lassoIndexes.get(prepared);
+  if (!root) {
+    root = buildLassoIndex(prepared.entries);
+    lassoIndexes.set(prepared, root);
+  }
+  const candidates: PreparedEntry[] = [];
+  const visit = (node: LassoBoundsNode) => {
+    if (!boundsOverlap(node.bounds, bounds)) return;
+    if (node.entries) {
+      for (const entry of node.entries) {
+        const expanded = expandBounds(entry.broadphase, entry.margin);
+        if (!expanded || boundsOverlap(expanded, bounds)) candidates.push(entry);
+      }
+    } else {
+      visit(node.left!);
+      visit(node.right!);
+    }
+  };
+  visit(root);
+  return candidates.sort((a, b) => a.order - b.order);
+}
+
+// A proven simple ring already is a nonzero polygon. Complex/touching rings
+// still use the original boolean canonicalizer; no trajectory simplification.
+function canonicalLasso(ring: PolygonRing): ReturnType<typeof canonicalizeClosedRing> {
+  const edges = ring
+    .map((a, i) => {
+      const b = ring[(i + 1) % ring.length]!;
+      return {
+        a,
+        b,
+        i,
+        minX: Math.min(a.x, b.x),
+        maxX: Math.max(a.x, b.x),
+        minY: Math.min(a.y, b.y),
+        maxY: Math.max(a.y, b.y),
+      };
+    })
+    .sort((a, b) => a.minX - b.minX);
+  let active: typeof edges = [];
+  for (const edge of edges) {
+    active = active.filter((other) => other.maxX >= edge.minX);
+    const { a, b, i } = edge;
+    for (const other of active) {
+      const { a: c, b: d, i: j } = other;
+      if (
+        Math.abs(i - j) === 1 ||
+        Math.abs(i - j) === ring.length - 1 ||
+        edge.maxY < other.minY ||
+        other.maxY < edge.minY
+      )
+        continue;
+      const o1 = orient2d(a.x, a.y, b.x, b.y, c.x, c.y),
+        o2 = orient2d(a.x, a.y, b.x, b.y, d.x, d.y);
+      const o3 = orient2d(c.x, c.y, d.x, d.y, a.x, a.y),
+        o4 = orient2d(c.x, c.y, d.x, d.y, b.x, b.y);
+      if (
+        ![o1, o2, o3, o4].every(Number.isFinite) ||
+        ((o1 === 0 || o2 === 0 || o1 > 0 !== o2 > 0) && (o3 === 0 || o4 === 0 || o3 > 0 !== o4 > 0))
+      )
+        return canonicalizeClosedRing(ring);
+    }
+    active.push(edge);
+  }
+  return { ok: true, polygons: [{ outer: ring, holes: [] }] };
+}
+
+// Preserve the reference segment predicate (including its degenerate behavior).
+// Bounds only skip distance calculations after that predicate has returned false.
+function withinLassoMargin(
+  piece: PreparedPiece,
+  lasso: PolygonBooleanMultiPolygon,
+  margin: number
+): PieceHit {
+  for (const first of allRings(piece.polygons))
+    for (const second of allRings(lasso)) {
+      if (first.length < 2 || second.length < 2) return null;
+      for (let i = 0; i < first.length; i++) {
+        const a = first[i]!,
+          b = first[(i + 1) % first.length]!;
+        const dx = b.x - a.x,
+          dy = b.y - a.y,
+          minX = Math.min(a.x, b.x),
+          maxX = Math.max(a.x, b.x),
+          minY = Math.min(a.y, b.y),
+          maxY = Math.max(a.y, b.y);
+        for (let j = 0; j < second.length; j++) {
+          const c = second[j]!,
+            d = second[(j + 1) % second.length]!;
+          const o1 = dx * (c.y - a.y) - dy * (c.x - a.x),
+            o2 = dx * (d.y - a.y) - dy * (d.x - a.x);
+          const ex = d.x - c.x,
+            ey = d.y - c.y;
+          const o3 = ex * (a.y - c.y) - ey * (a.x - c.x),
+            o4 = ex * (b.y - c.y) - ey * (b.x - c.x);
+          if (
+            !Number.isFinite(o1) ||
+            !Number.isFinite(o2) ||
+            !Number.isFinite(o3) ||
+            !Number.isFinite(o4)
+          )
+            return null;
+          if (o1 * o2 <= 0 && o3 * o4 <= 0) return true;
+          if (
+            minX > Math.max(c.x, d.x) + margin ||
+            Math.min(c.x, d.x) > maxX + margin ||
+            minY > Math.max(c.y, d.y) + margin ||
+            Math.min(c.y, d.y) > maxY + margin
+          )
+            continue;
+          const distance = segmentSegmentDistance(a, b, c, d);
+          if (distance === null) return null;
+          if (distance <= margin) return true;
+        }
+      }
+    }
+  return false;
+}
+
+type LassoEdge = { a: Point; b: Point; minY: number; maxY: number; minX: number; maxX: number };
+type PointTest = { bounds: Bounds; rows: readonly (readonly LassoEdge[])[]; height: number };
+const pointTests = new WeakMap<PolygonBooleanMultiPolygon, PointTest>();
+function fastPointInMulti(point: Point, multi: PolygonBooleanMultiPolygon) {
+  let test = pointTests.get(multi);
+  if (!test) {
+    const bounds = multiBounds(multi);
+    if (!bounds) return false;
+    const height = (bounds.maxY - bounds.minY) / 64;
+    const rows: LassoEdge[][] = Array.from({ length: 64 }, () => []);
+    for (const ring of allRings(multi))
+      for (let i = 0; i < ring.length; i++) {
+        const a = ring[i]!,
+          b = ring[(i + 1) % ring.length]!;
+        const edge = {
+          a,
+          b,
+          minY: Math.min(a.y, b.y),
+          maxY: Math.max(a.y, b.y),
+          minX: Math.min(a.x, b.x),
+          maxX: Math.max(a.x, b.x),
+        };
+        const first = height > 0 ? Math.min(63, Math.floor((edge.minY - bounds.minY) / height)) : 0;
+        const last = height > 0 ? Math.min(63, Math.floor((edge.maxY - bounds.minY) / height)) : 0;
+        for (let row = first; row <= last; row++) rows[row]!.push(edge);
+      }
+    test = { bounds, rows, height };
+    pointTests.set(multi, test);
+  }
+  const { bounds, rows, height } = test;
+  if (
+    point.x < bounds.minX ||
+    point.x > bounds.maxX ||
+    point.y < bounds.minY ||
+    point.y > bounds.maxY
+  )
+    return false;
+  const edges = rows[height > 0 ? Math.min(63, Math.floor((point.y - bounds.minY) / height)) : 0]!;
+  let winding = 0;
+  for (const { a, b, minY, maxY, minX, maxX } of edges) {
+    if (point.y < minY || point.y > maxY) continue;
+    const dx = b.x - a.x,
+      dy = b.y - a.y,
+      lengthSquared = dx * dx + dy * dy;
+    if (!Number.isFinite(lengthSquared) || lengthSquared === 0) continue;
+    if (point.x >= minX && point.x <= maxX) {
+      const progress = Math.max(
+        0,
+        Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared)
+      );
+      const x = point.x - (a.x + dx * progress),
+        y = point.y - (a.y + dy * progress);
+      if (x * x + y * y <= 0) return true;
+    }
+    const side = orient2d(a.x, a.y, b.x, b.y, point.x, point.y);
+    if (a.y <= point.y) {
+      if (b.y > point.y && side > 0) winding++;
+    } else if (b.y <= point.y && side < 0) winding--;
+  }
+  return winding !== 0;
+}
+
+function fastPieceIntersectsLasso(
+  piece: PreparedPiece,
+  lasso: PolygonBooleanMultiPolygon,
+  margin: number
+): PieceHit {
+  // For intersects, containment or boundary contact is a complete predicate.
+  // Reuse the reference fallback directly, avoiding construction of the whole
+  // polygon intersection for every object. Contains still uses boolean difference.
+  for (const ring of allRings(piece.polygons))
+    if (ring.length && fastPointInMulti(ring[0]!, lasso)) return true;
+  for (const sample of pieceSamplePoints(piece)) if (fastPointInMulti(sample, lasso)) return true;
+  for (const ring of allRings(lasso))
+    for (const point of ring) if (fastPointInMulti(point, piece.polygons)) return true;
+  return withinLassoMargin(piece, lasso, margin);
+}
+
+export type LayeredLassoQueryWork = {
+  readonly candidateCount: number;
+  readonly processedCount: number;
+  step(
+    now: () => number,
+    budgetMs?: number
+  ): LayeredObjectQueryResult<readonly LayeredObjectQueryHit[]> | null;
+};
+/** Internal incremental intersects query; callers own scheduling and session identity. */
+export function createLayeredLassoQuery(
+  prepared: PreparedLayeredObjectQuery,
+  path: readonly Point[]
+): LayeredObjectQueryResult<LayeredLassoQueryWork> {
+  if (
+    !isPreparedQuery(prepared) ||
+    !Array.isArray(path) ||
+    path.length < 3 ||
+    path.some((p) => !isFinitePoint(p))
+  )
+    return err('invalid-input');
+  const ring = freezeRing(
+    path.filter((p, i) => i === 0 || p.x !== path[i - 1]!.x || p.y !== path[i - 1]!.y)
+  );
+  if (!ring || ring.length < 3 || isCollinearRing(ring)) return err('invalid-input');
+  const canonical = canonicalLasso(ring);
+  if (!canonical.ok) return err('geometry-failed');
+  const bounds = multiBounds(canonical.polygons);
+  if (!bounds) return err('geometry-failed');
+  const entries = lassoCandidates(prepared, bounds),
+    hits: LayeredObjectQueryHit[] = [];
+  let index = 0,
+    result: LayeredObjectQueryResult<readonly LayeredObjectQueryHit[]> | null = null;
+  return ok({
+    candidateCount: entries.length,
+    get processedCount() {
+      return index;
+    },
+    step(now, budgetMs = 4) {
+      if (result) return result;
+      const start = now();
+      do {
+        if (index === entries.length) return (result = ok(Object.freeze(hits)));
+        const entry = entries[index++]!;
+        for (const piece of entry.pieces) {
+          const matched = fastPieceIntersectsLasso(piece, canonical.polygons, entry.margin);
+          if (matched === null) return (result = err('geometry-failed'));
+          if (matched) {
+            hits.push(makeHit(entry));
+            break;
+          }
+        }
+      } while (now() - start < budgetMs);
+      return index === entries.length ? (result = ok(Object.freeze(hits))) : null;
+    },
+  });
 }

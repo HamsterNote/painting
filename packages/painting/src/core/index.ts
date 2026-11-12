@@ -4,9 +4,21 @@ export * from '../model/documentReader';
 export * from './layeredEditorController';
 export * from './layeredInputMode';
 export * from './freehandSession';
-export * from './layeredToolSession';
+export { createLayeredToolSession } from './layeredToolSession';
+export type { SelectionOperation } from './layeredToolSession';
 export * from './layeredTextEditSession';
-export * from './layeredObjectQuery';
+export {
+  prepareLayeredObjectQuery,
+  queryObjectLasso,
+  queryObjectPoint,
+  queryObjectSweep,
+} from './layeredObjectQuery';
+export type {
+  LayeredObjectQueryErrorCode,
+  LayeredObjectQueryResult,
+  LayeredObjectQueryHit,
+  PreparedLayeredObjectQuery,
+} from './layeredObjectQuery';
 export * from '../geometry/freehand';
 export * from '../geometry/freehandCache';
 export * from '../geometry/affine';

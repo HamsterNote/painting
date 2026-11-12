@@ -66,6 +66,7 @@ for (const file of await readdir(directory))
         ? `${original.source}:${original.line} ${original.name ?? frame.functionName}`
         : frame.functionName;
     };
+    const inclusiveSites = new Map();
     const totals = new Map(),
       inclusive = new Map();
     const sum = (map, key, value) => map.set(key, (map.get(key) ?? 0) + value);
@@ -75,11 +76,15 @@ for (const file of await readdir(directory))
       sum(totals, locate(nodes.get(sample)), ms);
       let ancestor = sample;
       const files = new Set();
+      const sites = new Set();
       while (ancestor) {
-        files.add(locate(nodes.get(ancestor)).split(':')[0]);
+        const site = locate(nodes.get(ancestor));
+        sites.add(site);
+        files.add(site.split(':')[0]);
         ancestor = parents.get(ancestor);
       }
       for (const source of files) sum(inclusive, source, ms);
+      for (const site of sites) sum(inclusiveSites, site, ms);
     }
     const top = (map) => [...map].sort((a, b) => b[1] - a[1]).slice(0, 30);
     profiles.push({
@@ -87,6 +92,10 @@ for (const file of await readdir(directory))
       sampledMs: profile.timeDeltas.reduce((a, b) => a + b, 0) / 1000,
       self: top(totals),
       inclusiveBySource: top(inclusive),
+      inclusiveQuerySites: [...inclusiveSites]
+        .filter(([site]) => site.includes('/packages/painting/'))
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 25),
     });
   }
 await writeFile(`${directory}/profiling.json`, JSON.stringify(profiles, null, 2));

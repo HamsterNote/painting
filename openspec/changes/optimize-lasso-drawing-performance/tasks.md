@@ -7,8 +7,8 @@
 
 ## 2. 隔离静态历史与套索呈现
 
-- [ ] 2.1 将 path-only 更新从历史对象显示与 presentation 挂载确认中隔离；扩展 layered-display-regression 测试，用 RenderObserver/注册计数验证仅套索路径变化时历史遍历和注册均为零，历史 DOM 身份、混排顺序和 viewport 保持稳定。
-- [ ] 2.2 避免套索状态下 SelectionOverlay 的无效历史 cache 同步，并对等值 selection 去重通知；用计数测试确认连续相同命中集合不触发多余通知，切回选择工具后边框及缩放/旋转手柄正确显示。
+- [x] 2.1 将 path-only 更新从历史对象显示与 presentation 挂载确认中隔离；扩展 layered-display-regression 测试，用 RenderObserver/注册计数验证仅套索路径变化时历史遍历和注册均为零，历史 DOM 身份、混排顺序和 viewport 保持稳定。
+- [x] 2.2 避免套索状态下 SelectionOverlay 的无效历史 cache 同步，并对等值 selection 去重通知；用计数测试确认连续相同命中集合不触发多余通知，切回选择工具后边框及缩放/旋转手柄正确显示。
 
 ## 3. 控制查询和输入更新成本
 

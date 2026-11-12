@@ -1,7 +1,10 @@
 import type { LayeredEditorController, LayeredEditorTool } from './layeredEditorController';
 import {
   prepareLayeredObjectQuery,
-  queryObjectLasso,
+  createLayeredLassoQuery,
+  type LayeredLassoQueryWork,
+  type LayeredObjectQueryHit,
+  type LayeredObjectQueryResult,
   queryObjectPoint,
   queryObjectSweep,
 } from './layeredObjectQuery';
@@ -26,6 +29,13 @@ type ToolGesture = {
   replacements: readonly DocumentObject[];
   hidden: Set<string>;
   previousSelection: readonly string[];
+  pathVersion: number;
+  evaluatedVersion: number;
+  query?: { work: LayeredLassoQueryWork; version: number };
+  completed?: {
+    version: number;
+    result: LayeredObjectQueryResult<readonly LayeredObjectQueryHit[]>;
+  };
   placement?: {
     stage: number;
     anchors: Point[];
@@ -34,14 +44,31 @@ type ToolGesture = {
   };
 };
 
+export type LayeredToolScheduler = {
+  frame(callback: () => void): () => void;
+  work(callback: () => void): () => void;
+  now(): number;
+};
+
 /** The same geometry-driven gesture path is used by DOM and future semantic batches. */
 export function createLayeredToolSession(
   controller: LayeredEditorController,
-  allocateId: () => string
+  allocateId: () => string,
+  options: { scheduler?: LayeredToolScheduler; onError?: (error: unknown) => void } = {}
 ) {
   const cache = new FreehandGeometryCache();
   let gesture: ToolGesture | undefined;
   let prepared: ReturnType<typeof prepareLayeredObjectQuery>;
+  let preparedDocument: ReturnType<LayeredEditorController['getSnapshot']> | undefined;
+  let stopFrame: (() => void) | undefined;
+  let stopWork: (() => void) | undefined;
+  let destroyed = false;
+  const scheduler = options.scheduler;
+  const clearScheduled = () => {
+    stopFrame?.();
+    stopWork?.();
+    stopFrame = stopWork = undefined;
+  };
   const requireValue = <T>(
     result: { ok: true; value: T } | { ok: false; error: { code: string } }
   ): T => {
@@ -50,17 +77,88 @@ export function createLayeredToolSession(
   };
   const cancel = () => {
     const previous = gesture;
+    clearScheduled();
     gesture = undefined;
-    if (previous?.tool === 'lasso') controller.setSelection(previous.previousSelection);
+    if (
+      previous?.tool === 'lasso' &&
+      previous.revision === controller.getSnapshot('document').documentRevision
+    )
+      controller.setSelection(previous.previousSelection);
     controller.setPreview(null);
   };
   const unsubscribeTools = controller.subscribe('tools', () => {
     if (gesture && controller.getSnapshot('tools').activeTool !== gesture.tool) cancel();
   });
   const unsubscribeDocument = controller.subscribe('document', () => {
+    clearScheduled();
     gesture = undefined;
+    preparedDocument = undefined;
     cache.syncDocument(controller.getSnapshot('document'));
   });
+
+  const active = (current: ToolGesture) =>
+    gesture === current &&
+    current.revision === controller.getSnapshot('document').documentRevision &&
+    !destroyed;
+  function evaluate(current: ToolGesture) {
+    const query = createLayeredLassoQuery(requireValue(prepared), current.points);
+    if (!query.ok) return query;
+    return query.value.step(() => 0, Infinity)!;
+  }
+  function scheduleLasso(current: ToolGesture) {
+    if (!scheduler) {
+      const result = evaluate(current);
+      current.completed = { version: current.pathVersion, result };
+      if (result.ok) controller.setSelection(result.value.map((hit) => hit.objectId));
+      controller.setPreview({ objects: [], hiddenIds: [], path: current.points });
+      return;
+    }
+    const safely = (action: () => void) => {
+      if (!active(current)) return;
+      try {
+        action();
+      } catch (error) {
+        cancel();
+        options.onError?.(error);
+      }
+    };
+    if (!stopFrame)
+      stopFrame = scheduler.frame(() => {
+        if (!active(current)) return;
+        stopFrame = undefined;
+        safely(() => {
+          controller.setPreview({ objects: [], hiddenIds: [], path: current.points });
+        });
+      });
+    const work = () => {
+      if (!active(current)) return;
+      stopWork = undefined;
+      safely(() => {
+        if (!current.query) {
+          if (current.evaluatedVersion === current.pathVersion) return;
+          const query = createLayeredLassoQuery(requireValue(prepared), current.points);
+          current.evaluatedVersion = current.pathVersion;
+          if (!query.ok) {
+            current.completed = { version: current.pathVersion, result: query };
+            return;
+          }
+          current.query = { work: query.value, version: current.pathVersion };
+        }
+        const result = current.query.work.step(scheduler.now, 4);
+        if (result) {
+          current.completed = { version: current.query.version, result };
+          current.query = undefined;
+          // One query at a time: completed feedback is ordered by path version.
+          // New samples accumulate independently; they never starve a query already in flight.
+          if (result.ok) controller.setSelection(result.value.map((hit) => hit.objectId));
+        }
+        if (current.query || current.evaluatedVersion !== current.pathVersion)
+          stopWork = scheduler.work(work);
+      });
+    };
+    if (!stopWork && (current.query || current.evaluatedVersion !== current.pathVersion))
+      stopWork = scheduler.work(work);
+  }
 
   function pointHits(point: Point) {
     const document = controller.getSnapshot('document');
@@ -120,7 +218,12 @@ export function createLayeredToolSession(
       updatePlacement(points[points.length - 1]!);
       return;
     }
-    gesture.points.push(...points.map((point) => ({ ...point })));
+    let previousPoint = gesture.points[gesture.points.length - 1]!;
+    for (const point of points) {
+      if (point.x !== previousPoint.x || point.y !== previousPoint.y) gesture.pathVersion++;
+      gesture.points.push({ ...point });
+      previousPoint = point;
+    }
     const first = gesture.points[0]!;
     const last = gesture.points[gesture.points.length - 1]!;
     const { tool } = gesture;
@@ -135,11 +238,8 @@ export function createLayeredToolSession(
       );
       for (const hit of hits) gesture.hidden.add(hit.objectId);
     } else if (tool === 'lasso') {
-      if (gesture.points.length >= 3) {
-        const query = requireValue(prepared);
-        const result = queryObjectLasso(query, gesture.points, 'intersects');
-        if (result.ok) controller.setSelection(result.value.map((hit) => hit.objectId));
-      }
+      scheduleLasso(gesture);
+      return;
     } else if (tool === 'selection') {
       let transform = { ...IDENTITY_TRANSFORM, tx: last.x - first.x, ty: last.y - first.y };
       if (gesture.operation !== 'move' && gesture.originals.length) {
@@ -184,7 +284,7 @@ export function createLayeredToolSession(
       controller.setPreview({
         objects: gesture.replacements,
         hiddenIds: [...gesture.hidden],
-        path: tool === 'lasso' ? gesture.points : [],
+        path: [],
       })
     );
   }
@@ -192,10 +292,14 @@ export function createLayeredToolSession(
   function finish() {
     if (!gesture) return;
     const current = gesture;
+    clearScheduled();
     // Clear transport ownership before publishing a document mutation to subscribers.
     gesture = undefined;
     if (current.tool === 'lasso') {
-      const result = queryObjectLasso(requireValue(prepared), current.points, 'intersects');
+      const result =
+        current.completed?.version === current.pathVersion
+          ? current.completed.result
+          : evaluate(current);
       if (result.ok) {
         const selected = result.value.map((hit) => hit.objectId);
         controller.setSelection(selected);
@@ -229,6 +333,7 @@ export function createLayeredToolSession(
       extendSelection = false,
       targetId?: string
     ) {
+      if (destroyed) return false;
       const tool = controller.getSnapshot('tools').activeTool;
       if (gesture) {
         if (!gesture.placement || gesture.tool !== tool) return false;
@@ -244,8 +349,11 @@ export function createLayeredToolSession(
       if (['freehand', 'text', 'image', 'pan'].includes(tool)) return false;
       const document = controller.getSnapshot('document');
       if (['selection', 'eraser', 'lasso'].includes(tool)) {
-        prepared = prepareLayeredObjectQuery(document, cache);
-        requireValue(prepared);
+        if (preparedDocument !== document) {
+          prepared = prepareLayeredObjectQuery(document, cache);
+          requireValue(prepared);
+          preparedDocument = document;
+        }
       }
       if (tool === 'selection') {
         const hits = pointHits(point);
@@ -272,6 +380,8 @@ export function createLayeredToolSession(
         replacements: [],
         hidden: new Set(originals.map((object) => object.objectId)),
         previousSelection: controller.getSnapshot('selection'),
+        pathVersion: 0,
+        evaluatedVersion: -1,
         ...(tool === 'polygon' || tool === 'bezier'
           ? {
               placement: {
@@ -322,6 +432,7 @@ export function createLayeredToolSession(
     },
     cancel,
     destroy() {
+      destroyed = true;
       cancel();
       unsubscribeTools();
       unsubscribeDocument();
