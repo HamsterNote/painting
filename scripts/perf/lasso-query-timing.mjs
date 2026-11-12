@@ -83,6 +83,33 @@ export function lassoQueryTiming(raw) {
           m.time >= submit.time &&
           m.time < raw.up.start
       );
+    // Also expose the full observed interval, including final-up evaluation.
+    // Keep it separate so final results cannot silently close the live-only gap.
+    const actual = queries.find(
+      (q) => q.ok && q.pointCount >= input.index + 2 && q.time >= input.start
+    );
+    const actualSubmit =
+      actual &&
+      marks.find(
+        (m) =>
+          m.event === 'selection-submit' &&
+          m.session === actual.session &&
+          m.version === actual.version &&
+          m.final === actual.final &&
+          m.time >= actual.time
+      );
+    const actualOpportunity =
+      actualSubmit &&
+      marks.find(
+        (m) =>
+          m.event === 'selection-opportunity' &&
+          m.session === actualSubmit.session &&
+          m.version === actualSubmit.version &&
+          m.pointCount === actualSubmit.pointCount &&
+          m.final === actualSubmit.final &&
+          m.submittedAt === actualSubmit.time &&
+          m.time >= actualSubmit.time
+      );
     return {
       index: input.index,
       inputTime: input.start,
@@ -95,17 +122,35 @@ export function lassoQueryTiming(raw) {
       completeMs: end ? end.time - input.start : null,
       selectionMs: submit ? submit.time - input.start : null,
       opportunityMs: opportunity ? opportunity.time - input.start : null,
+      actualQueryVersion: actual?.version ?? null,
+      actualQueryPointCount: actual?.pointCount ?? null,
+      actualQueryFinal: actual?.final ?? null,
+      actualQueryCompleteTime: actual?.time ?? null,
+      actualSelectionTime: actualSubmit?.time ?? null,
+      actualOpportunityTime: actualOpportunity?.time ?? null,
+      actualCompleteMs: actual ? actual.time - input.start : null,
+      actualSelectionMs: actualSubmit ? actualSubmit.time - input.start : null,
+      actualOpportunityMs: actualOpportunity ? actualOpportunity.time - input.start : null,
     };
   });
   const liveQueries = queries.filter((q) => !q.final && q.ok && q.time < raw.up.start);
   return {
     observable: true,
     method:
-      'All source inputs mapped to first successful live query containing their captured prefix. Completion is exact marked query end; selection is marked setSelection return, including equal results. Queued rAF is a presentation opportunity proxy only. Missing live results/opportunities remain Infinity in p95; final-up results never fill live gaps.',
+      'All source inputs mapped to first successful query containing their captured prefix. Completion is exact marked query end; selection is marked setSelection return, including equal results. actual* fields include final-up results and retain their phase. Live-only fields are censored at up, missing live results/opportunities remain Infinity in their p95; final-up results never silently fill live gaps. Queued rAF is a presentation opportunity proxy only.',
     inputs: samples.length,
     completedInputs: perInput.filter((s) => s.completeMs !== null).length,
     selectedInputs: perInput.filter((s) => s.selectionMs !== null).length,
     opportunityInputs: perInput.filter((s) => s.opportunityMs !== null).length,
+    actualSelectedInputs: perInput.filter((s) => s.actualSelectionMs !== null).length,
+    actualInputToQueryP95: percentile(perInput.map((s) => s.actualCompleteMs ?? Infinity)),
+    actualInputToSelectionP95: percentile(perInput.map((s) => s.actualSelectionMs ?? Infinity)),
+    actualInputToOpportunityP95: percentile(perInput.map((s) => s.actualOpportunityMs ?? Infinity)),
+    actualSourceToOpportunityP95: percentile(
+      perInput.map((s) =>
+        s.actualOpportunityTime !== null ? s.actualOpportunityTime - s.due : Infinity
+      )
+    ),
     inputToQueryP95: percentile(perInput.map((s) => s.completeMs ?? Infinity)),
     inputToSelectionP95: percentile(perInput.map((s) => s.selectionMs ?? Infinity)),
     inputToOpportunityP95: percentile(perInput.map((s) => s.opportunityMs ?? Infinity)),

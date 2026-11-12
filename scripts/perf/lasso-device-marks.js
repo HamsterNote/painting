@@ -25,9 +25,9 @@
         if (running) record({ ...detail, event: 'selection-opportunity', submittedAt });
       });
   };
-  const frame = () => {
+  const frame = (timestamp) => {
     if (!running) return;
-    frames.push(performance.now());
+    frames.push({ timestamp, callback: performance.now() });
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
@@ -45,6 +45,10 @@
       pointerId: event.pointerId,
       pointerType: event.pointerType,
       isTrusted: event.isTrusted,
+      onSurface:
+        event.target instanceof Element &&
+        Boolean(event.target.closest('[data-testid="layered-surface"]')),
+      tool: window.__layeredEditor?.getSnapshot('tools').activeTool,
       samples: [...samples].map((sample) => ({
         time:
           sample.timeStamp > 1e12 ? sample.timeStamp - performance.timeOrigin : sample.timeStamp,
@@ -66,6 +70,10 @@
       pointers,
       frames,
     });
+  window.__paintingLassoPerfReset = () => {
+    marks.length = pointers.length = frames.length = 0;
+    performance.clearMarks('painting:test:lasso');
+  };
   window.__paintingLassoPerfStop = () => {
     running = false;
     phases.forEach((phase) => window.removeEventListener(phase, pointer, true));

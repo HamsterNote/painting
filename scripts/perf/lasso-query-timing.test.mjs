@@ -48,6 +48,8 @@ test('missing live feedback stays in the percentile denominator; final up cannot
   assert.equal(r.selectedInputs, 2);
   assert.equal(r.inputToQueryP95, null);
   assert.equal(r.inputToSelectionP95, null);
+  assert.equal(r.actualSelectedInputs, 3);
+  assert.equal(r.actualInputToSelectionP95, 25);
 });
 test('a query completing after up is not counted as live', () => {
   const raw = fixture();

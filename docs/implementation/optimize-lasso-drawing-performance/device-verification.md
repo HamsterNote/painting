@@ -15,7 +15,7 @@
 1. 构建：`pnpm run build:lib`，然后在playground执行`expo export --platform web --output-dir <待验目录>`。将该production目录通过设备可访问的测试静态站点提供；仓库`static-spa-server.mjs`只监听127.0.0.1，不能把该地址当作iPad可访问地址。禁止为此修改正式部署。
 2. Safari打开`/layered-editor?diagnostics=1&lassoPerf=1&fixture=lasso&lassoCount=1000&lassoScenario=local`。100/500/1000与local/dense逐一替换；mixed使用500（另加20文字、20形状、10图片）；独立空控制用`lassoCount=0&lassoScenario=empty`。
 3. Web Inspector中粘贴`scripts/perf/lasso-device-marks.js`的完整内容，再开始手势。`lassoPerf=1`仅启用可选测试观察入口；不装记录器不会产生计时。WKWebView测试宿主可在文档创建时以`WKUserScript(..., injectionTime: .atDocumentStart, forMainFrameOnly: true)`装载同一脚本；Expo DOM宿主须注入实际承载画布的DOM文档，而非外层空页面。通过`window.__layeredEditor`和input/query标记存在确认上下文。
-4. 选择套索。Pencil采用pen模式；触摸需先切到允许单指绘制的finger模式，确认事件`pointerType=touch`且进入套索，而非滚动/平移。每轮开始前等待字体、全部图片解码完成，核对对象数和每笔64点。
+4. 选择套索。Pencil采用pen模式；触摸需先切到允许单指绘制的finger模式，确认事件`pointerType=touch`且进入套索，而非滚动/平移。每轮开始前等待字体、全部图片解码完成，核对对象数和每笔64点。仅在上一手势已结束时调用`window.__paintingLassoPerfReset()`清空记录，再先采40个空闲rAF；同一文档不要反复重装记录器。
 5. Safari/宿主Inspector开启Timeline保存主线程任务、User Timing和实际render/paint；正式帧率采集与profile轮分开，不能把profile轮混进正式统计。记录器输出调用`window.__paintingLassoPerfExport()`，将完整JSON保存为带设备/场景/规模/轮次名称的文件。结束调用`window.__paintingLassoPerfStop()`。
 
 ## 输入矩阵和轮次
