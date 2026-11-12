@@ -7,11 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### 0.8.4 待发布
+## [0.9.0] - 2026-11-12
+
+`@hamster-note/painting` 与 `@hamster-note/painting-board` 同步发布，后者精确依赖 painting `0.9.0`。本次工具栏整体更新及共享工具栏公开入口以次版本交付；此前未发布的 0.8.4 内容一并纳入。
+
+### Added
+
+- HAM-156：底部悬浮胶囊工具栏、收起/展开、工具菜单、调色板、独立笔宽、缩放菜单和擦除轨迹。
 
 - 新增无绘图运行时依赖的 `/toolbar` 公开子路径，供 reader/notes 共用 DOM 外壳、键盘弹层、文件菜单及请求/布局类型。
 - painting 工具栏与 PaintingBoard 新增可选文件、异步选择/移除、busy 和按栏 layout；文件按钮位于重做后，当前项由宿主控制，不新增历史或保存事务。
-- 受控 top/bottom、安全区与正文占位支持上下分栏，显式0覆盖环境安全区；旧宿主缺省行为保留。两个发布包同步至0.8.4，接入说明见 `docs/toolbar.md`。
+- 受控 top/bottom、安全区与正文占位支持上下分栏，显式0覆盖环境安全区；旧宿主缺省行为保留。接入说明见 `docs/toolbar.md`。
+
+### Fixed
+
+- 修复弹层越出可见宿主、iOS 工具栏键盘桥和正向 Tab 关闭弹层后的焦点恢复。
 
 ## [0.7.0] - 2026-10-26
 
