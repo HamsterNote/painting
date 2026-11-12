@@ -1,4 +1,4 @@
-# 共享栏接入（0.8.4）
+# 共享栏接入（0.9.0）
 
 `@hamster-note/painting/toolbar` 提供 DOM / Expo DOM / WebView 使用的轻量入口，只依赖 React 和 React DOM，不加载绘图 controller、输入引擎、解析器或 React Native。它不是原生 RN 视图。reader/notes 应消费此公开子路径，业务 controller、保存和历史仍使用各库原实现。
 
@@ -67,7 +67,7 @@ const layout: PaneToolbarLayout = {
 
 ## 构建、验证与回滚
 
-- painting 与 painting-board 同步版本为0.8.4，后者依赖 painting 0.8.4；reader/notes 需显式升级至含 `/toolbar` 的版本，再接入。当前 PR 不执行 npm 发布。
+- painting 与 painting-board 同步版本为0.9.0，后者依赖 painting 0.9.0；reader/notes 需显式升级至含 `/toolbar` 的版本，再接入。通过 `v0.9.0` tag 触发现有发版流水线。
 - `pnpm build:lib` 生成 ESM、CommonJS 和类型声明；`pnpm pack:dry` 检查发布清单，`pnpm --filter @hamster-note/painting pack --pack-destination <目录>` 可生成可安装归档。
 - `pnpm test:toolbar` 用 esbuild 打包**公开编译入口**，静态检查轻量包依赖图，再运行 Chromium 夹具；reader/notes 为消费契约适配器，不冒充两个仓库已接入。其真实编辑器与 WebBase 联调属后续交付。
 - 开发时验收为 Web-only。回滚只恢复消费端依赖及可选 props，文件数据、controller、历史和会话无需迁移。旧 painting-board 默认行为另有浏览器夹具覆盖。
