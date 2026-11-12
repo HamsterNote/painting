@@ -1275,6 +1275,52 @@ function canonicalLasso(ring: PolygonRing): ReturnType<typeof canonicalizeClosed
   return { ok: true, polygons: [{ outer: ring, holes: [] }] };
 }
 
+// Outward rounding encloses the error of each basic operation, including
+// subnormals. Non-finite arithmetic cannot certify separation. These intervals
+// deliberately retain uncertain floating boundary cases for the old boolean.
+type Interval = readonly [number, number];
+function outward(value: number): Interval {
+  if (!Number.isFinite(value)) return [-Infinity, Infinity];
+  const error = Math.max(Number.MIN_VALUE, Math.abs(value) * Number.EPSILON);
+  return [value - error, value + error];
+}
+function subtractInterval(a: Interval, b: Interval): Interval {
+  return [outward(a[0] - b[1])[0], outward(a[1] - b[0])[1]];
+}
+function multiplyInterval(a: Interval, b: Interval): Interval {
+  const products = [a[0] * b[0], a[0] * b[1], a[1] * b[0], a[1] * b[1]];
+  if (!products.every(Number.isFinite)) return [-Infinity, Infinity];
+  return [outward(Math.min(...products))[0], outward(Math.max(...products))[1]];
+}
+function lineMissesExpandedEdgeBox(
+  c: Point,
+  d: Point,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+  margin: number
+): boolean {
+  const x = [outward(minX - margin)[0], outward(maxX + margin)[1]];
+  const y = [outward(minY - margin)[0], outward(maxY + margin)[1]];
+  const dx = subtractInterval([d.x, d.x], [c.x, c.x]);
+  const dy = subtractInterval([d.y, d.y], [c.y, c.y]);
+  let positive = true;
+  let negative = true;
+  for (const px of x)
+    for (const py of y) {
+      const side = subtractInterval(
+        multiplyInterval(dx, subtractInterval([py, py], [c.y, c.y])),
+        multiplyInterval(dy, subtractInterval([px, px], [c.x, c.x]))
+      );
+      positive &&= side[0] > 0;
+      negative &&= side[1] < 0;
+    }
+  // A linear function has its extrema at box corners. Strictly same-side
+  // corners prove even the infinite line misses the expanded edge box.
+  return positive || negative;
+}
+
 // Preserve the reference segment predicate (including its degenerate behavior)
 // before bounds rejection. A negative distance result with overlapping edge
 // bounds still needs the reference boolean check for floating boundary cases.
@@ -1320,10 +1366,14 @@ function withinLassoMargin(
             Math.min(c.y, d.y) > maxY + margin
           )
             continue;
-          overlappingBounds = true;
           const distance = segmentSegmentDistance(a, b, c, d);
           if (distance === null) return null;
           if (distance <= margin) return true;
+          if (
+            !overlappingBounds &&
+            !lineMissesExpandedEdgeBox(c, d, minX, minY, maxX, maxY, margin)
+          )
+            overlappingBounds = true;
         }
       }
     }

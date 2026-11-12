@@ -100,6 +100,27 @@ test('segment bounds skip a separated negative candidate but preserve both compa
   expect(onFallback).not.toHaveBeenCalled();
 });
 
+test('a long closing diagonal box overlaps the target, but its line is provably separated', () => {
+  const document = prepared([image('target', 60, 60, 3)]);
+  const path = [
+    [0, 0],
+    [100, 0],
+    [100, 10],
+  ].map(([x, y]) => ({ x, y }));
+  // The closing diagonal bbox covers x=0..100, y=0..10. Place the target
+  // within that box but well above the diagonal, without collinear edges.
+  const insideBox = prepared([image('target', 40, 7, 1)]);
+  for (const candidate of [document, insideBox]) {
+    const onFallback = jest.fn();
+    const query = createLayeredLassoQuery(candidate, path, { now: () => 0, onFallback });
+    const oracle = queryObjectLasso(candidate, path, 'intersects');
+    const result = complete(query);
+    expect(oracle.ok && oracle.value.map((hit) => hit.objectId)).toEqual([]);
+    expect(result).toEqual(oracle);
+    expect(onFallback).not.toHaveBeenCalled();
+  }
+});
+
 test.each(cases)(
   '$name: oracle and complete optimized query explicitly select target',
   ({ target, path }) => {
