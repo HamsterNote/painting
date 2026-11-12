@@ -32,6 +32,17 @@ export function createSemanticWebAdapter(options: {
   const view = host.ownerDocument.defaultView!;
   const zoomFeedback = createZoomFeedback(controller, view);
   const eraserTrail = createEraserTrail(host, controller);
+  // Message tasks yield to input/paint without nested setTimeout's 4ms clamp.
+  const workChannel =
+    typeof view.MessageChannel === 'function' ? new view.MessageChannel() : undefined;
+  const pendingWork = new Map<number, () => void>();
+  let nextWork = 0;
+  if (workChannel)
+    workChannel.port1.onmessage = ({ data }: MessageEvent<number>) => {
+      const callback = pendingWork.get(data);
+      pendingWork.delete(data);
+      callback?.();
+    };
   const engine = createLayeredToolSession(controller, options.allocateId, {
     scheduler: {
       frame: (callback) => {
@@ -39,6 +50,14 @@ export function createSemanticWebAdapter(options: {
         return () => view.cancelAnimationFrame(id);
       },
       work: (callback) => {
+        if (workChannel) {
+          const id = ++nextWork;
+          pendingWork.set(id, callback);
+          workChannel.port2.postMessage(id);
+          return () => {
+            pendingWork.delete(id);
+          };
+        }
         const id = view.setTimeout(callback, 0);
         return () => view.clearTimeout(id);
       },
@@ -304,6 +323,9 @@ export function createSemanticWebAdapter(options: {
     destroy() {
       cancel();
       engine.destroy();
+      pendingWork.clear();
+      workChannel?.port1.close();
+      workChannel?.port2.close();
       eraserTrail.destroy();
       unsubscribe();
       host.removeEventListener('pointerdown', down);
