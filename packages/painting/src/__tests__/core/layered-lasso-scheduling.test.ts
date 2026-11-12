@@ -135,6 +135,31 @@ test('equivalent selection results already suppress notifications', () => {
   expect(listener).toHaveBeenCalledTimes(1);
 });
 
+test('selection membership follows edits, undo and redo and rejects missing IDs atomically', () => {
+  const controller = makeLayeredController([layeredRect('a'), layeredRect('b')]);
+  controller.setSelection(['b', 'a', 'b']);
+  expect(controller.getSnapshot('selection')).toEqual(['b', 'a']);
+  expect(
+    controller.editObjects({
+      expectedDocumentRevision: 0,
+      removeIds: ['a'],
+      upsert: [layeredRect('c')],
+    }).ok
+  ).toBe(true);
+  expect(controller.setSelection(['c', 'b', 'c']).ok).toBe(true);
+  expect(controller.getSnapshot('selection')).toEqual(['c', 'b']);
+  expect(controller.setSelection(['b', 'a']).ok).toBe(false);
+  expect(controller.getSnapshot('selection')).toEqual(['c', 'b']);
+  expect(controller.undo().ok).toBe(true);
+  expect(controller.setSelection(['a', 'b']).ok).toBe(true);
+  expect(controller.setSelection(['a', 'c']).ok).toBe(false);
+  expect(controller.getSnapshot('selection')).toEqual(['a', 'b']);
+  expect(controller.redo().ok).toBe(true);
+  expect(controller.setSelection(['a']).ok).toBe(false);
+  expect(controller.setSelection([]).ok).toBe(true);
+  expect(controller.getSnapshot('selection')).toEqual([]);
+});
+
 test('performance events retain the query input prefix while newer batches arrive', () => {
   const controller = makeLayeredController(
     Array.from({ length: 20 }, (_, i) => layeredRect(`r${i}`))
