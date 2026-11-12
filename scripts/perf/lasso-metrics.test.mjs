@@ -8,7 +8,7 @@ function recording() {
     start: 0,
     drawingEnd: 100,
     actualFrames: [10, 20, 30],
-    frames: [10, 20, 30, 110],
+    frames: [10, 20, 30],
     down: { index: 0, start: 0, end: 1 },
     up: { start: 100, end: 105 },
     finalOpportunity: 120,
@@ -31,6 +31,14 @@ test('old recordings exclude the single post-up callback and recompute identical
   const raw = recording();
   const expected = lassoMetrics(raw);
   delete raw.actualFrames;
+  raw.frames.push(110);
+  assert.deepEqual(lassoMetrics(raw), expected);
+});
+
+test('compares both versions on the same rAF clock despite callback execution jitter', () => {
+  const raw = recording();
+  const expected = lassoMetrics(raw);
+  raw.actualFrames = [15, 25, 39];
   assert.deepEqual(lassoMetrics(raw), expected);
 });
 

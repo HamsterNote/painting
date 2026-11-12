@@ -10,10 +10,11 @@ export function lassoMetrics(raw) {
     .sort((a, b) => a - b);
   const T = idle[Math.floor(idle.length / 2)];
   // Early runner versions always appended exactly one queued callback after up.
-  // Retain those raw files, but exclude that callback. New files record actual
-  // callback times and stop sampling before up. Include both boundary gaps so
+  // Retain those raw files, but exclude that callback. New files also record
+  // actual callback times and stop sampling before up. Use rAF timestamps for
+  // BOTH versions so callback-clock jitter cannot change the comparison. Include both boundary gaps so
   // the last blocked move cannot disappear from the observation duration.
-  const frames = raw.actualFrames ?? raw.frames.slice(0, -1);
+  const frames = raw.actualFrames ? raw.frames : raw.frames.slice(0, -1);
   const boundaries = [
     raw.start,
     ...frames.map((t) => Math.max(raw.start, Math.min(raw.drawingEnd, t))),
