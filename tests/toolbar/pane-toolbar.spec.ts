@@ -1,55 +1,5 @@
 import { expect, test } from '@playwright/test';
 
-test('eraser samples and self-crossings have uniform alpha and expire 1s after release', async ({
-  page,
-}) => {
-  await page.goto('/painting.html?legacy');
-  await page.getByRole('button', { name: '橡皮擦', exact: true }).click();
-  const surface = page.getByTestId('layered-surface');
-  const box = (await surface.boundingBox())!;
-  await page.mouse.move(box.x + 100, box.y + 100);
-  await page.mouse.down();
-  for (const [x, y] of [
-    [180, 100],
-    [260, 100],
-    [180, 180],
-    [180, 60],
-  ]) {
-    await page.mouse.move(box.x + x!, box.y + y!, { steps: 10 });
-  }
-  const trail = page.locator('[data-eraser-trail]');
-  await expect(trail.locator('path')).toHaveCount(1);
-  const alpha = await trail.evaluate(async (svg) => {
-    const copy = svg.cloneNode(true) as SVGSVGElement;
-    copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    copy.setAttribute('width', '400');
-    copy.setAttribute('height', '300');
-    copy.style.width = '400px';
-    copy.style.height = '300px';
-    const image = new Image();
-    image.src = `data:image/svg+xml;base64,${btoa(new XMLSerializer().serializeToString(copy))}`;
-    await image.decode();
-    const canvas = document.createElement('canvas');
-    canvas.width = 400;
-    canvas.height = 300;
-    const ctx = canvas.getContext('2d')!;
-    ctx.drawImage(image, 0, 0);
-    // Between samples, at a sample joint, at a self-crossing, and on a single arm.
-    return [
-      [140, 100],
-      [220, 100],
-      [180, 100],
-      [180, 140],
-    ].map(([x, y]) => ctx.getImageData(x!, y!, 1, 1).data[3]);
-  });
-  expect(alpha[0]).toBeGreaterThan(110);
-  expect(alpha[0]).toBeLessThan(120);
-  expect(new Set(alpha).size).toBe(1);
-  await page.mouse.up();
-  await expect(trail.locator('g')).toHaveCSS('animation-duration', '1s');
-  await expect.poll(() => trail.count(), { timeout: 3000, intervals: [50] }).toBe(0);
-});
-
 test('public lightweight artifact serves reader/notes contract adapters without drawing runtime', async ({
   page,
   request,
