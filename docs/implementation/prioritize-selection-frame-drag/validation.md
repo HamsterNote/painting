@@ -1,5 +1,7 @@
 # HAM-246 验证记录
 
+实现提交：`4d049a930f6429259e82c197f000bb468cad5141`。PR：https://github.com/HamsterNote/painting/pull/51。
+
 实现 change：`prioritize-selection-frame-drag`。讨论已批准具体缩放/旋转手柄保留原操作；完整外接矩形的其余部分用于移动。
 
 ## 实现
@@ -8,7 +10,7 @@ schema3 的 `layeredSelectionGeometry` 从文档/预览、选择集合和 viewpo
 
 ## 命令与原始输出
 
-完整原始日志随任务评论的证据附件提供。命令均在本分支仓库根目录运行。
+完整原始日志保存为本目录的 `.txt` 文件，并随任务评论的证据附件提供；附件 JSON 按上表任务顺序逐项记录提交 SHA、完整命令、退出码和原始输出。命令均在本分支仓库根目录运行。
 
 ```sh
 pnpm exec jest --runInBand --watchman=false --runTestsByPath packages/painting/src/__tests__/core/layered-selection-geometry.test.ts packages/painting/src/__tests__/core/layered-tools.test.ts packages/painting/src/__tests__/layered-selection-overlay.test.tsx packages/painting/src/__tests__/layered-semantic-adapter.test.ts packages/painting/src/__tests__/core/layered-input-arbitration.test.ts
@@ -31,10 +33,10 @@ pnpm format:check
 openspec validate prioritize-selection-frame-drag --type change --strict --json
 ```
 
-首次独立服务运行原始输出：
+最终独立服务运行原始输出：
 
 ```text
-4 passed (3.2m)
+4 passed (2.1m)
 ```
 
 浏览器使用当前分支构建的独立 5276 服务；5266 属于其他任务，首次误复用它的结果不作为本次功能证据。CI 模式关闭 Metro 文件监听，避免共享机器 inotify 上限；不修改系统设置和其他任务的进程。

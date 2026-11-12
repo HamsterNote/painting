@@ -1,0 +1,43 @@
+
+> @hamster-note/painting-workspace@0.8.3 format:check /home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-246-e3f798372f66/workdir/painting
+> prettier --check .
+
+Checking formatting...
+[warn] .opencode/commands/opsx-apply.md
+[warn] .opencode/commands/opsx-archive.md
+[warn] .opencode/commands/opsx-explore.md
+[warn] .opencode/commands/opsx-propose.md
+[warn] .opencode/commands/opsx-sync.md
+[warn] .opencode/skills/openspec-apply-change/SKILL.md
+[warn] .opencode/skills/openspec-archive-change/SKILL.md
+[warn] .opencode/skills/openspec-explore/SKILL.md
+[warn] .opencode/skills/openspec-propose/SKILL.md
+[warn] .opencode/skills/openspec-sync-specs/SKILL.md
+[warn] docs/implementation/mobile-input-mode-switch/archive-verification.md
+[warn] docs/implementation/mobile-input-mode-switch/review-lifecycle-fixes.md
+[warn] openspec/changes/archive/2026-06-07-painting-drawing-surface/design.md
+[warn] openspec/changes/archive/2026-06-07-painting-drawing-surface/proposal.md
+[warn] openspec/changes/archive/2026-10-18-fix-ipad-pencil-text-selection/design.md
+[warn] openspec/changes/archive/2026-10-18-fix-ipad-pencil-text-selection/validation.md
+[warn] openspec/changes/archive/2026-10-18-fix-web-responder-touch-identity/evidence/after-regression.json
+[warn] openspec/changes/archive/2026-10-18-fix-web-responder-touch-identity/evidence/apply-validation.md
+[warn] openspec/changes/archive/2026-10-18-fix-web-responder-touch-identity/evidence/baseline.json
+[warn] openspec/changes/archive/2026-10-18-fix-web-responder-touch-identity/evidence/before-regression.json
+[warn] openspec/changes/archive/2026-10-18-fix-web-responder-touch-identity/evidence/build-verification.json
+[warn] openspec/changes/archive/2026-10-18-fix-web-responder-touch-identity/evidence/identifiers.json
+[warn] openspec/changes/archive/2026-10-18-fix-web-responder-touch-identity/evidence/no-diagnostics.json
+[warn] openspec/changes/archive/2026-10-18-fix-web-responder-touch-identity/evidence/probe.mjs
+[warn] openspec/changes/archive/2026-10-18-fix-web-responder-touch-identity/evidence/README.md
+[warn] openspec/changes/archive/2026-10-18-mobile-input-mode-switch/design.md
+[warn] openspec/changes/archive/2026-10-18-mobile-input-mode-switch/proposal.md
+[warn] openspec/changes/archive/2026-10-25-add-ios-pencilkit-surface/design.md
+[warn] openspec/changes/replace-pdf-painting-core/validation.md
+[warn] packages/painting/src/__tests__/fixtures/migration/painting-0.4.0.json
+[warn] packages/painting/src/__tests__/fixtures/v1/strokes.ts
+[warn] packages/painting/src/__tests__/fixtures/v2/strokes.ts
+[warn] packages/painting/src/__tests__/layered-toolbar.test.tsx
+[warn] packages/painting/src/__tests__/rulerPointerBridge.test.ts
+[warn] packages/painting/src/model/text.ts
+[warn] pnpm-lock.yaml
+[warn] Code style issues found in 36 files. Run Prettier with --write to fix.
+ ELIFECYCLE  Command failed with exit code 1.

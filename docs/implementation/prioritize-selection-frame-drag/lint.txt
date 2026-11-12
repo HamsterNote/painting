@@ -1,0 +1,55 @@
+
+> @hamster-note/painting-workspace@0.8.3 lint /home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-246-e3f798372f66/workdir/painting
+> eslint .
+
+
+/home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-246-e3f798372f66/workdir/painting/packages/painting/src/__tests__/core/layered-adaptive-contour.test.ts
+  309:3  warning  Test has no assertions  jest/expect-expect
+  345:3  warning  Test has no assertions  jest/expect-expect
+  350:3  warning  Test has no assertions  jest/expect-expect
+  381:3  warning  Test has no assertions  jest/expect-expect
+  406:3  warning  Test has no assertions  jest/expect-expect
+
+/home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-246-e3f798372f66/workdir/painting/packages/painting/src/__tests__/core/layered-affine.test.ts
+  30:3  warning  Test has no assertions  jest/expect-expect
+
+/home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-246-e3f798372f66/workdir/painting/packages/painting/src/__tests__/core/layered-document-roundtrip.test.ts
+  782:3  warning  Test has no assertions  jest/expect-expect
+
+/home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-246-e3f798372f66/workdir/painting/packages/painting/src/__tests__/core/layered-freehand-regressions.test.ts
+  263:3  warning  Test has no assertions  jest/expect-expect
+
+/home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-246-e3f798372f66/workdir/painting/packages/painting/src/__tests__/core/layered-text-edit-session.test.ts
+  155:3  warning  Test has no assertions  jest/expect-expect
+  174:3  warning  Test has no assertions  jest/expect-expect
+  191:3  warning  Test has no assertions  jest/expect-expect
+  203:3  warning  Test has no assertions  jest/expect-expect
+  488:3  warning  Test has no assertions  jest/expect-expect
+  512:3  warning  Test has no assertions  jest/expect-expect
+  614:3  warning  Test has no assertions  jest/expect-expect
+
+/home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-246-e3f798372f66/workdir/painting/packages/painting/src/__tests__/core/layered-world-bounds.test.ts
+  241:3  warning  Test has no assertions  jest/expect-expect
+  248:3  warning  Test has no assertions  jest/expect-expect
+  255:3  warning  Test has no assertions  jest/expect-expect
+  361:3  warning  Test has no assertions  jest/expect-expect
+  373:3  warning  Test has no assertions  jest/expect-expect
+  386:3  warning  Test has no assertions  jest/expect-expect
+  403:3  warning  Test has no assertions  jest/expect-expect
+  445:3  warning  Test has no assertions  jest/expect-expect
+  464:3  warning  Test has no assertions  jest/expect-expect
+  498:3  warning  Test has no assertions  jest/expect-expect
+  514:3  warning  Test has no assertions  jest/expect-expect
+  553:3  warning  Test has no assertions  jest/expect-expect
+  771:3  warning  Test has no assertions  jest/expect-expect
+
+/home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-246-e3f798372f66/workdir/painting/packages/painting/src/__tests__/core/viewport.test.ts
+  68:5  warning  Test has no assertions  jest/expect-expect
+  75:5  warning  Test has no assertions  jest/expect-expect
+
+/home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-246-e3f798372f66/workdir/painting/packages/painting/src/__tests__/viewport-affine.test.ts
+   89:5  warning  Test has no assertions  jest/expect-expect
+  161:5  warning  Test has no assertions  jest/expect-expect
+
+✖ 32 problems (0 errors, 32 warnings)
+
