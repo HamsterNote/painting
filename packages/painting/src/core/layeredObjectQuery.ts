@@ -1230,6 +1230,12 @@ function lassoCandidates(prepared: PreparedLayeredObjectQuery, bounds: Bounds) {
   return candidates.sort((a, b) => a.order - b.order);
 }
 
+// Canonicalization of self-touching/overlapping input can produce touching
+// components and holes whose boolean interpretation differs from winding over
+// all rings (seed 245, trajectory 9180). Bounds remain a conservative filter;
+// line separation alone cannot exclude the reference boolean's interior hit.
+const referenceCanonicalLassos = new WeakSet<PolygonBooleanMultiPolygon>();
+
 // A proven simple ring already is a nonzero polygon. Complex/touching rings
 // still use the original boolean canonicalizer; no trajectory simplification.
 function canonicalLasso(ring: PolygonRing): ReturnType<typeof canonicalizeClosedRing> {
@@ -1267,8 +1273,11 @@ function canonicalLasso(ring: PolygonRing): ReturnType<typeof canonicalizeClosed
       if (
         ![o1, o2, o3, o4].every(Number.isFinite) ||
         ((o1 === 0 || o2 === 0 || o1 > 0 !== o2 > 0) && (o3 === 0 || o4 === 0 || o3 > 0 !== o4 > 0))
-      )
-        return canonicalizeClosedRing(ring);
+      ) {
+        const canonical = canonicalizeClosedRing(ring);
+        if (canonical.ok) referenceCanonicalLassos.add(canonical.polygons);
+        return canonical;
+      }
     }
     active.push(edge);
   }
@@ -1330,6 +1339,7 @@ function withinLassoMargin(
   margin: number
 ): PieceHit | 'overlapping-bounds' {
   let overlappingBounds = false;
+  const allowLineProof = !referenceCanonicalLassos.has(lasso);
   for (const first of allRings(piece.polygons))
     for (const second of allRings(lasso)) {
       if (first.length < 2 || second.length < 2) return null;
@@ -1371,7 +1381,7 @@ function withinLassoMargin(
           if (distance <= margin) return true;
           if (
             !overlappingBounds &&
-            !lineMissesExpandedEdgeBox(c, d, minX, minY, maxX, maxY, margin)
+            (!allowLineProof || !lineMissesExpandedEdgeBox(c, d, minX, minY, maxX, maxY, margin))
           )
             overlappingBounds = true;
         }

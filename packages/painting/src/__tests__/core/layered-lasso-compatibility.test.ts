@@ -45,6 +45,22 @@ const cases = [
       [0, 40],
     ].map(([x, y]) => ({ x, y })),
   },
+  {
+    name: 'seed 245 trajectory 9180: touching canonical components retain boolean interior hit',
+    target: image('target', 51, 61, 3),
+    path: [
+      [100, 10],
+      [20, 90],
+      [60, 50],
+      [60, 90],
+      [10, 70],
+      [40, 0],
+      [20, 50],
+      [40, 70],
+      [90, 60],
+      [90, 0],
+    ].map(([x, y]) => ({ x, y })),
+  },
 ];
 function prepared(objects: readonly DocumentObject[]) {
   const result = prepareLayeredObjectQuery(
