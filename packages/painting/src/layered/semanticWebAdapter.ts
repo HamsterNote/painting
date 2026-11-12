@@ -77,6 +77,7 @@ export function createSemanticWebAdapter(options: {
     },
     onError: options.onError,
   });
+  let committing = false;
   let owner: { id: number; source: string; start: Point; pan: boolean } | undefined;
   let snapshot = controller.getSnapshot('viewport');
   const screen = (event: PointerEvent): Point => {
@@ -222,6 +223,14 @@ export function createSemanticWebAdapter(options: {
         /* Already released. */
       }
   }
+  function endToolGesture() {
+    committing = true;
+    try {
+      engine.end();
+    } finally {
+      committing = false;
+    }
+  }
   function up(event: PointerEvent) {
     if (!owner || event.pointerId !== owner.id || event.pointerType !== owner.source) return;
     safely(() => {
@@ -230,8 +239,8 @@ export function createSemanticWebAdapter(options: {
         engine.update([point]);
         if (controller.getSnapshot('tools').activeTool === 'eraser') {
           eraserTrail.append([point]);
-          eraserTrail.finish(() => engine.end());
-        } else engine.end();
+          eraserTrail.finish(endToolGesture);
+        } else endToolGesture();
       }
     });
     release();
@@ -306,7 +315,10 @@ export function createSemanticWebAdapter(options: {
   const unsubscribe = controller.subscribe('tools', () => {
     if (owner) cancel();
   });
-  const stopDocument = controller.subscribe('document', cancel);
+  const stopDocument = controller.subscribe('document', () => {
+    // Own synchronous commits finish normally; external edits still invalidate the owner.
+    if (!committing) cancel();
+  });
   let inputMode = controller.getSnapshot('input').mode;
   const stopInput = controller.subscribe('input', () => {
     const next = controller.getSnapshot('input').mode;
