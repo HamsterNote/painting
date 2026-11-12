@@ -9,10 +9,11 @@ import { lassoMetrics } from './lasso-metrics.mjs';
 
 const label = process.argv[2] ?? 'baseline';
 const engine = process.env.LASSO_BROWSER ?? 'chromium';
-const output = `artifacts/research/lasso/${label}-${engine}`;
+const output = process.env.LASSO_OUTPUT ?? `artifacts/research/lasso/${label}-${engine}`;
 const exportRoot = process.env.LASSO_EXPORT_ROOT ?? 'apps/playground/dist';
 await mkdir(output, { recursive: true });
-await cp(`${exportRoot}/_expo/static/js/web`, `${output}/bundles`, { recursive: true });
+if (process.env.LASSO_COPY_BUNDLES !== '0')
+  await cp(`${exportRoot}/_expo/static/js/web`, `${output}/bundles`, { recursive: true });
 const server = spawn(
   process.execPath,
   ['scripts/perf/static-spa-server.mjs', '--root', exportRoot],
@@ -50,6 +51,8 @@ try {
     cores: os.cpus().length,
     node: process.version,
     sha: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+    exportRoot,
+    productSha: process.env.LASSO_PRODUCT_SHA ?? null,
     diff: execFileSync('git', ['diff', '--stat'], { encoding: 'utf8' }),
     command: process.argv.join(' '),
     viewport: { width: 1280, height: 800 },
@@ -64,10 +67,11 @@ try {
   const scenarios = process.env.LASSO_SCENARIOS?.split(',') ?? ['local', 'dense', 'mixed'];
   const counts = process.env.LASSO_COUNTS?.split(',').map(Number) ?? [100, 500, 1000];
   const rounds = Number(process.env.LASSO_ROUNDS ?? 7);
+  const roundOffset = Number(process.env.LASSO_ROUND_OFFSET ?? 0);
   for (const scenario of scenarios) {
     const populations = scenario === 'mixed' ? [500] : counts;
     for (const count of populations)
-      for (let round = 0; round < rounds; round++) {
+      for (let round = roundOffset; round < roundOffset + rounds; round++) {
         // Alternate empty/populated order, keeping every matching empty control.
         for (const n of round % 2 ? [count, 0] : [0, count]) {
           const id = `${scenario}-${n}-pair${count}-r${round}`;
@@ -103,7 +107,10 @@ try {
           console.error('Fixture ready', id);
           let cdp;
           const traceEvents = [];
-          const profile = engine === 'chromium' && round === rounds - 1;
+          const profile =
+            process.env.LASSO_PROFILE !== '0' &&
+            engine === 'chromium' &&
+            round === roundOffset + rounds - 1;
           if (profile) {
             cdp = await context.newCDPSession(page);
             cdp.on('Tracing.dataCollected', ({ value }) => traceEvents.push(...value));
@@ -143,7 +150,12 @@ try {
                 c[name] = function (...args) {
                   const start = performance.now();
                   const result = original.apply(this, args);
-                  methods.push({ name, start, duration: performance.now() - start });
+                  methods.push({
+                    name,
+                    start,
+                    duration: performance.now() - start,
+                    index: current,
+                  });
                   return result;
                 };
                 restorers.push(() => {
