@@ -79,7 +79,7 @@ test('source policy and ownership preserve live mouse tools and cancel touch pre
 
 test.each(['rect', 'lasso', 'eraser', 'selection', 'bezier', 'polygon'] as const)(
   '%s touch transaction cancels before pair and late up cannot edit history',
-  (tool) => {
+  async (tool) => {
     const controller = makeLayeredController([layeredRect()]);
     controller.setTool(tool);
     controller.setSelection(['rect']);
@@ -118,6 +118,7 @@ test.each(['rect', 'lasso', 'eraser', 'selection', 'bezier', 'polygon'] as const
     const saved = controller.getSnapshot('document');
     send('down', 1, 10, 10);
     send('move', 1, 80, 80);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     expect(controller.getSnapshot('preview')).not.toEqual({ objects: [], hiddenIds: [], path: [] });
     send('down', 2, 180, 80);
     expect(controller.getSnapshot('preview')).toEqual({ objects: [], hiddenIds: [], path: [] });

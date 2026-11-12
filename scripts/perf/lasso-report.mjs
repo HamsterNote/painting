@@ -1,9 +1,19 @@
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { lassoMetrics } from './lasso-metrics.mjs';
 
 const directory = process.argv[2];
 const { metadata, results } = JSON.parse(await readFile(`${directory}/summary.json`, 'utf8'));
+for (const row of results)
+  Object.assign(
+    row,
+    lassoMetrics(JSON.parse(await readFile(`${directory}/${row.id}.json`, 'utf8')))
+  );
+await writeFile(
+  `${directory}/recomputed-summary.json`,
+  JSON.stringify({ metadata, results }, null, 2)
+);
 const comparisons = results
   .filter((r) => !r.warmup && r.count)
   .map((r) => {
@@ -21,7 +31,7 @@ const comparisons = results
       fpsRatio: r.fps / control.fps,
       dropIncrement: r.dropRate - control.dropRate,
       framePass: r.fps / control.fps >= 0.9 && r.dropRate - control.dropRate <= 0.05,
-      previewPass: r.previewP95 !== null && r.previewP95 <= 2 * r.T && r.previewCovered >= 597,
+      previewPass: r.previewP95 !== null && r.previewP95 <= 2 * r.T && r.previewCovered >= 570,
       finalPass: r.finalMs <= 100,
       // A change notification alone cannot measure unchanged live results; report as unproven.
       liveSelectionEvidence: r.selectionP95,

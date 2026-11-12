@@ -5,6 +5,7 @@ import { once } from 'node:events';
 import { createInterface } from 'node:readline';
 import os from 'node:os';
 import { lassoFixture, lassoTrajectory } from './lasso-fixture.mjs';
+import { lassoMetrics } from './lasso-metrics.mjs';
 
 const label = process.argv[2] ?? 'baseline';
 const engine = process.env.LASSO_BROWSER ?? 'chromium';
@@ -120,6 +121,7 @@ try {
               const c = window.__layeredEditor;
               const host = document.querySelector('[data-testid="layered-surface"]');
               const rect = host.getBoundingClientRect();
+              const actualFrames = [];
               const frames = [],
                 idle = [],
                 inputs = [],
@@ -159,11 +161,7 @@ try {
               const unsubPreview = c.subscribe('preview', () => {
                 const p = c.getSnapshot('preview').path;
                 if (!p.length) return;
-                const last = p[p.length - 1];
-                const index = points.findIndex(
-                  (point) =>
-                    Math.abs(point.x - last.x) < 0.001 && Math.abs(point.y - last.y) < 0.001
-                );
+                const index = Math.min(points.length - 1, Math.max(0, p.length - 2));
                 const published = performance.now();
                 requestAnimationFrame(() => {
                   const node = document.querySelector('[data-testid="layered-display"] polyline');
@@ -188,8 +186,10 @@ try {
                 );
               });
               const frame = (t) => {
+                if (!running) return;
                 frames.push(t);
-                if (running) requestAnimationFrame(frame);
+                actualFrames.push(performance.now());
+                requestAnimationFrame(frame);
               };
               const send = (phase, index, first = index) => {
                 current = index;
@@ -255,6 +255,7 @@ try {
               Element.prototype.querySelectorAll = originalQuery;
               return {
                 frames,
+                actualFrames,
                 idle,
                 inputs,
                 preview,
@@ -296,45 +297,13 @@ try {
             await cdp.detach();
           }
           await writeFile(`${output}/${id}.json`, JSON.stringify(raw));
-          const intervals = raw.frames.slice(1).map((t, i) => t - raw.frames[i]);
-          const idle = raw.idle
-            .slice(1)
-            .map((t, i) => t - raw.idle[i])
-            .sort((a, b) => a - b);
-          const T = idle[Math.floor(idle.length / 2)];
-          const duration = intervals.reduce((a, b) => a + b, 0);
-          const missing = intervals.reduce((sum, d) => sum + Math.max(0, Math.round(d / T) - 1), 0);
-          const percentile = (values) =>
-            values.sort((a, b) => a - b)[Math.floor(values.length * 0.95)] ?? null;
-          const previewLatencies = raw.inputs.flatMap((input) => {
-            const shown = raw.preview.find((p) => p.index >= input.index && p.domPoints);
-            return shown ? [shown.opportunity - input.start] : [];
-          });
           const summary = {
             id,
             scenario,
             count: n,
             round,
             warmup: round < 2,
-            T,
-            observed: intervals.length,
-            duration,
-            missing,
-            fps: (intervals.length * 1000) / duration,
-            dropRate: missing / (intervals.length + missing),
-            previewP95: percentile(previewLatencies),
-            previewCovered: previewLatencies.length,
-            selectionP95: percentile(
-              raw.selection
-                .filter((s) => raw.inputs.some((i) => i.index === s.index))
-                .map((s) => s.opportunity - raw.inputs.find((i) => i.index === s.index).start)
-            ),
-            beginMs: raw.down.end - raw.down.start,
-            endMs: raw.up.end - raw.up.start,
-            finalMs: raw.finalOpportunity - raw.up.start,
-            renders: raw.renders,
-            scanCount: raw.scans.length,
-            unchangedDocument: raw.unchangedDocument,
+            ...lassoMetrics(raw),
           };
           results.push(summary);
           await writeFile(`${output}/summary.json`, JSON.stringify({ metadata, results }, null, 2));
