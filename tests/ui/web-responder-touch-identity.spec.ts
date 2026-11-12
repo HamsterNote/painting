@@ -113,7 +113,7 @@ async function open(page: Page, diagnostics: boolean, mode: string, query = '') 
 async function visibleState(page: Page) {
   return page.evaluate(() => ({
     viewport: document
-      .querySelector('[data-testid="layered-display"] > g')
+      .querySelector('[data-testid="layered-display"] > [data-testid="layered-history-viewport"]')
       ?.getAttribute('transform'),
     objects: document.querySelectorAll('[data-testid="layered-display"] [data-object-id]').length,
     undo: !(document.querySelector('[aria-label="撤销"]') as HTMLButtonElement).disabled,

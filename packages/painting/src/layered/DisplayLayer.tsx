@@ -136,6 +136,7 @@ export function DisplayLayer(props: Parameters<typeof HistoryDisplay>[0]) {
     >
       <HistoryDisplay {...props} />
       <g
+        data-testid="layered-preview-viewport"
         transform={`matrix(${viewport.scale} 0 0 ${viewport.scale} ${viewport.tx} ${viewport.ty})`}
       >
         <PathPreview controller={props.controller} />
@@ -202,6 +203,7 @@ const HistoryDisplay = memo(function HistoryDisplay({
   }, [document, cache, presentation, preview, historyReadyDelayMs]);
   return (
     <g
+      data-testid="layered-history-viewport"
       ref={root}
       transform={`matrix(${viewport.scale} 0 0 ${viewport.scale} ${viewport.tx} ${viewport.ty})`}
     >
