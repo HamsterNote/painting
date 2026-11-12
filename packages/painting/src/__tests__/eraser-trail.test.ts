@@ -70,6 +70,34 @@ test('release and repeated stationary samples never restart a point lifetime', (
   trail.destroy();
 });
 
+test.each([true, false])(
+  'resuming after a 5s hold draws a complete fresh segment (stationary sample=%s)',
+  (stationarySample) => {
+    const host = document.createElement('div');
+    const trail = createEraserTrail(host, makeLayeredController());
+    trail.begin({ x: 0, y: 100, time: 0 });
+    jest.advanceTimersByTime(5000);
+    if (stationarySample) trail.append([{ x: 0, y: 100, time: 5000 }]);
+    expect(host.querySelector('svg')).toBeNull();
+    expect(jest.getTimerCount()).toBe(0);
+    jest.advanceTimersByTime(10);
+    trail.append([{ x: 100, y: 100, time: 5010 }]);
+    expect(host.querySelector('path')?.getAttribute('d')).toBe('M 0 100 L 100 100');
+    const intensity = () =>
+      Number(host.querySelector('stop')!.getAttribute('stop-color')!.match(/\d+/)![0]);
+    expect(intensity()).toBeGreaterThanOrEqual(252);
+    jest.advanceTimersByTime(500);
+    expect(host.querySelector('path')?.getAttribute('d')).toBe('M 0 100 L 100 100');
+    expect(intensity()).toBeGreaterThan(120);
+    expect(intensity()).toBeLessThan(140);
+    trail.finish(() => {});
+    jest.advanceTimersByTime(510);
+    expect(host.querySelector('svg')).toBeNull();
+    expect(jest.getTimerCount()).toBe(0);
+    trail.destroy();
+  }
+);
+
 test('separate gestures keep their own ages and never connect across the gap', () => {
   const host = document.createElement('div');
   const trail = createEraserTrail(host, makeLayeredController());

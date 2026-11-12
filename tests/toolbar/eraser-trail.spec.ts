@@ -143,3 +143,33 @@ test('different-age crossings use the newer coverage across separate gestures', 
   await page.clock.runFor(400);
   await expect(page.locator('[data-eraser-trail]')).toHaveCount(0);
 });
+
+for (const stationarySample of [true, false]) {
+  test(`resuming after a five-second hold keeps the whole new segment (stationary sample=${stationarySample})`, async ({
+    page,
+  }) => {
+    await send(page, 'down', 20, 100);
+    await page.clock.runFor(5000);
+    if (stationarySample) await send(page, 'move', 20, 100);
+    await expect(page.locator('[data-eraser-trail]')).toHaveCount(0);
+    await page.clock.runFor(10);
+    await send(page, 'move', 120, 100);
+    await expect(page.locator('[data-eraser-trail] path')).toHaveAttribute(
+      'd',
+      'M 20 100 L 120 100'
+    );
+    const positions = [
+      [30, 100],
+      [70, 100],
+      [110, 100],
+    ];
+    expect((await alphaAt(page, positions)).every((alpha) => alpha! >= 113)).toBe(true);
+    await page.clock.runFor(500);
+    expect((await alphaAt(page, positions)).every((alpha) => alpha! >= 56 && alpha! <= 60)).toBe(
+      true
+    );
+    await send(page, 'up', 120, 100);
+    await page.clock.runFor(510);
+    await expect(page.locator('[data-eraser-trail]')).toHaveCount(0);
+  });
+}

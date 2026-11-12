@@ -24,7 +24,7 @@ export function createEraserTrail(host: HTMLElement, controller: LayeredEditorCo
   let defs: SVGDefsElement | undefined;
   let group: SVGGElement | undefined;
   let segments: Segment[] = [];
-  let last: EraserTrailPoint | undefined;
+  let anchor: EraserTrailPoint | undefined;
   let frame: number | undefined;
   let tracking = false;
   let committing = false;
@@ -48,7 +48,7 @@ export function createEraserTrail(host: HTMLElement, controller: LayeredEditorCo
     if (frame !== undefined) view.cancelAnimationFrame(frame);
     frame = undefined;
     segments = [];
-    last = undefined;
+    anchor = undefined;
     tracking = false;
     removeOverlay();
   }
@@ -109,10 +109,19 @@ export function createEraserTrail(host: HTMLElement, controller: LayeredEditorCo
   function append(points: readonly EraserTrailPoint[]) {
     if (!tracking || !points.length) return;
     for (const point of points) {
-      // A stationary move/up must not renew the age of an existing point.
-      if (last && point.x === last.x && point.y === last.y) continue;
+      // The connection anchor follows every input sample; visible segment endpoints
+      // stay immutable, so stationary input cannot renew the existing trail.
+      const previous = anchor;
+      anchor = point;
+      if (previous && point.x === previous.x && point.y === previous.y) continue;
       if (!overlay) createOverlay();
-      const from = last ?? point;
+      // Browsers need not send moves while held still. After a gap longer than
+      // the trail lifetime, the newly traversed segment starts now, not in the past.
+      const from = previous
+        ? point.time - previous.time >= LIFETIME
+          ? { ...previous, time: point.time }
+          : previous
+        : point;
       const gradientId = `${id}-${serial++}`;
       const gradient = element('linearGradient', {
         id: gradientId,
@@ -137,7 +146,6 @@ export function createEraserTrail(host: HTMLElement, controller: LayeredEditorCo
       defs!.append(gradient);
       group!.append(path);
       segments.push({ from, to: point, path, gradient, start, end });
-      last = point;
     }
     render(view.performance.now());
     if (segments.length && frame === undefined) frame = view.requestAnimationFrame(tick);
@@ -157,7 +165,7 @@ export function createEraserTrail(host: HTMLElement, controller: LayeredEditorCo
   ];
   return {
     begin(point: EraserTrailPoint) {
-      last = undefined;
+      anchor = undefined;
       tracking = true;
       append([point]);
     },
@@ -170,7 +178,7 @@ export function createEraserTrail(host: HTMLElement, controller: LayeredEditorCo
       } finally {
         committing = false;
         tracking = false;
-        last = undefined;
+        anchor = undefined;
       }
     },
     clear,
