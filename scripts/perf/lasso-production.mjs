@@ -49,7 +49,8 @@ try {
     viewport: { width: 1280, height: 800 },
     dpr: 1,
     seed: 245,
-    input: 'synthetic pen PointerEvent; 600 points / 5s; independent setTimeout, never rAF-paced',
+    input:
+      'synthetic pen PointerEvent; 600 points / 5s; independent setTimeout; overdue samples coalesced; never rAF-paced',
     physicalPresentation: false,
   };
   await writeFile(`${output}/environment.json`, JSON.stringify(metadata, null, 2));
@@ -185,21 +186,28 @@ try {
                 frames.push(t);
                 if (running) requestAnimationFrame(frame);
               };
-              const send = (phase, index) => {
+              const send = (phase, index, first = index) => {
                 current = index;
                 const start = performance.now();
-                host.dispatchEvent(
+                const eventAt = (i) =>
                   new PointerEvent(`pointer${phase}`, {
                     bubbles: true,
                     pointerId: 245,
                     pointerType: 'pen',
-                    clientX: rect.x + points[index].x,
-                    clientY: rect.y + points[index].y,
+                    clientX: rect.x + points[i].x,
+                    clientY: rect.y + points[i].y,
                     button: 0,
                     buttons: phase === 'up' ? 0 : 1,
                     pressure: phase === 'up' ? 0 : 0.5,
-                  })
-                );
+                  });
+                const event = eventAt(index);
+                if (phase === 'move') {
+                  const batch = Array.from({ length: index - first + 1 }, (_, j) =>
+                    eventAt(first + j)
+                  );
+                  Object.defineProperty(event, 'getCoalescedEvents', { value: () => batch });
+                }
+                host.dispatchEvent(event);
                 return { index, phase, start, end: performance.now() };
               };
               const initialDocument = c.getSnapshot('document');
@@ -207,13 +215,27 @@ try {
               const down = send('down', 0);
               const start = performance.now();
               requestAnimationFrame(frame);
-              // Absolute schedule: if the main thread stalls, retain each sample and its lateness.
-              for (let i = 1; i < points.length; i++) {
-                const due = start + (i * 5000) / 599;
+              // A fixed 120Hz sample clock, independent of rAF. Like a busy browser's
+              // coalesced pointer channel, deliver every overdue sample in one batch.
+              let next = 1;
+              while (next < points.length) {
+                const due = start + (next * 5000) / 599;
                 await new Promise((resolve) =>
                   setTimeout(resolve, Math.max(0, due - performance.now()))
                 );
-                inputs.push({ due, ...send('move', i) });
+                const last = Math.min(
+                  599,
+                  Math.max(next, Math.floor(((performance.now() - start) * 599) / 5000))
+                );
+                const delivery = send('move', last, next);
+                for (let i = next; i <= last; i++)
+                  inputs.push({
+                    ...delivery,
+                    index: i,
+                    batchLast: last,
+                    due: start + (i * 5000) / 599,
+                  });
+                next = last + 1;
               }
               const drawingEnd = performance.now();
               running = false;
