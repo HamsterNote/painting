@@ -1,0 +1,346 @@
+import { chromium, webkit } from '@playwright/test';
+import { spawn, execFileSync } from 'node:child_process';
+import { mkdir, writeFile, cp } from 'node:fs/promises';
+import { once } from 'node:events';
+import { createInterface } from 'node:readline';
+import os from 'node:os';
+import { lassoFixture, lassoTrajectory } from './lasso-fixture.mjs';
+import { lassoMetrics } from './lasso-metrics.mjs';
+
+const label = process.argv[2] ?? 'baseline';
+const engine = process.env.LASSO_BROWSER ?? 'chromium';
+const output = process.env.LASSO_OUTPUT ?? `artifacts/research/lasso/${label}-${engine}`;
+const exportRoot = process.env.LASSO_EXPORT_ROOT ?? 'apps/playground/dist';
+await mkdir(output, { recursive: true });
+if (process.env.LASSO_COPY_BUNDLES !== '0')
+  await cp(`${exportRoot}/_expo/static/js/web`, `${output}/bundles`, { recursive: true });
+const server = spawn(
+  process.execPath,
+  ['scripts/perf/static-spa-server.mjs', '--root', exportRoot],
+  {
+    stdio: ['ignore', 'pipe', 'inherit'],
+  }
+);
+let browser;
+try {
+  const lines = createInterface({ input: server.stdout });
+  const [line] = await once(lines, 'line');
+  const { port } = JSON.parse(line);
+  lines.close();
+  browser = await (engine === 'webkit' ? webkit : chromium).launch({
+    headless: true,
+    args: engine === 'chromium' ? ['--no-sandbox'] : [],
+  });
+  const abort = () => {
+    void browser.close();
+  };
+  process.once('SIGTERM', abort);
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 800 },
+    deviceScaleFactor: 1,
+  });
+  const page = await context.newPage();
+  if (process.env.LASSO_QUERY_MARKS === '1')
+    await page.addInitScript(() => {
+      window.__paintingTestLassoPerf = (detail) => {
+        const mark = performance.mark('painting:test:lasso', { detail });
+        if (detail.event === 'selection-submit')
+          requestAnimationFrame(() =>
+            performance.mark('painting:test:lasso', {
+              detail: { ...detail, event: 'selection-opportunity', submittedAt: mark.startTime },
+            })
+          );
+      };
+    });
+  page.on('pageerror', (error) => console.error('PAGE ERROR', error.message));
+  const metadata = {
+    label,
+    engine,
+    browser: browser.version(),
+    platform: os.platform(),
+    release: os.release(),
+    cpu: os.cpus()[0].model,
+    cores: os.cpus().length,
+    node: process.version,
+    sha: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+    exportRoot,
+    productSha: process.env.LASSO_PRODUCT_SHA ?? null,
+    diff: execFileSync('git', ['diff', '--stat'], { encoding: 'utf8' }),
+    command: process.argv.join(' '),
+    viewport: { width: 1280, height: 800 },
+    dpr: 1,
+    seed: 245,
+    input:
+      'synthetic pen PointerEvent; 600 points / 5s; independent setTimeout; overdue samples coalesced; never rAF-paced',
+    physicalPresentation: false,
+    queryMarks: process.env.LASSO_QUERY_MARKS === '1',
+  };
+  await writeFile(`${output}/environment.json`, JSON.stringify(metadata, null, 2));
+  const results = [];
+  const scenarios = process.env.LASSO_SCENARIOS?.split(',') ?? ['local', 'dense', 'mixed'];
+  const counts = process.env.LASSO_COUNTS?.split(',').map(Number) ?? [100, 500, 1000];
+  const rounds = Number(process.env.LASSO_ROUNDS ?? 7);
+  const roundOffset = Number(process.env.LASSO_ROUND_OFFSET ?? 0);
+  for (const scenario of scenarios) {
+    const populations = scenario === 'mixed' ? [500] : counts;
+    for (const count of populations)
+      for (let round = roundOffset; round < roundOffset + rounds; round++) {
+        // Alternate empty/populated order, keeping every matching empty control.
+        for (const n of round % 2 ? [count, 0] : [0, count]) {
+          const id = `${scenario}-${n}-pair${count}-r${round}`;
+          console.error('Starting', id);
+          await page.goto(
+            `http://127.0.0.1:${port}/layered-editor?diagnostics=1&fixture=lasso&lassoCount=${n}&lassoScenario=${n ? scenario : 'empty'}`
+          );
+          await page.waitForFunction(() => Boolean(window.__layeredEditor));
+          const fixture = lassoFixture(n, n ? scenario : 'empty');
+          await page.evaluate(async (fixture) => {
+            const c = window.__layeredEditor;
+            c.setTool('lasso');
+            await document.fonts.ready;
+            await Promise.all(
+              fixture.objects
+                .filter((o) => o.kind === 'image')
+                .map(
+                  (o) =>
+                    new Promise((resolve, reject) => {
+                      const image = new Image();
+                      image.onload = resolve;
+                      image.onerror = reject;
+                      image.src = o.src;
+                    })
+                )
+            );
+            await new Promise((resolve) =>
+              requestAnimationFrame(() => requestAnimationFrame(resolve))
+            );
+            if (document.querySelectorAll('[data-object-id]').length !== fixture.objects.length)
+              throw new Error('fixture not mounted');
+          }, fixture);
+          console.error('Fixture ready', id);
+          let cdp;
+          const traceEvents = [];
+          const profile =
+            process.env.LASSO_PROFILE !== '0' &&
+            engine === 'chromium' &&
+            round === roundOffset + rounds - 1;
+          if (profile) {
+            cdp = await context.newCDPSession(page);
+            cdp.on('Tracing.dataCollected', ({ value }) => traceEvents.push(...value));
+            await cdp.send('Profiler.enable');
+            await cdp.send('Profiler.setSamplingInterval', { interval: 1000 });
+            await cdp.send('Profiler.start');
+            await cdp.send('Tracing.start', {
+              categories:
+                'devtools.timeline,v8.execute,blink.user_timing,disabled-by-default-devtools.timeline',
+              transferMode: 'ReportEvents',
+            });
+          }
+          const raw = await Promise.race([
+            page.evaluate(async (points) => {
+              const c = window.__layeredEditor;
+              const host = document.querySelector('[data-testid="layered-surface"]');
+              const rect = host.getBoundingClientRect();
+              const actualFrames = [];
+              const frames = [],
+                idle = [],
+                inputs = [],
+                preview = [],
+                selection = [],
+                methods = [],
+                scans = [];
+              let running = true,
+                current = -1;
+              const idleFrame = (t) => {
+                idle.push(t);
+                if (idle.length < 40) requestAnimationFrame(idleFrame);
+              };
+              requestAnimationFrame(idleFrame);
+              while (idle.length < 40) await new Promise((r) => setTimeout(r, 20));
+              const restorers = [];
+              for (const name of ['setSelection', 'setPreview']) {
+                const original = c[name];
+                c[name] = function (...args) {
+                  const start = performance.now();
+                  const result = original.apply(this, args);
+                  methods.push({
+                    name,
+                    start,
+                    duration: performance.now() - start,
+                    index: current,
+                  });
+                  return result;
+                };
+                restorers.push(() => {
+                  c[name] = original;
+                });
+              }
+              const originalQuery = Element.prototype.querySelectorAll;
+              Element.prototype.querySelectorAll = function (selector) {
+                const start = performance.now();
+                const result = originalQuery.call(this, selector);
+                if (selector === '[data-object-id]')
+                  scans.push({ start, duration: performance.now() - start, count: result.length });
+                return result;
+              };
+              const unsubPreview = c.subscribe('preview', () => {
+                const p = c.getSnapshot('preview').path;
+                if (!p.length) return;
+                const index = Math.min(points.length - 1, Math.max(0, p.length - 2));
+                const published = performance.now();
+                requestAnimationFrame(() => {
+                  const node = document.querySelector('[data-testid="layered-display"] polyline');
+                  preview.push({
+                    index,
+                    published,
+                    opportunity: performance.now(),
+                    domPoints: node?.getAttribute('points') ?? null,
+                  });
+                });
+              });
+              const unsubSelection = c.subscribe('selection', () => {
+                const published = performance.now(),
+                  index = current;
+                requestAnimationFrame(() =>
+                  selection.push({
+                    index,
+                    published,
+                    opportunity: performance.now(),
+                    ids: [...c.getSnapshot('selection')],
+                  })
+                );
+              });
+              const frame = (t) => {
+                if (!running) return;
+                frames.push(t);
+                actualFrames.push(performance.now());
+                requestAnimationFrame(frame);
+              };
+              const send = (phase, index, first = index) => {
+                current = index;
+                const start = performance.now();
+                const eventAt = (i) =>
+                  new PointerEvent(`pointer${phase}`, {
+                    bubbles: true,
+                    pointerId: 245,
+                    pointerType: 'pen',
+                    clientX: rect.x + points[i].x,
+                    clientY: rect.y + points[i].y,
+                    button: 0,
+                    buttons: phase === 'up' ? 0 : 1,
+                    pressure: phase === 'up' ? 0 : 0.5,
+                  });
+                const event = eventAt(index);
+                if (phase === 'move') {
+                  const batch = Array.from({ length: index - first + 1 }, (_, j) =>
+                    eventAt(first + j)
+                  );
+                  Object.defineProperty(event, 'getCoalescedEvents', { value: () => batch });
+                }
+                host.dispatchEvent(event);
+                return { index, phase, start, end: performance.now() };
+              };
+              const initialDocument = c.getSnapshot('document');
+              const renderStart = { ...window.__layeredRenders };
+              const down = send('down', 0);
+              const start = performance.now();
+              requestAnimationFrame(frame);
+              // A fixed 120Hz sample clock, independent of rAF. Like a busy browser's
+              // coalesced pointer channel, deliver every overdue sample in one batch.
+              let next = 1;
+              while (next < points.length) {
+                const due = start + (next * 5000) / 599;
+                await new Promise((resolve) =>
+                  setTimeout(resolve, Math.max(0, due - performance.now()))
+                );
+                const last = Math.min(
+                  599,
+                  Math.max(next, Math.floor(((performance.now() - start) * 599) / 5000))
+                );
+                const delivery = send('move', last, next);
+                for (let i = next; i <= last; i++)
+                  inputs.push({
+                    ...delivery,
+                    index: i,
+                    batchLast: last,
+                    due: start + (i * 5000) / 599,
+                  });
+                next = last + 1;
+              }
+              const drawingEnd = performance.now();
+              running = false;
+              const up = send('up', 599);
+              await new Promise((resolve) =>
+                requestAnimationFrame(() => requestAnimationFrame(resolve))
+              );
+              const finalOpportunity = performance.now();
+              unsubPreview();
+              unsubSelection();
+              restorers.forEach((restore) => restore());
+              Element.prototype.querySelectorAll = originalQuery;
+              return {
+                frames,
+                actualFrames,
+                idle,
+                inputs,
+                preview,
+                selection,
+                methods,
+                scans,
+                queryMarks: performance
+                  .getEntriesByName('painting:test:lasso')
+                  .map(({ startTime, detail }) => ({ time: startTime, ...detail })),
+                down,
+                up,
+                start,
+                drawingEnd,
+                finalOpportunity,
+                renders: {
+                  display: window.__layeredRenders.display - renderStart.display,
+                  objects: window.__layeredRenders.objects - renderStart.objects,
+                },
+                selected: c.getSnapshot('selection'),
+                unchangedDocument: c.getSnapshot('document') === initialDocument,
+                objectCount: initialDocument.objects.length,
+                sampleCounts: initialDocument.objects
+                  .filter((o) => o.kind === 'freehand')
+                  .map((o) => o.samples.length),
+              };
+            }, lassoTrajectory(scenario)),
+            new Promise((_, reject) => {
+              const timer = setTimeout(
+                () => reject(new Error(`Measurement timed out: ${id}`)),
+                180000
+              );
+              timer.unref();
+            }),
+          ]);
+          if (profile) {
+            const { profile: cpu } = await cdp.send('Profiler.stop');
+            const complete = new Promise((resolve) => cdp.once('Tracing.tracingComplete', resolve));
+            await cdp.send('Tracing.end');
+            await complete;
+            await writeFile(`${output}/${id}.cpuprofile`, JSON.stringify(cpu));
+            await writeFile(`${output}/${id}.trace.json`, JSON.stringify({ traceEvents }));
+            await cdp.detach();
+          }
+          await writeFile(`${output}/${id}.json`, JSON.stringify(raw));
+          const summary = {
+            id,
+            scenario,
+            count: n,
+            round,
+            warmup: round < 2,
+            ...lassoMetrics(raw),
+          };
+          results.push(summary);
+          await writeFile(`${output}/summary.json`, JSON.stringify({ metadata, results }, null, 2));
+          console.log(JSON.stringify(summary));
+        }
+      }
+  }
+} finally {
+  await browser?.close();
+  server.kill('SIGTERM');
+  await once(server, 'exit');
+}

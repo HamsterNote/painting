@@ -17,6 +17,7 @@ export default [
       'coverage/',
       'playwright-report/',
       'test-results/',
+      'artifacts/research/',
       '.vscode/',
       '.idea/',
       '.sisyphus/',

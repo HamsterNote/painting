@@ -1,6 +1,10 @@
 import type { GetClientToLocal } from '../geometry/pageCoordinates';
 import type { LayeredEditorController } from '../core/layeredEditorController';
-import { createLayeredToolSession, type SelectionOperation } from '../core/layeredToolSession';
+import {
+  createLayeredToolSession,
+  type SelectionOperation,
+  type LassoPerformanceEvent,
+} from '../core/layeredToolSession';
 import type { Point } from '../model/document';
 import type { WebFreehandPolicy } from '../input/web/freehandWebAdapter';
 import { createEraserTrail } from './eraserTrail';
@@ -32,7 +36,48 @@ export function createSemanticWebAdapter(options: {
   const view = host.ownerDocument.defaultView!;
   const zoomFeedback = createZoomFeedback(controller, view);
   const eraserTrail = createEraserTrail(host, controller);
-  const engine = createLayeredToolSession(controller, options.allocateId);
+  // Message tasks yield to input/paint without nested setTimeout's 4ms clamp.
+  const workChannel =
+    typeof view.MessageChannel === 'function' ? new view.MessageChannel() : undefined;
+  const pendingWork = new Map<number, () => void>();
+  let nextWork = 0;
+  if (workChannel)
+    workChannel.port1.onmessage = ({ data }: MessageEvent<number>) => {
+      const callback = pendingWork.get(data);
+      pendingWork.delete(data);
+      callback?.();
+    };
+  const perfView = view as Window & {
+    __paintingTestLassoPerf?: (event: LassoPerformanceEvent) => void;
+  };
+  const engine = createLayeredToolSession(controller, options.allocateId, {
+    // Set by the performance runner before page load; absent in normal use.
+    onPerf:
+      perfView.__paintingTestLassoPerf ??
+      (new URLSearchParams(view.location.search).get('lassoPerf') === '1'
+        ? (event) => perfView.__paintingTestLassoPerf?.(event)
+        : undefined),
+    scheduler: {
+      frame: (callback) => {
+        const id = view.requestAnimationFrame(callback);
+        return () => view.cancelAnimationFrame(id);
+      },
+      work: (callback) => {
+        if (workChannel) {
+          const id = ++nextWork;
+          pendingWork.set(id, callback);
+          workChannel.port2.postMessage(id);
+          return () => {
+            pendingWork.delete(id);
+          };
+        }
+        const id = view.setTimeout(callback, 0);
+        return () => view.clearTimeout(id);
+      },
+      now: () => view.performance.now(),
+    },
+    onError: options.onError,
+  });
   let owner: { id: number; source: string; start: Point; pan: boolean } | undefined;
   let snapshot = controller.getSnapshot('viewport');
   const screen = (event: PointerEvent): Point => {
@@ -273,6 +318,7 @@ export function createSemanticWebAdapter(options: {
     view.addEventListener('pointercancel', pointerCancel);
   }
   view.addEventListener('blur', cancel);
+  view.addEventListener('lostpointercapture', pointerCancel);
   view.addEventListener('pagehide', cancel);
   host.ownerDocument.addEventListener('visibilitychange', hidden);
   host.addEventListener('pointermove', hover);
@@ -290,6 +336,9 @@ export function createSemanticWebAdapter(options: {
     destroy() {
       cancel();
       engine.destroy();
+      pendingWork.clear();
+      workChannel?.port1.close();
+      workChannel?.port2.close();
       eraserTrail.destroy();
       unsubscribe();
       host.removeEventListener('pointerdown', down);
@@ -300,6 +349,7 @@ export function createSemanticWebAdapter(options: {
       view.removeEventListener('pointerup', up);
       view.removeEventListener('pointercancel', pointerCancel);
       view.removeEventListener('blur', cancel);
+      view.removeEventListener('lostpointercapture', pointerCancel);
       view.removeEventListener('pagehide', cancel);
       view.removeEventListener('keydown', keyDown);
       host.ownerDocument.removeEventListener('visibilitychange', hidden);

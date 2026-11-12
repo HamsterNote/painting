@@ -411,10 +411,14 @@ test('paper, ruler, touch pinch and minimap use the same viewport', async ({ pag
   expect(
     await page.evaluate(() => window.__layeredEditor!.getSnapshot('viewport').viewport)
   ).toEqual({ scale: 2, tx: initial.tx * 2 - 100, ty: initial.ty * 2 - 100 });
-  await expect(page.getByTestId('layered-display').locator(':scope > g')).toHaveAttribute(
-    'transform',
-    `matrix(2 0 0 2 ${initial.tx * 2 - 100} ${initial.ty * 2 - 100})`
-  );
+  for (const layer of ['layered-history-viewport', 'layered-preview-viewport']) {
+    const viewport = page.getByTestId('layered-display').getByTestId(layer);
+    await expect(viewport).toHaveCount(1);
+    await expect(viewport).toHaveAttribute(
+      'transform',
+      `matrix(2 0 0 2 ${initial.tx * 2 - 100} ${initial.ty * 2 - 100})`
+    );
+  }
   await expect(page.getByTestId('layered-paper').locator('g')).toHaveAttribute(
     'transform',
     `matrix(2 0 0 2 ${initial.tx * 2 - 100} ${initial.ty * 2 - 100})`
