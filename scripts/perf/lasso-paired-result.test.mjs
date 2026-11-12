@@ -45,3 +45,16 @@ test('nonfinite or absent controls cannot enter the retained cohort', () => {
     })
   );
 });
+
+test('never excludes a pair because the populated drawing itself is slow', () => {
+  const baseline = sample(60);
+  baseline[1].fps = 0;
+  const result = pairedLassoResult({
+    scenario: 'local',
+    count: 100,
+    round: 2,
+    samples: { baseline, optimized: sample(60) },
+  });
+  assert.equal(result.retained, true);
+  assert.equal(result.variants.baseline.drawing.fps, 0);
+});
