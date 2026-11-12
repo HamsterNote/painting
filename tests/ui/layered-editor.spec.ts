@@ -575,3 +575,80 @@ test('shape dash and freehand pressure settings are isolated', async ({ page }) 
   await openToolbarSettings(page);
   await expect(page.getByLabel('形状线型', { exact: true })).toHaveValue('dash');
 });
+
+for (const source of ['mouse', 'touch'] as const) {
+  test.describe(`selection frame ${source}`, () => {
+    test.use({ hasTouch: true });
+    test('selection frame priority moves empty space, outer band and covered low layer', async ({
+      page,
+    }) => {
+      await openEditor(page);
+      await selectToolbarTool(page, '椭圆');
+      await pointer(page, 'down', 100, 100);
+      await pointer(page, 'up', 300, 300);
+      await selectToolbarTool(page, '矩形');
+      await pointer(page, 'down', 160, 150);
+      await pointer(page, 'up', 240, 250);
+      await selectToolbarTool(page, '选择');
+      const surface = page.getByTestId('layered-surface');
+      const box = (await surface.boundingBox())!;
+      await page.mouse.click(box.x + 100, box.y + 200);
+      const before = await page.evaluate(
+        () => window.__layeredEditor!.getSnapshot('document').objects
+      );
+      expect(await page.evaluate(() => window.__layeredEditor!.getSnapshot('selection'))).toEqual([
+        before[0].objectId,
+      ]);
+      if (source === 'touch')
+        await page.evaluate(() => window.__layeredEditor!.setInputMode('finger'));
+      const cdp = await page.context().newCDPSession(page);
+      let dx = 0,
+        dy = 0;
+      for (const start of [
+        { x: 200, y: 200 },
+        { x: 303, y: 200 },
+        { x: 130, y: 150 },
+      ]) {
+        const x = box.x + start.x + dx,
+          y = box.y + start.y + dy;
+        if (source === 'mouse') {
+          await page.mouse.move(x, y);
+          await page.mouse.down();
+          await page.mouse.move(x + 20, y + 10);
+          await page.mouse.move(x + 350, y + 30);
+          await page.mouse.up();
+        } else {
+          await cdp.send('Input.dispatchTouchEvent', {
+            type: 'touchStart',
+            touchPoints: [{ x, y }],
+          });
+          await cdp.send('Input.dispatchTouchEvent', {
+            type: 'touchMove',
+            touchPoints: [{ x: x + 20, y: y + 10 }],
+          });
+          await cdp.send('Input.dispatchTouchEvent', {
+            type: 'touchMove',
+            touchPoints: [{ x: x + 350, y: y + 30 }],
+          });
+          await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        }
+        dx += 350;
+        dy += 30;
+        const after = await page.evaluate(
+          () => window.__layeredEditor!.getSnapshot('document').objects
+        );
+        expect(after[0].transform.tx).toBeCloseTo(dx);
+        expect(after[0].transform.ty).toBeCloseTo(dy);
+        expect(after[1]).toEqual(before[1]);
+        expect(after.map((o) => o.objectId)).toEqual(before.map((o) => o.objectId));
+        await page.getByRole('button', { name: '撤销', exact: true }).click();
+        expect(
+          (await page.evaluate(() => window.__layeredEditor!.getSnapshot('document').objects))[0]
+            .transform.tx
+        ).toBeCloseTo(dx - 350);
+        await page.getByRole('button', { name: '重做', exact: true }).click();
+      }
+      await cdp.detach();
+    });
+  });
+}

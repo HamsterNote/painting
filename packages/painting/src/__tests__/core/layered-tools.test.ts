@@ -228,3 +228,38 @@ test.each(['empty', 'degenerate', 'cancel'] as const)(
     session.destroy();
   }
 );
+
+test.each([false, true])(
+  'frame priority locks sparse low-layer selection, multiselect=%s',
+  (multi) => {
+    const a = {
+      ...layeredRect('a'),
+      shapeType: 'ellipse' as const,
+      style: { color: '#000', width: 2, opacity: 1 },
+    };
+    const b = layeredRect('b');
+    const c = { ...layeredRect('c'), transform: { a: 1, b: 0, c: 0, d: 1, tx: 300, ty: 0 } };
+    const controller = makeLayeredController([a, b, c]);
+    controller.setTool('selection');
+    controller.setSelection(multi ? ['a', 'c'] : ['a']);
+    const session = createLayeredToolSession(controller, () => 'unused');
+    const before = controller.getSnapshot('document');
+    session.begin({ x: multi ? 200 : 30, y: 50 }, 'move', true, 'b');
+    for (const x of [70, 350, 600]) session.update([{ x, y: 80 }]);
+    expect(controller.getSnapshot('document')).toBe(before);
+    expect(controller.getSnapshot('history').canUndo).toBe(false);
+    session.end();
+    const after = controller.getSnapshot('document');
+    expect(after.objects.map((o) => o.objectId)).toEqual(['a', 'b', 'c']);
+    expect(after.objects[1]).toEqual(b);
+    expect(after.objects[0].transform.tx).toBe(multi ? 400 : 570);
+    expect(after.objects[2].transform.tx).toBe(multi ? 700 : 300);
+    expect(controller.getSnapshot('selection')).toEqual(multi ? ['a', 'c'] : ['a']);
+    controller.undo();
+    expect(controller.getSnapshot('document').objects).toEqual(before.objects);
+    expect(controller.getSnapshot('history').canUndo).toBe(false);
+    controller.redo();
+    expect(controller.getSnapshot('document').objects).toEqual(after.objects);
+    session.destroy();
+  }
+);

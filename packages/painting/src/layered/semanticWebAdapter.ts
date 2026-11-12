@@ -2,7 +2,6 @@ import type { GetClientToLocal } from '../geometry/pageCoordinates';
 import type { LayeredEditorController } from '../core/layeredEditorController';
 import {
   createLayeredToolSession,
-  type SelectionOperation,
   type LassoPerformanceEvent,
 } from '../core/layeredToolSession';
 import type { Point } from '../model/document';
@@ -135,16 +134,12 @@ export function createSemanticWebAdapter(options: {
       event.preventDefault();
       return;
     }
-    const handle =
-      event.target instanceof Element ? event.target.closest('[data-selection-operation]') : null;
-    const operation = (handle?.getAttribute('data-selection-operation') ??
-      'move') as SelectionOperation;
     safely(() => {
       if (
         tool !== 'pan' &&
         !engine.begin(
           world(point),
-          operation,
+          'move',
           event.shiftKey,
           resolveObjectId(event.target) ?? undefined
         )
@@ -311,6 +306,15 @@ export function createSemanticWebAdapter(options: {
   const unsubscribe = controller.subscribe('tools', () => {
     if (owner) cancel();
   });
+  const stopDocument = controller.subscribe('document', cancel);
+  let inputMode = controller.getSnapshot('input').mode;
+  const stopInput = controller.subscribe('input', () => {
+    const next = controller.getSnapshot('input').mode;
+    if (next !== inputMode) {
+      inputMode = next;
+      cancel();
+    }
+  });
   if (options.listen !== false) {
     host.addEventListener('pointerdown', down);
     view.addEventListener('pointermove', move);
@@ -341,6 +345,8 @@ export function createSemanticWebAdapter(options: {
       workChannel?.port2.close();
       eraserTrail.destroy();
       unsubscribe();
+      stopDocument();
+      stopInput();
       host.removeEventListener('pointerdown', down);
       host.removeEventListener('wheel', wheel);
       host.removeEventListener('pointermove', hover);
