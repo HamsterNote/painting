@@ -17,6 +17,13 @@ for (const file of await readdir(directory)) {
   const profile = JSON.parse(await readFile(`${directory}/${file}`, 'utf8'));
   const trace = JSON.parse(await readFile(`${directory}/${id}.trace.json`, 'utf8'));
   const nodes = new Map(profile.nodes.map((node) => [node.id, node]));
+  let clock = profile.startTime;
+  const samples = profile.samples
+    .map((node, i) => {
+      clock += profile.timeDeltas[i];
+      return { timestamp: clock, node };
+    })
+    .sort((a, b) => a.timestamp - b.timestamp);
   const locate = (node) => {
     const frame = node.callFrame;
     const original =
@@ -35,22 +42,25 @@ for (const file of await readdir(directory)) {
     const self = new Map();
     let timestamp = profile.startTime;
     let sampledMs = 0;
-    for (let i = 0; i < profile.samples.length; i++) {
-      const next = timestamp + profile.timeDeltas[i];
+    for (const sample of samples) {
+      const next = sample.timestamp;
       const overlap = Math.max(0, Math.min(next, end.ts) - Math.max(timestamp, begin.ts)) / 1000;
       if (overlap) {
-        const site = locate(nodes.get(profile.samples[i]));
+        const site = locate(nodes.get(sample.node));
         self.set(site, (self.get(site) ?? 0) + overlap);
         sampledMs += overlap;
       }
       timestamp = next;
     }
+    if (sampledMs > (end.ts - begin.ts) / 1000 + 0.001)
+      throw new Error(`Overlapping CPU intervals in ${tag}`);
     results.push({
       rawProfile: file,
       rawTrace: `${id}.trace.json`,
       phase,
       traceWindowMs: (end.ts - begin.ts) / 1000,
       sampledMs,
+      negativeTimeDeltaCount: profile.timeDeltas.filter((delta) => delta < 0).length,
       self: [...self].sort((a, b) => b[1] - a[1]).slice(0, 20),
     });
   }
@@ -58,7 +68,7 @@ for (const file of await readdir(directory)) {
 if (results.length !== 18) throw new Error(`Expected 18 phase windows, got ${results.length}`);
 const report = {
   method:
-    'Diagnostic round r7 only, p600 query setup/work marker windows. CPU sample interval overlap apportioned to windows; sampling is approximate. Oracle and selection outside markers excluded. Profile overhead means these are not formal timing statistics.',
+    'Diagnostic round r7 only, p600 query setup/work marker windows. Reconstruct absolute sample timestamps and sort them because V8 profiles contain negative time deltas. Nonoverlapping sample intervals apportioned to windows; attribution near window boundaries is approximate at sampling resolution. Oracle and selection outside markers excluded. Profile overhead means these are not formal timing statistics.',
   results,
 };
 await writeFile(`${directory}/profile-phases.json`, JSON.stringify(report, null, 2));
