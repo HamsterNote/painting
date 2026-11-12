@@ -1,0 +1,114 @@
+import {
+  createLayeredLassoQuery,
+  prepareLayeredObjectQuery,
+  queryObjectLasso,
+} from '../../core/layeredObjectQuery';
+import { createLayeredToolSession, type LayeredToolScheduler } from '../../core/layeredToolSession';
+import { FreehandGeometryCache } from '../../geometry/freehandCache';
+import type { DocumentObject } from '../../model/document';
+import { makeLayeredController } from '../fixtures/layered';
+
+function image(objectId: string, x: number, y: number, size: number): DocumentObject {
+  return {
+    kind: 'image',
+    objectId,
+    objectRevision: 1,
+    transformRevision: 1,
+    transform: { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 },
+    src: 'data:image/png;base64,AA==',
+    localBounds: { minX: x, minY: y, maxX: x + size, maxY: y + size },
+  };
+}
+const cases = [
+  {
+    name: 'review floating intersection at image corner (31,34)',
+    target: image('target', 31, 31, 3),
+    path: [
+      [70, 10],
+      [20, 50],
+      [10, 20],
+      [10, 60],
+      [0, 70],
+      [10, 20],
+      [40, 40],
+    ].map(([x, y]) => ({ x, y })),
+  },
+  {
+    name: 'legacy separated collinear segments remain a hit',
+    target: image('target', 40, 40, 20),
+    path: [
+      [0, 0],
+      [100, 0],
+      [100, 20],
+      [20, 20],
+      [20, 40],
+      [0, 40],
+    ].map(([x, y]) => ({ x, y })),
+  },
+];
+function prepared(objects: readonly DocumentObject[]) {
+  const result = prepareLayeredObjectQuery(
+    { schemaVersion: 3, documentRevision: 0, objects },
+    new FreehandGeometryCache()
+  );
+  if (!result.ok) throw new Error(result.error.code);
+  return result.value;
+}
+function complete(query: ReturnType<typeof createLayeredLassoQuery>) {
+  return query.ok ? query.value.step(() => 0, Infinity)! : query;
+}
+
+test.each(cases)(
+  '$name: oracle and complete optimized query explicitly select target',
+  ({ target, path }) => {
+    const document = prepared([target]);
+    const oldResult = queryObjectLasso(document, path, 'intersects');
+    const newResult = complete(createLayeredLassoQuery(document, path));
+    expect(oldResult.ok && oldResult.value.map((hit) => hit.objectId)).toEqual(['target']);
+    expect(newResult.ok && newResult.value.map((hit) => hit.objectId)).toEqual(['target']);
+  }
+);
+
+describe.each(cases)('$name: tool session', ({ target, path }) => {
+  test.each(['synchronous', 'end-before-work', 'completed-live'] as const)(
+    '%s final selection includes target',
+    (mode) => {
+      const controller = makeLayeredController([target]);
+      controller.setTool('lasso');
+      const jobs = new Set<() => void>();
+      const enqueue = (callback: () => void) => {
+        jobs.add(callback);
+        return () => {
+          jobs.delete(callback);
+        };
+      };
+      const scheduler: LayeredToolScheduler = { frame: enqueue, work: enqueue, now: () => 0 };
+      const session = createLayeredToolSession(
+        controller,
+        () => 'unused',
+        mode === 'synchronous' ? {} : { scheduler }
+      );
+      const document = controller.getSnapshot('document');
+      const history = controller.getSnapshot('history');
+      session.begin(path[0]!);
+      session.update(path.slice(1));
+      if (mode === 'completed-live') {
+        while (jobs.size) {
+          const batch = [...jobs];
+          jobs.clear();
+          batch.forEach((job) => job());
+        }
+      }
+      expect(controller.getSnapshot('selection')).toEqual(
+        mode === 'end-before-work' ? [] : ['target']
+      );
+      session.end();
+      expect(controller.getSnapshot('selection')).toEqual(['target']);
+      expect(controller.getSnapshot('tools').activeTool).toBe('selection');
+      expect(controller.getSnapshot('document')).toBe(document);
+      expect(controller.getSnapshot('history')).toBe(history);
+      expect(jobs.size).toBe(0);
+      session.destroy();
+    }
+  );
+});

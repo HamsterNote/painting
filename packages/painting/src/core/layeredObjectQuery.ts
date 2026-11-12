@@ -1394,15 +1394,17 @@ function fastPieceIntersectsLasso(
   lasso: PolygonBooleanMultiPolygon,
   margin: number
 ): PieceHit {
-  // For intersects, containment or boundary contact is a complete predicate.
-  // Reuse the reference fallback directly, avoiding construction of the whole
-  // polygon intersection for every object. Contains still uses boolean difference.
+  // Positive containment/contact checks avoid constructing an intersection.
+  // A negative fast result is not conclusive: boolean clipping can retain a
+  // boundary intersection lost by the point/distance predicates after floating
+  // point canonicalization. Keep the unchanged reference as the fallback.
   for (const ring of allRings(piece.polygons))
     if (ring.length && fastPointInMulti(ring[0]!, lasso)) return true;
   for (const sample of pieceSamplePoints(piece)) if (fastPointInMulti(sample, lasso)) return true;
   for (const ring of allRings(lasso))
     for (const point of ring) if (fastPointInMulti(point, piece.polygons)) return true;
-  return withinLassoMargin(piece, lasso, margin);
+  const contact = withinLassoMargin(piece, lasso, margin);
+  return contact === true ? true : pieceIntersectsLasso(piece, lasso, margin);
 }
 
 export type LayeredLassoQueryWork = {
