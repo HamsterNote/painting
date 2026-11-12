@@ -92,16 +92,16 @@ test('eraser trail has an intermediate fading frame, expires, and adds no histor
   expect(saved.document.objects).toHaveLength(0);
   await page.waitForTimeout(700);
   const opacity = await trail
-    .locator('path')
+    .locator('g')
     .first()
     .evaluate((path) => Number(getComputedStyle(path).opacity));
   expect(opacity).toBeGreaterThan(0);
-  expect(opacity).toBeLessThan(0.45);
+  expect(opacity).toBeLessThan(1);
   await info.attach('eraser-trail-intermediate', {
     body: await page.screenshot(),
     contentType: 'image/png',
   });
-  await expect(trail).toHaveCount(0, { timeout: 2500 });
+  await expect.poll(() => trail.count(), { timeout: 3000, intervals: [50] }).toBe(0);
   const faded = await layeredState(page);
   expect(faded.document).toEqual(saved.document);
   expect(faded.history).toEqual(saved.history);

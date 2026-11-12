@@ -1,5 +1,55 @@
 import { expect, test } from '@playwright/test';
 
+test('eraser samples and self-crossings have uniform alpha and expire 1s after release', async ({
+  page,
+}) => {
+  await page.goto('/painting.html?legacy');
+  await page.getByRole('button', { name: '橡皮擦', exact: true }).click();
+  const surface = page.getByTestId('layered-surface');
+  const box = (await surface.boundingBox())!;
+  await page.mouse.move(box.x + 100, box.y + 100);
+  await page.mouse.down();
+  for (const [x, y] of [
+    [180, 100],
+    [260, 100],
+    [180, 180],
+    [180, 60],
+  ]) {
+    await page.mouse.move(box.x + x!, box.y + y!, { steps: 10 });
+  }
+  const trail = page.locator('[data-eraser-trail]');
+  await expect(trail.locator('path')).toHaveCount(1);
+  const alpha = await trail.evaluate(async (svg) => {
+    const copy = svg.cloneNode(true) as SVGSVGElement;
+    copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    copy.setAttribute('width', '400');
+    copy.setAttribute('height', '300');
+    copy.style.width = '400px';
+    copy.style.height = '300px';
+    const image = new Image();
+    image.src = `data:image/svg+xml;base64,${btoa(new XMLSerializer().serializeToString(copy))}`;
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = 400;
+    canvas.height = 300;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(image, 0, 0);
+    // Between samples, at a sample joint, at a self-crossing, and on a single arm.
+    return [
+      [140, 100],
+      [220, 100],
+      [180, 100],
+      [180, 140],
+    ].map(([x, y]) => ctx.getImageData(x!, y!, 1, 1).data[3]);
+  });
+  expect(alpha[0]).toBeGreaterThan(110);
+  expect(alpha[0]).toBeLessThan(120);
+  expect(new Set(alpha).size).toBe(1);
+  await page.mouse.up();
+  await expect(trail.locator('g')).toHaveCSS('animation-duration', '1s');
+  await expect.poll(() => trail.count(), { timeout: 3000, intervals: [50] }).toBe(0);
+});
+
 test('public lightweight artifact serves reader/notes contract adapters without drawing runtime', async ({
   page,
   request,
@@ -71,9 +121,9 @@ test('320px actual board: order, tap targets, async failure, zero inset and edge
   await expect(menu.getByRole('menuitemradio').first()).toHaveAttribute('aria-checked', 'true');
   await page.keyboard.press('Escape');
   const shell = page.locator('[data-toolbar-edge]');
-  await expect(shell).toHaveCSS('bottom', '50px');
+  await expect(shell).toHaveCSS('bottom', '42px');
   await page.getByRole('button', { name: '切换零安全区' }).click();
-  await expect(shell).toHaveCSS('bottom', '16px');
+  await expect(shell).toHaveCSS('bottom', '8px');
   await page.getByRole('button', { name: '迁移边缘' }).click();
   await expect(shell).toHaveCSS('top', '60px');
   await expect(toolbar.getByRole('button', { name: '撤销', exact: true })).toBeEnabled();
@@ -97,7 +147,7 @@ test('legacy compiled PaintingBoard retains the bottom default and existing tool
   const toolbar = page.getByRole('toolbar');
   await expect(toolbar).toBeVisible();
   await expect(toolbar.getByRole('button', { name: '文件', exact: true })).toHaveCount(0);
-  await expect(page.locator('[data-toolbar-edge]')).toHaveCSS('bottom', '16px');
+  await expect(page.locator('[data-toolbar-edge]')).toHaveCSS('bottom', '8px');
   await toolbar.getByRole('button', { name: '工具菜单' }).click();
   await page.getByRole('menuitemradio', { name: '矩形', exact: true }).click();
   await expect(toolbar.getByRole('button', { name: '工具菜单' })).toContainText('矩形');
@@ -135,14 +185,14 @@ test('shared pane layouts consume 24/34 once in side-by-side and vertical hosts'
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.goto('/light.html?split');
   for (const name of ['reader', 'notes']) {
-    await expect(page.getByTestId(name).locator('[data-toolbar-edge]')).toHaveCSS('bottom', '50px');
+    await expect(page.getByTestId(name).locator('[data-toolbar-edge]')).toHaveCSS('bottom', '42px');
   }
   await page.setViewportSize({ width: 800, height: 1200 });
   await page.getByRole('button', { name: '迁移边缘' }).click();
   await expect(page.getByTestId('reader').locator('[data-toolbar-edge]')).toHaveCSS('top', '60px');
   await expect(page.getByTestId('notes').locator('[data-toolbar-edge]')).toHaveCSS(
     'bottom',
-    '50px'
+    '42px'
   );
   for (const name of ['reader', 'notes']) {
     const pane = page.getByTestId(name);

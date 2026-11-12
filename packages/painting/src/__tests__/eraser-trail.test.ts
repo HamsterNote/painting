@@ -8,7 +8,7 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-test('segments retire independently at 2s, follow viewport, and never request an animation frame', () => {
+test('one continuous trail follows viewport and fades within 1s of release without animation frames', () => {
   const controller = makeLayeredController();
   const host = document.createElement('div');
   const raf = jest.spyOn(window, 'requestAnimationFrame');
@@ -19,7 +19,10 @@ test('segments retire independently at 2s, follow viewport, and never request an
   trail.begin({ x: 10, y: 20 });
   jest.advanceTimersByTime(1000);
   trail.append([{ x: 30, y: 40 }]);
-  expect(host.querySelectorAll('path')).toHaveLength(2);
+  expect(host.querySelectorAll('path')).toHaveLength(1);
+  expect(host.querySelector('path')?.getAttribute('d')).toBe('M 10 20 L 10 20 L 30 40');
+  expect(host.querySelector('svg')?.style.opacity).toBe('0.45');
+  expect(jest.getTimerCount()).toBe(0);
   controller.updateViewport({
     type: 'replace',
     expectedRevision: 0,
@@ -27,11 +30,11 @@ test('segments retire independently at 2s, follow viewport, and never request an
   });
   expect(host.querySelector('g')?.getAttribute('transform')).toBe('translate(50 -10) scale(2)');
   expect(host.querySelector('path')?.getAttribute('vector-effect')).toBe('non-scaling-stroke');
+  trail.finish(() => {});
+  expect(host.querySelector('g')?.style.animation).toBe('hn-eraser-fade 1000ms linear forwards');
   jest.advanceTimersByTime(999);
-  expect(host.querySelectorAll('path')).toHaveLength(2);
-  jest.advanceTimersByTime(1);
   expect(host.querySelectorAll('path')).toHaveLength(1);
-  jest.advanceTimersByTime(1000);
+  jest.advanceTimersByTime(1);
   expect(host.querySelector('svg')).toBeNull();
   expect(jest.getTimerCount()).toBe(0);
   expect(controller.getSnapshot('document')).toBe(documentBefore);
@@ -46,6 +49,22 @@ function send(target: EventTarget, phase: string, x = 50, y = 50) {
   Object.assign(event, { pointerId: 1, pointerType: 'pen', clientX: x, clientY: y, button: 0 });
   target.dispatchEvent(event);
 }
+
+test('starting a new erase retires the old fade timer without clearing the new trail', () => {
+  const host = document.createElement('div');
+  const trail = createEraserTrail(host, makeLayeredController());
+  trail.begin({ x: 10, y: 20 });
+  trail.finish(() => {});
+  jest.advanceTimersByTime(500);
+  trail.begin({ x: 30, y: 40 });
+  expect(jest.getTimerCount()).toBe(0);
+  jest.advanceTimersByTime(500);
+  expect(host.querySelector('path')?.getAttribute('d')).toBe('M 30 40 L 30 40');
+  trail.finish(() => {});
+  jest.advanceTimersByTime(1000);
+  expect(host.querySelector('svg')).toBeNull();
+  trail.destroy();
+});
 
 test('clearing during a live erase does not recreate feedback or commit on late move/up', () => {
   const controller = makeLayeredController([layeredRect('a')]);
@@ -107,7 +126,7 @@ test.each([
     send(window, 'up', 60, 60);
     expect(host.querySelector('[data-eraser-trail]')).not.toBeNull();
     expect(controller.getSnapshot('document').objects).toHaveLength(0);
-    if (reason === 'expiry') jest.advanceTimersByTime(2000);
+    if (reason === 'expiry') jest.advanceTimersByTime(1000);
     else if (reason === 'tool') controller.setTool('rect');
     else if (reason === 'undo') controller.undo();
     else if (reason === 'redo') {

@@ -2,14 +2,15 @@ import type { LayeredEditorController } from '../core/layeredEditorController';
 import type { Point } from '../model/document';
 
 const SVG = 'http://www.w3.org/2000/svg';
-const LIFETIME = 2000;
+const LIFETIME = 1000;
 
-/** Local visual feedback only. CSS handles fading; one-shot timers retire each sampled segment. */
+/** One opaque path, composited with uniform opacity; fade the whole trail after release. */
 export function createEraserTrail(host: HTMLElement, controller: LayeredEditorController) {
   const view = host.ownerDocument.defaultView!;
   let overlay: SVGSVGElement | undefined;
   let group: SVGGElement | undefined;
-  let previous: Point | undefined;
+  let path: SVGPathElement | undefined;
+  let pathData = '';
   let tracking = false;
   let committing = false;
   let tool = controller.getSnapshot('tools').activeTool;
@@ -24,7 +25,8 @@ export function createEraserTrail(host: HTMLElement, controller: LayeredEditorCo
     overlay?.remove();
     overlay = undefined;
     group = undefined;
-    previous = undefined;
+    path = undefined;
+    pathData = '';
     tracking = false;
   }
   function append(points: readonly Point[]) {
@@ -35,38 +37,27 @@ export function createEraserTrail(host: HTMLElement, controller: LayeredEditorCo
       overlay.setAttribute('aria-hidden', 'true');
       overlay.style.cssText =
         'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:7;overflow:hidden';
+      overlay.style.opacity = '.45';
       const style = host.ownerDocument.createElementNS(SVG, 'style');
-      style.textContent = '@keyframes hn-eraser-fade { from { opacity:.45 } to { opacity:0 } }';
+      style.textContent = '@keyframes hn-eraser-fade { from { opacity:1 } to { opacity:0 } }';
       group = host.ownerDocument.createElementNS(SVG, 'g');
       overlay.append(style, group);
       host.append(overlay);
       transform();
     }
-    const start = previous ?? points[0]!;
-    const path = host.ownerDocument.createElementNS(SVG, 'path');
-    path.setAttribute(
-      'd',
-      `M ${start.x} ${start.y} ${points.map((p) => `L ${p.x} ${p.y}`).join(' ')}`
-    );
-    path.setAttribute('fill', 'none');
-    path.setAttribute('stroke', '#9B8DD5');
-    path.setAttribute('stroke-width', '12');
-    path.setAttribute('stroke-linecap', 'round');
-    path.setAttribute('stroke-linejoin', 'round');
-    path.setAttribute('vector-effect', 'non-scaling-stroke');
-    path.style.animation = `hn-eraser-fade ${LIFETIME}ms linear forwards`;
-    group!.append(path);
-    previous = { ...points[points.length - 1]! };
-    const timer = view.setTimeout(() => {
-      timers.delete(timer);
-      path.remove();
-      if (!group?.childElementCount) {
-        overlay?.remove();
-        overlay = undefined;
-        group = undefined;
-      }
-    }, LIFETIME);
-    timers.add(timer);
+    if (!path) {
+      path = host.ownerDocument.createElementNS(SVG, 'path');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', '#9B8DD5');
+      path.setAttribute('stroke-width', '12');
+      path.setAttribute('stroke-linecap', 'round');
+      path.setAttribute('stroke-linejoin', 'round');
+      path.setAttribute('vector-effect', 'non-scaling-stroke');
+      group!.append(path);
+      pathData = `M ${points[0]!.x} ${points[0]!.y}`;
+    }
+    pathData += points.map((p) => ` L ${p.x} ${p.y}`).join('');
+    path.setAttribute('d', pathData);
   }
   const clearExternalMutation = () => {
     if (!committing) clear();
@@ -83,7 +74,7 @@ export function createEraserTrail(host: HTMLElement, controller: LayeredEditorCo
   ];
   return {
     begin(point: Point) {
-      previous = undefined;
+      clear();
       tracking = true;
       append([point]);
     },
@@ -95,8 +86,11 @@ export function createEraserTrail(host: HTMLElement, controller: LayeredEditorCo
         action();
       } finally {
         committing = false;
-        previous = undefined;
         tracking = false;
+        if (group) {
+          group.style.animation = `hn-eraser-fade ${LIFETIME}ms linear forwards`;
+          timers.add(view.setTimeout(clear, LIFETIME));
+        }
       }
     },
     clear,
