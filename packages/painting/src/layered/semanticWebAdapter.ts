@@ -45,6 +45,7 @@ export function createSemanticWebAdapter(options: {
     };
   const perfView = view as Window & {
     __paintingTestLassoPerf?: (event: LassoPerformanceEvent) => void;
+    __paintingTestLassoWarmup?: boolean;
   };
   const engine = createLayeredToolSession(controller, options.allocateId, {
     // Set by the performance runner before page load; absent in normal use.
@@ -71,9 +72,28 @@ export function createSemanticWebAdapter(options: {
         return () => view.clearTimeout(id);
       },
       now: () => view.performance.now(),
+      idle:
+        perfView.__paintingTestLassoWarmup === false
+          ? undefined
+          : (callback) => {
+              if (typeof view.requestIdleCallback === 'function') {
+                const id = view.requestIdleCallback((deadline) =>
+                  callback(deadline.timeRemaining())
+                );
+                return () => view.cancelIdleCallback(id);
+              }
+              // Safari fallback gives paint/input a turn and keeps work bounded.
+              const id = view.setTimeout(() => callback(4), 32);
+              return () => view.clearTimeout(id);
+            },
     },
     onError: options.onError,
   });
+  const pauseWarmup = () => engine.pauseWarmup();
+  const resumeWarmup = () => engine.resumeWarmup();
+  host.addEventListener('pointerdown', pauseWarmup, true);
+  view.addEventListener('pointerup', resumeWarmup);
+  view.addEventListener('pointercancel', resumeWarmup);
   let committing = false;
   let owner: { id: number; source: string; start: Point; pan: boolean } | undefined;
   let snapshot = controller.getSnapshot('viewport');
@@ -349,6 +369,9 @@ export function createSemanticWebAdapter(options: {
     destroy() {
       cancel();
       engine.destroy();
+      host.removeEventListener('pointerdown', pauseWarmup, true);
+      view.removeEventListener('pointerup', resumeWarmup);
+      view.removeEventListener('pointercancel', resumeWarmup);
       pendingWork.clear();
       workChannel?.port1.close();
       workChannel?.port2.close();

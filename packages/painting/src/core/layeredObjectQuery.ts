@@ -1012,8 +1012,22 @@ function makeHit(entry: PreparedEntry): LayeredObjectQueryHit {
   });
 }
 
+const multiBoundsCache = new WeakMap<PolygonBooleanMultiPolygon, Bounds>();
 function multiBounds(multi: PolygonBooleanMultiPolygon): Bounds | null {
-  return pointsBounds(allRings(multi).flatMap((ring) => ring as Point[]));
+  const cached = multiBoundsCache.get(multi);
+  if (cached) return cached;
+  const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  for (const ring of allRings(multi))
+    for (const p of ring) {
+      if (!isFinitePoint(p)) return null;
+      bounds.minX = Math.min(bounds.minX, p.x);
+      bounds.minY = Math.min(bounds.minY, p.y);
+      bounds.maxX = Math.max(bounds.maxX, p.x);
+      bounds.maxY = Math.max(bounds.maxY, p.y);
+    }
+  if (!Number.isFinite(bounds.minX)) return null;
+  multiBoundsCache.set(multi, bounds);
+  return bounds;
 }
 
 /** 是否全部点共线（用差值 cross；非有限按非共线处理避免误拒）。 */
@@ -1371,50 +1385,54 @@ function withinLassoMargin(
 ): PieceHit | 'overlapping-bounds' {
   let overlappingBounds = false;
   const allowLineProof = !referenceCanonicalLassos.has(lasso);
-  const root = lassoEdgeIndex(lasso);
+  // Each object's actual edges are indexed once and reused across lassos.
+  // A lasso line can reject an entire object-edge subtree with one old-predicate
+  // interval check; keep ambiguous/collinear leaves for the original predicate.
+  const root = lassoEdgeIndex(piece.polygons);
   if (!root) return null;
-  for (const first of allRings(piece.polygons)) {
-    if (first.length < 2) return null;
-    for (let i = 0; i < first.length; i++) {
-      const a = first[i]!,
-        b = first[(i + 1) % first.length]!;
-      const dx = b.x - a.x,
-        dy = b.y - a.y;
-      const minX = Math.min(a.x, b.x),
-        maxX = Math.max(a.x, b.x),
-        minY = Math.min(a.y, b.y),
-        maxY = Math.max(a.y, b.y);
-      // Outside this range the skipped pair's other orientations could overflow.
+  const stack: EdgeNode[] = [];
+  for (const ring of allRings(lasso)) {
+    if (ring.length < 2) return null;
+    for (let j = 0; j < ring.length; j++) {
+      const c = ring[j]!,
+        d = ring[(j + 1) % ring.length]!;
+      const ex = d.x - c.x,
+        ey = d.y - c.y;
+      const cx = Math.min(c.x, d.x),
+        cy = Math.min(c.y, d.y),
+        exx = Math.max(c.x, d.x),
+        eyy = Math.max(c.y, d.y);
       const pruneSafe =
         Math.max(
-          Math.abs(a.x),
-          Math.abs(a.y),
-          Math.abs(b.x),
-          Math.abs(b.y),
+          Math.abs(c.x),
+          Math.abs(c.y),
+          Math.abs(d.x),
+          Math.abs(d.y),
           Math.abs(root.bounds.minX),
-          Math.abs(root.bounds.maxX),
           Math.abs(root.bounds.minY),
+          Math.abs(root.bounds.maxX),
           Math.abs(root.bounds.maxY)
         ) <= 1e150;
-      const visit = (node: EdgeNode): PieceHit => {
-        const box = node.bounds;
+      stack.push(root);
+      while (stack.length) {
+        const node = stack.pop()!,
+          box = node.bounds;
         const disjoint =
-          minX > box.maxX + margin ||
-          box.minX > maxX + margin ||
-          minY > box.maxY + margin ||
-          box.minY > maxY + margin;
-        // AABB alone is unsound for the historical collinear predicate. Only
-        // prune when ALL old o1*o2 products are provably strictly positive.
-        if (disjoint && pruneSafe && sameSideBox(a, b, box)) return false;
+          cx > box.maxX + margin ||
+          box.minX > exx + margin ||
+          cy > box.maxY + margin ||
+          box.minY > eyy + margin;
+        // This bounds the old o3*o4 expression, including product underflow.
+        if (disjoint && pruneSafe && sameSideBox(c, d, box)) continue;
         if (!node.edges) {
-          const left = visit(node.left!);
-          return left !== false ? left : visit(node.right!);
+          stack.push(node.right!, node.left!);
+          continue;
         }
-        for (const { a: c, b: d, minX: cx, minY: cy, maxX: exx, maxY: eyy } of node.edges) {
+        for (const { a, b, minX, minY, maxX, maxY } of node.edges) {
+          const dx = b.x - a.x,
+            dy = b.y - a.y;
           const o1 = dx * (c.y - a.y) - dy * (c.x - a.x),
             o2 = dx * (d.y - a.y) - dy * (d.x - a.x);
-          const ex = d.x - c.x,
-            ey = d.y - c.y;
           const o3 = ex * (a.y - c.y) - ey * (a.x - c.x),
             o4 = ex * (b.y - c.y) - ey * (b.x - c.x);
           if (
@@ -1443,10 +1461,7 @@ function withinLassoMargin(
           )
             overlappingBounds = true;
         }
-        return false;
-      };
-      const hit = visit(root);
-      if (hit !== false) return hit;
+      }
     }
   }
   return overlappingBounds ? 'overlapping-bounds' : false;
@@ -1481,7 +1496,7 @@ function lassoEdgeIndex(multi: PolygonBooleanMultiPolygon): EdgeNode | null {
       bounds.maxX = Math.max(bounds.maxX, e.maxX);
       bounds.maxY = Math.max(bounds.maxY, e.maxY);
     }
-    if (edges.length <= 8) return { bounds, edges };
+    if (edges.length <= 4) return { bounds, edges };
     const axis = bounds.maxX - bounds.minX > bounds.maxY - bounds.minY ? 'minX' : 'minY';
     edges.sort((a, b) => a[axis] - b[axis]);
     const mid = edges.length >> 1;
@@ -1518,10 +1533,17 @@ function sameSideBox(a: Point, b: Point, box: Bounds): boolean {
 type PointTest = { bounds: Bounds; rows: readonly (readonly LassoEdge[])[]; height: number };
 const pointTests = new WeakMap<PolygonBooleanMultiPolygon, PointTest>();
 function fastPointInMulti(point: Point, multi: PolygonBooleanMultiPolygon) {
+  const bounds = multiBounds(multi);
+  if (
+    !bounds ||
+    point.x < bounds.minX ||
+    point.x > bounds.maxX ||
+    point.y < bounds.minY ||
+    point.y > bounds.maxY
+  )
+    return false;
   let test = pointTests.get(multi);
   if (!test) {
-    const bounds = multiBounds(multi);
-    if (!bounds) return false;
     const height = (bounds.maxY - bounds.minY) / 64;
     const rows: LassoEdge[][] = Array.from({ length: 64 }, () => []);
     for (const ring of allRings(multi))
@@ -1543,14 +1565,7 @@ function fastPointInMulti(point: Point, multi: PolygonBooleanMultiPolygon) {
     test = { bounds, rows, height };
     pointTests.set(multi, test);
   }
-  const { bounds, rows, height } = test;
-  if (
-    point.x < bounds.minX ||
-    point.x > bounds.maxX ||
-    point.y < bounds.minY ||
-    point.y > bounds.maxY
-  )
-    return false;
+  const { rows, height } = test;
   const edges = rows[height > 0 ? Math.min(63, Math.floor((point.y - bounds.minY) / height)) : 0]!;
   let winding = 0;
   for (const { a, b, minY, maxY, minX, maxX } of edges) {
@@ -1697,4 +1712,62 @@ export function createLayeredLassoQuery(
       return index === entries.length ? (result = ok(Object.freeze(hits))) : null;
     },
   });
+}
+
+let warmup: LayeredLassoQueryWork | undefined;
+let warmupEntries: PreparedEntry[] | undefined;
+let warmed = false;
+/** Internal: one small synthetic workload per JS realm; never selects real objects. */
+export function warmLayeredLasso(now: () => number, budgetMs: number): boolean {
+  if (warmed) return true;
+  const start = now();
+  if (!warmup) {
+    const entries = (warmupEntries ??= []);
+    while (entries.length < 64) {
+      const i = entries.length;
+      const x = (i % 8) * 3,
+        y = Math.floor(i / 8) * 3;
+      // More than one BVH leaf exercises the traversal used by ink outlines.
+      // Four-point rectangles warmed only the leaf predicate.
+      const ring = freezeRing(
+        Array.from({ length: 16 }, (_, j) => ({
+          x: x + 0.7 * Math.cos(((j + 0.2) * Math.PI) / 8),
+          y: y + 0.7 * Math.sin(((j + 0.2) * Math.PI) / 8),
+        }))
+      )!;
+      const piece = freezePiece([ring]);
+      entries.push({
+        objectId: `warm-${i}`,
+        objectRevision: 1,
+        transformRevision: 1,
+        kind: 'freehand',
+        order: i,
+        margin: 0,
+        pieces: [piece],
+        broadphase: multiBounds(piece.polygons)!,
+      });
+      if (now() - start >= budgetMs) return false;
+    }
+    const path = Array.from({ length: 128 }, (_, i) => ({
+      x: 10 + 8 * Math.cos((i * Math.PI) / 64),
+      y: 10 + 8 * Math.sin((i * Math.PI) / 64),
+    }));
+    const query = createLayeredLassoQuery({ documentRevision: 0, entries }, path);
+    if (!query.ok) return (warmed = true);
+    warmup = query.value;
+    warmupEntries = undefined;
+  }
+  const remaining = budgetMs - (now() - start);
+  if (remaining <= 0) return false;
+  if (warmup.step(now, remaining)) {
+    warmed = true;
+    warmup = undefined;
+  }
+  return warmed;
+}
+
+/** Finish document-only broadphase construction during idle, independent of a real path. */
+export function primeLayeredLassoIndex(prepared: PreparedLayeredObjectQuery): void {
+  if (prepared.entries.length && !lassoIndexes.has(prepared))
+    lassoIndexes.set(prepared, buildLassoIndex(prepared.entries));
 }

@@ -6,10 +6,11 @@ import {
 } from '../../core/layeredToolSession';
 import { layeredRect, makeLayeredController } from '../fixtures/layered';
 
-function scheduler() {
+function scheduler(withIdle = false) {
   const frames = new Set<() => void>(),
     work = new Set<() => void>(),
     all: (() => void)[] = [];
+  const idle = new Set<() => void>();
   let time = 0;
   const enqueue = (queue: Set<() => void>, callback: () => void) => {
     queue.add(callback);
@@ -22,6 +23,9 @@ function scheduler() {
     frame: (callback) => enqueue(frames, callback),
     work: (callback) => enqueue(work, callback),
     now: () => time++,
+    ...(withIdle
+      ? { idle: (callback: (budget: number) => void) => enqueue(idle, () => callback(4)) }
+      : {}),
   };
   const flush = (queue: Set<() => void>) => {
     const callbacks = [...queue];
@@ -30,6 +34,11 @@ function scheduler() {
   };
   return {
     adapter,
+    idle,
+    idleTick: () => flush(idle),
+    idleDrain: () => {
+      for (let i = 0; i < 200 && idle.size; i++) flush(idle);
+    },
     frames,
     work,
     all,
@@ -89,6 +98,9 @@ test('end before a frame computes the complete final path without an undo transa
   session.begin({ x: -20, y: -20 });
   session.update(path);
   session.end();
+  expect(controller.getSnapshot('preview').lassoPending).toBe(true);
+  expect(clock.frames.size).toBe(0);
+  expect(clock.work.size).toBe(1);
   clock.frame();
   clock.drain();
   expect(controller.getSnapshot('selection')).toEqual(['rect']);
@@ -335,3 +347,103 @@ test.each(['cancel', 'tool', 'document', 'destroy', 'new-gesture'] as const)(
     session.destroy();
   }
 );
+
+test('idle warmup is bounded, prepares current geometry without editing, and first real drag does no work', () => {
+  const controller = makeLayeredController([layeredRect()]);
+  controller.setTool('lasso');
+  const clock = scheduler(true),
+    events: LassoPerformanceEvent[] = [];
+  const session = createLayeredToolSession(controller, () => 'unused', {
+    scheduler: clock.adapter,
+    onPerf: (e) => events.push(e),
+  });
+  const document = controller.getSnapshot('document'),
+    history = controller.getSnapshot('history');
+  expect(clock.idle.size).toBe(1);
+  clock.idleDrain();
+  expect(events.some((e) => e.phase === 'warmup-index' && e.complete)).toBe(true);
+  expect(controller.getSnapshot('document')).toBe(document);
+  expect(controller.getSnapshot('history')).toBe(history);
+  expect(controller.getSnapshot('selection')).toEqual([]);
+  expect(controller.getSnapshot('preview').path).toEqual([]);
+  const prepare = jest.spyOn(objectQuery, 'createControllerObjectQuery');
+  const query = jest.spyOn(objectQuery, 'createLayeredLassoQuery');
+  session.begin({ x: -20, y: -20 });
+  session.update(path);
+  clock.frame();
+  clock.idleDrain();
+  clock.drain();
+  expect(prepare).not.toHaveBeenCalled();
+  expect(query).not.toHaveBeenCalled();
+  session.end();
+  clock.frame();
+  clock.drain();
+  expect(prepare).not.toHaveBeenCalled();
+  expect(query).toHaveBeenCalledTimes(1);
+  expect(controller.getSnapshot('selection')).toEqual(['rect']);
+  prepare.mockRestore();
+  query.mockRestore();
+  session.destroy();
+});
+
+test.each(['input', 'document', 'destroy'] as const)(
+  '%s invalidates queued idle callbacks',
+  (mode) => {
+    const controller = makeLayeredController([layeredRect()]);
+    controller.setTool('lasso');
+    const clock = scheduler(true),
+      session = createLayeredToolSession(controller, () => 'unused', { scheduler: clock.adapter });
+    const old = [...clock.all];
+    if (mode === 'input') session.begin({ x: -20, y: -20 });
+    if (mode === 'document')
+      controller.editObjects({ expectedDocumentRevision: 0, removeIds: ['rect'] });
+    if (mode === 'destroy') session.destroy();
+    const prepare = jest.spyOn(objectQuery, 'createControllerObjectQuery');
+    old.forEach((callback) => callback());
+    expect(prepare).not.toHaveBeenCalled();
+    expect(controller.getSnapshot('selection')).toEqual([]);
+    if (mode === 'input') {
+      session.update(path);
+      session.end();
+      clock.frame();
+      clock.drain();
+    }
+    if (mode === 'document') clock.idleDrain();
+    expect(controller.getSnapshot('document').objects.length).toBe(mode === 'document' ? 0 : 1);
+    prepare.mockRestore();
+    session.destroy();
+  }
+);
+
+test('release resumes partial idle preparation without restarting or sharing its cursor', () => {
+  const controller = makeLayeredController(
+    Array.from({ length: 30 }, (_, i) => layeredRect(`r${i}`))
+  );
+  controller.setTool('lasso');
+  const clock = scheduler(true);
+  const prepare = jest.spyOn(objectQuery, 'createControllerObjectQuery');
+  const events: LassoPerformanceEvent[] = [];
+  const session = createLayeredToolSession(controller, () => 'unused', {
+    scheduler: clock.adapter,
+    onPerf: (e) => events.push(e),
+  });
+  try {
+    for (let i = 0; i < 200 && !events.some((e) => e.phase === 'warmup-prepare'); i++)
+      clock.idleTick();
+    expect(events.find((e) => e.phase === 'warmup-prepare')?.complete).toBe(false);
+    expect(prepare).toHaveBeenCalledTimes(1);
+    const late = [...clock.all];
+    session.begin({ x: -20, y: -20 });
+    session.update(path);
+    session.end();
+    late.forEach((callback) => callback());
+    clock.frame();
+    clock.drain();
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(controller.getSnapshot('selection')).toHaveLength(30);
+    expect(controller.getSnapshot('preview').path).toEqual([]);
+  } finally {
+    prepare.mockRestore();
+    session.destroy();
+  }
+});
