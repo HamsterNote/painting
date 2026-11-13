@@ -180,6 +180,11 @@ describe.each(cases)('$name: tool session', ({ target, path }) => {
       }
       expect(controller.getSnapshot('selection')).toEqual([]);
       session.end();
+      for (let i = 0; jobs.size && i < 100; i++) {
+        const batch = [...jobs];
+        jobs.clear();
+        batch.forEach((job) => job());
+      }
       expect(controller.getSnapshot('selection')).toEqual(['target']);
       expect(controller.getSnapshot('tools').activeTool).toBe('selection');
       expect(controller.getSnapshot('document')).toBe(document);

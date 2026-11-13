@@ -29,11 +29,12 @@ import type {
   Point,
 } from '../model/document';
 import { readLayeredDocument } from '../model/documentReader';
+import type { LayeredEditorController } from './layeredEditorController';
 import { applyAffine } from '../geometry/affine';
 import { flattenLayeredCubic, flattenLayeredEllipse } from '../geometry/adaptiveContour';
 import { deriveShapeGeometry } from '../geometry/shape';
 import { deriveLayeredWorldBounds } from '../geometry/worldBounds';
-import type { FreehandGeometryCache } from '../geometry/freehandCache';
+import type { FreehandGeometryCache, FreehandPresentation } from '../geometry/freehandCache';
 import {
   canonicalizeClosedRing,
   hitTestNonzeroRings,
@@ -783,24 +784,35 @@ function buildFreehandEntry(
   order: number,
   cache: FreehandGeometryCache
 ): LayeredObjectQueryResult<PreparedEntry> {
-  let polygon: readonly Point[];
+  let presentation: FreehandPresentation;
   try {
-    polygon = cache.getPresentation(object as FreehandObject, 'final').transformedPolygon;
+    presentation = cache.getPresentation(object as FreehandObject, 'final');
   } catch {
     return err('geometry-failed');
   }
-  if (!Array.isArray(polygon) || polygon.length === 0) {
+  const polygon = presentation.transformedPolygon;
+  const bounds = presentation.worldBounds;
+  if (
+    !Array.isArray(polygon) ||
+    !polygon.length ||
+    !bounds ||
+    ![bounds.minX, bounds.minY, bounds.maxX, bounds.maxY].every(Number.isFinite)
+  )
     return err('geometry-failed');
-  }
-  const ring = freezeRing(polygon);
-  if (!ring) {
-    return err('geometry-failed');
-  }
-  const worldBounds = deriveLayeredWorldBounds(object, cache);
-  if (!worldBounds) {
-    return err('geometry-failed');
-  }
-  return ok(entryFrom(object, order, 0, [freezePiece([ring])], worldBounds.visualWorldBounds));
+  // The cache owns deeply frozen world points. Borrow them instead of copying
+  // tens of thousands of immutable vertices on the first release. A custom
+  // mutable cache still takes the defensive copy path used by the public API.
+  let ring: PolygonRing | null;
+  if (Object.isFrozen(polygon) && polygon.every((p) => Object.isFrozen(p) && isFinitePoint(p))) {
+    const first = polygon[0]!,
+      last = polygon[polygon.length - 1]!;
+    ring =
+      polygon.length > 1 && first.x === last.x && first.y === last.y
+        ? Object.freeze(polygon.slice(0, -1))
+        : polygon;
+  } else ring = freezeRing(polygon);
+  if (!ring) return err('geometry-failed');
+  return ok(entryFrom(object, order, 0, [freezePiece([ring])], Object.freeze({ ...bounds })));
 }
 
 /** shape：中心线粗描边 pieces（矩形 + 顶点圆盘）+ 可选 fill region。 */
@@ -929,36 +941,54 @@ export function prepareLayeredObjectQuery(
   if (!read.ok) {
     return err('invalid-document');
   }
-  const document_ = read.value;
+  return compileObjectQuery(read.value, cache).step(() => 0, Infinity)!;
+}
+
+/** Internal: controller snapshots are already validated, owned and deeply frozen.
+ * Keep their sample identities so rendering and queries share the same geometry.
+ * The public raw-document API above still validates and copies untrusted input.
+ */
+export function createControllerObjectQuery(
+  controller: LayeredEditorController,
+  cache: FreehandGeometryCache
+) {
+  return compileObjectQuery(controller.getSnapshot('document'), cache);
+}
+
+function compileObjectQuery(document: EditorDocument, cache: FreehandGeometryCache) {
   const entries: PreparedEntry[] = [];
-  for (let order = 0; order < document_.objects.length; order += 1) {
-    const object = document_.objects[order]!;
-    let built: LayeredObjectQueryResult<PreparedEntry>;
-    switch (object.kind) {
-      case 'freehand':
-        built = buildFreehandEntry(object, order, cache);
-        break;
-      case 'shape':
-        built = buildShapeEntry(object, order, cache);
-        break;
-      case 'image':
-      case 'text':
-        built = buildBoundsQuadEntry(object, order, cache);
-        break;
-      default:
-        return err('invalid-document');
-    }
-    if (!built.ok) {
-      return err(built.error.code);
-    }
-    entries.push(built.value);
-  }
-  return ok(
-    Object.freeze({
-      documentRevision: document_.documentRevision,
-      entries: Object.freeze(entries),
-    })
-  );
+  let order = 0;
+  let result: LayeredObjectQueryResult<PreparedLayeredObjectQuery> | null = null;
+  return {
+    step(
+      now: () => number,
+      budgetMs = 4
+    ): LayeredObjectQueryResult<PreparedLayeredObjectQuery> | null {
+      if (result) return result;
+      const start = now();
+      do {
+        if (order === document.objects.length) {
+          return (result = ok(
+            Object.freeze({
+              documentRevision: document.documentRevision,
+              entries: Object.freeze(entries),
+            })
+          ));
+        }
+        const object = document.objects[order]!;
+        const built =
+          object.kind === 'freehand'
+            ? buildFreehandEntry(object, order, cache)
+            : object.kind === 'shape'
+              ? buildShapeEntry(object, order, cache)
+              : buildBoundsQuadEntry(object, order, cache);
+        if (!built.ok) return (result = err(built.error.code));
+        entries.push(built.value);
+        order++;
+      } while (now() - start < budgetMs);
+      return null;
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1190,12 +1220,13 @@ type LassoBoundsNode = {
 };
 const lassoIndexes = new WeakMap<PreparedLayeredObjectQuery, LassoBoundsNode>();
 function buildLassoIndex(entries: readonly PreparedEntry[]): LassoBoundsNode {
-  const bounds = {
-    minX: Math.min(...entries.map((e) => e.broadphase.minX - e.margin)),
-    minY: Math.min(...entries.map((e) => e.broadphase.minY - e.margin)),
-    maxX: Math.max(...entries.map((e) => e.broadphase.maxX + e.margin)),
-    maxY: Math.max(...entries.map((e) => e.broadphase.maxY + e.margin)),
-  };
+  const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  for (const entry of entries) {
+    bounds.minX = Math.min(bounds.minX, entry.broadphase.minX - entry.margin);
+    bounds.minY = Math.min(bounds.minY, entry.broadphase.minY - entry.margin);
+    bounds.maxX = Math.max(bounds.maxX, entry.broadphase.maxX + entry.margin);
+    bounds.maxY = Math.max(bounds.maxY, entry.broadphase.maxY + entry.margin);
+  }
   if (entries.length <= 16) return { bounds, entries };
   const axis = bounds.maxX - bounds.minX > bounds.maxY - bounds.minY ? 'minX' : 'minY';
   const sorted = [...entries].sort((a, b) => a.broadphase[axis] - b.broadphase[axis]);
@@ -1340,21 +1371,46 @@ function withinLassoMargin(
 ): PieceHit | 'overlapping-bounds' {
   let overlappingBounds = false;
   const allowLineProof = !referenceCanonicalLassos.has(lasso);
-  for (const first of allRings(piece.polygons))
-    for (const second of allRings(lasso)) {
-      if (first.length < 2 || second.length < 2) return null;
-      for (let i = 0; i < first.length; i++) {
-        const a = first[i]!,
-          b = first[(i + 1) % first.length]!;
-        const dx = b.x - a.x,
-          dy = b.y - a.y,
-          minX = Math.min(a.x, b.x),
-          maxX = Math.max(a.x, b.x),
-          minY = Math.min(a.y, b.y),
-          maxY = Math.max(a.y, b.y);
-        for (let j = 0; j < second.length; j++) {
-          const c = second[j]!,
-            d = second[(j + 1) % second.length]!;
+  const root = lassoEdgeIndex(lasso);
+  if (!root) return null;
+  for (const first of allRings(piece.polygons)) {
+    if (first.length < 2) return null;
+    for (let i = 0; i < first.length; i++) {
+      const a = first[i]!,
+        b = first[(i + 1) % first.length]!;
+      const dx = b.x - a.x,
+        dy = b.y - a.y;
+      const minX = Math.min(a.x, b.x),
+        maxX = Math.max(a.x, b.x),
+        minY = Math.min(a.y, b.y),
+        maxY = Math.max(a.y, b.y);
+      // Outside this range the skipped pair's other orientations could overflow.
+      const pruneSafe =
+        Math.max(
+          Math.abs(a.x),
+          Math.abs(a.y),
+          Math.abs(b.x),
+          Math.abs(b.y),
+          Math.abs(root.bounds.minX),
+          Math.abs(root.bounds.maxX),
+          Math.abs(root.bounds.minY),
+          Math.abs(root.bounds.maxY)
+        ) <= 1e150;
+      const visit = (node: EdgeNode): PieceHit => {
+        const box = node.bounds;
+        const disjoint =
+          minX > box.maxX + margin ||
+          box.minX > maxX + margin ||
+          minY > box.maxY + margin ||
+          box.minY > maxY + margin;
+        // AABB alone is unsound for the historical collinear predicate. Only
+        // prune when ALL old o1*o2 products are provably strictly positive.
+        if (disjoint && pruneSafe && sameSideBox(a, b, box)) return false;
+        if (!node.edges) {
+          const left = visit(node.left!);
+          return left !== false ? left : visit(node.right!);
+        }
+        for (const { a: c, b: d, minX: cx, minY: cy, maxX: exx, maxY: eyy } of node.edges) {
           const o1 = dx * (c.y - a.y) - dy * (c.x - a.x),
             o2 = dx * (d.y - a.y) - dy * (d.x - a.x);
           const ex = d.x - c.x,
@@ -1370,10 +1426,10 @@ function withinLassoMargin(
             return null;
           if (o1 * o2 <= 0 && o3 * o4 <= 0) return true;
           if (
-            minX > Math.max(c.x, d.x) + margin ||
-            Math.min(c.x, d.x) > maxX + margin ||
-            minY > Math.max(c.y, d.y) + margin ||
-            Math.min(c.y, d.y) > maxY + margin
+            minX > exx + margin ||
+            cx > maxX + margin ||
+            minY > eyy + margin ||
+            cy > maxY + margin
           )
             continue;
           const distance = segmentSegmentDistance(a, b, c, d);
@@ -1381,16 +1437,84 @@ function withinLassoMargin(
           if (distance <= margin) return true;
           if (
             !overlappingBounds &&
-            (!allowLineProof || !lineMissesExpandedEdgeBox(c, d, minX, minY, maxX, maxY, margin))
+            (!allowLineProof ||
+              (!lineMissesExpandedEdgeBox(c, d, minX, minY, maxX, maxY, margin) &&
+                !lineMissesExpandedEdgeBox(a, b, cx, cy, exx, eyy, margin)))
           )
             overlappingBounds = true;
         }
-      }
+        return false;
+      };
+      const hit = visit(root);
+      if (hit !== false) return hit;
     }
+  }
   return overlappingBounds ? 'overlapping-bounds' : false;
 }
 
 type LassoEdge = { a: Point; b: Point; minY: number; maxY: number; minX: number; maxX: number };
+type EdgeNode = { bounds: Bounds; edges?: LassoEdge[]; left?: EdgeNode; right?: EdgeNode };
+const edgeIndexes = new WeakMap<PolygonBooleanMultiPolygon, EdgeNode>();
+function lassoEdgeIndex(multi: PolygonBooleanMultiPolygon): EdgeNode | null {
+  const old = edgeIndexes.get(multi);
+  if (old) return old;
+  const edges: LassoEdge[] = [];
+  for (const ring of allRings(multi))
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i]!,
+        b = ring[(i + 1) % ring.length]!;
+      edges.push({
+        a,
+        b,
+        minX: Math.min(a.x, b.x),
+        maxX: Math.max(a.x, b.x),
+        minY: Math.min(a.y, b.y),
+        maxY: Math.max(a.y, b.y),
+      });
+    }
+  if (!edges.length) return null;
+  const build = (edges: LassoEdge[]): EdgeNode => {
+    const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+    for (const e of edges) {
+      bounds.minX = Math.min(bounds.minX, e.minX);
+      bounds.minY = Math.min(bounds.minY, e.minY);
+      bounds.maxX = Math.max(bounds.maxX, e.maxX);
+      bounds.maxY = Math.max(bounds.maxY, e.maxY);
+    }
+    if (edges.length <= 8) return { bounds, edges };
+    const axis = bounds.maxX - bounds.minX > bounds.maxY - bounds.minY ? 'minX' : 'minY';
+    edges.sort((a, b) => a[axis] - b[axis]);
+    const mid = edges.length >> 1;
+    return { bounds, left: build(edges.slice(0, mid)), right: build(edges.slice(mid)) };
+  };
+  const root = build(edges);
+  edgeIndexes.set(multi, root);
+  return root;
+}
+
+// Interval evaluation of the *old floating expression*, not a new orientation
+// predicate. Each rounded operation is monotone, so endpoint evaluations bound
+// all endpoints in this node. Also exclude product underflow and infinities.
+function sameSideBox(a: Point, b: Point, box: Bounds): boolean {
+  const dx = b.x - a.x,
+    dy = b.y - a.y;
+  const lowY = box.minY - a.y,
+    highY = box.maxY - a.y,
+    lowX = box.minX - a.x,
+    highX = box.maxX - a.x;
+  const p = dx * (dx >= 0 ? lowY : highY),
+    q = dx * (dx >= 0 ? highY : lowY);
+  const r = dy * (dy >= 0 ? lowX : highX),
+    s = dy * (dy >= 0 ? highX : lowX);
+  const low = p - s,
+    high = q - r;
+  return (
+    Number.isFinite(low) &&
+    Number.isFinite(high) &&
+    ((low > 0 && low * low > 0) || (high < 0 && high * high > 0))
+  );
+}
+
 type PointTest = { bounds: Bounds; rows: readonly (readonly LassoEdge[])[]; height: number };
 const pointTests = new WeakMap<PolygonBooleanMultiPolygon, PointTest>();
 function fastPointInMulti(point: Point, multi: PolygonBooleanMultiPolygon) {
@@ -1465,7 +1589,18 @@ function fastPieceIntersectsLasso(
   // point canonicalization. Keep the unchanged reference as the fallback.
   for (const ring of allRings(piece.polygons))
     if (ring.length && fastPointInMulti(ring[0]!, lasso)) return true;
-  for (const sample of pieceSamplePoints(piece)) if (fastPointInMulti(sample, lasso)) return true;
+  for (const ring of allRings(piece.polygons)) {
+    for (const point of ring) if (fastPointInMulti(point, lasso)) return true;
+    if (ring.length >= 2)
+      for (let i = 0; i < ring.length; i++) {
+        const a = ring[i]!,
+          b = ring[(i + 1) % ring.length]!;
+        const x = a.x / 2 + b.x / 2,
+          y = a.y / 2 + b.y / 2;
+        if (Number.isFinite(x) && Number.isFinite(y) && fastPointInMulti({ x, y }, lasso))
+          return true;
+      }
+  }
   for (const ring of allRings(lasso))
     for (const point of ring) if (fastPointInMulti(point, piece.polygons)) return true;
   const contact = withinLassoMargin(piece, lasso, margin);
@@ -1490,7 +1625,9 @@ export function createLayeredLassoQuery(
   // Internal diagnostic runs only. Normal queries do not read a timing clock.
   diagnostics?: {
     now: () => number;
-    onFallback: (
+    onPhase?: (phase: 'canonicalize' | 'candidates', elapsedMs: number) => void;
+    onObject?: (objectId: string, elapsedMs: number) => void;
+    onFallback?: (
       objectId: string,
       elapsedMs: number,
       reason: 'overlapping-bounds' | 'indeterminate'
@@ -1508,12 +1645,18 @@ export function createLayeredLassoQuery(
     path.filter((p, i) => i === 0 || p.x !== path[i - 1]!.x || p.y !== path[i - 1]!.y)
   );
   if (!ring || ring.length < 3 || isCollinearRing(ring)) return err('invalid-input');
+  const canonicalStart = diagnostics?.now();
   const canonical = canonicalLasso(ring);
+  if (canonicalStart !== undefined)
+    diagnostics?.onPhase?.('canonicalize', diagnostics.now() - canonicalStart);
   if (!canonical.ok) return err('geometry-failed');
   const bounds = multiBounds(canonical.polygons);
   if (!bounds) return err('geometry-failed');
+  const candidatesStart = diagnostics?.now();
   const entries = lassoCandidates(prepared, bounds),
     hits: LayeredObjectQueryHit[] = [];
+  if (candidatesStart !== undefined)
+    diagnostics?.onPhase?.('candidates', diagnostics.now() - candidatesStart);
   let index = 0,
     result: LayeredObjectQueryResult<readonly LayeredObjectQueryHit[]> | null = null;
   return ok({
@@ -1527,6 +1670,7 @@ export function createLayeredLassoQuery(
       do {
         if (index === entries.length) return (result = ok(Object.freeze(hits)));
         const entry = entries[index++]!;
+        const objectStart = diagnostics?.now();
         for (const piece of entry.pieces) {
           const matched = fastPieceIntersectsLasso(
             piece,
@@ -1536,7 +1680,7 @@ export function createLayeredLassoQuery(
               ? (reason) => {
                   const start = diagnostics.now();
                   const result = pieceIntersectsLasso(piece, canonical.polygons, entry.margin);
-                  diagnostics.onFallback(entry.objectId, diagnostics.now() - start, reason);
+                  diagnostics.onFallback?.(entry.objectId, diagnostics.now() - start, reason);
                   return result;
                 }
               : undefined
@@ -1547,6 +1691,8 @@ export function createLayeredLassoQuery(
             break;
           }
         }
+        if (objectStart !== undefined)
+          diagnostics?.onObject?.(entry.objectId, diagnostics.now() - objectStart);
       } while (now() - start < budgetMs);
       return index === entries.length ? (result = ok(Object.freeze(hits))) : null;
     },

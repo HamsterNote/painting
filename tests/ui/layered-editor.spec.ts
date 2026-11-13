@@ -500,6 +500,7 @@ test('lasso, move, resize, rotate and fast erase retain raw data and reversible 
   ])
     await pointer(page, 'move', x, y);
   await pointer(page, 'up', 10, 80);
+  await expect(page.getByLabel('缩放选区')).toBeVisible();
   expect(await page.evaluate(() => window.__layeredEditor!.getSnapshot('selection').length)).toBe(
     5
   );

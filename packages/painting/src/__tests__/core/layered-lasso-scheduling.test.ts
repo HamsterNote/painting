@@ -69,6 +69,8 @@ test('many batches share one preview frame, selection waits for up and final sam
   expect(controller.getSnapshot('selection')).toEqual([]);
   session.update([{ x: -20, y: -20 }]);
   session.end();
+  clock.frame();
+  clock.drain();
   expect(controller.getSnapshot('selection')).toEqual(['a', 'b']);
   expect(controller.getSnapshot('tools').activeTool).toBe('selection');
   expect(controller.getSnapshot('document')).toBe(document);
@@ -87,6 +89,8 @@ test('end before a frame computes the complete final path without an undo transa
   session.begin({ x: -20, y: -20 });
   session.update(path);
   session.end();
+  clock.frame();
+  clock.drain();
   expect(controller.getSnapshot('selection')).toEqual(['rect']);
   expect(clock.frames.size + clock.work.size).toBe(0);
   expect(controller.getSnapshot('history').canUndo).toBe(false);
@@ -113,6 +117,8 @@ test('the unpainted last batch changes the final hit set', () => {
     clock.frame();
     if (appendLast) session.update([{ x: 300, y: 140 }]);
     session.end();
+    clock.frame();
+    clock.drain();
     const selected = controller.getSnapshot('selection');
     session.destroy();
     return selected;
@@ -198,7 +204,7 @@ test.each([true, false])(
     controller.setTool('lasso');
     const clock = scheduler();
     const events: LassoPerformanceEvent[] = [];
-    const prepare = jest.spyOn(objectQuery, 'prepareLayeredObjectQuery');
+    const prepare = jest.spyOn(objectQuery, 'createControllerObjectQuery');
     const query = jest.spyOn(objectQuery, 'createLayeredLassoQuery');
     const selection = jest.fn();
     controller.subscribe('selection', selection);
@@ -221,6 +227,12 @@ test.each([true, false])(
       const latest = events.at(-1)!;
       session.end();
       session.end();
+      expect(controller.getSnapshot('preview').lassoPending).toBe(scheduled ? true : undefined);
+      expect(query).toHaveBeenCalledTimes(scheduled ? 0 : 1);
+      if (scheduled) {
+        clock.frame();
+        clock.drain();
+      }
       expect(prepare).toHaveBeenCalledTimes(1);
       expect(query).toHaveBeenCalledTimes(1);
       expect(selection).toHaveBeenCalledTimes(1);
@@ -285,3 +297,41 @@ test('a failing test performance observer cannot alter editing or cancellation',
   expect(controller.getSnapshot('selection')).toEqual(['rect']);
   session.destroy();
 });
+
+test.each(['cancel', 'tool', 'document', 'destroy', 'new-gesture'] as const)(
+  '%s while final work is pending keeps the retained path and invalidates late work',
+  (mode) => {
+    const controller = makeLayeredController(
+      Array.from({ length: 30 }, (_, i) => layeredRect(`r${i}`))
+    );
+    controller.setTool('lasso');
+    controller.setSelection(['r0']);
+    const clock = scheduler();
+    const session = createLayeredToolSession(controller, () => 'unused', {
+      scheduler: clock.adapter,
+    });
+    session.begin({ x: -20, y: -20 });
+    session.update(path);
+    session.end();
+    expect(controller.getSnapshot('selection')).toEqual(['r0']);
+    expect(controller.getSnapshot('preview').lassoPending).toBe(true);
+    expect(controller.getSnapshot('preview').path.length).toBeGreaterThan(3);
+    clock.frame();
+    clock.query(); // partial preparation; result is still pending
+    expect(clock.work.size).toBe(1);
+    const late = [...clock.all];
+    if (mode === 'cancel') session.cancel();
+    if (mode === 'tool') controller.setTool('line');
+    if (mode === 'document')
+      controller.editObjects({ expectedDocumentRevision: 0, removeIds: ['r0'] });
+    if (mode === 'destroy') session.destroy();
+    const began = mode === 'new-gesture' ? session.begin({ x: 500, y: 500 }) : true;
+    expect(began).toBe(true);
+    late.forEach((callback) => callback());
+    clock.frame();
+    clock.drain();
+    expect(controller.getSnapshot('selection')).toEqual(mode === 'document' ? [] : ['r0']);
+    expect(controller.getSnapshot('preview').lassoPending).toBeUndefined();
+    session.destroy();
+  }
+);

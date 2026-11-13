@@ -1,7 +1,7 @@
 import type { LayeredEditorController } from './layeredEditorController';
 import type { SelectionOperation } from './layeredToolSession';
 import type { Point } from '../model/document';
-import { FreehandGeometryCache } from '../geometry/freehandCache';
+import { layeredGeometryCache } from './layeredGeometryCache';
 import { deriveLayeredWorldBounds } from '../geometry/worldBounds';
 
 export type SelectionRect = Readonly<{ minX: number; minY: number; maxX: number; maxY: number }>;
@@ -11,8 +11,6 @@ export type LayeredSelectionGeometry = Readonly<{
   rotate: Readonly<{ x: number; y: number; radius: number }>;
   region: SelectionRect;
 }>;
-
-const caches = new WeakMap<LayeredEditorController, FreehandGeometryCache>();
 
 /** Schema 3 visual bounds mapped to host-local DIP, with fixed screen-size handles. */
 export function deriveLayeredSelectionGeometry(
@@ -24,11 +22,10 @@ export function deriveLayeredSelectionGeometry(
   const document = controller.getSnapshot('document');
   const preview = controller.getSnapshot('preview');
   const v = controller.getSnapshot('viewport').viewport;
-  let cache = caches.get(controller);
-  if (!cache) caches.set(controller, (cache = new FreehandGeometryCache()));
-  cache.syncDocument(document);
+  const cache = layeredGeometryCache(controller);
+  const selected = new Set(selection);
   const bounds = document.objects
-    .filter((object) => selection.includes(object.objectId))
+    .filter((object) => selected.has(object.objectId))
     .map(
       (original) =>
         deriveLayeredWorldBounds(
