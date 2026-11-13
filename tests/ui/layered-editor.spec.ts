@@ -1,5 +1,6 @@
 import {
   selectionFrame,
+  dragScale,
   dragSelection,
   rotateSelection,
   expectSelectionAngle,
@@ -587,7 +588,12 @@ for (const source of ['mouse', 'touch'] as const) {
     test.use({ hasTouch: true });
     test('selection frame priority moves empty space, outer band and covered low layer', async ({
       page,
+      browserName,
     }) => {
+      test.skip(
+        source === 'touch' && browserName !== 'chromium',
+        'Touch dragging uses Chromium CDP'
+      );
       await openEditor(page);
       await selectToolbarTool(page, '椭圆');
       await pointer(page, 'down', 100, 100);
@@ -607,7 +613,7 @@ for (const source of ['mouse', 'touch'] as const) {
       ]);
       if (source === 'touch')
         await page.evaluate(() => window.__layeredEditor!.setInputMode('finger'));
-      const cdp = await page.context().newCDPSession(page);
+      const cdp = source === 'touch' ? await page.context().newCDPSession(page) : undefined;
       let dx = 0,
         dy = 0;
       for (const start of [
@@ -624,19 +630,19 @@ for (const source of ['mouse', 'touch'] as const) {
           await page.mouse.move(x + 350, y + 30);
           await page.mouse.up();
         } else {
-          await cdp.send('Input.dispatchTouchEvent', {
+          await cdp!.send('Input.dispatchTouchEvent', {
             type: 'touchStart',
             touchPoints: [{ x, y }],
           });
-          await cdp.send('Input.dispatchTouchEvent', {
+          await cdp!.send('Input.dispatchTouchEvent', {
             type: 'touchMove',
             touchPoints: [{ x: x + 20, y: y + 10 }],
           });
-          await cdp.send('Input.dispatchTouchEvent', {
+          await cdp!.send('Input.dispatchTouchEvent', {
             type: 'touchMove',
             touchPoints: [{ x: x + 350, y: y + 30 }],
           });
-          await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+          await cdp!.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
         }
         dx += 350;
         dy += 30;
@@ -654,7 +660,7 @@ for (const source of ['mouse', 'touch'] as const) {
         ).toBeCloseTo(dx - 350);
         await page.getByRole('button', { name: '重做', exact: true }).click();
       }
-      await cdp.detach();
+      await cdp?.detach();
     });
   });
 }
@@ -692,19 +698,19 @@ test('selection session rotates preview and committed frame, retains direction t
     c.setTool('selection');
     c.setSelection(['session-a', 'session-b']);
   });
-  await rotateSelection(page, 30, false);
-  await expectSelectionAngle(page, 30);
+  const firstAngle = await rotateSelection(page, 30, false);
+  await expectSelectionAngle(page, firstAngle);
   expect(
     await page.evaluate(() => window.__layeredEditor!.getSnapshot('document').documentRevision)
   ).toBe(1);
   await page.mouse.up();
-  await expectSelectionAngle(page, 30);
-  await rotateSelection(page, 20);
-  await expectSelectionAngle(page, 50);
+  await expectSelectionAngle(page, firstAngle);
+  const committedAngle = await rotateSelection(page, 20);
+  await expectSelectionAngle(page, committedAngle);
   let f = await selectionFrame(page);
   // This starts in the multiselection gap over a higher unselected object.
   await dragSelection(page, f.center, { x: f.center.x + 20, y: f.center.y + 10 });
-  await expectSelectionAngle(page, 50);
+  await expectSelectionAngle(page, committedAngle);
   expect(
     await page.evaluate(
       () =>
@@ -715,21 +721,21 @@ test('selection session rotates preview and committed frame, retains direction t
   ).toEqual({ a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 });
   f = await selectionFrame(page);
   const width = Math.hypot(f.corners[1].x - f.corners[0].x, f.corners[1].y - f.corners[0].y);
-  await dragSelection(page, f.resize, {
+  const resize = await dragSelection(page, f.resize, {
     x: f.center.x + (f.resize.x - f.center.x) * 1.2,
     y: f.center.y + (f.resize.y - f.center.y) * 1.2,
   });
-  await expectSelectionAngle(page, 50);
+  await expectSelectionAngle(page, committedAngle);
   f = await selectionFrame(page);
   expect(Math.hypot(f.corners[1].x - f.corners[0].x, f.corners[1].y - f.corners[0].y)).toBeCloseTo(
-    width * 1.2,
+    width * dragScale(resize, f.center),
     2
   );
-  await rotateSelection(page, 10, false);
-  await expectSelectionAngle(page, 60);
+  const previewAngle = await rotateSelection(page, 10, false);
+  await expectSelectionAngle(page, previewAngle);
   await page.keyboard.press('Escape');
   await page.mouse.up();
-  await expectSelectionAngle(page, 50);
+  await expectSelectionAngle(page, committedAngle);
   expect(
     await page.evaluate(() => window.__layeredEditor!.getSnapshot('document').documentRevision)
   ).toBe(5);

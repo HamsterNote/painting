@@ -38,3 +38,5 @@ HAM-249 实施与验证记录（2026-11-13）
 系统 Watchman/inotify 达到共享监听上限，Jest 使用 `--watchman=false`；额外套索 UI 入口的首次服务器启动遇到 ENOSPC，原始记录 `lasso-ui.txt`。CI 模式重试结果另存 `lasso-ui-final.txt`。
 
 本次验证为 Web Chromium 与无 DOM/模拟 DOM 测试；未执行 WebKit、iPad Safari、iOS WebView 实体设备验收，也不替代 #52 尚未验收的整套设备性能矩阵。人工验收已通过；规格同步及归档位于 `openspec/changes/archive/2026-11-13-rotate-selection-frame-with-session/`，产品代码保持已验收的 `d7e0802` 不变，后续进入 PR 代码审查。
+
+PR #55 后续 WebKit CI 问题的定位、坐标取整实测与本地回归记录见 `webkit-bugfix.md`；该补充记录更新上述首次交付时尚未执行 WebKit 的验证边界。

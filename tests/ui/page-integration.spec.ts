@@ -1,5 +1,6 @@
 import {
   selectionFrame,
+  dragScale,
   dragSelection,
   rotateSelection,
   expectSelectionAngle,
@@ -291,29 +292,29 @@ for (const rotation of [0, 90, 180, 270])
         c.setSelection(['a', 'b']);
       });
       await expectSelectionAngle(page, rotation);
-      await rotateSelection(page, 30);
-      await expectSelectionAngle(page, rotation + 30);
+      const firstAngle = await rotateSelection(page, 30);
+      await expectSelectionAngle(page, firstAngle);
       let f = await selectionFrame(page);
       const dx = 12 * zoom,
         dy = 8 * zoom;
-      await dragSelection(page, f.center, { x: f.center.x + dx, y: f.center.y + dy });
-      await expectSelectionAngle(page, rotation + 30);
+      const move = await dragSelection(page, f.center, { x: f.center.x + dx, y: f.center.y + dy });
+      await expectSelectionAngle(page, firstAngle);
       const after = await selectionFrame(page);
-      expect(after.center.x - f.center.x).toBeCloseTo(dx, 2);
-      expect(after.center.y - f.center.y).toBeCloseTo(dy, 2);
+      expect(after.center.x - f.center.x).toBeCloseTo(move.end.x - move.start.x, 2);
+      expect(after.center.y - f.center.y).toBeCloseTo(move.end.y - move.start.y, 2);
       f = after;
       const width = Math.hypot(f.corners[1].x - f.corners[0].x, f.corners[1].y - f.corners[0].y);
-      await dragSelection(page, f.resize, {
+      const resize = await dragSelection(page, f.resize, {
         x: f.center.x + (f.resize.x - f.center.x) * 1.1,
         y: f.center.y + (f.resize.y - f.center.y) * 1.1,
       });
-      await expectSelectionAngle(page, rotation + 30);
+      await expectSelectionAngle(page, firstAngle);
       f = await selectionFrame(page);
       expect(
         Math.hypot(f.corners[1].x - f.corners[0].x, f.corners[1].y - f.corners[0].y)
-      ).toBeCloseTo(width * 1.1, 2);
-      await rotateSelection(page, 20);
-      await expectSelectionAngle(page, rotation + 50);
+      ).toBeCloseTo(width * dragScale(resize, f.center), 2);
+      const finalAngle = await rotateSelection(page, 20);
+      await expectSelectionAngle(page, finalAngle);
       expect(
         await page.evaluate(
           () => window.__pageEditors![0]!.getSnapshot('document').documentRevision
