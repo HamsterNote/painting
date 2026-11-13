@@ -1,3 +1,9 @@
+import {
+  selectionFrame,
+  dragSelection,
+  rotateSelection,
+  expectSelectionAngle,
+} from './selection-session-helpers';
 import { openToolbarSettings, selectToolbarTool } from './layered-helpers';
 import { expect, test, type Page } from '@playwright/test';
 import { decodeRgbaPng } from './canvas2d-pen-pixel-helpers';
@@ -652,3 +658,97 @@ for (const source of ['mouse', 'touch'] as const) {
     });
   });
 }
+
+test('selection session rotates preview and committed frame, retains direction through edits and rejects envelope hits', async ({
+  page,
+}) => {
+  await openEditor(page);
+  await page.evaluate(() => {
+    const c = window.__layeredEditor!;
+    const shape = (id: string, x: number, y: number, w: number, h: number) => ({
+      kind: 'shape' as const,
+      objectId: id,
+      objectRevision: 1,
+      transformRevision: 1,
+      transform: { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 },
+      shapeType: 'ellipse' as const,
+      points: [
+        { x, y },
+        { x: x + w, y: y + h },
+      ],
+      style: { color: '#000', width: 2, opacity: 1 },
+    });
+    c.editObjects({
+      expectedDocumentRevision: c.getSnapshot('document').documentRevision,
+      upsert: [
+        shape('session-a', 100, 150, 80, 100),
+        shape('session-b', 320, 150, 80, 100),
+        {
+          ...shape('session-cover', 240, 180, 20, 40),
+          style: { color: '#000', width: 2, opacity: 1, fill: '#eee' },
+        },
+      ],
+    });
+    c.setTool('selection');
+    c.setSelection(['session-a', 'session-b']);
+  });
+  await rotateSelection(page, 30, false);
+  await expectSelectionAngle(page, 30);
+  expect(
+    await page.evaluate(() => window.__layeredEditor!.getSnapshot('document').documentRevision)
+  ).toBe(1);
+  await page.mouse.up();
+  await expectSelectionAngle(page, 30);
+  await rotateSelection(page, 20);
+  await expectSelectionAngle(page, 50);
+  let f = await selectionFrame(page);
+  // This starts in the multiselection gap over a higher unselected object.
+  await dragSelection(page, f.center, { x: f.center.x + 20, y: f.center.y + 10 });
+  await expectSelectionAngle(page, 50);
+  expect(
+    await page.evaluate(
+      () =>
+        window
+          .__layeredEditor!.getSnapshot('document')
+          .objects.find((o) => o.objectId === 'session-cover')!.transform
+    )
+  ).toEqual({ a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 });
+  f = await selectionFrame(page);
+  const width = Math.hypot(f.corners[1].x - f.corners[0].x, f.corners[1].y - f.corners[0].y);
+  await dragSelection(page, f.resize, {
+    x: f.center.x + (f.resize.x - f.center.x) * 1.2,
+    y: f.center.y + (f.resize.y - f.center.y) * 1.2,
+  });
+  await expectSelectionAngle(page, 50);
+  f = await selectionFrame(page);
+  expect(Math.hypot(f.corners[1].x - f.corners[0].x, f.corners[1].y - f.corners[0].y)).toBeCloseTo(
+    width * 1.2,
+    2
+  );
+  await rotateSelection(page, 10, false);
+  await expectSelectionAngle(page, 60);
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await expectSelectionAngle(page, 50);
+  expect(
+    await page.evaluate(() => window.__layeredEditor!.getSnapshot('document').documentRevision)
+  ).toBe(5);
+  await page.evaluate(() => {
+    const c = window.__layeredEditor!;
+    c.setSelection([]);
+    c.setSelection(['session-a', 'session-b']);
+  });
+  await expectSelectionAngle(page, 0);
+  await rotateSelection(page, 45);
+  f = await selectionFrame(page);
+  const outside = {
+    x: Math.max(...f.region.map((p) => p.x)) - 0.5,
+    y: Math.max(...f.region.map((p) => p.y)) - 0.5,
+  };
+  const before = await page.evaluate(() => window.__layeredEditor!.getSnapshot('document'));
+  await page.mouse.click(outside.x, outside.y);
+  expect(await page.evaluate(() => window.__layeredEditor!.getSnapshot('selection'))).toEqual([]);
+  expect(await page.evaluate(() => window.__layeredEditor!.getSnapshot('document'))).toEqual(
+    before
+  );
+});

@@ -64,7 +64,8 @@ export function PageIntegrationFixture({ readOnly = false }: { readOnly?: boolea
   const [enabled, setEnabled] = useState(!readOnly);
   const [page, setPage] = useState(0);
   const [scale, setScale] = useState(1);
-  const [rotated, setRotated] = useState(false);
+  const [rotation, setRotation] = useState(0);
+  const rotated = rotation === 90 || rotation === 270;
   useEffect(() => {
     window.__pageEditors = editors;
     for (const editor of editors)
@@ -83,7 +84,29 @@ export function PageIntegrationFixture({ readOnly = false }: { readOnly?: boolea
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: '#ddd' }}>
       <div>
         <button onClick={() => setScale((scale) => (scale === 1 ? 2.5 : 1))}>Zoom page</button>
-        <button onClick={() => setRotated((value) => !value)}>Rotate page</button>
+        <button onClick={() => setRotation((value) => (value === 0 ? 90 : 0))}>Rotate page</button>
+        <select
+          aria-label="Page angle"
+          value={rotation}
+          onChange={(event) => setRotation(Number(event.target.value))}
+        >
+          {[0, 90, 180, 270].map((angle) => (
+            <option key={angle} value={angle}>
+              {angle}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Page scale"
+          value={scale}
+          onChange={(event) => setScale(Number(event.target.value))}
+        >
+          {[0.5, 1, 2, 2.5].map((scale) => (
+            <option key={scale} value={scale}>
+              {scale}
+            </option>
+          ))}
+        </select>
         <button onClick={() => setPage((page) => 1 - page)}>Switch page</button>
         <button onClick={() => setEnabled((value) => !value)}>
           {enabled ? 'Disable input' : 'Enable input'}
@@ -111,9 +134,14 @@ export function PageIntegrationFixture({ readOnly = false }: { readOnly?: boolea
             geometry={{
               width: 600,
               height: 800,
-              pageToSurface: rotated
-                ? { a: 0, b: scale, c: -scale, d: 0, tx: 800 * scale, ty: 0 }
-                : { a: scale, b: 0, c: 0, d: scale, tx: 0, ty: 0 },
+              pageToSurface:
+                rotation === 90
+                  ? { a: 0, b: scale, c: -scale, d: 0, tx: 800 * scale, ty: 0 }
+                  : rotation === 180
+                    ? { a: -scale, b: 0, c: 0, d: -scale, tx: 600 * scale, ty: 800 * scale }
+                    : rotation === 270
+                      ? { a: 0, b: -scale, c: scale, d: 0, tx: 0, ty: 600 * scale }
+                      : { a: scale, b: 0, c: 0, d: scale, tx: 0, ty: 0 },
             }}
           />
         </div>

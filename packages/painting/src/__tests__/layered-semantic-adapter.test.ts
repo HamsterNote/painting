@@ -1,3 +1,5 @@
+import { deriveLayeredSelectionGeometry } from '../core/layeredSelectionGeometry';
+import { applyAffine } from '../geometry/affine';
 import { createSemanticWebAdapter } from '../layered/semanticWebAdapter';
 import { layeredRect, makeLayeredController } from './fixtures/layered';
 import { createNavigationWebAdapter } from '../layered/navigationWebAdapter';
@@ -464,5 +466,72 @@ test.each(['resize', 'rotate'] as const)(
     expect(h.controller.getSnapshot('selection')).toEqual(['a']);
     expect(h.error).not.toHaveBeenCalled();
     h.destroy();
+  }
+);
+
+test.each(['cancel', 'escape', 'blur', 'capture', 'hidden', 'tool', 'mode', 'unmount'] as const)(
+  'rotated selection %s restores committed geometry and rejects non-owner/late input',
+  (reason) => {
+    const h = selectionHarness();
+    const geometry = () => deriveLayeredSelectionGeometry(h.controller)!;
+    const direction = () =>
+      (Math.atan2(geometry().localToHost.b, geometry().localToHost.a) * 180) / Math.PI;
+    const rotate = (degrees: number, release: boolean) => {
+      const g = geometry();
+      const start = applyAffine(g.localToHost, g.rotate)!;
+      const center = applyAffine(g.localToHost, {
+        x: (g.frame.minX + g.frame.maxX) / 2,
+        y: (g.frame.minY + g.frame.maxY) / 2,
+      })!;
+      const a = (degrees * Math.PI) / 180,
+        dx = start.x - center.x,
+        dy = start.y - center.y;
+      const end = {
+        x: center.x + Math.cos(a) * dx - Math.sin(a) * dy,
+        y: center.y + Math.sin(a) * dx + Math.cos(a) * dy,
+      };
+      h.send('down', start.x, start.y);
+      h.send('move', end.x, end.y);
+      if (release) h.send('up', end.x, end.y);
+    };
+    rotate(30, true);
+    expect(direction()).toBeCloseTo(30);
+    const before = h.controller.getSnapshot('document');
+    rotate(30, false);
+    expect(direction()).toBeCloseTo(60);
+    h.send('move', 400, 400, 'mouse', 2);
+    h.send('up', 400, 400, 'mouse', 2);
+    expect(direction()).toBeCloseTo(60);
+    if (reason === 'cancel') h.send('cancel', 0, 0);
+    if (reason === 'escape') window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    if (reason === 'blur') window.dispatchEvent(new Event('blur'));
+    if (reason === 'capture') {
+      const e = new Event('lostpointercapture', { bubbles: true });
+      Object.assign(e, { pointerId: 1, pointerType: 'mouse' });
+      h.host.dispatchEvent(e);
+    }
+    if (reason === 'hidden') {
+      const spy = jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+      spy.mockRestore();
+    }
+    if (reason === 'tool') h.controller.setTool('rect');
+    if (reason === 'mode') h.controller.setInputMode('finger');
+    if (reason === 'unmount') h.destroy();
+    h.send('move', 400, 400);
+    h.send('up', 400, 400);
+    expect(h.controller.getSnapshot('document')).toBe(before);
+    expect(h.controller.getSnapshot('preview').objects).toHaveLength(0);
+    h.controller.setTool('selection');
+    expect(direction()).toBeCloseTo(reason === 'tool' || reason === 'unmount' ? 0 : 30);
+    let next: number | null = null;
+    if (reason !== 'unmount') {
+      rotate(20, true);
+      next = direction();
+      h.destroy();
+    }
+    expect(next === null).toBe(reason === 'unmount');
+    expect(next ?? 0).toBeCloseTo(reason === 'unmount' ? 0 : reason === 'tool' ? 20 : 50);
+    expect(h.error).not.toHaveBeenCalled();
   }
 );

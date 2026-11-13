@@ -1,0 +1,50 @@
+PASS legacy-web packages/painting/src/__tests__/layered-semantic-adapter.test.ts
+  ✓ DOM hover/click identity delegates, while captured eraser uses the whole geometry sweep (50 ms)
+  ✓ source policy and ownership preserve live mouse tools and cancel touch previews (4 ms)
+  ✓ rect touch transaction cancels before pair and late up cannot edit history (29 ms)
+  ✓ lasso touch transaction cancels before pair and late up cannot edit history (24 ms)
+  ✓ eraser touch transaction cancels before pair and late up cannot edit history (24 ms)
+  ✓ bezier touch transaction cancels before pair and late up cannot edit history (19 ms)
+  ✓ polygon touch transaction cancels before pair and late up cannot edit history (20 ms)
+  ✓ auto captured selection handle keeps its resize transaction when a paper finger arrives (5 ms)
+  ✓ finger captured selection handle keeps its resize transaction when a paper finger arrives (4 ms)
+  ✓ selection page affine mapping at zoom 0.5 locks covered target and uses final up (4 ms)
+  ✓ selection page affine mapping at zoom 1 locks covered target and uses final up (4 ms)
+  ✓ selection page affine mapping at zoom 2 locks covered target and uses final up (3 ms)
+  ✓ selection sources respect auto mode and second touch never steals owner (9 ms)
+  ✓ selection sources respect finger mode and second touch never steals owner (8 ms)
+  ✓ selection sources respect pen mode and second touch never steals owner (10 ms)
+  ✓ selection cancel clears preview and ignores late events (3 ms)
+  ✓ selection escape clears preview and ignores late events (4 ms)
+  ✓ selection blur clears preview and ignores late events (3 ms)
+  ✓ selection hidden clears preview and ignores late events (3 ms)
+  ✓ selection tool clears preview and ignores late events (3 ms)
+  ✓ selection mode clears preview and ignores late events (3 ms)
+  ✓ selection revision clears preview and ignores late events (3 ms)
+  ✓ selection unmount clears preview and ignores late events (2 ms)
+  ✓ frame click is history-free, controls are safe and outside shift/blank retain selection rules (11 ms)
+  ✓ auto pen latch keeps frame touches in navigation and leaves document unchanged (5 ms)
+  ✓ coordinate resize handle beats covering DOM object (3 ms)
+  ✓ coordinate rotate handle beats covering DOM object (2 ms)
+  ✓ rotated selection cancel restores committed geometry and rejects non-owner/late input (5 ms)
+  ✓ rotated selection escape restores committed geometry and rejects non-owner/late input (4 ms)
+  ✓ rotated selection blur restores committed geometry and rejects non-owner/late input (4 ms)
+  ✓ rotated selection capture restores committed geometry and rejects non-owner/late input (7 ms)
+  ✓ rotated selection hidden restores committed geometry and rejects non-owner/late input (8 ms)
+  ✓ rotated selection tool restores committed geometry and rejects non-owner/late input (4 ms)
+  ✓ rotated selection mode restores committed geometry and rejects non-owner/late input (4 ms)
+  ✓ rotated selection unmount restores committed geometry and rejects non-owner/late input (4 ms)
+  bezier staged cancellation
+    ✓ mode cancels between releases and prevents the old shape from completing (3 ms)
+    ✓ blur cancels between releases and prevents the old shape from completing (3 ms)
+    ✓ hidden cancels between releases and prevents the old shape from completing (4 ms)
+  polygon staged cancellation
+    ✓ mode cancels between releases and prevents the old shape from completing (3 ms)
+    ✓ blur cancels between releases and prevents the old shape from completing (2 ms)
+    ✓ hidden cancels between releases and prevents the old shape from completing (3 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       41 passed, 41 total
+Snapshots:   0 total
+Time:        6.367 s
+Ran all test suites matching /packages\/painting\/src\/__tests__\/layered-semantic-adapter.test.ts/i.
