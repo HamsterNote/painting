@@ -1,9 +1,6 @@
 import type { GetClientToLocal } from '../geometry/pageCoordinates';
 import type { LayeredEditorController } from '../core/layeredEditorController';
-import {
-  createLayeredToolSession,
-  type LassoPerformanceEvent,
-} from '../core/layeredToolSession';
+import { createLayeredToolSession, type LassoPerformanceEvent } from '../core/layeredToolSession';
 import type { Point } from '../model/document';
 import type { WebFreehandPolicy } from '../input/web/freehandWebAdapter';
 import { createEraserTrail } from './eraserTrail';

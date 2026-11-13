@@ -95,6 +95,7 @@ export function createLayeredInputArbiter(options: {
       ? 'safe-control'
       : (options.targetRole?.(event) ??
         (event.type === 'pointerdown' &&
+        !state.gesture &&
         hitLayeredSelectionGeometry(deriveLayeredSelectionGeometry(controller), { x, y })
           ? 'selection'
           : 'paper'));
