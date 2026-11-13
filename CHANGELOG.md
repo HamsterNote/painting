@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-13
+
+`@hamster-note/painting` 与 `@hamster-note/painting-board` 同步发布，后者精确依赖 painting `0.9.1`。本次修复既有工具栏、擦除反馈与选择交互，未新增公开 API，按补丁版本交付。
+
+### Fixed
+
+- HAM-241 / HAM-250：移除顶部重复的清空入口，保留底栏「清空画布」及撤销；底栏距画板底边为 8px 加安全区，显式零 inset 仍有效。
+- HAM-241 / HAM-250：橡皮尾迹按每个采样点的年龄在 1s 内滚动淡出，连续拖动 5s 仅保留最近约 1s；交叉与采样接缝不叠色加深，擦除提交不提前清空反馈。
+- HAM-246：优先处理已有选区框拖动，保持后续接触点的手势仲裁归属。
+- 套索查询隔离预览并分帧调度，复杂几何保留参考布尔相交回退，避免选择结果回归。
+
 ## [0.9.0] - 2026-11-12
 
 `@hamster-note/painting` 与 `@hamster-note/painting-board` 同步发布，后者精确依赖 painting `0.9.0`。本次工具栏整体更新及共享工具栏公开入口以次版本交付；此前未发布的 0.8.4 内容一并纳入。
