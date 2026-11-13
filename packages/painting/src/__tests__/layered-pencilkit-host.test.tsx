@@ -258,7 +258,8 @@ test.each([
     draw(2);
     const first = controller.getSnapshot('document').objects.at(-1)!;
     expect(controller.getSnapshot('document').objects).toHaveLength(previous.length + 1);
-    fireEvent.click(view.getByRole('button', { name: '设置' }));
+    fireEvent.click(view.getByRole('button', { name: '笔触设置' }));
+    expect(view.getByRole('dialog', { name: '笔触设置' })).toBeTruthy();
     fireEvent.change(view.getByLabelText('颜色', { exact: true }), {
       target: { value: '#df2468' },
     });
@@ -279,6 +280,12 @@ test.each([
     draw(3);
     const committed = controller.getSnapshot('document').objects;
     expect(committed).toHaveLength(previous.length + 2);
+    expect(committed.at(-1)).toMatchObject(
+      tool === 'freehand'
+        ? { brushSnapshot: { color: '#df2468' } }
+        : { style: { color: '#df2468' } }
+    );
+    expect(committed.slice(0, -1)).toEqual([...previous, first]);
     fireEvent.click(view.getByRole('button', { name: '撤销', exact: true }));
     expect(controller.getSnapshot('document').objects).toEqual([...previous, first]);
     fireEvent.click(view.getByRole('button', { name: '重做', exact: true }));

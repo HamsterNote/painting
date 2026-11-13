@@ -26,6 +26,10 @@ test('board toolbar and surface use the same controller with isolated document r
   expect(screen.getByTestId('layered-surface')).toBeTruthy();
   const before = renderObserver.mock.calls.length;
   fireEvent.click(screen.getByRole('button', { name: '设置' }));
+  expect(screen.queryByLabelText('压力模式')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '设置' }));
+  fireEvent.click(screen.getByRole('button', { name: '笔触设置' }));
+  expect(screen.getByRole('dialog', { name: '笔触设置' })).toBeTruthy();
   fireEvent.change(screen.getByLabelText('压力模式'), { target: { value: 'constant' } });
   expect(controller.getSnapshot('tools').settings.freehand.pressureMode).toBe('constant');
   expect(renderObserver).toHaveBeenCalledTimes(before);
