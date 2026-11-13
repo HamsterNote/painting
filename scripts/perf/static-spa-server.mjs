@@ -4,7 +4,7 @@
  * 只用于 production export 的本地静态服务。带扩展名的请求永远映射到真实文件，
  * 因而资源缺失会返回 404，不会被 SPA fallback 的 HTML 掩盖。
  */
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, createWriteStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { resolve, sep } from 'node:path';
 
@@ -44,6 +44,10 @@ function extensionOf(pathname) {
 
 const root = resolve(readArgument('--root', 'apps/playground/dist'));
 const requestedPort = Number.parseInt(readArgument('--port', '0'), 10);
+const host = readArgument('--host', '127.0.0.1');
+const landing = readArgument('--landing', '');
+const logPath = readArgument('--log', '');
+const log = logPath ? createWriteStream(logPath, { flags: 'a' }) : null;
 if (!existsSync(root) || !statSync(root).isDirectory()) {
   throw new Error(`Static export directory is unavailable: ${root}`);
 }
@@ -52,10 +56,23 @@ const indexPath = resolve(root, 'index.html');
 if (!existsSync(indexPath)) throw new Error(`SPA index is unavailable: ${indexPath}`);
 
 const server = createServer((request, response) => {
+  if (log)
+    response.once('finish', () =>
+      log.write(
+        JSON.stringify({
+          time: new Date().toISOString(),
+          peer: request.socket.remoteAddress,
+          method: request.method,
+          url: request.url,
+          status: response.statusCode,
+        }) + '\n'
+      )
+    );
   const requestUrl = new URL(request.url ?? '/', 'http://127.0.0.1');
   let pathname;
   try {
     pathname = decodeURIComponent(requestUrl.pathname);
+    if (pathname === '/' && landing) pathname = `/${landing}`;
   } catch {
     response.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' });
     response.end('Malformed request path');
@@ -89,17 +106,17 @@ const server = createServer((request, response) => {
     .pipe(response);
 });
 
-server.listen(requestedPort, '127.0.0.1', () => {
+server.listen(requestedPort, host, () => {
   const address = server.address();
   if (!address || typeof address === 'string')
     throw new Error('Unable to determine server address');
   process.stdout.write(
-    `${JSON.stringify({ event: 'listening', host: '127.0.0.1', port: address.port, root, mimeTypes: MIME_TYPES })}\n`
+    `${JSON.stringify({ event: 'listening', host, port: address.port, root, mimeTypes: MIME_TYPES })}\n`
   );
 });
 
 function shutdown() {
-  server.close(() => process.exit(0));
+  server.close(() => (log ? log.end(() => process.exit(0)) : process.exit(0)));
 }
 process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);

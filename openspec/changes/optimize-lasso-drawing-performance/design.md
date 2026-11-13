@@ -2,6 +2,8 @@
 
 ## Context
 
+最新测量约束以 `measurement-protocol.md` 为准：6核主机一分钟load超过3直接废弃整对样本，记录空闲CPU；两版在同一时段相邻AB/BA执行。主指标是查询边界的Chromium线程CPU时钟与独立操作计数，Paint墙钟仅作端到端验收证据。旧高负载读数不用于前后对比。本轮只改测量与交付工具，不改几何算法、预热或产品代码；PR #53静态服务与原版、main并列供人类先验证拖动手感。
+
 动机见 proposal.md。当前 `layeredToolSession.update` 在每批输入对累计轨迹调用 `queryObjectLasso`，再调用 `setSelection`、`setPreview`。查询每次规范化完整多边形并遍历 prepared.entries，候选再执行几何相交；prepared 已在 begin 构建，不应误写为每次 move 重建几何。
 
 `DisplayLayer` 订阅整个 preview，每次轨迹变化都会 map 历史对象；其 layout effect 依赖 preview，会扫描所有 `[data-object-id]` 并重建 presentation 注册。`ObjectNode` 虽有 memo，不能免除父层遍历及 effect。`SelectionOverlay` 在判定套索工具无需选区框之前先 syncDocument；controller 的 document/preview 是分频道稳定快照，没有发现 move 自动复制全量文档的证据。文本或图层快照仅为待 trace 排除的假设，不新增栅格截图机制。

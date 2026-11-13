@@ -1,5 +1,7 @@
 // Complete production gesture, headed Chromium. Gate uses first Paint after selection DOM commit.
 // This is a presentation proxy under Xvfb, not physical display/hand timing.
+// Secondary acceptance evidence only. Do not compare independent invocations;
+// use lasso-clean-pair.mjs for adjacent AB/BA kernel CPU and operation counts.
 import { chromium } from '@playwright/test';
 import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
@@ -8,9 +10,13 @@ import { mkdir, writeFile, cp } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import os from 'node:os';
 import { lassoTrajectory } from './lasso-fixture.mjs';
+import { sampleHost } from './lasso-host-gate.mjs';
 const output = process.argv[2] ?? 'artifacts/research/lasso-final-query/ui';
 const root = process.env.LASSO_EXPORT_ROOT ?? 'apps/playground/dist';
 await mkdir(output, { recursive: true });
+const preflight = await sampleHost();
+await writeFile(`${output}/host-preflight.json`, JSON.stringify(preflight, null, 2));
+if (!preflight.valid) throw new Error('Invalid host: no UI timing run; retry after load drops');
 await cp(root, `${output}/site`, { recursive: true });
 const xroot = 'artifacts/research/lasso-release/x11/root';
 const display = process.env.DISPLAY ?? process.env.LASSO_X_DISPLAY ?? ':248';
@@ -73,6 +79,16 @@ try {
   for (let repeat = 0; repeat < Number(process.env.LASSO_REPEATS ?? 1); repeat++)
     for (const scenario of (process.env.LASSO_SCENARIOS ?? 'local,dense').split(','))
       for (const count of (process.env.LASSO_COUNTS ?? '500,1000').split(',').map(Number)) {
+        // Sample before navigation: waiting here must not give the first gesture
+        // an extra 500ms of application idle warmup.
+        const pageHostBefore = await sampleHost();
+        if (!pageHostBefore.valid) {
+          await writeFile(
+            `${output}/${scenario}-${count}-p${repeat}.invalid-host.json`,
+            JSON.stringify(pageHostBefore, null, 2)
+          );
+          throw new Error('Invalid host: cold page rejected before navigation');
+        }
         const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
         const page = await context.newPage();
         const errors = [];
@@ -106,6 +122,14 @@ try {
         for (let round = 0; round < Number(process.env.LASSO_ROUNDS ?? 3); round++) {
           const id = `${scenario}-${count}-p${repeat}-r${round}`;
           await page.bringToFront();
+          const hostBefore = round === 0 ? pageHostBefore : await sampleHost();
+          if (!hostBefore.valid) {
+            await writeFile(
+              `${output}/${id}.invalid-host.json`,
+              JSON.stringify(hostBefore, null, 2)
+            );
+            throw new Error('Invalid host: round rejected before input; retry in a fresh page');
+          }
           // Focus before arming the session; the first focus transition can cancel gestures.
           await page.evaluate(() => window.__layeredEditor.setTool('pan'));
           await page.getByTestId('layered-surface').click({ position: { x: 5, y: 5 } });
@@ -238,7 +262,11 @@ try {
               warmup: window.__warmupMarks ?? [],
             };
           });
-          await writeFile(`${output}/${id}.json`, JSON.stringify({ ...raw, errors, timeout }));
+          const hostAfter = await sampleHost();
+          await writeFile(
+            `${output}/${id}.json`,
+            JSON.stringify({ ...raw, errors, timeout, hostBefore, hostAfter })
+          );
           await writeFile(`${output}/${id}.trace.json`, JSON.stringify({ traceEvents: events }));
           await page.screenshot({ path: `${output}/${id}.png` });
           const down = events.find((e) => e.name === 'input:pointerdown'),
@@ -367,7 +395,12 @@ try {
             loadOver200: loadTasks.filter((e) => e.dur > 200000).length,
             cold: round === 0,
             valid:
-              !!paint && !timeout && !errors.length && !raw.marks.some((m) => m.event === 'cancel'),
+              hostBefore.valid &&
+              hostAfter.valid &&
+              !!paint &&
+              !timeout &&
+              !errors.length &&
+              !raw.marks.some((m) => m.event === 'cancel'),
             objectCount: raw.objectCount,
             selected: raw.selected.length,
             releaseToPaintMs: latency,
@@ -377,6 +410,9 @@ try {
             queryTaskWallMs,
             queryTaskGapMs: qe && qs ? qe.time - qs.time - queryTaskWallMs : null,
             hostLoad: os.loadavg(),
+            hostBefore,
+            hostAfter,
+            measurementRole: 'secondary UI acceptance; not an independent-version comparison',
             phases,
             gcMs: gc,
             taskMaxMs: Math.max(0, ...tasks.map((e) => e.dur / 1000)),
@@ -385,6 +421,8 @@ try {
             dragQueries: raw.marks.filter((m) => m.event === 'query-start' && m.time < release)
               .length,
             pass:
+              hostBefore.valid &&
+              hostAfter.valid &&
               !!paint &&
               !timeout &&
               !errors.length &&
@@ -398,6 +436,8 @@ try {
           rows.push(row);
           console.log(JSON.stringify(row));
           await writeFile(`${output}/summary.json`, JSON.stringify(rows, null, 2));
+          if (!hostAfter.valid)
+            throw new Error('Host became invalid: discard round and retry on a fresh page');
         }
         await context.close();
       }

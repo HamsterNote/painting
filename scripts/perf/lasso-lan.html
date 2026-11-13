@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>套索手感对照 · 松手选择版</title>
+  <style>
+    body {
+      font: 18px system-ui;
+      margin: 36px auto;
+      padding: 0 24px;
+      max-width: 680px;
+      line-height: 1.6;
+      color: #17202b;
+      background: #f5f7fb;
+    }
+    a {
+      display: block;
+      background: white;
+      border: 1px solid #ccd4e0;
+      border-radius: 12px;
+      padding: 18px;
+      margin: 14px 0;
+      color: #1458b0;
+      text-decoration: none;
+    }
+    small {
+      color: #556;
+    }
+  </style>
+  <h1>套索手感对照 · 松手选择版</h1>
+  <p>选择场景后点“套索”，用手指连续画圈。拖动时只显示轨迹，松手后出现选区。</p>
+  <a href="/layered-editor?fixture=lasso&amp;lassoCount=0&amp;lassoScenario=local&amp;touchDraw=1"
+    >空白对照</a
+  >
+  <a href="/layered-editor?fixture=lasso&amp;lassoCount=100&amp;lassoScenario=local&amp;touchDraw=1"
+    >100 笔</a
+  >
+  <a href="/layered-editor?fixture=lasso&amp;lassoCount=500&amp;lassoScenario=local&amp;touchDraw=1"
+    >500 笔</a
+  >
+  <p>先比较拖动是否流畅，再单独感受松手后的等待。三版使用相同固定笔画，刷新可重置。</p>
+  <a id="original">打开原版</a>
+  <a id="merged">打开已合入版</a>
+  <small>PR #53 草稿 · production 静态构建 · 应用代码 d8189c2 / PR 快照 c23d4ca</small>
+  <script>
+    document.getElementById('original').href = `http://${location.hostname}:6271/`;
+    document.getElementById('merged').href = `http://${location.hostname}:6272/`;
+  </script>
+</html>
