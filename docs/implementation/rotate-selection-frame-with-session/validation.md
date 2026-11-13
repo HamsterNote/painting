@@ -1,6 +1,6 @@
 HAM-249 实施与验证记录（2026-11-13）
 
-基线：main `5ee0925`，包含 #51（HAM-246，整体选区优先及共享几何）与祖先提交 `3ac6e58`（#52）。本次未推送、未创建 PR，未归档或同步增量规格，交付后等待验收。
+基线：main `5ee0925`，包含 #51（HAM-246，整体选区优先及共享几何）与祖先提交 `3ac6e58`（#52）。实现提交为 `d7e0802`。2026-11-13 修勾在 HAM-249 回复“验证通过”（评论 `01a1d2db-50b4-7a8d-a8d8-e547a25ac4c2`）；获准同步主规格、归档，并推送分支向 main 提交 PR。
 
 实现
 
@@ -37,4 +37,4 @@ HAM-249 实施与验证记录（2026-11-13）
 
 系统 Watchman/inotify 达到共享监听上限，Jest 使用 `--watchman=false`；额外套索 UI 入口的首次服务器启动遇到 ENOSPC，原始记录 `lasso-ui.txt`。CI 模式重试结果另存 `lasso-ui-final.txt`。
 
-本次验证为 Web Chromium 与无 DOM/模拟 DOM 测试；未执行 WebKit、iPad Safari、iOS WebView 实体设备验收，也不替代 #52 尚未验收的整套设备性能矩阵。OpenSpec 的任务执行完成不表示人工验收通过；本次不归档，任务进入“验证中”，推送和 PR 等待本次触发指示中的确认。
+本次验证为 Web Chromium 与无 DOM/模拟 DOM 测试；未执行 WebKit、iPad Safari、iOS WebView 实体设备验收，也不替代 #52 尚未验收的整套设备性能矩阵。人工验收已通过；规格同步及归档位于 `openspec/changes/archive/2026-11-13-rotate-selection-frame-with-session/`，产品代码保持已验收的 `d7e0802` 不变，后续进入 PR 代码审查。
