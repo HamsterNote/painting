@@ -221,3 +221,74 @@ test('lifecycle reset drops ownership without waiting for missing terminal event
   });
   expect(next.intents).toEqual([{ type: 'route', target: 'tool', input: pointer(1) }]);
 });
+
+test.each(['mouse', 'pen', 'touch'] as const)(
+  '%s stale owner retires only after cancel ACK',
+  (device) => {
+    const h = harness();
+    const first = { ...pointer(1, 'down', device), isPrimary: true };
+    const next = { ...pointer(2, 'down', device), isPrimary: true };
+    h.dispatch(first);
+    // Movement without primary metadata must not erase down identity.
+    h.dispatch(pointer(1, 'move', device));
+    expect(h.dispatch(next)).toEqual([{ type: 'cancel', target: 'tool' }]);
+    expect(h.state().gesture?.ids).toEqual([1]);
+    expect(h.ack(false)).toEqual([]);
+    expect(h.state().gesture?.ids).toEqual([1]);
+    expect(h.dispatch(next)).toEqual([{ type: 'cancel', target: 'tool' }]);
+    expect(h.ack(true)).toEqual([
+      ...(device === 'pen' ? [{ type: 'detect-pen' }] : []),
+      { type: 'route', target: 'tool', input: next },
+    ]);
+    expect(h.state().contacts).toEqual([next]);
+    expect(h.state().ownership.active.map((p) => p.pointerId)).toEqual([2]);
+    expect(h.dispatch(pointer(1, 'up', device))).toEqual([]);
+  }
+);
+
+test.each([undefined, false])('pen primary identity %s cannot prove a stale owner', (isPrimary) => {
+  const h = harness();
+  h.dispatch({ ...pointer(1, 'down', 'pen'), isPrimary });
+  expect(h.dispatch({ ...pointer(2, 'down', 'pen'), isPrimary: true })).toEqual([
+    { type: 'detect-pen' },
+  ]);
+  expect(h.state().gesture?.ids).toEqual([1]);
+});
+
+test('primary touch alongside pen is a palm, not evidence that the pen ended', () => {
+  const h = harness();
+  h.dispatch({ ...pointer(1, 'down', 'pen'), isPrimary: true });
+  expect(h.dispatch({ ...pointer(2), isPrimary: true })).toEqual([]);
+  expect(h.dispatch({ ...pointer(3, 'down', 'pen'), isPrimary: true })).toEqual([
+    { type: 'cancel', target: 'tool' },
+  ]);
+  h.ack(true);
+  expect(h.state().gesture?.ids).toEqual([3]);
+  expect(h.state().suppressed).toEqual([2]);
+  expect(h.dispatch(pointer(2, 'up'))).toEqual([]);
+  expect(h.state().gesture?.ids).toEqual([3]);
+});
+
+test('stale recovery does not replace an active navigation pair', () => {
+  const h = harness();
+  h.dispatch({ ...pointer(1), isPrimary: true });
+  h.dispatch({ ...pointer(2), isPrimary: false });
+  h.ack(true);
+  expect(h.dispatch({ ...pointer(3), isPrimary: true })).toEqual([]);
+  expect(h.state().gesture?.ids).toEqual([1, 2]);
+});
+
+test('failed recovery ACK blocks reused-ID move/up until a fresh down retries', () => {
+  const h = harness();
+  const down = { ...pointer(1, 'down', 'pen'), isPrimary: true };
+  h.dispatch(down);
+  h.dispatch(down);
+  h.ack(false);
+  expect(h.dispatch(pointer(1, 'move', 'pen'))).toEqual([]);
+  expect(h.dispatch(pointer(1, 'up', 'pen'))).toEqual([]);
+  expect(h.dispatch(down)).toEqual([{ type: 'cancel', target: 'tool' }]);
+  expect(h.ack(true)).toEqual([
+    { type: 'detect-pen' },
+    { type: 'route', target: 'tool', input: down },
+  ]);
+});

@@ -294,7 +294,7 @@ Web 普通 hover/click SHALL 支持从实际 DOM 目标定位对象；选择工�
 
 ### Requirement: Rotated selection frame obeys transaction and cancellation semantics
 
-系统 SHALL 将选框会话方向作为临时交互状态，不写入持久化文档、不单独增加历史。一次实际移动、缩放或旋转 SHALL 仍只提交一个可逆文档事务；无变化点击不提交。取消未完成变换 SHALL 同时撤销对象及选框预览，恢复操作前仍有效的会话方向；若既有行为已清除选择则结束会话。pointercancel、Escape、失焦、页面隐藏、卸载、工具或输入模式切换 SHALL 遵守既有取消与归属规则，迟到事件不得提交或恢复旧方向。捕获丢失 SHALL 只改变事件路由，不取消活动手势或预览；owner SHALL 保留到真正的 up/cancel 或生命周期中断，正常 up 仍仅提交一次。历史撤销/重做或外部文档替换后，若选择仍有效，系统 SHALL 根据当前文档重新建立正交选框；若选择无效则清除，不能残留旧框或旧命中区。
+系统 SHALL 将选框会话方向作为临时交互状态，不写入持久化文档、不单独增加历史。一次实际移动、缩放或旋转 SHALL 仍只提交一个可逆文档事务；无变化点击不提交。取消未完成变换 SHALL 同时撤销对象及选框预览，恢复操作前仍有效的会话方向；若既有行为已清除选择则结束会话。pointercancel、Escape、失焦、页面隐藏、卸载、工具或输入模式切换 SHALL 遵守既有取消与归属规则，迟到事件不得提交或恢复旧方向。捕获丢失 SHALL 只改变事件路由，不取消活动手势或预览；owner SHALL 保留到真正的 up/cancel、生命周期中断或下述新同类主指针 down 恢复，正常 up 仍仅提交一次。历史撤销/重做或外部文档替换后，若选择仍有效，系统 SHALL 根据当前文档重新建立正交选框；若选择无效则清除，不能残留旧框或旧命中区。
 
 #### Scenario: Cancel restores the previous orientation
 
@@ -315,6 +315,16 @@ Web 普通 hover/click SHALL 支持从实际 DOM 目标定位对象；选择工�
 
 - **WHEN** 选框已有30°已提交方向，继续旋转预览至60°，在正常up前或后丢失捕获
 - **THEN** 捕获丢失本身不回滚预览或清除owner；正常up只提交一次60°方向，若收到真正取消则恢复30°且迟到up不提交
+
+#### Scenario: A fresh primary down recovers a missing terminal event
+
+- **WHEN** 单指针语义手势未收到终止事件，新的有效主按键 down 与旧 owner 同属 mouse，或同属 pen/touch 且新旧指针都明确为 primary
+- **THEN** 系统 SHALL 先取消旧会话并确认清理成功，再以新 down 开始独立会话；旧轨迹不提交，新手势正常结束仅提交一次。捕获丢失与 buttons=0 move 本身均不触发恢复
+
+#### Scenario: Secondary contacts retain existing arbitration
+
+- **WHEN** 笔手势期间落下手指或次级笔，或触摸手势期间落下非 primary 第二指
+- **THEN** 系统 MUST NOT 将旧 owner 判为陈旧；笔手势继续抑制手掌，双触摸按既有规则取消单触摸工具并接管导航，活动双指会话不被恢复规则替换。缺少 primary 信息的 pen/touch 输入不得推测主指针身份
 
 ### Requirement: Scheduled lasso feedback preserves final geometry and cancellation
 
@@ -343,7 +353,7 @@ Web 普通 hover/click SHALL 支持从实际 DOM 目标定位对象；选择工�
 #### Scenario: Native touch release commits the final selection
 
 - **WHEN** 浏览器以真实触摸输入完成有效套索，并正常发出 pointerup/touchend，指针捕获可能在正常松手之前或之后释放
-- **THEN** MUST 执行一次最终查询并将成功结果写入选区，捕获丢失只改变路由而不得误取消当前手势或在途查询；保留owner直到up、真正取消或生命周期中断，重复up不重复提交；文档与历史不变。MUST 分开记录触摸与鼠标证据，CDP 触摸或桌面 WebKit 结果不得替代已报告故障设备的复验
+- **THEN** MUST 执行一次最终查询并将成功结果写入选区，捕获丢失只改变路由而不得误取消当前手势或在途查询；保留owner直到up、真正取消、生命周期中断或下述新同类主指针 down 恢复，重复up不重复提交；文档与历史不变。MUST 分开记录触摸与鼠标证据，CDP 触摸或桌面 WebKit 结果不得替代已报告故障设备的复验
 
 #### Scenario: Touch interruption does not submit a stale selection
 
@@ -369,3 +379,13 @@ Web 普通 hover/click SHALL 支持从实际 DOM 目标定位对象；选择工�
 
 - **WHEN** 比较两版套索查询性能
 - **THEN** MUST 记录每轮前后load与空闲CPU；一分钟load超过可用核数一半时废弃整对并重跑。两版MUST在同一时段相邻交替AB/BA执行，以同线程查询边界CPU时钟及候选数、段对检查数、独立分配采样和GC次数为主证据。CPU时钟缺失不得以墙钟替代；内核首次查询不得冒充首次真实UI手势；原冷态150/400ms及零>200ms长任务门槛不变，真机验证单列
+
+#### Scenario: A fresh primary down recovers a missing terminal event
+
+- **WHEN** 单指针语义手势未收到终止事件，新的有效主按键 down 与旧 owner 同属 mouse，或同属 pen/touch 且新旧指针都明确为 primary
+- **THEN** 系统 SHALL 先取消旧会话并确认清理成功，再以新 down 开始独立会话；旧轨迹不提交，新手势正常结束仅提交一次。捕获丢失与 buttons=0 move 本身均不触发恢复
+
+#### Scenario: Secondary contacts retain existing arbitration
+
+- **WHEN** 笔手势期间落下手指或次级笔，或触摸手势期间落下非 primary 第二指
+- **THEN** 系统 MUST NOT 将旧 owner 判为陈旧；笔手势继续抑制手掌，双触摸按既有规则取消单触摸工具并接管导航，活动双指会话不被恢复规则替换。缺少 primary 信息的 pen/touch 输入不得推测主指针身份

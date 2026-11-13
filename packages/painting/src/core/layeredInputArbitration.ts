@@ -1,4 +1,4 @@
-import type { NormalizedPointerInput } from './input';
+import { supersedesPrimaryPointer, type NormalizedPointerInput } from './input';
 import {
   createPointerOwnershipState,
   reducePointerOwnership,
@@ -24,7 +24,12 @@ export type LayeredInputArbitration = Readonly<{
   suppressed: readonly (string | number)[];
   draining: boolean;
   gesture?: LayeredInputGesture;
-  pending?: { gesture: LayeredInputGesture; input?: Pointer };
+  pending?:
+    | { gesture: LayeredInputGesture; input?: Pointer }
+    | {
+        restart: Extract<LayeredInputArbitrationEvent, { type: 'pointer' }>;
+        retired: Pointer;
+      };
 }>;
 export type LayeredInputArbitrationEvent =
   | { type: 'pointer'; input: Pointer; policy: LayeredInputSnapshot; panTool: boolean }
@@ -74,6 +79,27 @@ export function reduceLayeredInputArbitration(
   if (event.type === 'cancel-result') {
     if (!state.pending) return { state, intents };
     const pending = state.pending;
+    if ('restart' in pending) {
+      // Keep ownership intact on a failed ACK. Never finish the old trajectory
+      // with a new pointer, nor admit new input until cancellation succeeded.
+      if (!event.ok) return { state, intents };
+      const id = pending.retired.pointerId;
+      return reduceLayeredInputArbitration(
+        {
+          ...state,
+          ownership: reducePointerOwnership(state.ownership, {
+            ...pending.retired,
+            phase: 'cancel',
+          }),
+          contacts: state.contacts.filter((p) => p.pointerId !== id),
+          suppressed: state.suppressed.filter((p) => p !== id),
+          gesture: undefined,
+          pending: undefined,
+          draining: false,
+        },
+        pending.restart
+      );
+    }
     if (!event.ok) {
       return {
         state: {
@@ -103,6 +129,25 @@ export function reduceLayeredInputArbitration(
     };
   }
   const { input, policy, panTool } = event;
+  if (
+    input.phase === 'down' &&
+    (!state.pending || 'restart' in state.pending) &&
+    state.gesture?.ids.length === 1 &&
+    (input.button === undefined || input.button === 0) &&
+    (input.targetRole === 'paper' || input.targetRole === 'selection')
+  ) {
+    const retired = state.contacts.find((p) => p.pointerId === state.gesture!.ids[0]);
+    if (retired && supersedesPrimaryPointer(retired, input)) {
+      return {
+        state: { ...state, pending: { restart: event, retired } },
+        intents: [{ type: 'cancel', target: target(state.gesture) }],
+      };
+    }
+  }
+  // A failed recovery ACK leaves routing closed, including when the browser
+  // reuses the same pointer ID. Retry cancellation on a fresh primary down;
+  // new move/up must never finish the stale tool transaction.
+  if (state.pending && 'restart' in state.pending) return { state, intents };
   const id = input.pointerId;
   const existing = state.contacts.find((p) => p.pointerId === id);
   const ownership = reducePointerOwnership(state.ownership, input);
@@ -162,7 +207,9 @@ export function reduceLayeredInputArbitration(
   // Capture and hit-target changes must not replace the role claimed on down.
   const contacts = ended
     ? state.contacts.filter((p) => p.pointerId !== id)
-    : state.contacts.map((p) => (p.pointerId === id ? { ...input, targetRole: p.targetRole } : p));
+    : state.contacts.map((p) =>
+        p.pointerId === id ? { ...input, targetRole: p.targetRole, isPrimary: p.isPrimary } : p
+      );
   const next = { ...state, ownership, contacts };
   if (state.suppressed.includes(id)) {
     return {
