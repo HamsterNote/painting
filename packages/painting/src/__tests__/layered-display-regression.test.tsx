@@ -4,6 +4,66 @@ import { PresentationCoordinator } from '../layered/PresentationCoordinator';
 import { layeredRect, makeLayeredController, commitLayeredStroke } from './fixtures/layered';
 import { layeredText, layeredImage } from './fixtures/layeredDom';
 import type { ShapeObject } from '../model/document';
+import { FreehandGeometryCache } from '../geometry/freehandCache';
+import { SelectionOverlay } from '../layered/SelectionOverlay';
+
+test('path-only previews never traverse history or rebuild presentation registrations', () => {
+  const controller = makeLayeredController([layeredText, layeredRect(), layeredImage]);
+  const presentation = new PresentationCoordinator(controller);
+  const mount = jest.spyOn(presentation, 'mount');
+  const onRender = jest.fn();
+  const { container, unmount } = render(
+    <DisplayLayer controller={controller} presentation={presentation} onRender={onRender} />
+  );
+  const nodes = Array.from(container.querySelectorAll('[data-object-id]'));
+  const matrix = nodes[0].parentElement!.getAttribute('transform');
+  onRender.mockClear();
+  mount.mockClear();
+  for (let i = 0; i < 10; i++)
+    act(() => {
+      controller.setPreview({
+        objects: [],
+        hiddenIds: [],
+        path: [
+          { x: 0, y: 0 },
+          { x: i + 1, y: 10 },
+        ],
+      });
+    });
+  expect(onRender).not.toHaveBeenCalled();
+  expect(mount).not.toHaveBeenCalled();
+  expect(Array.from(container.querySelectorAll('[data-object-id]'))).toEqual(nodes);
+  expect(nodes[0].parentElement!.getAttribute('transform')).toBe(matrix);
+  expect(container.querySelector('polyline')?.getAttribute('points')).toBe('0,0 10,10');
+  unmount();
+  presentation.destroy();
+});
+
+test('lasso skips selection cache scans and selection handles return when switching tools', () => {
+  const controller = makeLayeredController([layeredRect()]);
+  controller.setTool('lasso');
+  controller.setSelection(['rect']);
+  const scan = jest.spyOn(FreehandGeometryCache.prototype, 'syncDocument');
+  const { container, unmount } = render(<SelectionOverlay controller={controller} />);
+  act(() => {
+    controller.setPreview({
+      objects: [],
+      hiddenIds: [],
+      path: [
+        { x: 0, y: 0 },
+        { x: 10, y: 10 },
+      ],
+    });
+  });
+  expect(scan).not.toHaveBeenCalled();
+  act(() => {
+    controller.setTool('selection');
+  });
+  expect(container.querySelector('[data-selection-operation="resize"]')).not.toBeNull();
+  expect(container.querySelector('[data-selection-operation="rotate"]')).not.toBeNull();
+  unmount();
+  scan.mockRestore();
+});
 
 test.each(['line', 'rect', 'ellipse', 'polygon', 'bezier'] as const)(
   '%s uses shared geometry and shape-only dash style',

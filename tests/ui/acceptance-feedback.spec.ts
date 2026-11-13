@@ -222,10 +222,11 @@ for (const width of [1280, 390]) {
       const tx = (box.width - paperWidth * before.scale) / 2;
       const matrix = `matrix(${before.scale} 0 0 ${before.scale} ${tx} ${before.ty})`;
       await expect(paper.locator('g')).toHaveAttribute('transform', matrix);
-      await expect(page.getByTestId('layered-display').locator(':scope > g')).toHaveAttribute(
-        'transform',
-        matrix
-      );
+      for (const layer of ['layered-history-viewport', 'layered-preview-viewport']) {
+        const viewport = page.getByTestId('layered-display').getByTestId(layer);
+        await expect(viewport).toHaveCount(1);
+        await expect(viewport).toHaveAttribute('transform', matrix);
+      }
       const rect = (await paper.locator('rect').boundingBox())!;
       expect(rect.x + rect.width / 2).toBeCloseTo(box.x + box.width / 2, 1);
       expect(Number(await page.getByTestId('minimap-viewport').getAttribute('x'))).toBeCloseTo(

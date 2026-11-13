@@ -1945,6 +1945,11 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
     }
     const next: string[] = [];
     const seen = new Set<string>();
+    // Validate against one current document snapshot, including equal selections.
+    // Avoid scanning N objects for each of K selected IDs; empty clears stay O(1).
+    const existing = ids.length
+      ? new Set(this.kernel.getDocument().objects.map((object) => object.objectId))
+      : undefined;
     for (const objectId of ids) {
       if (!isNonEmptyString(objectId)) {
         return { result: errResult('invalid-input'), notifications: [] };
@@ -1952,7 +1957,7 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
       if (seen.has(objectId)) {
         continue;
       }
-      if (!this.documentHasObject(objectId)) {
+      if (!existing?.has(objectId)) {
         return { result: errResult('selection-target-missing'), notifications: [] };
       }
       seen.add(objectId);

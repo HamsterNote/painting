@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createEditor, type LayeredEditorController } from '@hamster-note/painting/layered';
 import { LayeredPaintingBoard } from '@hamster-note/painting-board';
 import { mixedFixture, resourceFixture } from './mixedFixture';
+import { lassoFixture } from './lassoPerformanceFixture';
 import { PageIntegrationFixture } from './PageIntegrationFixture';
 import { createGestureTrace, type GestureTrace } from './gestureTrace';
 import { GestureTracePanel } from './GestureTracePanel';
@@ -80,11 +81,16 @@ export default function LayeredEditorDom(props: {
   );
   const [controller] = useState(() => {
     const editor = createEditor(
-      params.get('fixture') === 'mixed'
-        ? mixedFixture()
-        : params.get('fixture') === 'resources'
-          ? resourceFixture()
-          : undefined
+      params.get('fixture') === 'lasso'
+        ? lassoFixture(
+            Math.min(1000, Math.max(0, Number(params.get('lassoCount')) || 0)),
+            params.get('lassoScenario') ?? 'local'
+          )
+        : params.get('fixture') === 'mixed'
+          ? mixedFixture()
+          : params.get('fixture') === 'resources'
+            ? resourceFixture()
+            : undefined
     );
     if (params.get('touchDraw') === '1') editor.initializeInputMode('finger');
     return editor;

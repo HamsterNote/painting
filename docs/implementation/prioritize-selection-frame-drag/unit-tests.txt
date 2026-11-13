@@ -1,0 +1,11 @@
+PASS core-node packages/painting/src/__tests__/core/layered-input-arbitration.test.ts
+PASS core-node packages/painting/src/__tests__/core/layered-selection-geometry.test.ts
+PASS legacy-web packages/painting/src/__tests__/layered-selection-overlay.test.tsx
+PASS legacy-web packages/painting/src/__tests__/layered-semantic-adapter.test.ts
+PASS core-node packages/painting/src/__tests__/core/layered-tools.test.ts
+
+Test Suites: 5 passed, 5 total
+Tests:       73 passed, 73 total
+Snapshots:   0 total
+Time:        7.282 s, estimated 13 s
+Ran all test suites within paths "packages/painting/src/__tests__/core/layered-selection-geometry.test.ts", "packages/painting/src/__tests__/core/layered-tools.test.ts", "packages/painting/src/__tests__/layered-selection-overlay.test.tsx", "packages/painting/src/__tests__/layered-semantic-adapter.test.ts", "packages/painting/src/__tests__/core/layered-input-arbitration.test.ts" in 2 projects.
