@@ -168,32 +168,42 @@ Web 普通 hover/click SHALL 支持从实际 DOM 目标定位对象；选择工�
 
 ### Requirement: Selection frame has one complete interaction region
 
-选择工具显示有效选中框时，系统 SHALL 将选中框内部、边界及所有现有手柄交互区域共同包围的完整矩形（包含边界）作为整体优先范围；手柄与框之间、四周手柄所在外扩带内的空白 SHALL 包含在范围中。范围 SHALL 由当前可见选中框及手柄的位置确定，不依赖所选图形的路径、填充、透明度、图形包围盒内可见部分或 DOM 是否命中图形。系统 SHALL 在该范围中支持拖动当前选择；直接命中既有缩放/旋转手柄交互区时 SHALL 保留对应操作，其余位置 SHALL 移动当前选择。多选时 SHALL 使用整体选中框并移动完整选中集合，不改变对象之间的相对位置。显示与命中范围 SHALL 在缩放、平移、已变换对象和页面坐标映射下保持一致。
+选择工具显示有效选框时，系统 SHALL 在选框自身局部坐标中，将选框内部、边界及所有现有手柄交互区域共同包围的完整矩形（包含边界）作为整体优先范围，再与选框一起变换到显示坐标；手柄与框之间、四周手柄所在外扩带内的空白 SHALL 包含在范围中。选框旋转后，该范围及缩放手柄命中区 SHALL 同步旋转，旋转手柄命中区 SHALL 跟随其中心位置；系统 MUST NOT 将旋转范围在宿主坐标中的正交外接矩形直接用作最终命中区。范围 SHALL 由当前可见选框及手柄的位置确定，不依赖所选图形的路径、填充、透明度、图形包围盒内可见部分或 DOM 是否命中图形。系统 SHALL 在该范围中支持拖动当前选择；直接命中既有缩放/旋转手柄交互区时 SHALL 保留对应操作，其余位置 SHALL 移动当前选择。多选时 SHALL 使用整体选框并移动完整选中集合，不改变对象之间的相对位置。显示与命中范围 SHALL 在缩放、平移、已变换对象和页面坐标映射下保持一致。选区优先于其他文档对象、输入策略及手势起点锁定规则 SHALL 继续有效。
 
 #### Scenario: Empty space inside a frame moves a sparse object
 
 - **WHEN** 选中斜线、空心椭圆或不规则图形后，从框内没有图形路径或填充的空白处按下并拖动
-- **THEN** 当前选择按起点至终点位移移动，选中框同步跟随，不清空选择
+- **THEN** 当前选择按起点至终点位移移动，选框同步跟随，不清空选择
 
 #### Scenario: Outer handle band belongs to the selection
 
-- **WHEN** 起点位于含手柄的完整外接矩形的上、下、左、右外扩带或边界，且不在具体手柄交互区内
-- **THEN** 拖动移动当前选择，即使该点既不在图形本身也不在原始图形包围盒内
+- **WHEN** 起点位于选框局部坐标中含手柄的完整优先矩形的上、下、左、右外扩带或边界，且不在具体手柄交互区内
+- **THEN** 无论框是否旋转，拖动均移动当前选择，即使该点既不在图形本身也不在原始图形包围盒内
 
 #### Scenario: Handle operations remain available
 
-- **WHEN** 用户直接从缩放手柄或旋转手柄交互区开始拖动，包括该区域与其他对象重叠时
-- **THEN** 分别缩放或旋转当前选中集合，目标不变且不退化为移动
+- **WHEN** 用户直接从旋转后可见的缩放手柄或旋转手柄交互区开始拖动，包括该区域与其他对象重叠时
+- **THEN** 分别缩放或旋转当前选中集合，目标不变且不退化为移动，原手柄位置不再具有旧命中效力
 
 #### Scenario: Multiselection gaps move the whole selection
 
-- **WHEN** 多个对象被选中，用户从整体选中框内的对象间隙开始拖动
+- **WHEN** 多个对象被选中，用户从旋转后的整体选框内的对象间隙开始拖动
 - **THEN** 所有且仅所选对象移动相同位移，集合与相对位置保持不变
 
 #### Scenario: Viewport and page mapping align with visible frame
 
 - **WHEN** 在 zoom 为 0.5、1、2 且存在非零平移的画布，以及带宿主页面坐标映射的页面表面，从可见优先范围内空白拖动
 - **THEN** 均命中当前选择，屏幕拖动与显示位移一致，不出现命中偏移或随 zoom 变化而漏掉手柄外扩带
+
+#### Scenario: Rotated region wins over covered objects
+
+- **WHEN** 低层 A 的选框已旋转 45°，更高层 B 覆盖其优先范围内空白，用户从该空白拖动
+- **THEN** 只有 A 移动，选择和图层顺序不变，B 不抢占操作
+
+#### Scenario: Axis aligned envelope does not create false hits
+
+- **WHEN** 选框旋转 45° 后，用户从其完整优先范围的宿主正交外接矩形内、但实际旋转优先范围外且不在任何手柄命中区内的位置开始操作
+- **THEN** 不因该外接矩形而拖动当前选择；命中其他对象时沿用普通选择规则，空白点击沿用取消选择规则，范围外 Shift 追加选择保持可用
 
 ### Requirement: Selection interaction precedes document stacking
 
@@ -242,3 +252,120 @@ Web 普通 hover/click SHALL 支持从实际 DOM 目标定位对象；选择工�
 
 - **WHEN** owner 已开始选中框拖动后，另一个指针落在更高层对象上并移动或抬起
 - **THEN** 第二指针不改变该次目标或提交事务；若既有仲裁取消当前操作以进入导航，先回滚预览，再按原规则导航，旧 owner 的迟到结束不提交
+
+### Requirement: Selection frame orientation belongs to the selection session
+
+系统 SHALL 为新建立的选择，以所选对象当前可见几何的文档轴对齐整体外接矩形建立起始选框，方向不继承对象已存储的旋转。选择集合不变且未被清除时，框与全部现有手柄 SHALL 随当前选择的旋转预览和已提交累计旋转同步变化，松手后保持该方向；连续旋转不得因跨越 ±π 而翻转或跳变。后续移动与缩放 SHALL 保持该会话方向并同步改变框的位置与尺寸；不得每次根据对象的正交外接矩形重新定向。多选 SHALL 使用一个会话方向，不要求各对象原始方向相同。清除后重选或选择集合实际变化 SHALL 开始新会话并恢复文档轴对齐；同集合的重复选择通知及 viewport 更新 SHALL 不重置方向。页面自身旋转 SHALL 仅影响文档到显示的映射，不累计为选框会话旋转。
+
+#### Scenario: Preview and committed frame follow rotation
+
+- **WHEN** 新选中一个未旋转矩形并旋转 30°，观察拖动中和松手后的框与手柄
+- **THEN** 框保持原始包围关系并同步旋转 30°，缩放手柄位于旋转后的角点，旋转手柄沿旋转后的框外法线排列，松手不恢复正交
+
+#### Scenario: Consecutive edits retain orientation
+
+- **WHEN** 同一选择先旋转 30°，再旋转 20°，然后移动并缩放
+- **THEN** 框方向累计为 50°，移动与缩放后仍为 50°；框及手柄连续贴合所选集合，各编辑操作仍正常
+
+#### Scenario: Continuous rotation crosses angle wrap
+
+- **WHEN** 用户连续旋转经过 +180° 与 -180° 的表示边界并继续同向转动
+- **THEN** 图形、框和手柄连续跟随指针，不反向跳动或突然恢复正交
+
+#### Scenario: Reselecting a rotated object starts orthogonal
+
+- **WHEN** 用户旋转对象后点击范围外空白取消选择，再重新选择同一对象
+- **THEN** 对象保留已提交旋转，新选框包围其当前可见几何并相对文档轴正交，旧会话方向不恢复，清除和重选不新增文档历史
+
+#### Scenario: Multiselection changes start a fresh frame
+
+- **WHEN** 含不同已有方向的多个对象被选中并整体旋转，随后通过范围外 Shift 操作实际增加或移除一个对象
+- **THEN** 整体旋转期间使用同一个随动选框；集合变化后以新集合的当前几何建立正交框，不沿用旧集合角度
+
+#### Scenario: Repeated selection and navigation keep the session
+
+- **WHEN** 旋转后保持同一选择集合，收到同集合重复通知、平移或更改 zoom
+- **THEN** 会话方向保持，框与手柄仅按最新视口映射显示，不积累额外旋转
+
+#### Scenario: Page rotation composes with selection rotation
+
+- **WHEN** 在页面旋转 0°、90°、180°、270°、zoom 为 0.5、1、2 且存在非零偏移时，多选对象并旋转 30°，再从旋转后的框内空白及各现有手柄操作
+- **THEN** 框方向相对文档轴累计 30°，屏幕方向由页面映射与会话方向共同决定；显示与命中一致，不重复计入页面角度，拖动方向及缩放/旋转结果符合指针操作
+
+### Requirement: Rotated selection frame obeys transaction and cancellation semantics
+
+系统 SHALL 将选框会话方向作为临时交互状态，不写入持久化文档、不单独增加历史。一次实际移动、缩放或旋转 SHALL 仍只提交一个可逆文档事务；无变化点击不提交。取消未完成变换 SHALL 同时撤销对象及选框预览，恢复操作前仍有效的会话方向；若既有行为已清除选择则结束会话。pointercancel、Escape、失焦、页面隐藏、卸载、工具或输入模式切换 SHALL 遵守既有取消与归属规则，迟到事件不得提交或恢复旧方向。捕获丢失 SHALL 只改变事件路由，不取消活动手势或预览；owner SHALL 保留到真正的 up/cancel 或生命周期中断，正常 up 仍仅提交一次。历史撤销/重做或外部文档替换后，若选择仍有效，系统 SHALL 根据当前文档重新建立正交选框；若选择无效则清除，不能残留旧框或旧命中区。
+
+#### Scenario: Cancel restores the previous orientation
+
+- **WHEN** 当前会话已提交 30°，继续旋转预览至 60°，分别以 pointercancel、Escape、失焦或页面隐藏取消，再发送迟到 move/up
+- **THEN** 无第二次旋转事务，仍有效选择的图形与选框恢复 30°，迟到事件不改变文档或框；新合法手势可正常开始
+
+#### Scenario: Termination clears obsolete geometry
+
+- **WHEN** 旋转预览中切换工具、输入模式或卸载编辑器，之后结束旧指针或重新挂载
+- **THEN** 未完成操作不提交，旧预览、归属和命中区被清理，不复用上次挂载的会话状态
+
+#### Scenario: History and external replacement reconcile the frame
+
+- **WHEN** 完成一次旋转并撤销、重做，或从外部替换所选对象的文档内容
+- **THEN** 文档按既有事务语义恢复；仍有效的选择重新得到当前几何的正交框，无效选择被清除，无额外选框历史、陈旧角度或不可见命中区
+
+#### Scenario: Capture loss retains the rotated owner until release
+
+- **WHEN** 选框已有30°已提交方向，继续旋转预览至60°，在正常up前或后丢失捕获
+- **THEN** 捕获丢失本身不回滚预览或清除owner；正常up只提交一次60°方向，若收到真正取消则恢复30°且迟到up不提交
+
+### Requirement: Scheduled lasso feedback preserves final geometry and cancellation
+
+系统 SHALL 在套索绘制过程中只显示轨迹并保留手势前选区；begin/update MUST NOT 准备几何、执行几何查询或提交临时选区。允许合并中间输入的显示，但 MUST 保留全部有效输入用于正常结束时的一次最终相交选择。正常结束 SHALL 包含最后一批有效输入，以完整轨迹和开始时有效的文档版本计算最终结果；结果非空切换选择工具，结果为空保持套索工具。纯套索操作 MUST 不更改文档或新增 undo 事务。
+
+#### Scenario: End arrives before queued preview update
+
+- **WHEN** 高频输入尚有未显示的批次时正常抬起
+- **THEN** 最终选区与对全部有效轨迹执行既有相交规则的结果一致，包含末批命中、保留文档顺序，随后延迟回调不覆盖最终结果
+
+#### Scenario: Cancellation restores previous selection
+
+- **WHEN** 套索因 Escape、pointercancel、失焦、页面隐藏、切换工具或卸载而取消
+- **THEN** 在原文档版本仍有效时恢复手势前选区并清空轨迹，取消待执行工作，迟到回调不改写后续手势；文档变化时清理旧手势且不重新选中已删除对象
+
+#### Scenario: Geometry and editing remain compatible
+
+- **WHEN** 套索跨过变换后的笔画、形状、文字和图片，包含边界接触、自交及退化轨迹，然后移动、缩放或旋转选中对象并撤销重做
+- **THEN** 选择结果遵循既有几何命中和退化处理规则，变换及撤销重做保持原有事务语义，取消和纯圈选不新增绘图事务
+
+#### Scenario: Selection is computed once on release
+
+- **WHEN** 用户按住并继续绘制有效套索而不抬起
+- **THEN** 持续更新轨迹，几何准备和查询次数保持为零；正常抬起后按完整轨迹查询一次并提交最终结果。此契约由 2026-11-13 用户决定替代原实时选区要求，不表示原实时指标已通过
+
+#### Scenario: Native touch release commits the final selection
+
+- **WHEN** 浏览器以真实触摸输入完成有效套索，并正常发出 pointerup/touchend，指针捕获可能在正常松手之前或之后释放
+- **THEN** MUST 执行一次最终查询并将成功结果写入选区，捕获丢失只改变路由而不得误取消当前手势或在途查询；保留owner直到up、真正取消或生命周期中断，重复up不重复提交；文档与历史不变。MUST 分开记录触摸与鼠标证据，CDP 触摸或桌面 WebKit 结果不得替代已报告故障设备的复验
+
+#### Scenario: Touch interruption does not submit a stale selection
+
+- **WHEN** 活动触摸套索收到取消、被双指缩放接管或用户切换工具
+- **THEN** MUST 取消旧手势、保留有效原选区及文档和历史，不提交迟到结果，并允许下一次触摸圈选正常完成
+
+#### Scenario: Pending final selection is visible and cancellable
+
+- **WHEN** 松手后的最终查询尚未完成
+- **THEN** 保留完整套索轨迹并显示正在选择的反馈；分批执行准备和精算，结果到达时以最终选框替换轨迹。等待期间的新手势、取消、文档更新、工具切换与销毁使旧结果失效，不恢复已删除对象
+
+#### Scenario: Final selection performance gate
+
+- **WHEN** 在桌面Chromium生产构建中以6×CPU降频，分别对500和1000笔完成连续套索手势
+- **THEN** 松手到可见选区的延迟分别不超过150ms和400ms，全手势到选区呈现期间不存在超过200ms的主线程任务；冷态、热态分别报告，失败轮次不可删除或以CI通过替代
+
+#### Scenario: Idle preparation precedes the first real lasso
+
+- **WHEN** 首屏已显示或编辑完成，主线程有空闲时间且没有真实手势进行
+- **THEN** 可以执行一次小型合成套索预热，并分批准备当前冻结文档的几何索引；预热不改变选区、工具、文档、历史或轨迹。输入开始或销毁取消排队预热，文档更改使旧准备失效。首次真实套索仍单列为冷态，预热自身成本、未完成预热的情况及长任务必须公开报告
+
+#### Scenario: Performance comparisons reject host contention
+
+- **WHEN** 比较两版套索查询性能
+- **THEN** MUST 记录每轮前后load与空闲CPU；一分钟load超过可用核数一半时废弃整对并重跑。两版MUST在同一时段相邻交替AB/BA执行，以同线程查询边界CPU时钟及候选数、段对检查数、独立分配采样和GC次数为主证据。CPU时钟缺失不得以墙钟替代；内核首次查询不得冒充首次真实UI手势；原冷态150/400ms及零>200ms长任务门槛不变，真机验证单列

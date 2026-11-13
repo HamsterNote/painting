@@ -1,3 +1,10 @@
+import {
+  selectionFrame,
+  dragScale,
+  dragSelection,
+  rotateSelection,
+  expectSelectionAngle,
+} from './selection-session-helpers';
 import { test, expect } from '@playwright/test';
 
 for (const dpr of [1, 2, 3]) {
@@ -249,3 +256,75 @@ test('selection frame page mapping keeps empty-space drag aligned after host zoo
   expect(objects[0].transform.tx).toBeCloseTo(30, 3);
   expect(objects[0].transform.ty).toBeCloseTo(20, 3);
 });
+
+for (const rotation of [0, 90, 180, 270])
+  for (const zoom of [0.5, 1, 2]) {
+    test(`selection session page angle ${rotation} zoom ${zoom} aligns multiselect move and handles`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1900, height: 1900 });
+      await page.goto('/?fixture=pages');
+      await expect(page.getByTestId('layered-surface')).toHaveAttribute('data-input-ready', 'true');
+      await page.getByLabel('Page angle').selectOption(String(rotation));
+      await page.getByLabel('Page scale').selectOption(String(zoom));
+      await page.evaluate(() => {
+        const c = window.__pageEditors![0]!;
+        const shape = (id: string, x: number) => ({
+          kind: 'shape' as const,
+          objectId: id,
+          objectRevision: 1,
+          transformRevision: 1,
+          transform: { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 },
+          shapeType: 'rect' as const,
+          points: [
+            { x, y: 200 },
+            { x: x + 50, y: 260 },
+          ],
+          style: { color: '#000', width: 2, opacity: 1 },
+        });
+        c.editObjects({ expectedDocumentRevision: 0, upsert: [shape('a', 200), shape('b', 350)] });
+        c.updateViewport({
+          type: 'replace',
+          expectedRevision: 0,
+          viewport: { scale: 1, tx: 17, ty: 23 },
+        });
+        c.setTool('selection');
+        c.setSelection(['a', 'b']);
+      });
+      await expectSelectionAngle(page, rotation);
+      const firstAngle = await rotateSelection(page, 30);
+      await expectSelectionAngle(page, firstAngle);
+      let f = await selectionFrame(page);
+      const dx = 12 * zoom,
+        dy = 8 * zoom;
+      const move = await dragSelection(page, f.center, { x: f.center.x + dx, y: f.center.y + dy });
+      await expectSelectionAngle(page, firstAngle);
+      const after = await selectionFrame(page);
+      expect(after.center.x - f.center.x).toBeCloseTo(move.end.x - move.start.x, 2);
+      expect(after.center.y - f.center.y).toBeCloseTo(move.end.y - move.start.y, 2);
+      f = after;
+      const width = Math.hypot(f.corners[1].x - f.corners[0].x, f.corners[1].y - f.corners[0].y);
+      const resize = await dragSelection(page, f.resize, {
+        x: f.center.x + (f.resize.x - f.center.x) * 1.1,
+        y: f.center.y + (f.resize.y - f.center.y) * 1.1,
+      });
+      await expectSelectionAngle(page, firstAngle);
+      f = await selectionFrame(page);
+      expect(
+        Math.hypot(f.corners[1].x - f.corners[0].x, f.corners[1].y - f.corners[0].y)
+      ).toBeCloseTo(width * dragScale(resize, f.center), 2);
+      const finalAngle = await rotateSelection(page, 20);
+      await expectSelectionAngle(page, finalAngle);
+      expect(
+        await page.evaluate(
+          () => window.__pageEditors![0]!.getSnapshot('document').documentRevision
+        )
+      ).toBe(5);
+      await page.evaluate(() => {
+        const c = window.__pageEditors![0]!;
+        c.setSelection([]);
+        c.setSelection(['a', 'b']);
+      });
+      await expectSelectionAngle(page, rotation);
+    });
+  }

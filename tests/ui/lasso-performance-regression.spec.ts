@@ -50,7 +50,7 @@ for (const source of ['mouse', 'pen'] as const) {
   });
 }
 
-for (const reason of ['Escape', 'pointercancel', 'lostpointercapture', 'blur'] as const) {
+for (const reason of ['Escape', 'pointercancel', 'blur'] as const) {
   test(`lasso ${reason} restores selection and ignores queued feedback`, async ({ page }) => {
     await openLayeredEditor(page, '&fixture=mixed');
     await page.evaluate(() => {
@@ -81,3 +81,34 @@ for (const reason of ['Escape', 'pointercancel', 'lostpointercapture', 'blur'] a
     expect(state.history.canUndo).toBe(false);
   });
 }
+
+test('lasso capture loss keeps its trajectory until up and commits the complete ordered selection', async ({
+  page,
+}) => {
+  await openLayeredEditor(page, '&fixture=mixed');
+  const before = await layeredState(page);
+  await page.evaluate(() => window.__layeredEditor!.setTool('lasso'));
+  await dispatchLayeredPointer(page, 'down', { x: 10, y: 70 });
+  for (const point of [
+    { x: 320, y: 70 },
+    { x: 320, y: 300 },
+    { x: 10, y: 300 },
+  ])
+    await dispatchLayeredPointer(page, 'move', point);
+  const trajectory = page.locator('[data-testid="layered-display"] polyline');
+  await expect(trajectory).toBeVisible();
+  await page.getByTestId('layered-surface').dispatchEvent('lostpointercapture', {
+    pointerId: 41,
+    pointerType: 'pen',
+    bubbles: true,
+  });
+  await expect(trajectory).toBeVisible();
+  expect((await layeredState(page)).selection).toEqual(before.selection);
+  await dispatchLayeredPointer(page, 'up', { x: 10, y: 70 });
+  await expect(page.getByLabel('缩放选区')).toBeVisible();
+  const after = await layeredState(page);
+  expect(after.selection).toEqual(before.document.objects.map((object) => object.objectId));
+  expect(after.document).toEqual(before.document);
+  expect(after.history).toEqual(before.history);
+  expect(after.preview.path).toEqual([]);
+});

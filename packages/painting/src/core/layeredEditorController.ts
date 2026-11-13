@@ -1,3 +1,4 @@
+import { createLayeredSelectionFrame, type LayeredSelectionFrame } from './layeredSelectionFrame';
 /**
  * 分层编辑器控制器（Task 3.1 / 4.4）。
  *
@@ -160,6 +161,7 @@ export type LayeredEditorResult<T> =
 
 /** 订阅频道；除 interaction 外均按 state 返回稳定引用，适合 useSyncExternalStore。 */
 export type LayeredEditorChannel =
+  | 'selectionFrame'
   | 'input'
   | 'document'
   | 'history'
@@ -201,6 +203,7 @@ export type LayeredToolsSnapshot = Readonly<{
 export type LayeredSelectionSnapshot = readonly string[];
 
 export type LayeredPreviewSnapshot = Readonly<{
+  selectionFrame?: LayeredSelectionFrame;
   objects: readonly DocumentObject[];
   hiddenIds: readonly string[];
   path: readonly Point[];
@@ -228,6 +231,7 @@ export type LayeredEditorSnapshotMap = Readonly<{
   history: LayeredHistorySnapshot;
   tools: LayeredToolsSnapshot;
   selection: LayeredSelectionSnapshot;
+  selectionFrame: LayeredSelectionFrame | null;
   viewport: LayeredViewportSnapshot;
   preview: LayeredPreviewSnapshot;
   navigation: LayeredNavigationSnapshot;
@@ -261,6 +265,7 @@ export interface LayeredEditorController {
   setFreehandSettings(settings: BrushSnapshot): LayeredEditorResult<void>;
   setShapeSettings(settings: ShapeStyle): LayeredEditorResult<void>;
   setSelection(ids: readonly string[]): LayeredEditorResult<void>;
+  resetSelectionFrame(): void;
   setPreview(preview: LayeredPreviewSnapshot | null): LayeredEditorResult<void>;
   setNavigation(patch: Partial<LayeredNavigationSnapshot>): LayeredEditorResult<void>;
   updateViewport(command: LayeredViewportCommand): LayeredEditorResult<LayeredViewportUpdateResult>;
@@ -279,6 +284,8 @@ export interface LayeredEditorController {
 
 /** One reversible object edit. Freehand creation remains exclusive to raw commit. */
 export type LayeredObjectEdit = Readonly<{
+  /** Internal selection-session commit; adopted atomically with the object edit. */
+  selectionFrame?: LayeredSelectionFrame;
   expectedDocumentRevision: number;
   upsert?: readonly DocumentObject[];
   removeIds?: readonly string[];
@@ -1402,15 +1409,8 @@ function sameShapeStyle(left: ShapeStyle, right: ShapeStyle): boolean {
 }
 
 function sameSelection(left: readonly string[], right: readonly string[]): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-  for (let index = 0; index < left.length; index += 1) {
-    if (left[index] !== right[index]) {
-      return false;
-    }
-  }
-  return true;
+  const members = new Set(right);
+  return left.length === right.length && left.every((id) => members.has(id));
 }
 
 function isTool(value: unknown): value is LayeredEditorTool {
@@ -1447,6 +1447,9 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
   private freehandSettings: BrushSnapshot;
   private shapeSettings: ShapeStyle;
   private selection: readonly string[];
+  private selectionFrame: LayeredSelectionFrame | null = null;
+  private selectionFrameId = 0;
+  private selectionFrameCache = new FreehandGeometryCache();
   private viewportSnapshot: LayeredViewportSnapshot;
   private toolsSnapshot: LayeredToolsSnapshot;
   private preview: LayeredPreviewSnapshot = EMPTY_PREVIEW;
@@ -1517,6 +1520,16 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
         return this.kernel.getHistory() as LayeredEditorSnapshotMap[C];
       case 'tools':
         return this.toolsSnapshot as LayeredEditorSnapshotMap[C];
+      case 'selectionFrame':
+        if (this.activeTool !== 'selection') return null as LayeredEditorSnapshotMap[C];
+        if (!this.selectionFrame && this.selection.length)
+          this.selectionFrame = createLayeredSelectionFrame(
+            this.kernel.getDocument(),
+            this.selection,
+            ++this.selectionFrameId,
+            this.selectionFrameCache
+          );
+        return this.selectionFrame as LayeredEditorSnapshotMap[C];
       case 'selection':
         return this.selection as LayeredEditorSnapshotMap[C];
       case 'viewport':
@@ -1650,6 +1663,12 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
     return okResult(undefined);
   }
 
+  resetSelectionFrame(): void {
+    this.selectionFrame = null;
+    this.preview = EMPTY_PREVIEW;
+    this.emit(['selectionFrame', 'preview']);
+  }
+
   setPreview(preview: LayeredPreviewSnapshot | null): LayeredEditorResult<void> {
     if (this.locked) return errResult('internal-invariant');
     if (preview === null) this.preview = EMPTY_PREVIEW;
@@ -1663,6 +1682,13 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
         (preview.lassoPending !== undefined && typeof preview.lassoPending !== 'boolean')
       )
         return errResult('invalid-input');
+      const frame = preview.selectionFrame;
+      if (
+        frame &&
+        (frame.sessionId !== this.getSnapshot('selectionFrame')?.sessionId ||
+          !copyTransform(frame.transform))
+      )
+        return errResult('invalid-input');
       const objects = preview.objects.map(copyDocumentObject);
       if (
         objects.some((object) => !object) ||
@@ -1671,6 +1697,14 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
       )
         return errResult('invalid-input');
       this.preview = Object.freeze({
+        ...(frame
+          ? {
+              selectionFrame: Object.freeze({
+                ...this.selectionFrame!,
+                transform: copyTransform(frame.transform)!,
+              }),
+            }
+          : {}),
         objects: Object.freeze(objects as DocumentObject[]),
         hiddenIds: Object.freeze([...preview.hiddenIds]),
         path: Object.freeze(preview.path.map((point) => Object.freeze({ x: point.x, y: point.y }))),
@@ -1682,7 +1716,11 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
   }
 
   /** 顺序发出频道通知；listener 抛错被隔离，不影响已完成事务。 */
-  private emit(channels: readonly LayeredEditorChannel[]): void {
+  private emit(channels: readonly LayeredEditorChannel[], preserveSelectionFrame = false): void {
+    if (channels.includes('document') && !preserveSelectionFrame) {
+      this.selectionFrame = null;
+      channels = [...channels, 'selectionFrame'];
+    }
     if (channels.includes('document') && this.preview !== EMPTY_PREVIEW) {
       this.preview = EMPTY_PREVIEW;
       channels = [...channels, 'preview'];
@@ -1888,6 +1926,8 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
       }
     }
     this.activeTool = tool;
+    this.selectionFrame = null;
+    notifications.push('selectionFrame');
     if (this.preview !== EMPTY_PREVIEW) {
       this.preview = EMPTY_PREVIEW;
       notifications.push('preview');
@@ -1971,7 +2011,12 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
       return { result: okResult(undefined), notifications: [] };
     }
     this.selection = frozen;
-    return { result: okResult(undefined), notifications: ['selection'] };
+    this.selectionFrame = null;
+    this.preview = EMPTY_PREVIEW;
+    return {
+      result: okResult(undefined),
+      notifications: ['selection', 'selectionFrame', 'preview'],
+    };
   }
 
   updateViewport(
@@ -2103,16 +2148,31 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
   }
 
   editObjects(edit: LayeredObjectEdit): LayeredEditorResult<EditorDocument> {
+    let preserveFrame = false;
     const outcome = this.runExclusive<EditorDocument>(() => {
       if (this.activeSession)
         return { result: errResult('active-session-conflict'), notifications: [] };
+      const frame = edit?.selectionFrame;
+      if (
+        frame &&
+        (frame.sessionId !== this.selectionFrame?.sessionId || !copyTransform(frame.transform))
+      )
+        return { result: errResult('invalid-input'), notifications: [] };
       const result = this.kernel.editObjects(edit);
       if (!result.ok) return { result, notifications: [] };
       const notifications: LayeredEditorChannel[] = ['document', 'history'];
       if (this.reconcileSelection()) notifications.push('selection');
+      if (frame && sameSelection(frame.ids, this.selection)) {
+        this.selectionFrame = Object.freeze({
+          ...this.selectionFrame!,
+          transform: copyTransform(frame.transform)!,
+        });
+        preserveFrame = true;
+        notifications.push('selectionFrame');
+      }
       return { result, notifications };
     });
-    this.emit(outcome.notifications);
+    this.emit(outcome.notifications, preserveFrame);
     return outcome.result;
   }
 

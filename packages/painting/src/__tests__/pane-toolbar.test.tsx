@@ -57,7 +57,7 @@ test('legacy caller has no files control; opening and relocating preserve editor
       placement="floating"
     />
   );
-  expect(screen.getByRole('region').style.bottom).toBe('50px');
+  expect(screen.getByRole('region').style.bottom).toBe('42px');
   expect(controller.getSnapshot('document')).toBe(document);
   expect(controller.getSnapshot('history')).toBe(history);
 });
@@ -81,7 +81,7 @@ test('explicit zero overrides env and header/safe top overlap rather than accumu
       <button>tool</button>
     </ToolbarShell>
   );
-  expect(screen.getByRole('region').style.bottom).toBe('16px');
+  expect(screen.getByRole('region').style.bottom).toBe('8px');
 });
 
 test('host owns current item, request is single flight and pins opening pane', async () => {

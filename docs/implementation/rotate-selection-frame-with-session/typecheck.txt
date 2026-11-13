@@ -1,0 +1,11 @@
+
+> @hamster-note/painting-workspace@0.8.3 typecheck /home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting
+> pnpm --filter @hamster-note/painting typecheck && pnpm --filter @hamster-note/painting-board typecheck && pnpm --filter @hamster-note/painting-playground exec tsc --noEmit
+
+
+> @hamster-note/painting@0.9.0 typecheck /home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/packages/painting
+> tsc --noEmit
+
+
+> @hamster-note/painting-board@0.9.0 typecheck /home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/packages/painting-board
+> tsc --noEmit -p tsconfig.typecheck.json

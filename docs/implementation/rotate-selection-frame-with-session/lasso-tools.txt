@@ -1,0 +1,28 @@
+✔ includes the final blocked interval in FPS and missing frames (22.714012ms)
+✔ old recordings exclude the single post-up callback and recompute identically (21.871411ms)
+✔ compares both versions on the same rAF clock despite callback execution jitter (0.5871ms)
+✔ a closing coordinate matching the first point still presents the full prefix (16.569209ms)
+✔ unpresented input fails p95 instead of disappearing from the sample (0.5275ms)
+✔ includes successful submissions even when equal selections suppress notifications (22.537911ms)
+✔ separates final dispatch, selection call and presentation wait (17.055109ms)
+✔ absence of feedback cannot become an empty passing latency population (0.4547ms)
+✔ nearest-rank p95 includes the actual tail for five rounds (0.3112ms)
+✔ keeps publication wait and the subsequent rAF opportunity separate (9.322405ms)
+✔ rejects the entire pair when either control fails, regardless of version (23.440512ms)
+✔ uses exactly the same threshold for both and retains valid pairs (0.3321ms)
+✔ retains raw invalid measurements instead of replacing or resampling them (0.368ms)
+✔ nonfinite or absent controls cannot enter the retained cohort (0.8481ms)
+✔ never excludes a pair because the populated drawing itself is slow (10.720005ms)
+✔ new input cannot borrow completion of an older in-flight path (46.979723ms)
+✔ missing live feedback stays in the percentile denominator; final up cannot fill it (0.433301ms)
+✔ a query completing after up is not counted as live (20.50621ms)
+✔ equal selection results are measured without a notification (0.5884ms)
+✔ absent and unmatched marks cannot silently produce valid timing evidence (22.932012ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 948.312872

@@ -1,0 +1,650 @@
+[
+  {
+    "browserName": "webkit",
+    "rotation": 0,
+    "zoom": 0.5,
+    "radius": 25.5,
+    "requestedStart": {
+      "x": 220,
+      "y": 243.5
+    },
+    "requestedEnd": {
+      "x": 232.75,
+      "y": 246.9163522034968
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 220,
+      "y": 243
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 232,
+      "y": 246
+    },
+    "actualDelta": 27.552811379254454,
+    "requestedError": -2.4471886207455467,
+    "deliveredError": -1.9746333990156018e-7
+  },
+  {
+    "browserName": "webkit",
+    "rotation": 0,
+    "zoom": 1,
+    "radius": 51,
+    "requestedStart": {
+      "x": 370,
+      "y": 333
+    },
+    "requestedEnd": {
+      "x": 395.5,
+      "y": 339.8327044069936
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 370,
+      "y": 333
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 395,
+      "y": 339
+    },
+    "actualDelta": 29.05460526003875,
+    "requestedError": -0.9453947399612517,
+    "deliveredError": 1.1609616024088611e-6
+  },
+  {
+    "browserName": "webkit",
+    "rotation": 0,
+    "zoom": 2,
+    "radius": 102,
+    "requestedStart": {
+      "x": 670,
+      "y": 512
+    },
+    "requestedEnd": {
+      "x": 721,
+      "y": 525.6654088139873
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 670,
+      "y": 512
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 721,
+      "y": 525
+    },
+    "actualDelta": 29.81415994118236,
+    "requestedError": -0.1858400588176395,
+    "deliveredError": -2.7966163145265455e-6
+  },
+  {
+    "browserName": "webkit",
+    "rotation": 90,
+    "zoom": 0.5,
+    "radius": 25.5,
+    "requestedStart": {
+      "x": 380.5,
+      "y": 304
+    },
+    "requestedEnd": {
+      "x": 377.0836477965032,
+      "y": 316.75
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 380,
+      "y": 304
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 377,
+      "y": 316
+    },
+    "actualDelta": 28.61046021107366,
+    "requestedError": -1.3895397889263421,
+    "deliveredError": 5.451084490459835e-7
+  },
+  {
+    "browserName": "webkit",
+    "rotation": 90,
+    "zoom": 1,
+    "radius": 51,
+    "requestedStart": {
+      "x": 691,
+      "y": 454
+    },
+    "requestedEnd": {
+      "x": 684.1672955930064,
+      "y": 479.5
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 691,
+      "y": 454
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 684,
+      "y": 479
+    },
+    "actualDelta": 29.604449733751615,
+    "requestedError": -0.395550266248378,
+    "deliveredError": -1.012253292742571e-6
+  },
+  {
+    "browserName": "webkit",
+    "rotation": 90,
+    "zoom": 2,
+    "radius": 102,
+    "requestedStart": {
+      "x": 1312,
+      "y": 754
+    },
+    "requestedEnd": {
+      "x": 1298.3345911860129,
+      "y": 805
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 1312,
+      "y": 754
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 1298,
+      "y": 805
+    },
+    "actualDelta": 30.094242584474816,
+    "requestedError": 0.09424258447481296,
+    "deliveredError": 1.1080298065735406e-6
+  },
+  {
+    "browserName": "webkit",
+    "rotation": 180,
+    "zoom": 0.5,
+    "radius": 25.5,
+    "requestedStart": {
+      "x": 220,
+      "y": 464.5
+    },
+    "requestedEnd": {
+      "x": 207.25,
+      "y": 461.0836477965032
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 220,
+      "y": 464
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 207,
+      "y": 461
+    },
+    "actualDelta": 30.57922874349073,
+    "requestedError": 0.5792287434907157,
+    "deliveredError": 1.8710017620598808e-6
+  },
+  {
+    "browserName": "webkit",
+    "rotation": 180,
+    "zoom": 1,
+    "radius": 51,
+    "requestedStart": {
+      "x": 370,
+      "y": 775
+    },
+    "requestedEnd": {
+      "x": 344.5,
+      "y": 768.1672955930064
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 370,
+      "y": 775
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 344,
+      "y": 768
+    },
+    "actualDelta": 30.57922874349073,
+    "requestedError": 0.5792287434907157,
+    "deliveredError": 1.8710017620598808e-6
+  },
+  {
+    "browserName": "webkit",
+    "rotation": 180,
+    "zoom": 2,
+    "radius": 102,
+    "requestedStart": {
+      "x": 670,
+      "y": 1396
+    },
+    "requestedEnd": {
+      "x": 619,
+      "y": 1382.3345911860129
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 670,
+      "y": 1396
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 619,
+      "y": 1382
+    },
+    "actualDelta": 30.094242584474866,
+    "requestedError": 0.09424258447484804,
+    "deliveredError": 1.108029847742701e-6
+  },
+  {
+    "browserName": "webkit",
+    "rotation": 270,
+    "zoom": 0.5,
+    "radius": 25.5,
+    "requestedStart": {
+      "x": 159.5,
+      "y": 304
+    },
+    "requestedEnd": {
+      "x": 162.9163522034968,
+      "y": 291.25
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 159,
+      "y": 304
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 162,
+      "y": 291
+    },
+    "actualDelta": 29.475888809350913,
+    "requestedError": -0.5241111906490872,
+    "deliveredError": -1.9389484151588476e-7
+  },
+  {
+    "browserName": "webkit",
+    "rotation": 270,
+    "zoom": 1,
+    "radius": 51,
+    "requestedStart": {
+      "x": 249,
+      "y": 454
+    },
+    "requestedEnd": {
+      "x": 255.83270440699363,
+      "y": 428.5
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 249,
+      "y": 454
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 255,
+      "y": 428
+    },
+    "actualDelta": 30.018362433545814,
+    "requestedError": 0.01836243354581768,
+    "deliveredError": -4.9940632749212455e-6
+  },
+  {
+    "browserName": "webkit",
+    "rotation": 270,
+    "zoom": 2,
+    "radius": 102,
+    "requestedStart": {
+      "x": 428,
+      "y": 754
+    },
+    "requestedEnd": {
+      "x": 441.66540881398726,
+      "y": 703
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 428,
+      "y": 754
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 441,
+      "y": 703
+    },
+    "actualDelta": 29.81415994118236,
+    "requestedError": -0.1858400588176395,
+    "deliveredError": -2.7966163145265455e-6
+  },
+  {
+    "browserName": "chromium",
+    "rotation": 0,
+    "zoom": 0.5,
+    "radius": 25.5,
+    "requestedStart": {
+      "x": 220,
+      "y": 230.5
+    },
+    "requestedEnd": {
+      "x": 232.75,
+      "y": 233.9163522034968
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 220,
+      "y": 230.5
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 232.75,
+      "y": 233.91635131835938
+    },
+    "actualDelta": 29.999998737744786,
+    "requestedError": -1.2622552141294816e-6,
+    "deliveredError": -2.678505488518113e-7
+  },
+  {
+    "browserName": "chromium",
+    "rotation": 0,
+    "zoom": 1,
+    "radius": 51,
+    "requestedStart": {
+      "x": 370,
+      "y": 320
+    },
+    "requestedEnd": {
+      "x": 395.5,
+      "y": 326.8327044069936
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 370,
+      "y": 320
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 395.5,
+      "y": 326.83270263671875
+    },
+    "actualDelta": 29.9999987377448,
+    "requestedError": -1.2622551999186267e-6,
+    "deliveredError": -2.6785053464095654e-7
+  },
+  {
+    "browserName": "chromium",
+    "rotation": 0,
+    "zoom": 2,
+    "radius": 102,
+    "requestedStart": {
+      "x": 670,
+      "y": 499
+    },
+    "requestedEnd": {
+      "x": 721,
+      "y": 512.6654088139873
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 670,
+      "y": 499
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 721,
+      "y": 512.6654052734375
+    },
+    "actualDelta": 29.9999987377448,
+    "requestedError": -1.2622551999186267e-6,
+    "deliveredError": -2.6785053464095654e-7
+  },
+  {
+    "browserName": "chromium",
+    "rotation": 90,
+    "zoom": 0.5,
+    "radius": 25.5,
+    "requestedStart": {
+      "x": 380.5,
+      "y": 291
+    },
+    "requestedEnd": {
+      "x": 377.0836477965032,
+      "y": 303.75
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 380.5,
+      "y": 291
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 377.0836486816406,
+      "y": 303.75
+    },
+    "actualDelta": 29.999998737744775,
+    "requestedError": -1.2622552247876229e-6,
+    "deliveredError": -2.6785055240452493e-7
+  },
+  {
+    "browserName": "chromium",
+    "rotation": 90,
+    "zoom": 1,
+    "radius": 51,
+    "requestedStart": {
+      "x": 691,
+      "y": 441
+    },
+    "requestedEnd": {
+      "x": 684.1672955930064,
+      "y": 466.5
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 691,
+      "y": 441
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 684.1672973632812,
+      "y": 466.5
+    },
+    "actualDelta": 29.999998737744775,
+    "requestedError": -1.2622552247876229e-6,
+    "deliveredError": -2.6785055240452493e-7
+  },
+  {
+    "browserName": "chromium",
+    "rotation": 90,
+    "zoom": 2,
+    "radius": 102,
+    "requestedStart": {
+      "x": 1312,
+      "y": 741
+    },
+    "requestedEnd": {
+      "x": 1298.3345911860129,
+      "y": 792
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 1312,
+      "y": 741
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 1298.3345947265625,
+      "y": 792
+    },
+    "actualDelta": 29.999998737744818,
+    "requestedError": -1.2622551821550583e-6,
+    "deliveredError": -2.678505097719608e-7
+  },
+  {
+    "browserName": "chromium",
+    "rotation": 180,
+    "zoom": 0.5,
+    "radius": 25.5,
+    "requestedStart": {
+      "x": 220,
+      "y": 451.5
+    },
+    "requestedEnd": {
+      "x": 207.25,
+      "y": 448.0836477965032
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 220,
+      "y": 451.5
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 207.25,
+      "y": 448.0836486816406
+    },
+    "actualDelta": 29.999998737744846,
+    "requestedError": -1.2622551197355294e-6,
+    "deliveredError": -2.678505256882187e-7
+  },
+  {
+    "browserName": "chromium",
+    "rotation": 180,
+    "zoom": 1,
+    "radius": 51,
+    "requestedStart": {
+      "x": 370,
+      "y": 762
+    },
+    "requestedEnd": {
+      "x": 344.5,
+      "y": 755.1672955930064
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 370,
+      "y": 762
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 344.5,
+      "y": 755.1672973632812
+    },
+    "actualDelta": 29.999998737744846,
+    "requestedError": -1.2622551197355294e-6,
+    "deliveredError": -2.678505256882187e-7
+  },
+  {
+    "browserName": "chromium",
+    "rotation": 180,
+    "zoom": 2,
+    "radius": 102,
+    "requestedStart": {
+      "x": 670,
+      "y": 1383
+    },
+    "requestedEnd": {
+      "x": 619,
+      "y": 1369.3345911860129
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 670,
+      "y": 1383
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 619,
+      "y": 1369.3345947265625
+    },
+    "actualDelta": 29.999998737744846,
+    "requestedError": -1.2622551197355294e-6,
+    "deliveredError": -2.678505256882187e-7
+  },
+  {
+    "browserName": "chromium",
+    "rotation": 270,
+    "zoom": 0.5,
+    "radius": 25.5,
+    "requestedStart": {
+      "x": 159.5,
+      "y": 291
+    },
+    "requestedEnd": {
+      "x": 162.9163522034968,
+      "y": 278.25
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 159.5,
+      "y": 291
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 162.91635131835938,
+      "y": 278.25
+    },
+    "actualDelta": 29.999998737744807,
+    "requestedError": -1.2622551963659134e-6,
+    "deliveredError": -2.6785053108824286e-7
+  },
+  {
+    "browserName": "chromium",
+    "rotation": 270,
+    "zoom": 1,
+    "radius": 51,
+    "requestedStart": {
+      "x": 249,
+      "y": 441
+    },
+    "requestedEnd": {
+      "x": 255.83270440699363,
+      "y": 415.5
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 249,
+      "y": 441
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 255.83270263671875,
+      "y": 415.5
+    },
+    "actualDelta": 29.999998737744807,
+    "requestedError": -1.2622551963659134e-6,
+    "deliveredError": -2.6785053108824286e-7
+  },
+  {
+    "browserName": "chromium",
+    "rotation": 270,
+    "zoom": 2,
+    "radius": 102,
+    "requestedStart": {
+      "x": 428,
+      "y": 741
+    },
+    "requestedEnd": {
+      "x": 441.66540881398726,
+      "y": 690
+    },
+    "down": {
+      "type": "pointerdown",
+      "x": 428,
+      "y": 741
+    },
+    "up": {
+      "type": "pointerup",
+      "x": 441.6654052734375,
+      "y": 690
+    },
+    "actualDelta": 29.999998737744797,
+    "requestedError": -1.2622552034713406e-6,
+    "deliveredError": -2.678505381936702e-7
+  }
+]

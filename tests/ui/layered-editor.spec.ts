@@ -1,3 +1,10 @@
+import {
+  selectionFrame,
+  dragScale,
+  dragSelection,
+  rotateSelection,
+  expectSelectionAngle,
+} from './selection-session-helpers';
 import { openToolbarSettings, selectToolbarTool } from './layered-helpers';
 import { expect, test, type Page } from '@playwright/test';
 import { decodeRgbaPng } from './canvas2d-pen-pixel-helpers';
@@ -133,7 +140,11 @@ test('new mouse ink covers existing HTML text in active and historical pixels', 
   expect(pixel(await decodeRgbaPng(await surface.screenshot()), 90, 150)).toEqual([45, 45, 45]);
 });
 
-test('default route opens the layered editor and responds over LAN', async ({ page, request }) => {
+test('default route opens the layered editor and responds over LAN', async ({
+  page,
+  request,
+  baseURL,
+}) => {
   await page.goto('/');
   await expect(page.getByTestId('layered-drawing')).toBeVisible();
   const { networkInterfaces } = await import('node:os');
@@ -141,7 +152,10 @@ test('default route opens the layered editor and responds over LAN', async ({ pa
     .flat()
     .find((entry) => entry && entry.family === 'IPv4' && !entry.internal)?.address;
   expect(address).toBeTruthy();
-  const response = await request.get(`http://${address}:5266/`);
+  const lanUrl = new URL(baseURL!);
+  lanUrl.hostname = address!;
+  lanUrl.pathname = '/';
+  const response = await request.get(lanUrl.toString());
   expect(response.ok()).toBe(true);
 });
 
@@ -582,7 +596,12 @@ for (const source of ['mouse', 'touch'] as const) {
     test.use({ hasTouch: true });
     test('selection frame priority moves empty space, outer band and covered low layer', async ({
       page,
+      browserName,
     }) => {
+      test.skip(
+        source === 'touch' && browserName !== 'chromium',
+        'Touch dragging uses Chromium CDP'
+      );
       await openEditor(page);
       await selectToolbarTool(page, '椭圆');
       await pointer(page, 'down', 100, 100);
@@ -602,7 +621,7 @@ for (const source of ['mouse', 'touch'] as const) {
       ]);
       if (source === 'touch')
         await page.evaluate(() => window.__layeredEditor!.setInputMode('finger'));
-      const cdp = await page.context().newCDPSession(page);
+      const cdp = source === 'touch' ? await page.context().newCDPSession(page) : undefined;
       let dx = 0,
         dy = 0;
       for (const start of [
@@ -619,19 +638,19 @@ for (const source of ['mouse', 'touch'] as const) {
           await page.mouse.move(x + 350, y + 30);
           await page.mouse.up();
         } else {
-          await cdp.send('Input.dispatchTouchEvent', {
+          await cdp!.send('Input.dispatchTouchEvent', {
             type: 'touchStart',
             touchPoints: [{ x, y }],
           });
-          await cdp.send('Input.dispatchTouchEvent', {
+          await cdp!.send('Input.dispatchTouchEvent', {
             type: 'touchMove',
             touchPoints: [{ x: x + 20, y: y + 10 }],
           });
-          await cdp.send('Input.dispatchTouchEvent', {
+          await cdp!.send('Input.dispatchTouchEvent', {
             type: 'touchMove',
             touchPoints: [{ x: x + 350, y: y + 30 }],
           });
-          await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+          await cdp!.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
         }
         dx += 350;
         dy += 30;
@@ -649,7 +668,101 @@ for (const source of ['mouse', 'touch'] as const) {
         ).toBeCloseTo(dx - 350);
         await page.getByRole('button', { name: '重做', exact: true }).click();
       }
-      await cdp.detach();
+      await cdp?.detach();
     });
   });
 }
+
+test('selection session rotates preview and committed frame, retains direction through edits and rejects envelope hits', async ({
+  page,
+}) => {
+  await openEditor(page);
+  await page.evaluate(() => {
+    const c = window.__layeredEditor!;
+    const shape = (id: string, x: number, y: number, w: number, h: number) => ({
+      kind: 'shape' as const,
+      objectId: id,
+      objectRevision: 1,
+      transformRevision: 1,
+      transform: { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 },
+      shapeType: 'ellipse' as const,
+      points: [
+        { x, y },
+        { x: x + w, y: y + h },
+      ],
+      style: { color: '#000', width: 2, opacity: 1 },
+    });
+    c.editObjects({
+      expectedDocumentRevision: c.getSnapshot('document').documentRevision,
+      upsert: [
+        shape('session-a', 100, 150, 80, 100),
+        shape('session-b', 320, 150, 80, 100),
+        {
+          ...shape('session-cover', 240, 180, 20, 40),
+          style: { color: '#000', width: 2, opacity: 1, fill: '#eee' },
+        },
+      ],
+    });
+    c.setTool('selection');
+    c.setSelection(['session-a', 'session-b']);
+  });
+  const firstAngle = await rotateSelection(page, 30, false);
+  await expectSelectionAngle(page, firstAngle);
+  expect(
+    await page.evaluate(() => window.__layeredEditor!.getSnapshot('document').documentRevision)
+  ).toBe(1);
+  await page.mouse.up();
+  await expectSelectionAngle(page, firstAngle);
+  const committedAngle = await rotateSelection(page, 20);
+  await expectSelectionAngle(page, committedAngle);
+  let f = await selectionFrame(page);
+  // This starts in the multiselection gap over a higher unselected object.
+  await dragSelection(page, f.center, { x: f.center.x + 20, y: f.center.y + 10 });
+  await expectSelectionAngle(page, committedAngle);
+  expect(
+    await page.evaluate(
+      () =>
+        window
+          .__layeredEditor!.getSnapshot('document')
+          .objects.find((o) => o.objectId === 'session-cover')!.transform
+    )
+  ).toEqual({ a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 });
+  f = await selectionFrame(page);
+  const width = Math.hypot(f.corners[1].x - f.corners[0].x, f.corners[1].y - f.corners[0].y);
+  const resize = await dragSelection(page, f.resize, {
+    x: f.center.x + (f.resize.x - f.center.x) * 1.2,
+    y: f.center.y + (f.resize.y - f.center.y) * 1.2,
+  });
+  await expectSelectionAngle(page, committedAngle);
+  f = await selectionFrame(page);
+  expect(Math.hypot(f.corners[1].x - f.corners[0].x, f.corners[1].y - f.corners[0].y)).toBeCloseTo(
+    width * dragScale(resize, f.center),
+    2
+  );
+  const previewAngle = await rotateSelection(page, 10, false);
+  await expectSelectionAngle(page, previewAngle);
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await expectSelectionAngle(page, committedAngle);
+  expect(
+    await page.evaluate(() => window.__layeredEditor!.getSnapshot('document').documentRevision)
+  ).toBe(5);
+  await page.evaluate(() => {
+    const c = window.__layeredEditor!;
+    c.setSelection([]);
+    c.setSelection(['session-a', 'session-b']);
+  });
+  await expectSelectionAngle(page, 0);
+  await rotateSelection(page, 45);
+  f = await selectionFrame(page);
+  const outside = {
+    x: Math.max(...f.region.map((p) => p.x)) - 0.5,
+    y: Math.max(...f.region.map((p) => p.y)) - 0.5,
+  };
+  const before = await page.evaluate(() => window.__layeredEditor!.getSnapshot('document'));
+  await page.mouse.click(outside.x, outside.y);
+  expect(await page.evaluate(() => window.__layeredEditor!.getSnapshot('selection'))).toEqual([]);
+  expect(await page.evaluate(() => window.__layeredEditor!.getSnapshot('document'))).toEqual(
+    before
+  );
+});

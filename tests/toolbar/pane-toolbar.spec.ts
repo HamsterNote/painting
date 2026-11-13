@@ -71,9 +71,9 @@ test('320px actual board: order, tap targets, async failure, zero inset and edge
   await expect(menu.getByRole('menuitemradio').first()).toHaveAttribute('aria-checked', 'true');
   await page.keyboard.press('Escape');
   const shell = page.locator('[data-toolbar-edge]');
-  await expect(shell).toHaveCSS('bottom', '50px');
+  await expect(shell).toHaveCSS('bottom', '42px');
   await page.getByRole('button', { name: '切换零安全区' }).click();
-  await expect(shell).toHaveCSS('bottom', '16px');
+  await expect(shell).toHaveCSS('bottom', '8px');
   await page.getByRole('button', { name: '迁移边缘' }).click();
   await expect(shell).toHaveCSS('top', '60px');
   await expect(toolbar.getByRole('button', { name: '撤销', exact: true })).toBeEnabled();
@@ -97,7 +97,7 @@ test('legacy compiled PaintingBoard retains the bottom default and existing tool
   const toolbar = page.getByRole('toolbar');
   await expect(toolbar).toBeVisible();
   await expect(toolbar.getByRole('button', { name: '文件', exact: true })).toHaveCount(0);
-  await expect(page.locator('[data-toolbar-edge]')).toHaveCSS('bottom', '16px');
+  await expect(page.locator('[data-toolbar-edge]')).toHaveCSS('bottom', '8px');
   await toolbar.getByRole('button', { name: '工具菜单' }).click();
   await page.getByRole('menuitemradio', { name: '矩形', exact: true }).click();
   await expect(toolbar.getByRole('button', { name: '工具菜单' })).toContainText('矩形');
@@ -135,14 +135,14 @@ test('shared pane layouts consume 24/34 once in side-by-side and vertical hosts'
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.goto('/light.html?split');
   for (const name of ['reader', 'notes']) {
-    await expect(page.getByTestId(name).locator('[data-toolbar-edge]')).toHaveCSS('bottom', '50px');
+    await expect(page.getByTestId(name).locator('[data-toolbar-edge]')).toHaveCSS('bottom', '42px');
   }
   await page.setViewportSize({ width: 800, height: 1200 });
   await page.getByRole('button', { name: '迁移边缘' }).click();
   await expect(page.getByTestId('reader').locator('[data-toolbar-edge]')).toHaveCSS('top', '60px');
   await expect(page.getByTestId('notes').locator('[data-toolbar-edge]')).toHaveCSS(
     'bottom',
-    '50px'
+    '42px'
   );
   for (const name of ['reader', 'notes']) {
     const pane = page.getByTestId(name);

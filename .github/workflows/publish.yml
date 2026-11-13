@@ -181,19 +181,19 @@ jobs:
           echo 'A maintainer must approve painting, then painting-board, using `npm stage approve <stage-id>`.' >> "$GITHUB_STEP_SUMMARY"
           echo 'Staging is not a public npm release. After approval, rerun this workflow in publish mode to verify and create the GitHub Release.' >> "$GITHUB_STEP_SUMMARY"
 
-      # Direct publishing uses the package's trusted publisher, not the stage-only NPM_TOKEN.
-      - name: Publish painting with npm trusted publishing
+      # Use NPM_TOKEN when configured; an empty secret preserves OIDC authentication.
+      - name: Publish painting
         if: steps.version.outputs.painting_exists == 'false' && env.RELEASE_MODE == 'publish'
         working-directory: packages/painting
         env:
-          NODE_AUTH_TOKEN: ''
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --tag "$PUBLISH_TAG" --access public --loglevel=verbose
 
-      - name: Publish painting-board with npm trusted publishing
+      - name: Publish painting-board
         if: steps.version.outputs.board_exists == 'false' && env.RELEASE_MODE == 'publish'
         working-directory: packages/painting-board
         env:
-          NODE_AUTH_TOKEN: ''
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --tag "$PUBLISH_TAG" --access public --loglevel=verbose
 
       - name: Verify public release before creating GitHub Release
@@ -233,7 +233,8 @@ jobs:
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
           ## Release was not completed
-          Inspect the failed step above. Direct publishing uses GitHub OIDC, not NPM_TOKEN.
+          Inspect the failed step above. Direct publishing uses NPM_TOKEN when configured, otherwise GitHub OIDC.
+          For token errors, check expiry, package write permissions, and publishing/2FA restrictions.
           For OIDC authentication or permission errors, check BOTH npm package settings:
           - Trusted publisher: GitHub Actions, owner HamsterNote, repository painting, workflow publish.yml.
           - The trusted publisher must allow npm publish (stage-only permissions cannot publish directly).

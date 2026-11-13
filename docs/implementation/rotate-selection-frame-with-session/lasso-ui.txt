@@ -1,0 +1,46 @@
+[WebServer] (node:2080170) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2080195) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2080212) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2080267) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2080280) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2080320) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2080339) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] Skipping web setup: EXPO_NO_WEB_SETUP is enabled.
+[WebServer] /home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/node_modules/.pnpm/@expo+cli@57.0.26_@expo+dom-webview@57.0.1_@expo+metro-runtime@57.0.16_expo-constants@5_48a7404f8d8fbe21a9aff3c8bfe3b230/node_modules/@expo/cli/build/src/utils/errors.js:130
+[WebServer]     throw error;
+[WebServer]     ^
+[WebServer]
+[WebServer] Error: ENOSPC: System limit for number of file watchers reached, watch '/home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/packages/painting-board/node_modules'
+[WebServer]     at FSWatcher.<computed> (node:internal/fs/watchers:316:19)
+[WebServer]     at Object.watch (node:fs:2538:36)
+[WebServer]     at #watchdir (/home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/node_modules/.pnpm/@expo+metro-file-map@57.0.3/node_modules/@expo/metro-file-map/build/watchers/FallbackWatcher.js:166:36)
+[WebServer]     at /home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/node_modules/.pnpm/@expo+metro-file-map@57.0.3/node_modules/@expo/metro-file-map/build/watchers/FallbackWatcher.js:72:31
+[WebServer]     at /home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/node_modules/.pnpm/@expo+metro-file-map@57.0.3/node_modules/@expo/metro-file-map/build/watchers/FallbackWatcher.js:438:33
+[WebServer]     at Walker._filterDir (/home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/node_modules/.pnpm/@expo+metro-file-map@57.0.3/node_modules/@expo/metro-file-map/build/watchers/FallbackWatcher.js:417:36)
+[WebServer]     at /home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/node_modules/.pnpm/walker@1.0.8/node_modules/walker/lib/walker.js:58:17
+[WebServer]     at FSReqCallback.oncomplete (node:fs:197:5)
+[WebServer] Emitted 'error' event at:
+[WebServer]     at FallbackWatcher.emitError (/home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/node_modules/.pnpm/@expo+metro-file-map@57.0.3/node_modules/@expo/metro-file-map/build/watchers/AbstractWatcher.js:92:23)
+[WebServer]     at #checkedEmitError (/home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/node_modules/.pnpm/@expo+metro-file-map@57.0.3/node_modules/@expo/metro-file-map/build/watchers/FallbackWatcher.js:154:18)
+[WebServer]     at #watchdir (/home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/node_modules/.pnpm/@expo+metro-file-map@57.0.3/node_modules/@expo/metro-file-map/build/watchers/FallbackWatcher.js:170:35)
+[WebServer]     at /home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/node_modules/.pnpm/@expo+metro-file-map@57.0.3/node_modules/@expo/metro-file-map/build/watchers/FallbackWatcher.js:72:31
+[WebServer]     at /home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/node_modules/.pnpm/@expo+metro-file-map@57.0.3/node_modules/@expo/metro-file-map/build/watchers/FallbackWatcher.js:438:33
+[WebServer]     at Walker._filterDir (/home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/node_modules/.pnpm/@expo+metro-file-map@57.0.3/node_modules/@expo/metro-file-map/build/watchers/FallbackWatcher.js:417:36)
+[WebServer]     at /home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/node_modules/.pnpm/walker@1.0.8/node_modules/walker/lib/walker.js:58:17
+[WebServer]     at FSReqCallback.oncomplete (node:fs:197:5) {
+[WebServer]   errno: -28,
+[WebServer]   syscall: 'watch',
+[WebServer]   code: 'ENOSPC',
+[WebServer]   path: '/home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/packages/painting-board/node_modules',
+[WebServer]   filename: '/home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/packages/painting-board/node_modules'
+[WebServer] }
+[WebServer]
+[WebServer] Node.js v24.15.0
+Error: Process from config.webServer was not able to start. Exit code: 1

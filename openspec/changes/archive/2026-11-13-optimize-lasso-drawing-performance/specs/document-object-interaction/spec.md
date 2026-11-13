@@ -55,3 +55,29 @@
 
 - **WHEN** 比较两版套索查询性能
 - **THEN** MUST 记录每轮前后load与空闲CPU；一分钟load超过可用核数一半时废弃整对并重跑。两版MUST在同一时段相邻交替AB/BA执行，以同线程查询边界CPU时钟及候选数、段对检查数、独立分配采样和GC次数为主证据。CPU时钟缺失不得以墙钟替代；内核首次查询不得冒充首次真实UI手势；原冷态150/400ms及零>200ms长任务门槛不变，真机验证单列
+
+## MODIFIED Requirements
+
+### Requirement: Rotated selection frame obeys transaction and cancellation semantics
+
+系统 SHALL 将选框会话方向作为临时交互状态，不写入持久化文档、不单独增加历史。一次实际移动、缩放或旋转 SHALL 仍只提交一个可逆文档事务；无变化点击不提交。取消未完成变换 SHALL 同时撤销对象及选框预览，恢复操作前仍有效的会话方向；若既有行为已清除选择则结束会话。pointercancel、Escape、失焦、页面隐藏、卸载、工具或输入模式切换 SHALL 遵守既有取消与归属规则，迟到事件不得提交或恢复旧方向。捕获丢失 SHALL 只改变事件路由，不取消活动手势或预览；owner SHALL 保留到真正的 up/cancel 或生命周期中断，正常 up 仍仅提交一次。历史撤销/重做或外部文档替换后，若选择仍有效，系统 SHALL 根据当前文档重新建立正交选框；若选择无效则清除，不能残留旧框或旧命中区。
+
+#### Scenario: Cancel restores the previous orientation
+
+- **WHEN** 当前会话已提交 30°，继续旋转预览至 60°，分别以 pointercancel、Escape、失焦或页面隐藏取消，再发送迟到 move/up
+- **THEN** 无第二次旋转事务，仍有效选择的图形与选框恢复 30°，迟到事件不改变文档或框；新合法手势可正常开始
+
+#### Scenario: Termination clears obsolete geometry
+
+- **WHEN** 旋转预览中切换工具、输入模式或卸载编辑器，之后结束旧指针或重新挂载
+- **THEN** 未完成操作不提交，旧预览、归属和命中区被清理，不复用上次挂载的会话状态
+
+#### Scenario: History and external replacement reconcile the frame
+
+- **WHEN** 完成一次旋转并撤销、重做，或从外部替换所选对象的文档内容
+- **THEN** 文档按既有事务语义恢复；仍有效的选择重新得到当前几何的正交框，无效选择被清除，无额外选框历史、陈旧角度或不可见命中区
+
+#### Scenario: Capture loss retains the rotated owner until release
+
+- **WHEN** 选框已有30°已提交方向，继续旋转预览至60°，在正常up前或后丢失捕获
+- **THEN** 捕获丢失本身不回滚预览或清除owner；正常up只提交一次60°方向，若收到真正取消则恢复30°且迟到up不提交

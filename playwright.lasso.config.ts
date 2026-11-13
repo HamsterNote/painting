@@ -7,7 +7,7 @@ export default defineConfig({
   workers: 1,
   use: { ...config.use, baseURL: 'http://127.0.0.1:5281' },
   webServer: {
-    command: `node scripts/perf/static-spa-server.mjs --port 5281 --root ${process.env.LASSO_EXPORT_ROOT ?? 'apps/playground/dist'}`,
+    command: `node scripts/perf/static-spa-server.mjs --host 0.0.0.0 --port 5281 --root ${process.env.LASSO_EXPORT_ROOT ?? 'apps/playground/dist'}`,
     port: 5281,
     reuseExistingServer: false,
   },

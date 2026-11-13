@@ -1,0 +1,9 @@
+PASS legacy-web packages/painting/src/__tests__/layered-semantic-adapter.test.ts
+PASS core-node packages/painting/src/__tests__/core/layered-selection-session.test.ts
+PASS core-node packages/painting/src/__tests__/core/layered-lasso-scheduling.test.ts
+
+Test Suites: 3 passed, 3 total
+Tests:       62 passed, 62 total
+Snapshots:   0 total
+Time:        2.072 s
+Ran all test suites matching /packages\/painting\/src\/__tests__\/core\/layered-selection-session.test.ts|packages\/painting\/src\/__tests__\/layered-semantic-adapter.test.ts|packages\/painting\/src\/__tests__\/core\/layered-lasso-scheduling.test.ts/i in 2 projects.

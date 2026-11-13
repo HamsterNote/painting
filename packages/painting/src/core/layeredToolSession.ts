@@ -12,9 +12,9 @@ import {
   queryObjectPoint,
   queryObjectSweep,
 } from './layeredObjectQuery';
-import { composeAffine } from '../geometry/affine';
 import { layeredGeometryCache } from './layeredGeometryCache';
-import { deriveLayeredWorldBounds } from '../geometry/worldBounds';
+import type { LayeredSelectionFrame } from './layeredSelectionFrame';
+import { applyAffine, composeAffine } from '../geometry/affine';
 import { deriveShapeGeometry } from '../geometry/shape';
 import {
   IDENTITY_TRANSFORM,
@@ -28,6 +28,10 @@ type ToolGesture = {
   tool: LayeredEditorTool;
   operation: SelectionOperation;
   revision: number;
+  frame?: LayeredSelectionFrame;
+  nextFrame?: LayeredSelectionFrame;
+  angle: number;
+  lastAngle?: number;
   points: Point[];
   originals: readonly DocumentObject[];
   replacements: readonly DocumentObject[];
@@ -143,6 +147,21 @@ export function createLayeredToolSession(
   };
   const unsubscribeTools = controller.subscribe('tools', () => {
     if (gesture && controller.getSnapshot('tools').activeTool !== gesture.tool) cancel();
+  });
+  const unsubscribeSelection = controller.subscribe('selection', () => {
+    if (
+      gesture?.tool === 'selection' &&
+      gesture.frame?.sessionId !== controller.getSnapshot('selectionFrame')?.sessionId
+    )
+      cancel();
+  });
+  let inputMode = controller.getSnapshot('input').mode;
+  const unsubscribeInput = controller.subscribe('input', () => {
+    const next = controller.getSnapshot('input').mode;
+    if (next !== inputMode) {
+      inputMode = next;
+      if (gesture) cancel();
+    }
   });
   const unsubscribeDocument = controller.subscribe('document', () => {
     clearScheduled();
@@ -471,18 +490,23 @@ export function createLayeredToolSession(
     } else if (tool === 'selection') {
       let transform = { ...IDENTITY_TRANSFORM, tx: last.x - first.x, ty: last.y - first.y };
       if (gesture.operation !== 'move' && gesture.originals.length) {
-        const bounds = gesture.originals.map(
-          (object) => deriveLayeredWorldBounds(object, cache)?.visualWorldBounds
-        );
-        if (bounds.some((entry) => !entry)) throw new Error('geometry-failed');
-        const cx =
-          (Math.min(...bounds.map((b) => b!.minX)) + Math.max(...bounds.map((b) => b!.maxX))) / 2;
-        const cy =
-          (Math.min(...bounds.map((b) => b!.minY)) + Math.max(...bounds.map((b) => b!.maxY))) / 2;
-        const angle =
-          gesture.operation === 'rotate'
-            ? Math.atan2(last.y - cy, last.x - cx) - Math.atan2(first.y - cy, first.x - cx)
-            : 0;
+        const frame = gesture.frame;
+        if (!frame) throw new Error('geometry-failed');
+        const center = applyAffine(frame.transform, {
+          x: (frame.bounds.minX + frame.bounds.maxX) / 2,
+          y: (frame.bounds.minY + frame.bounds.maxY) / 2,
+        });
+        if (!center) throw new Error('geometry-failed');
+        const { x: cx, y: cy } = center;
+        if (gesture.operation === 'rotate') {
+          for (const point of points) {
+            const angle = Math.atan2(point.y - cy, point.x - cx);
+            const previous = gesture.lastAngle ?? Math.atan2(first.y - cy, first.x - cx);
+            gesture.angle += Math.atan2(Math.sin(angle - previous), Math.cos(angle - previous));
+            gesture.lastAngle = angle;
+          }
+        }
+        const angle = gesture.angle;
         const ratio =
           gesture.operation === 'resize'
             ? Math.max(
@@ -494,6 +518,11 @@ export function createLayeredToolSession(
         const a = Math.cos(angle) * ratio;
         const b = Math.sin(angle) * ratio;
         transform = { a, b, c: -b, d: a, tx: cx - a * cx + b * cy, ty: cy - b * cx - a * cy };
+      }
+      if (gesture.frame) {
+        const next = composeAffine(transform, gesture.frame.transform);
+        if (!next) throw new Error('invalid-transform');
+        gesture.nextFrame = { ...gesture.frame, transform: next };
       }
       gesture.replacements = gesture.originals.map((object) => {
         const next = composeAffine(transform, object.transform);
@@ -510,6 +539,7 @@ export function createLayeredToolSession(
     }
     requireValue(
       controller.setPreview({
+        ...(gesture.nextFrame ? { selectionFrame: gesture.nextFrame } : {}),
         objects: gesture.replacements,
         hiddenIds: [...gesture.hidden],
         path: [],
@@ -535,13 +565,17 @@ export function createLayeredToolSession(
         (object) =>
           object.objectId === 'preview-shape' ? { ...object, objectId: allocateId() } : object
       );
-      requireValue(
-        controller.editObjects({
-          expectedDocumentRevision: current.revision,
-          upsert,
-          removeIds: current.tool === 'eraser' ? [...current.hidden] : [],
-        })
-      );
+      if (upsert.length || (current.tool === 'eraser' && current.hidden.size))
+        requireValue(
+          controller.editObjects({
+            ...(current.tool === 'selection' && current.nextFrame
+              ? { selectionFrame: current.nextFrame }
+              : {}),
+            expectedDocumentRevision: current.revision,
+            upsert,
+            removeIds: current.tool === 'eraser' ? [...current.hidden] : [],
+          })
+        );
     }
     controller.setPreview(null);
     resumeWarmup();
@@ -605,6 +639,11 @@ export function createLayeredToolSession(
         tool,
         operation,
         revision: document.documentRevision,
+        frame:
+          tool === 'selection'
+            ? (controller.getSnapshot('selectionFrame') ?? undefined)
+            : undefined,
+        angle: 0,
         points: [{ ...point }],
         originals,
         replacements: [],
@@ -666,7 +705,10 @@ export function createLayeredToolSession(
       pauseWarmup();
       cancel();
       unsubscribeTools();
+      unsubscribeSelection();
+      unsubscribeInput();
       unsubscribeDocument();
+      controller.resetSelectionFrame();
     },
   };
 }

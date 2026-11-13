@@ -8,14 +8,14 @@
 
 旧查询微基准不能解释完整交互；同时“真机没改善，所以瓶颈不在查询”也不成立。主线程采样中仍有显著几何成本，图层提交和绘制也占用时间。正式保留的同机诊断 `main-final/local-500-r1`（第二次手势）在按下至抬起的浏览器输入时间窗口内：
 
-| 工作 | main 耗时证据 | 松手选择版同场景 r1 |
-| --- | --- | --- |
-| 几何/查询 CPU 采样（含其后代） | 1276.4ms；7 次非 final 查询启动 | **0ms；0 次非 final 查询启动** |
-| React CPU 采样（剩余未归入查询的调用栈） | 168.4ms | 219.8ms |
-| 手势/session CPU 采样（剩余调用栈） | 见 report.json | 见 report.json |
-| 主线程 Paint 区间并集 | 182.5ms | 383.0ms |
-| 主线程 Commit 区间并集 | 559.3ms | 1194.7ms |
-| 历史 display/object render 增量 | 0 / 0 | 0 / 0 |
+| 工作                                     | main 耗时证据                   | 松手选择版同场景 r1            |
+| ---------------------------------------- | ------------------------------- | ------------------------------ |
+| 几何/查询 CPU 采样（含其后代）           | 1276.4ms；7 次非 final 查询启动 | **0ms；0 次非 final 查询启动** |
+| React CPU 采样（剩余未归入查询的调用栈） | 168.4ms                         | 219.8ms                        |
+| 手势/session CPU 采样（剩余调用栈）      | 见 report.json                  | 见 report.json                 |
+| 主线程 Paint 区间并集                    | 182.5ms                         | 383.0ms                        |
+| 主线程 Commit 区间并集                   | 559.3ms                         | 1194.7ms                       |
+| 历史 display/object render 增量          | 0 / 0                           | 0 / 0                          |
 
 各行不是可以相加的互斥 CPU 账单：profile 是采样，timeline 是 wall-time 区间；FunctionCall/RunTask 等父子事件相互包含，报告按事件名称取区间并集。V8 `(program)` 等未归因部分保留在 `other JS/native/idle`，没有强行算给渲染。Paint/Commit 总量也受实际帧数影响，不能把新版总量增加直接解释为单帧退化。可确认的是：当前优化没有取消每次手势中的反复几何工作；移除它之后仍保留浏览器渲染成本，历史 React 重渲染不是这份 trace 的主要问题。真机根因的最终排序仍需 Safari Timeline。
 
@@ -36,16 +36,16 @@
 
 下表 FPS 是 rAF 代理，p95 是本轮帧间隔，不能当作输入→轨迹呈现 p95。数值用于暴露限制，不作设备性能承诺。
 
-| 场景/轮 | main FPS / 帧间隔p95 ms | 新版 FPS / 帧间隔p95 ms | 有效性 |
-| --- | --- | --- | --- |
-| local 0 / r0 | 55.2 / 33.3 | 23.3 / 116.6 | 新版空白对照明显慢 |
-| local 0 / r1 | 53.6 / 33.3 | 55.2 / 33.3 | main 空白低于约60Hz的90% |
-| local 500 / r0 | 53.8 / 16.8 | 59.0 / 16.7 | **两版手势均取消，均无最终提交；无效** |
-| local 500 / r1 | 15.0 / 133.3 | 52.6 / 33.4 | 手势完成，但对应空白对照不足以做验收 |
-| dense 0 / r0 | 26.4 / 83.4 | 59.4 / 16.7 | main 空白明显慢 |
-| dense 0 / r1 | 22.6 / 100.0 | 10.2 / 316.7 | 两版空白都明显慢 |
-| dense 500 / r0 | 9.1 / 250.0 | 5.2 / 416.7 | 手势完成，但对照无效 |
-| dense 500 / r1 | 14.6 / 150.0 | 11.4 / 300.0 | 手势完成，但对照无效 |
+| 场景/轮        | main FPS / 帧间隔p95 ms | 新版 FPS / 帧间隔p95 ms | 有效性                                 |
+| -------------- | ----------------------- | ----------------------- | -------------------------------------- |
+| local 0 / r0   | 55.2 / 33.3             | 23.3 / 116.6            | 新版空白对照明显慢                     |
+| local 0 / r1   | 53.6 / 33.3             | 55.2 / 33.3             | main 空白低于约60Hz的90%               |
+| local 500 / r0 | 53.8 / 16.8             | 59.0 / 16.7             | **两版手势均取消，均无最终提交；无效** |
+| local 500 / r1 | 15.0 / 133.3            | 52.6 / 33.4             | 手势完成，但对应空白对照不足以做验收   |
+| dense 0 / r0   | 26.4 / 83.4             | 59.4 / 16.7             | main 空白明显慢                        |
+| dense 0 / r1   | 22.6 / 100.0            | 10.2 / 316.7            | 两版空白都明显慢                       |
+| dense 500 / r0 | 9.1 / 250.0             | 5.2 / 416.7             | 手势完成，但对照无效                   |
+| dense 500 / r1 | 14.6 / 150.0            | 11.4 / 300.0            | 手势完成，但对照无效                   |
 
 **没有完整有效的性能验收配对，不报告提速倍数/达标率。** local500/r0 的取消原因未完成归因；它发生在两版，不算作流畅手势。所有原始数据保留，取消轮由 `validGesture:false` 显式排除通过结论。
 
@@ -62,17 +62,17 @@
 
 验证输出随包交付：
 
-| 检查 | 结果 |
-| --- | --- |
-| `pnpm exec jest --runInBand --testPathPatterns='layered-(lasso\|tools\|display-regression)'` | 本机 Jest29 没按该复数参数筛选，实际运行了**全部109套/1440项，通过**；不是只跑受影响测试 |
-| 随后新增“未显示末批输入改变最终命中集合”测试，`--selectProjects core-node --runTestsByPath ...layered-lasso-scheduling.test.ts` | 该套16项通过；全量1440计数不包含后来这1项，不虚报已重跑全量 |
-| `pnpm exec playwright test --config=playwright.lasso.config.ts --project=chromium tests/ui/lasso-performance-regression.spec.ts tests/ui/layered-editor.spec.ts` | production Chromium **27项通过**；包括取消、末批输入、变换/undo/redo、历史/半透明交接和页面视口 |
-| 相同 UI 范围 `--project=webkit` | **浏览器无法启动**：缺 libicu74、libxml2.so.2、libevent、libflite 等运行库；27项均在 launch 前失败，不计产品回归或通过 |
-| `pnpm run typecheck` | 通过 |
-| `pnpm run lint`，末次工具/新增测试 scoped eslint | 通过；全仓0错误、32条既有警告 |
-| `pnpm run build:lib`、`pnpm --filter @hamster-note/painting-playground exec expo export --platform web --source-maps` | 两版均通过 |
-| `openspec validate optimize-lasso-drawing-performance --strict` | 通过 |
-| 新旧执行bundle的 source map 与对应工具会话源码逐字节核验 | 两版均一致，见 source-integrity.json；测量目录的 environment.sha 是 runner checkout，冻结站点以该核验为准 |
+| 检查                                                                                                                                                             | 结果                                                                                                                   |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `pnpm exec jest --runInBand --testPathPatterns='layered-(lasso\|tools\|display-regression)'`                                                                     | 本机 Jest29 没按该复数参数筛选，实际运行了**全部109套/1440项，通过**；不是只跑受影响测试                               |
+| 随后新增“未显示末批输入改变最终命中集合”测试，`--selectProjects core-node --runTestsByPath ...layered-lasso-scheduling.test.ts`                                  | 该套16项通过；全量1440计数不包含后来这1项，不虚报已重跑全量                                                            |
+| `pnpm exec playwright test --config=playwright.lasso.config.ts --project=chromium tests/ui/lasso-performance-regression.spec.ts tests/ui/layered-editor.spec.ts` | production Chromium **27项通过**；包括取消、末批输入、变换/undo/redo、历史/半透明交接和页面视口                        |
+| 相同 UI 范围 `--project=webkit`                                                                                                                                  | **浏览器无法启动**：缺 libicu74、libxml2.so.2、libevent、libflite 等运行库；27项均在 launch 前失败，不计产品回归或通过 |
+| `pnpm run typecheck`                                                                                                                                             | 通过                                                                                                                   |
+| `pnpm run lint`，末次工具/新增测试 scoped eslint                                                                                                                 | 通过；全仓0错误、32条既有警告                                                                                          |
+| `pnpm run build:lib`、`pnpm --filter @hamster-note/painting-playground exec expo export --platform web --source-maps`                                            | 两版均通过                                                                                                             |
+| `openspec validate optimize-lasso-drawing-performance --strict`                                                                                                  | 通过                                                                                                                   |
+| 新旧执行bundle的 source map 与对应工具会话源码逐字节核验                                                                                                         | 两版均一致，见 source-integrity.json；测量目录的 environment.sha 是 runner checkout，冻结站点以该核验为准              |
 
 OpenSpec 已根据2026-11-13明确产品决定取消实时选区要求；原4.1/4.3/4.4保持未完成，不归档。Safari/iOS WebView、物理触摸/Pencil和真实手感仍待验。几何库调查见 `geometry-library-comparison.md`，没有做替换。
 
