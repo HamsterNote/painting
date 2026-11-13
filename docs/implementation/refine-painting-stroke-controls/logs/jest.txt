@@ -1,0 +1,8 @@
+PASS legacy-web packages/painting/src/__tests__/layered-toolbar.test.tsx (7.54 s)
+PASS legacy-web packages/painting/src/__tests__/toolbar-inline-pickers.test.tsx
+
+Test Suites: 2 passed, 2 total
+Tests:       25 passed, 25 total
+Snapshots:   0 total
+Time:        8.857 s, estimated 11 s
+Ran all test suites matching /packages\/painting\/src\/__tests__\/layered-toolbar.test.tsx|packages\/painting\/src\/__tests__\/toolbar-inline-pickers.test.tsx/i.

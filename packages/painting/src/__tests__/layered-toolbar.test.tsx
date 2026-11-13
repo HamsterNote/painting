@@ -10,6 +10,10 @@ import { createLayeredToolSession } from '../core/layeredToolSession';
 function settings() {
   fireEvent.click(screen.getByRole('button', { name: '设置' }));
 }
+function stroke() {
+  const trigger = screen.getByRole('button', { name: '笔触设置', exact: true });
+  if (trigger.getAttribute('aria-expanded') !== 'true') fireEvent.click(trigger);
+}
 function choose(name: string) {
   if (['选择', '橡皮擦', '套索', '平移'].includes(name)) {
     fireEvent.click(screen.getByRole('button', { name: name === '平移' ? '移动' : name }));
@@ -30,8 +34,15 @@ afterEach(() => {
 test('primary width follows tool parameters, committed object history and document reload', () => {
   const controller = makeLayeredController();
   render(<Toolbar controller={controller} />);
-  const input = () => screen.getByLabelText<HTMLInputElement>('笔宽');
-  expect(within(screen.getByRole('toolbar')).getByLabelText('笔宽')).toBe(input());
+  const input = () => {
+    stroke();
+    return screen.getByLabelText<HTMLInputElement>('笔宽');
+  };
+  expect(within(screen.getByRole('toolbar')).queryByLabelText('笔宽')).toBeNull();
+  stroke();
+  expect(within(screen.getByRole('dialog', { name: '笔触设置' })).getByLabelText('笔宽')).toBe(
+    input()
+  );
   settings();
   expect(within(screen.getByRole('dialog')).queryByLabelText('笔宽')).toBeNull();
   dismiss();
@@ -86,8 +97,8 @@ test('primary width follows tool parameters, committed object history and docume
   if (!parsed.ok) throw new Error(parsed.error.code);
   expect(createEditor(parsed.value).getSnapshot('document').objects).toEqual(objects);
   choose('选择');
-  expect(input().disabled).toBe(true);
-  expect(input().value).toBe('');
+  expect(screen.getByRole('button', { name: '笔触设置' })).toHaveProperty('disabled', true);
+  expect(screen.queryByRole('dialog')).toBeNull();
   choose('矩形');
   expect(input().value).toBe('3');
 });
@@ -95,17 +106,17 @@ test('primary width follows tool parameters, committed object history and docume
 test('freehand settings are isolated from shapes through the real settings path', () => {
   const controller = makeLayeredController();
   render(<Toolbar controller={controller} />);
-  settings();
+  stroke();
   expect(screen.queryByLabelText('形状线型')).toBeNull();
   expect(screen.getByLabelText('压力模式')).toHaveProperty('value', 'auto');
-  expect(screen.getAllByRole('slider')).toHaveLength(1);
+  expect(screen.getAllByRole('slider')).toHaveLength(2);
   dismiss();
   choose('矩形');
-  settings();
+  stroke();
   fireEvent.change(screen.getByLabelText('形状线型'), { target: { value: 'dash' } });
   dismiss();
   choose('自由笔');
-  settings();
+  stroke();
   fireEvent.change(screen.getByLabelText('笔宽'), { target: { value: '24' } });
   fireEvent.change(screen.getByLabelText('压力模式'), { target: { value: 'constant' } });
   fireEvent.change(screen.getByLabelText('颜色'), { target: { value: '#123456' } });
@@ -120,7 +131,7 @@ test('freehand settings are isolated from shapes through the real settings path'
   });
   dismiss();
   choose('矩形');
-  settings();
+  stroke();
   expect(screen.getByLabelText('形状线型')).toHaveProperty('value', 'dash');
   expect(screen.getByLabelText('笔宽')).toHaveProperty('value', '2');
 });
@@ -209,23 +220,25 @@ test('palette updates only the current family, never existing objects or history
   const document = controller.getSnapshot('document');
   const history = controller.getSnapshot('history');
   render(<Toolbar controller={controller} />);
+  stroke();
   fireEvent.click(screen.getByRole('button', { name: '蓝', exact: true }));
   choose('矩形');
+  stroke();
   fireEvent.click(screen.getByRole('button', { name: '黑', exact: true }));
   expect(controller.getSnapshot('tools').settings.shape.color).toBe('#2D2D2D');
   choose('自由笔');
+  stroke();
   expect(screen.getByRole('button', { name: '蓝', exact: true }).getAttribute('aria-pressed')).toBe(
     'true'
   );
   expect(controller.getSnapshot('tools').settings.freehand.color).toBe('#7FA3C3');
-  settings();
+  stroke();
   fireEvent.change(screen.getByLabelText('颜色'), { target: { value: '#123456' } });
-  dismiss();
   const palette = screen.getByRole('group', { name: '调色板，用于绘图或形状' });
   expect(within(palette).queryAllByRole('button', { pressed: true })).toHaveLength(0);
   choose('文字');
-  for (const button of within(palette).getAllByRole('button'))
-    expect(button).toHaveProperty('disabled', true);
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(screen.getByRole('button', { name: '笔触设置' })).toHaveProperty('disabled', true);
   expect(controller.getSnapshot('history')).toBe(history);
   expect(controller.getSnapshot('document')).toBe(document);
 });
@@ -319,6 +332,7 @@ test('independent circular collapse control preserves state and restores focus',
 test('black defaults apply only to new editors and the custom ring tracks each family', () => {
   const controller = createEditor();
   render(<Toolbar controller={controller} />);
+  stroke();
   expect(controller.getSnapshot('tools').settings.freehand.color).toBe('#2D2D2D');
   expect(controller.getSnapshot('tools').settings.shape.color).toBe('#2D2D2D');
   const palette = screen.getByRole('group', { name: '调色板，用于绘图或形状' });
@@ -329,9 +343,11 @@ test('black defaults apply only to new editors and the custom ring tracks each f
     screen.getByLabelText('自由取色').parentElement?.style.getPropertyValue('--current-color')
   ).toBe('#123456');
   choose('矩形');
+  stroke();
   expect(screen.getByLabelText('自由取色')).toHaveProperty('value', '#2d2d2d');
   choose('文字');
-  expect(screen.getByLabelText('自由取色')).toHaveProperty('disabled', true);
+  expect(screen.queryByLabelText('自由取色')).toBeNull();
+  expect(screen.getByRole('button', { name: '笔触设置' })).toHaveProperty('disabled', true);
 });
 
 test('clear is atomic, reversible and does nothing on an empty board or active stroke', () => {
@@ -390,7 +406,7 @@ test('keyboard menu navigation, Escape, outside input and editable fields surviv
   expect(document.activeElement).toBe(screen.getByRole('menuitemradio', { name: '矩形' }));
   dismiss();
   expect(document.activeElement).toBe(trigger);
-  settings();
+  stroke();
   const width = screen.getByLabelText<HTMLInputElement>('笔宽');
   expect(width.style.userSelect).toBe('text');
   width.focus();
@@ -399,10 +415,10 @@ test('keyboard menu navigation, Escape, outside input and editable fields surviv
   expect(screen.queryByRole('dialog')).toBeNull();
   choose('矩形');
   expect(controller.getSnapshot('tools').activeTool).toBe('rect');
-  settings();
+  stroke();
   first.unmount();
   render(<Toolbar controller={controller} />);
-  settings();
+  stroke();
   fireEvent.change(screen.getByLabelText('笔宽'), { target: { value: '12' } });
   expect(controller.getSnapshot('tools').settings.shape.width).toBe(12);
   fireEvent(window, new Event('blur'));
@@ -412,9 +428,9 @@ test('keyboard menu navigation, Escape, outside input and editable fields surviv
 
 /** Traversal past a document edge blurs to BODY; a keyboard user must not lose focus. */
 function tabOutOfPanel(panel: HTMLElement, shiftKey: boolean, losesWindow = false) {
-  const controls = [...panel.querySelectorAll<HTMLElement>('button, input, select, textarea')].filter(
-    (control) => !(control as HTMLButtonElement).disabled
-  );
+  const controls = [
+    ...panel.querySelectorAll<HTMLElement>('button, input, select, textarea'),
+  ].filter((control) => !(control as HTMLButtonElement).disabled);
   const edge = shiftKey ? controls[0] : controls[controls.length - 1];
   edge.focus();
   expect(document.activeElement).toBe(edge);
@@ -455,7 +471,7 @@ test('color entry closes onto the 自由取色 button, the same target as Shift+
   const controller = makeLayeredController();
   render(<Toolbar controller={controller} inlinePickers />);
   jest.useFakeTimers();
-  const trigger = screen.getByRole('button', { name: '自由取色' });
+  const trigger = screen.getByRole('button', { name: '笔触设置' });
   fireEvent.click(trigger);
   tabOutOfPanel(screen.getByRole('dialog'), false);
   expect(screen.queryByRole('dialog')).toBeNull();
@@ -603,4 +619,113 @@ test('slider preserves the measured viewport center after pan and resize', () =>
   expect(controller.getSnapshot('document')).toBe(document);
   expect(controller.getSnapshot('history')).toBe(history);
   measure.mockRestore();
+});
+
+test('stroke entry owns the palette, previews authoritative parameters and isolates invalid drafts', () => {
+  const controller = createEditor();
+  render(<Toolbar controller={controller} />);
+  const trigger = screen.getByRole('button', { name: '笔触设置' });
+  const preview = () => trigger.querySelector('path')!;
+  expect(screen.getByRole('toolbar').querySelector('input,.hn-painting-palette')).toBeNull();
+  stroke();
+  const panel = screen.getByRole('dialog', { name: '笔触设置' });
+  expect(
+    within(panel)
+      .getAllByRole('button')
+      .slice(0, 6)
+      .map((b) => b.getAttribute('aria-label'))
+  ).toEqual(['黑', '蓝', '绿', '黄', '粉', '紫']);
+  const number = screen.getByLabelText<HTMLInputElement>('笔宽');
+  const slider = screen.getByRole('slider', { name: '笔宽滑条' });
+  const document = controller.getSnapshot('document'),
+    history = controller.getSnapshot('history');
+  let previous = 0;
+  for (const width of [0.5, 3.5, 12, 200]) {
+    fireEvent.change(number, { target: { value: String(width) } });
+    const displayed = Number(preview().getAttribute('stroke-width'));
+    expect(displayed).toBeGreaterThan(previous);
+    expect(displayed).toBeGreaterThanOrEqual(1);
+    expect(displayed).toBeLessThanOrEqual(6);
+    previous = displayed;
+    expect(slider).toHaveProperty('value', String(width));
+  }
+  fireEvent.change(slider, { target: { value: '12' } });
+  expect(number.value).toBe('12');
+  fireEvent.change(number, { target: { value: '3.55' } });
+  expect(controller.getSnapshot('tools').settings.freehand.nominalSize).toBe(3.55);
+  for (const value of ['', '0', '201']) {
+    fireEvent.change(number, { target: { value } });
+    expect(controller.getSnapshot('tools').settings.freehand.nominalSize).toBe(3.55);
+    fireEvent.blur(number);
+    expect(number.value).toBe('3.55');
+  }
+  const reject = jest
+    .spyOn(controller, 'setFreehandSettings')
+    .mockImplementation(() => ({ ok: false, error: { code: 'test' } }) as never);
+  fireEvent.change(number, { target: { value: '8' } });
+  expect(number.value).toBe('3.55');
+  fireEvent.change(slider, { target: { value: '24' } });
+  expect(slider).toHaveProperty('value', '3.55');
+  reject.mockRestore();
+  act(() =>
+    controller.setFreehandSettings({
+      ...controller.getSnapshot('tools').settings.freehand,
+      nominalSize: 8,
+      color: '#123456',
+      opacity: 0.5,
+    })
+  );
+  expect(number.value).toBe('8');
+  expect(preview().getAttribute('stroke')).toBe('#123456');
+  expect(preview().getAttribute('opacity')).toBe('0.5');
+  fireEvent.change(number, { target: { value: '' } });
+  act(() => controller.setTool('rect'));
+  expect(screen.getByLabelText('笔宽')).toHaveProperty('value', '2');
+  act(() => controller.setTool('freehand'));
+  expect(screen.getByLabelText('笔宽')).toHaveProperty('value', '8');
+  act(() => controller.setTool('text'));
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(trigger).toHaveProperty('disabled', true);
+  settings();
+  expect(screen.getByRole('dialog', { name: '绘图设置' })).toBeTruthy();
+  for (const label of ['笔宽', '压力模式', '颜色', '不透明度'])
+    expect(screen.queryByLabelText(label)).toBeNull();
+  expect(controller.getSnapshot('document')).toBe(document);
+  expect(controller.getSnapshot('history')).toBe(history);
+});
+
+test('S7 each pressure mode is frozen in new ink and survives undo, redo and saved reload', () => {
+  const controller = createEditor();
+  render(<Toolbar controller={controller} />);
+  const modes = ['auto', 'real', 'simulated', 'constant'] as const;
+  for (const [index, pressureMode] of modes.entries()) {
+    stroke();
+    const oldObjects = controller.getSnapshot('document').objects;
+    const history = controller.getSnapshot('history');
+    fireEvent.change(screen.getByLabelText('压力模式'), { target: { value: pressureMode } });
+    fireEvent.change(screen.getByLabelText('笔宽'), { target: { value: String(4 + index * 4) } });
+    fireEvent.click(screen.getByRole('button', { name: index % 2 ? '蓝' : '黑', exact: true }));
+    expect(controller.getSnapshot('history')).toBe(history);
+    expect(controller.getSnapshot('document').objects).toEqual(oldObjects);
+    act(() => commitLayeredStroke(controller, `pressure-${index}`));
+    const objects = controller.getSnapshot('document').objects;
+    expect(objects[index]).toMatchObject({
+      kind: 'freehand',
+      brushSnapshot: {
+        pressureMode,
+        nominalSize: 4 + index * 4,
+        color: index % 2 ? '#7FA3C3' : '#2D2D2D',
+      },
+    });
+    act(() => controller.undo());
+    expect(controller.getSnapshot('document').objects).toEqual(oldObjects);
+    act(() => controller.redo());
+    expect(controller.getSnapshot('document').objects).toEqual(objects);
+  }
+  const before = controller.getSnapshot('document').objects;
+  const saved = serializeLayeredDocument(controller.getSnapshot('document'));
+  if (!saved.ok) throw new Error(saved.error.code);
+  const parsed = parseLayeredDocument(saved.value);
+  if (!parsed.ok) throw new Error(parsed.error.code);
+  expect(createEditor(parsed.value).getSnapshot('document').objects).toEqual(before);
 });

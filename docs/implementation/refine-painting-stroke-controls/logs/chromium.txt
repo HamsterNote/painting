@@ -1,0 +1,72 @@
+[2m[WebServer] [22m(node:2657371) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:2657400) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:2657433) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:2657566) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:2657600) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:2657662) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:2657684) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m[33mSkipping web setup: EXPO_NO_WEB_SETUP is enabled.[39m
+
+Running 40 tests using 3 workers
+
+(node:2658191) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2658192) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2658193) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2658191) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2658192) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2658193) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium] › tests/ui/painting-toolbar.spec.ts:17:3 › 工具 returns focus on Escape and closes after keyboard traversal (10.2s)
+  ✓   3 [chromium] › tests/ui/native-toolbar-bridge.spec.ts:52:3 › bridge contract: 工具菜单 Escape restores focus; both Tab directions exit (8.7s)
+  ✓   4 [chromium] › tests/ui/painting-toolbar.spec.ts:54:3 › 工具 returns to its trigger when Tab runs past the document (4.3s)
+  ✓   2 [chromium] › tests/ui/toolbar-round4.spec.ts:12:3 › zoom readout never shifts capsule or groups at 1280px (14.2s)
+  ✓   5 [chromium] › tests/ui/native-toolbar-bridge.spec.ts:52:3 › bridge contract: 缩放比例 Escape restores focus; both Tab directions exit (5.0s)
+  ✓   6 [chromium] › tests/ui/painting-toolbar.spec.ts:17:3 › 缩放设置 returns focus on Escape and closes after keyboard traversal (5.4s)
+  ✓   8 [chromium] › tests/ui/native-toolbar-bridge.spec.ts:52:3 › bridge contract: 设置 Escape restores focus; both Tab directions exit (5.9s)
+  ✓   7 [chromium] › tests/ui/toolbar-round4.spec.ts:12:3 › zoom readout never shifts capsule or groups at 390px (7.8s)
+  ✓   9 [chromium] › tests/ui/painting-toolbar.spec.ts:54:3 › 缩放设置 returns to its trigger when Tab runs past the document (5.1s)
+  ✓  10 [chromium] › tests/ui/native-toolbar-bridge.spec.ts:52:3 › bridge contract: 笔触设置 Escape restores focus; both Tab directions exit (5.7s)
+  ✓  13 [chromium] › tests/ui/native-toolbar-bridge.spec.ts:93:1 › color field preserves a single trusted Tab and traverses range/selected radio (1.1s)
+  ✓  14 [chromium] › tests/ui/native-toolbar-bridge.spec.ts:123:1 › a delayed color transition receipt leaves native disabled while ordinary text owns Tab (788ms)
+  ✓  11 [chromium] › tests/ui/toolbar-round4.spec.ts:12:3 › zoom readout never shifts capsule or groups at 320px (7.0s)
+  ✓  12 [chromium] › tests/ui/painting-toolbar.spec.ts:17:3 › 绘图设置 returns focus on Escape and closes after keyboard traversal (4.5s)
+  ✓  15 [chromium] › tests/ui/native-toolbar-bridge.spec.ts:167:1 › touch drag from a focused color editor changes range and hands focus over after release outside (952ms)
+  ✓  18 [chromium] › tests/ui/native-toolbar-bridge.spec.ts:233:3 › UIKit compatibility replay: radio restores again after pointerup focus is blurred by mousedown (727ms)
+  ✓  19 [chromium] › tests/ui/native-toolbar-bridge.spec.ts:233:3 › UIKit compatibility replay: checkbox restores again after pointerup focus is blurred by mousedown (831ms)
+  ✓  20 [chromium] › tests/ui/native-toolbar-bridge.spec.ts:297:1 › color-to-label preserves the activation hit target until the compatibility click (594ms)
+  ✓  17 [chromium] › tests/ui/painting-toolbar.spec.ts:54:3 › 绘图设置 returns to its trigger when Tab runs past the document (3.0s)
+  ✓  16 [chromium] › tests/ui/toolbar-round4.spec.ts:43:1 › primary width reaches new brush snapshots and restores each tool family (4.1s)
+  ✓  21 [chromium] › tests/ui/painting-toolbar.spec.ts:17:3 › 笔触设置 returns focus on Escape and closes after keyboard traversal (2.3s)
+  ✓  22 [chromium] › tests/ui/toolbar-round4.spec.ts:86:1 › eraser trail has an intermediate fading frame, expires, and adds no history (3.6s)
+  ✓  23 [chromium] › tests/ui/painting-toolbar.spec.ts:54:3 › 笔触设置 returns to its trigger when Tab runs past the document (2.4s)
+  ✓  25 [chromium] › tests/ui/painting-toolbar.spec.ts:78:3 › toolbar layout and keyboard reach at 320px (4.4s)
+  ✓  26 [chromium] › tests/ui/painting-toolbar.spec.ts:78:3 › toolbar layout and keyboard reach at 390px (3.7s)
+  ✓  24 [chromium] › tests/ui/toolbar-round4.spec.ts:124:1 › eraser feedback clears immediately on tool change, undo, clear and page exit (8.5s)
+  ✓  27 [chromium] › tests/ui/painting-toolbar.spec.ts:78:3 › toolbar layout and keyboard reach at 768px (3.4s)
+  ✓  28 [chromium] › tests/ui/painting-toolbar.spec.ts:78:3 › toolbar layout and keyboard reach at 1024px (3.3s)
+  ✓  29 [chromium] › tests/ui/painting-toolbar.spec.ts:78:3 › toolbar layout and keyboard reach at 1280px (3.5s)
+  ✓  30 [chromium] › tests/ui/painting-toolbar.spec.ts:78:3 › toolbar layout and keyboard reach at 1440px (3.8s)
+  ✓  31 [chromium] › tests/ui/painting-toolbar.spec.ts:158:1 › keyboard menu selection, editable numbers, dismissal and the next canvas down (2.8s)
+  ✓  32 [chromium] › tests/ui/painting-toolbar.spec.ts:199:1 › thirty short pen strokes and a crossing do not activate the toolbar or swallow its next click (4.0s)
+  ✓  33 [chromium] › tests/ui/painting-toolbar.spec.ts:237:3 › 200% browser page scale at 320px keeps stroke settings reachable (1.8s)
+  ✓  34 [chromium] › tests/ui/painting-toolbar.spec.ts:237:3 › 200% browser page scale at 390px keeps stroke settings reachable (1.7s)
+  ✓  35 [chromium] › tests/ui/painting-toolbar.spec.ts:266:1 › custom color and clear canvas preserve independent styles and reversible history (2.5s)
+  ✓  36 [chromium] › tests/ui/painting-toolbar.spec.ts:304:1 › dragging zoom preserves visible center ink after pan, embedded offset and resize (2.6s)
+  ✓  37 [chromium] › tests/ui/painting-toolbar.spec.ts:389:1 › preset rings match the selected color and the custom ring only outlines custom colors (3.9s)
+  ✓  38 [chromium] › tests/ui/painting-toolbar.spec.ts:438:3 › stroke smoke S2 S3 S5 S6 visual evidence at 1280px (6.6s)
+  ✓  39 [chromium] › tests/ui/painting-toolbar.spec.ts:438:3 › stroke smoke S2 S3 S5 S6 visual evidence at 390px (5.6s)
+  ✓  40 [chromium] › tests/ui/painting-toolbar.spec.ts:438:3 › stroke smoke S2 S3 S5 S6 visual evidence at 320px (5.7s)
+
+  40 passed (2.5m)

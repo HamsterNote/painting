@@ -1,0 +1,144 @@
+
+Running 3 tests using 1 worker
+
+(node:2649263) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2649263) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [webkit] › tests/ui/painting-toolbar.spec.ts:433:3 › stroke smoke S2 S3 S5 S6 visual evidence at 1280px (3ms)
+(node:2649732) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2649732) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 [webkit] › tests/ui/painting-toolbar.spec.ts:433:3 › stroke smoke S2 S3 S5 S6 visual evidence at 390px (4ms)
+(node:2650135) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2650135) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  3 [webkit] › tests/ui/painting-toolbar.spec.ts:433:3 › stroke smoke S2 S3 S5 S6 visual evidence at 320px (8ms)
+
+
+  1) [webkit] › tests/ui/painting-toolbar.spec.ts:433:3 › stroke smoke S2 S3 S5 S6 visual evidence at 1280px 
+
+    Error: browserType.launch: 
+    ╔══════════════════════════════════════════════════════╗
+    ║ Host system is missing dependencies to run browsers. ║
+    ║ Missing libraries:                                   ║
+    ║     libicudata.so.74                                 ║
+    ║     libicui18n.so.74                                 ║
+    ║     libicuuc.so.74                                   ║
+    ║     libxml2.so.2                                     ║
+    ║     libevent-2.1.so.7                                ║
+    ║     libflite.so.1                                    ║
+    ║     libflite_usenglish.so.1                          ║
+    ║     libflite_cmu_grapheme_lang.so.1                  ║
+    ║     libflite_cmu_grapheme_lex.so.1                   ║
+    ║     libflite_cmu_indic_lang.so.1                     ║
+    ║     libflite_cmu_indic_lex.so.1                      ║
+    ║     libflite_cmulex.so.1                             ║
+    ║     libflite_cmu_time_awb.so.1                       ║
+    ║     libflite_cmu_us_awb.so.1                         ║
+    ║     libflite_cmu_us_kal16.so.1                       ║
+    ║     libflite_cmu_us_kal.so.1                         ║
+    ║     libflite_cmu_us_rms.so.1                         ║
+    ║     libflite_cmu_us_slt.so.1                         ║
+    ║     libavif.so.16                                    ║
+    ║     libmanette-0.2.so.0                              ║
+    ║     libwoff2dec.so.1.0.2                             ║
+    ║     libx264.so                                       ║
+    ╚══════════════════════════════════════════════════════╝
+
+    Error Context: test-results/stroke-webkit/painting-toolbar-stroke-sm-bd725-6-visual-evidence-at-1280px-webkit/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/stroke-webkit/painting-toolbar-stroke-sm-bd725-6-visual-evidence-at-1280px-webkit/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/stroke-webkit/painting-toolbar-stroke-sm-bd725-6-visual-evidence-at-1280px-webkit/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit] › tests/ui/painting-toolbar.spec.ts:433:3 › stroke smoke S2 S3 S5 S6 visual evidence at 390px 
+
+    Error: browserType.launch: 
+    ╔══════════════════════════════════════════════════════╗
+    ║ Host system is missing dependencies to run browsers. ║
+    ║ Missing libraries:                                   ║
+    ║     libicudata.so.74                                 ║
+    ║     libicui18n.so.74                                 ║
+    ║     libicuuc.so.74                                   ║
+    ║     libxml2.so.2                                     ║
+    ║     libevent-2.1.so.7                                ║
+    ║     libflite.so.1                                    ║
+    ║     libflite_usenglish.so.1                          ║
+    ║     libflite_cmu_grapheme_lang.so.1                  ║
+    ║     libflite_cmu_grapheme_lex.so.1                   ║
+    ║     libflite_cmu_indic_lang.so.1                     ║
+    ║     libflite_cmu_indic_lex.so.1                      ║
+    ║     libflite_cmulex.so.1                             ║
+    ║     libflite_cmu_time_awb.so.1                       ║
+    ║     libflite_cmu_us_awb.so.1                         ║
+    ║     libflite_cmu_us_kal16.so.1                       ║
+    ║     libflite_cmu_us_kal.so.1                         ║
+    ║     libflite_cmu_us_rms.so.1                         ║
+    ║     libflite_cmu_us_slt.so.1                         ║
+    ║     libavif.so.16                                    ║
+    ║     libmanette-0.2.so.0                              ║
+    ║     libwoff2dec.so.1.0.2                             ║
+    ║     libx264.so                                       ║
+    ╚══════════════════════════════════════════════════════╝
+
+    Error Context: test-results/stroke-webkit/painting-toolbar-stroke-sm-2088e-S6-visual-evidence-at-390px-webkit/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/stroke-webkit/painting-toolbar-stroke-sm-2088e-S6-visual-evidence-at-390px-webkit/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/stroke-webkit/painting-toolbar-stroke-sm-2088e-S6-visual-evidence-at-390px-webkit/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [webkit] › tests/ui/painting-toolbar.spec.ts:433:3 › stroke smoke S2 S3 S5 S6 visual evidence at 320px 
+
+    Error: browserType.launch: 
+    ╔══════════════════════════════════════════════════════╗
+    ║ Host system is missing dependencies to run browsers. ║
+    ║ Missing libraries:                                   ║
+    ║     libicudata.so.74                                 ║
+    ║     libicui18n.so.74                                 ║
+    ║     libicuuc.so.74                                   ║
+    ║     libxml2.so.2                                     ║
+    ║     libevent-2.1.so.7                                ║
+    ║     libflite.so.1                                    ║
+    ║     libflite_usenglish.so.1                          ║
+    ║     libflite_cmu_grapheme_lang.so.1                  ║
+    ║     libflite_cmu_grapheme_lex.so.1                   ║
+    ║     libflite_cmu_indic_lang.so.1                     ║
+    ║     libflite_cmu_indic_lex.so.1                      ║
+    ║     libflite_cmulex.so.1                             ║
+    ║     libflite_cmu_time_awb.so.1                       ║
+    ║     libflite_cmu_us_awb.so.1                         ║
+    ║     libflite_cmu_us_kal16.so.1                       ║
+    ║     libflite_cmu_us_kal.so.1                         ║
+    ║     libflite_cmu_us_rms.so.1                         ║
+    ║     libflite_cmu_us_slt.so.1                         ║
+    ║     libavif.so.16                                    ║
+    ║     libmanette-0.2.so.0                              ║
+    ║     libwoff2dec.so.1.0.2                             ║
+    ║     libx264.so                                       ║
+    ╚══════════════════════════════════════════════════════╝
+
+    Error Context: test-results/stroke-webkit/painting-toolbar-stroke-sm-cf639-S6-visual-evidence-at-320px-webkit/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/stroke-webkit/painting-toolbar-stroke-sm-cf639-S6-visual-evidence-at-320px-webkit/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/stroke-webkit/painting-toolbar-stroke-sm-cf639-S6-visual-evidence-at-320px-webkit/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3 failed
+    [webkit] › tests/ui/painting-toolbar.spec.ts:433:3 › stroke smoke S2 S3 S5 S6 visual evidence at 1280px 
+    [webkit] › tests/ui/painting-toolbar.spec.ts:433:3 › stroke smoke S2 S3 S5 S6 visual evidence at 390px 
+    [webkit] › tests/ui/painting-toolbar.spec.ts:433:3 › stroke smoke S2 S3 S5 S6 visual evidence at 320px 

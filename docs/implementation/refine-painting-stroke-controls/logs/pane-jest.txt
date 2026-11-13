@@ -1,0 +1,15 @@
+PASS legacy-web packages/painting/src/__tests__/pane-toolbar.test.tsx
+  ✓ legacy caller has no files control; opening and relocating preserve editor snapshots (271 ms)
+  ✓ explicit zero overrides env and header/safe top overlap rather than accumulate (8 ms)
+  ✓ host owns current item, request is single flight and pins opening pane (94 ms)
+  ✓ selection cancelled keeps original current item and permits retry (61 ms)
+  ✓ selection failed keeps original current item and permits retry (44 ms)
+  ✓ selection throw keeps original current item and permits retry (58 ms)
+  ✓ current selection is a no-op, last file removal and host busy are blocked (30 ms)
+  ✓ keyboard traversal skips disabled removal and Escape restores file trigger (25 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       8 passed, 8 total
+Snapshots:   0 total
+Time:        1.867 s
+Ran all test suites matching /packages\/painting\/src\/__tests__\/pane-toolbar.test.tsx/i.

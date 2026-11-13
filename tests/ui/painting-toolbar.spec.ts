@@ -4,6 +4,7 @@ import {
   layeredState,
   openLayeredEditor,
   openToolbarSettings,
+  openToolbarStroke,
   selectToolbarTool,
 } from './layered-helpers';
 
@@ -11,6 +12,7 @@ for (const [triggerName, role, panelName] of [
   ['工具菜单', 'menu', '工具'],
   ['缩放比例', 'dialog', '缩放设置'],
   ['设置', 'dialog', '绘图设置'],
+  ['笔触设置', 'dialog', '笔触设置'],
 ] as const) {
   test(`${panelName} returns focus on Escape and closes after keyboard traversal`, async ({
     page,
@@ -133,11 +135,17 @@ for (const width of [320, 390, 768, 1024, 1280, 1440]) {
     await expect(page.getByRole('button', { name: 'OCR', exact: true })).toHaveCount(0);
     const collapse = (await page.getByRole('button', { name: '收起工具栏' }).boundingBox())!;
     expect(collapse.y + collapse.height).toBeLessThanOrEqual(box.y - 8);
+    await expect(page.getByRole('button', { name: '笔触设置' })).toBeDisabled();
+    await selectToolbarTool(page, '画笔');
+    await openToolbarStroke(page);
     const colors = page.locator('.hn-painting-color span');
     const firstColor = (await colors.nth(0).boundingBox())!,
       secondColor = (await colors.nth(1).boundingBox())!;
     expect(secondColor.x - firstColor.x - firstColor.width).toBeCloseTo(20 / 3, 1);
-    await expect(page.getByLabel('自由取色', { exact: true })).toBeDisabled();
+    await expect(
+      page.getByRole('dialog', { name: '笔触设置' }).getByLabel('自由取色', { exact: true })
+    ).toBeEnabled();
+    await page.keyboard.press('Escape');
     await page.screenshot({ path: info.outputPath(`toolbar-${width}.png`) });
     await page.getByRole('button', { name: '收起工具栏' }).click();
     await expect(strip).toHaveCount(0);
@@ -160,7 +168,7 @@ test('keyboard menu selection, editable numbers, dismissal and the next canvas d
   await page.keyboard.press('Enter');
   expect((await layeredState(page)).tools.activeTool).toBe('rect');
   await expect(trigger).toBeFocused();
-  await openToolbarSettings(page);
+  await openToolbarStroke(page);
   const width = page.getByLabel('笔宽', { exact: true });
   await width.fill('12');
   await width.selectText();
@@ -198,7 +206,7 @@ test('thirty short pen strokes and a crossing do not activate the toolbar or swa
   }
   expect((await layeredState(page)).document.objects).toHaveLength(30);
   const surface = (await page.getByTestId('layered-surface').boundingBox())!;
-  const target = (await page.getByRole('button', { name: '工具菜单', exact: true }).boundingBox())!;
+  const target = (await page.getByRole('button', { name: '笔触设置', exact: true }).boundingBox())!;
   const cdp = await page.context().newCDPSession(page);
   for (const [type, x, y, buttons] of [
     ['mousePressed', surface.x + 80, surface.y + 80, 1],
@@ -217,43 +225,49 @@ test('thirty short pen strokes and a crossing do not activate the toolbar or swa
   }
   expect((await layeredState(page)).tools.activeTool).toBe('freehand');
   expect((await layeredState(page)).document.objects).toHaveLength(31);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: '笔触设置', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: '笔触设置', exact: true })).toBeVisible();
   await selectToolbarTool(page, '文字');
   expect((await layeredState(page)).tools.activeTool).toBe('text');
   expect(await page.evaluate(() => getSelection()?.toString())).toBe('');
 });
 
-test('200% browser page scale and visual viewport resize keep settings reachable', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 780, height: 844 });
-  await openLayeredEditor(page);
-  const cdp = await page.context().newCDPSession(page);
-  await openToolbarSettings(page);
-  await cdp.send('Emulation.setPageScaleFactor', { pageScaleFactor: 2 });
-  await page.getByLabel('不透明度', { exact: true }).focus();
-  const check = async () =>
-    page.getByRole('dialog', { name: '绘图设置' }).evaluate((el) => {
-      const rect = el.getBoundingClientRect(),
-        view = visualViewport!;
-      return (
-        rect.left >= view.offsetLeft &&
-        rect.right <= view.offsetLeft + view.width &&
-        rect.top >= view.offsetTop &&
-        rect.bottom <= view.offsetTop + view.height
-      );
-    });
-  await expect.poll(check).toBe(true);
-  // Desktop automation cannot open a physical IME keyboard; shrink its visible viewport.
-  await page.setViewportSize({ width: 780, height: 440 });
-  await expect.poll(check).toBe(true);
-  await page.getByLabel('笔宽', { exact: true }).fill('20');
-  expect((await layeredState(page)).tools.settings.freehand.nominalSize).toBe(20);
-});
+for (const hostWidth of [640, 780]) {
+  test(`200% browser page scale at ${hostWidth / 2}px keeps stroke settings reachable`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: hostWidth, height: 844 });
+    await openLayeredEditor(page);
+    const cdp = await page.context().newCDPSession(page);
+    await openToolbarStroke(page);
+    await cdp.send('Emulation.setPageScaleFactor', { pageScaleFactor: 2 });
+    await page.getByLabel('不透明度', { exact: true }).focus();
+    const check = async () =>
+      page.getByRole('dialog', { name: '笔触设置' }).evaluate((el) => {
+        const rect = el.getBoundingClientRect(),
+          view = visualViewport!;
+        return (
+          rect.left >= view.offsetLeft &&
+          rect.right <= view.offsetLeft + view.width &&
+          rect.top >= view.offsetTop &&
+          rect.bottom <= view.offsetTop + view.height
+        );
+      });
+    await expect.poll(check).toBe(true);
+    // Desktop automation cannot open a physical IME keyboard; shrink its visible viewport.
+    await page.setViewportSize({ width: hostWidth, height: 440 });
+    await expect.poll(check).toBe(true);
+    await page.getByLabel('笔宽', { exact: true }).fill('20');
+    expect((await layeredState(page)).tools.settings.freehand.nominalSize).toBe(20);
+  });
+}
 
 test('custom color and clear canvas preserve independent styles and reversible history', async ({
   page,
 }) => {
   await openLayeredEditor(page);
+  await openToolbarStroke(page);
   const ring = page.getByLabel('自由取色', { exact: true });
   await expect(ring).toHaveValue('#2d2d2d');
   await ring.evaluate((node: HTMLInputElement) => {
@@ -270,6 +284,7 @@ test('custom color and clear canvas preserve independent styles and reversible h
     'rgb(18, 52, 86)'
   );
   await selectToolbarTool(page, '矩形');
+  await openToolbarStroke(page);
   await expect(ring).toHaveValue('#2d2d2d');
   await selectToolbarTool(page, '自由笔');
   await dispatchLayeredPointer(page, 'down', { x: 50, y: 50 });
@@ -376,6 +391,7 @@ test('preset rings match the selected color and the custom ring only outlines cu
 }) => {
   await openLayeredEditor(page);
   const custom = page.locator('.hn-painting-custom-color span');
+  await openToolbarStroke(page);
   const ring = page.getByLabel('自由取色', { exact: true });
   for (const [name, color] of [
     ['黑', 'rgb(45, 45, 45)'],
@@ -400,8 +416,10 @@ test('preset rings match the selected color and the custom ring only outlines cu
   await expect(custom).toHaveCSS('outline-width', '2px');
   await expect(page.locator('.hn-painting-color[aria-pressed="true"]')).toHaveCount(0);
   await selectToolbarTool(page, '矩形');
+  await openToolbarStroke(page);
   await expect(custom).toHaveCSS('outline-style', 'none');
   await selectToolbarTool(page, '画笔');
+  await openToolbarStroke(page);
   await expect(custom).toHaveCSS('outline-color', 'rgb(18, 52, 86)');
   await page.getByRole('button', { name: '蓝', exact: true }).click();
   await expect(custom).toHaveCSS('outline-style', 'none');
@@ -412,6 +430,82 @@ test('preset rings match the selected color and the custom ring only outlines cu
   });
   await expect(custom).toHaveCSS('outline-color', 'rgb(18, 52, 86)');
   await selectToolbarTool(page, '文字');
-  await expect(custom).toHaveCSS('outline-style', 'none');
-  await expect(ring).toBeDisabled();
+  await expect(custom).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '笔触设置' })).toBeDisabled();
 });
+
+for (const viewportWidth of [1280, 390, 320]) {
+  test(`stroke smoke S2 S3 S5 S6 visual evidence at ${viewportWidth}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width: viewportWidth, height: 900 });
+    await openLayeredEditor(page);
+    const trigger = page.getByRole('button', { name: '笔触设置', exact: true });
+    await trigger.focus();
+    await page.keyboard.press('Space');
+    const panel = page.getByRole('dialog', { name: '笔触设置', exact: true });
+    await expect(panel).toBeVisible();
+    await expect(page.getByRole('toolbar').locator('input,.hn-painting-palette')).toHaveCount(0);
+    const number = panel.getByRole('spinbutton', { name: '笔宽', exact: true });
+    const preview = trigger.locator('path');
+    let previous = 0;
+    for (const width of [0.5, 3.5, 12, 200]) {
+      await number.fill(String(width));
+      expect((await layeredState(page)).tools.settings.freehand.nominalSize).toBe(width);
+      const visualWidth = Number(await preview.getAttribute('stroke-width'));
+      expect(visualWidth).toBeGreaterThan(previous);
+      expect(visualWidth).toBeLessThanOrEqual(6);
+      previous = visualWidth;
+      await expect(panel.getByRole('slider', { name: '笔宽滑条' })).toHaveValue(String(width));
+      if (width === 0.5 || width === 200)
+        await info.attach(`preview-${width}`, {
+          body: await page.screenshot(),
+          contentType: 'image/png',
+        });
+    }
+    await number.fill('3.5');
+    for (const value of ['', '0', '201']) {
+      await number.fill(value);
+      await number.press('Enter');
+      await expect(number).toHaveValue('3.5');
+    }
+    await number.fill('12');
+    await expect(number).toHaveCSS('width', '64px');
+    await expect(number).toHaveCSS('height', '44px');
+    const swatches = panel.locator('.hn-painting-color');
+    expect((await swatches.all()).length).toBe(6);
+    // Browsers quantize fractional layout widths to their subpixel grid.
+    expect((await swatches.first().boundingBox())!.width).toBeCloseTo(30.6667, 1);
+    await page.screenshot({
+      path: `docs/implementation/refine-painting-stroke-controls/evidence/${info.project.name}-stroke-${viewportWidth}.png`,
+    });
+    await page.keyboard.press('Escape');
+    await expect(trigger).toBeFocused();
+    await page.getByRole('button', { name: '缩放比例' }).click();
+    const zoom = page.getByRole('slider', { name: '缩放', exact: true });
+    await zoom.press('Home');
+    for (let i = 0; i < 4; i++) await zoom.press('ArrowRight');
+    await expect(zoom).toHaveValue('125');
+    await expect(zoom).toHaveCSS('height', '44px');
+    await expect(zoom).toHaveCSS('appearance', 'none');
+    expect(
+      await zoom.evaluate((el) =>
+        Number.parseFloat((el as HTMLElement).style.getPropertyValue('--range-fill'))
+      )
+    ).toBeCloseTo((100 / 775) * 100);
+    await page.screenshot({
+      path: `docs/implementation/refine-painting-stroke-controls/evidence/${info.project.name}-zoom-${viewportWidth}.png`,
+    });
+    await trigger.click();
+    await expect(page.getByRole('dialog')).toHaveCount(1);
+    await expect(panel).toBeVisible();
+    const last = panel.locator('select,input').last();
+    await last.focus();
+    const bounds = await last.boundingBox();
+    expect(bounds!.y).toBeGreaterThanOrEqual(0);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(900);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewportWidth);
+    await page.getByRole('button', { name: '收起工具栏' }).click();
+    await expect(panel).toHaveCount(0);
+    await page.getByRole('button', { name: '展开工具栏' }).click();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+}

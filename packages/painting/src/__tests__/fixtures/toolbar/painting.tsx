@@ -6,6 +6,9 @@ import { files, useFixtureHost } from './shared';
 function Fixture() {
   const host = useFixtureHost();
   const [controller] = useState(() => createEditor());
+  const [secondary] = useState(() => createEditor());
+  const split = new URLSearchParams(window.location.search).has('split');
+  const inline = new URLSearchParams(window.location.search).has('inline');
   const legacy = new URLSearchParams(window.location.search).has('legacy');
   const long = new URLSearchParams(window.location.search).has('long');
   const remove = new URLSearchParams(window.location.search).has('remove');
@@ -20,9 +23,13 @@ function Fixture() {
   return (
     <>
       {host.controls}
-      <div data-testid="painting" style={{ height: 650, width: '100%' }}>
+      <div
+        data-testid="painting"
+        style={{ height: split ? 400 : 650, width: '100%', position: 'relative' }}
+      >
         <LayeredPaintingBoard
           controller={controller}
+          toolbarInlinePickers={inline}
           files={legacy ? undefined : fixtureFiles}
           currentFileKey={host.current}
           paneId="primary"
@@ -31,6 +38,15 @@ function Fixture() {
           layout={legacy ? undefined : host.layout}
         />
       </div>
+      {split ? (
+        <div data-testid="secondary" style={{ height: 400, width: '100%', position: 'relative' }}>
+          <LayeredPaintingBoard
+            controller={secondary}
+            toolbarInlinePickers={inline}
+            layout={{ ...host.layout, edge: host.edge === 'top' ? 'bottom' : 'top' }}
+          />
+        </div>
+      ) : null}
     </>
   );
 }

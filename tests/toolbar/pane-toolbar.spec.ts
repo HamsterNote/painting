@@ -170,7 +170,7 @@ test('320px board: file and tool/settings/zoom panels exclude each other in both
   const toolbar = page.getByRole('toolbar');
   const files = toolbar.getByRole('button', { name: '文件', exact: true });
   const menu = page.getByRole('menu', { name: '文件列表' });
-  for (const name of ['设置', '工具菜单', '缩放比例']) {
+  for (const name of ['设置', '工具菜单', '缩放比例', '笔触设置']) {
     const trigger = toolbar.getByRole('button', { name, exact: true });
     await trigger.click();
     await expect(trigger).toHaveAttribute('aria-expanded', 'true');
@@ -241,3 +241,33 @@ for (const remove of [false, true]) {
     await expect(menu).toHaveCount(0);
   });
 }
+
+test('stroke panels stay in their own top/bottom pane and inline pickers remain DOM controls', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 1000 });
+  await page.goto('/painting.html?split&inline');
+  for (const paneName of ['painting', 'secondary']) {
+    const pane = page.getByTestId(paneName);
+    const trigger = pane.getByRole('button', { name: '笔触设置', exact: true });
+    await trigger.click();
+    const panel = pane.getByRole('dialog', { name: '笔触设置' });
+    await expect(panel).toBeVisible();
+    await expect(panel.locator('select,input[type=color]')).toHaveCount(0);
+    const bounds = (await pane.boundingBox())!,
+      popup = (await panel.boundingBox())!;
+    expect(popup.x).toBeGreaterThanOrEqual(bounds.x);
+    expect(popup.x + popup.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+    expect(popup.y).toBeGreaterThanOrEqual(bounds.y);
+    expect(popup.y + popup.height).toBeLessThanOrEqual(bounds.y + bounds.height);
+    await panel.getByRole('button', { name: '自由取色' }).click();
+    const color = panel.getByRole('textbox', { name: '颜色', exact: true });
+    await expect(color).toBeFocused();
+    await color.fill('#123456');
+    await panel.getByLabel('恒定', { exact: true }).check();
+    await expect(trigger.locator('path')).toHaveAttribute('stroke', '#123456');
+    await page.keyboard.press('Escape');
+    await expect(trigger).toBeFocused();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  }
+});

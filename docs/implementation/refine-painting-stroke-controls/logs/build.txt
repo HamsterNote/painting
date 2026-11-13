@@ -1,0 +1,33 @@
+
+> @hamster-note/painting-workspace@0.8.3 build:lib /home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-258-b192151121a1/workdir/painting
+> pnpm --filter @hamster-note/painting build && pnpm --filter @hamster-note/painting-board build
+
+
+> @hamster-note/painting@0.9.1 build /home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-258-b192151121a1/workdir/painting/packages/painting
+> bob build
+
+ℹ [commonjs] Cleaning up previous build at lib/commonjs
+ℹ [module] Cleaning up previous build at lib/module
+ℹ [commonjs] Compiling 124 files in src with babel
+ℹ [typescript] Cleaning up previous build at lib/typescript
+ℹ [module] Compiling 124 files in src with babel
+ℹ [typescript] Generating type definitions with tsc
+✔ [module] Wrote files to lib/module
+✔ [commonjs] Wrote files to lib/commonjs
+✔ [typescript] Wrote definition files to lib/typescript
+
+> @hamster-note/painting-board@0.9.1 build /home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-258-b192151121a1/workdir/painting/packages/painting-board
+> bob build
+
+ℹ [typescript] Cleaning up previous build at lib/typescript
+ℹ [typescript] Generating type definitions with tsc
+ℹ [module] Cleaning up previous build at lib/module
+ℹ [module] Compiling 1 files in src with babel
+ℹ [commonjs] Cleaning up previous build at lib/commonjs
+ℹ [commonjs] Compiling 1 files in src with babel
+✔ [commonjs] Wrote files to lib/commonjs
+⚠ [commonjs] The esm option is disabled, but the exports['.'].require field is set in package.json. This is likely a mistake.
+✔ [module] Wrote files to lib/module
+⚠ [module] The esm option is disabled, but the exports['.'].import field is set in package.json. This is likely a mistake.
+✔ [typescript] Wrote definition files to lib/typescript
+⚠ [typescript] The exports['.'].import.types field in package.json should not be set when the esm option is not enabled for the module target.
