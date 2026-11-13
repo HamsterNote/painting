@@ -26,6 +26,16 @@
 - **WHEN** 用户按住并继续绘制有效套索而不抬起
 - **THEN** 持续更新轨迹，几何准备和查询次数保持为零；正常抬起后按完整轨迹查询一次并提交最终结果。此契约由 2026-11-13 用户决定替代原实时选区要求，不表示原实时指标已通过
 
+#### Scenario: Native touch release commits the final selection
+
+- **WHEN** 浏览器以真实触摸输入完成有效套索，并正常发出 pointerup/touchend，随后释放指针捕获
+- **THEN** MUST 执行一次最终查询并将成功结果写入选区，正常松手后的捕获释放不得误取消在途查询；文档与历史不变。MUST 分开记录触摸与鼠标证据，CDP 触摸或桌面 WebKit 结果不得替代已报告故障设备的复验
+
+#### Scenario: Touch interruption does not submit a stale selection
+
+- **WHEN** 活动触摸套索收到取消、被双指缩放接管或用户切换工具
+- **THEN** MUST 取消旧手势、保留有效原选区及文档和历史，不提交迟到结果，并允许下一次触摸圈选正常完成
+
 #### Scenario: Pending final selection is visible and cancellable
 
 - **WHEN** 松手后的最终查询尚未完成

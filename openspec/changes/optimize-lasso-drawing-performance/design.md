@@ -2,6 +2,8 @@
 
 ## Context
 
+最新优先级为真机松手选不中P0，停止性能优化与自动重试。鼠标和CDP触摸在原冻结构建均可选中，不能据此宣称真机已修复；独立诊断入口与验证限制见 `touch-regression-validation.md`。保留取消/版本防护，取得失败事件与轨迹后再定根因。下述性能协议仍保留，但暂不继续执行。
+
 最新测量约束以 `measurement-protocol.md` 为准：6核主机一分钟load超过3直接废弃整对样本，记录空闲CPU；两版在同一时段相邻AB/BA执行。主指标是查询边界的Chromium线程CPU时钟与独立操作计数，Paint墙钟仅作端到端验收证据。旧高负载读数不用于前后对比。本轮只改测量与交付工具，不改几何算法、预热或产品代码；PR #53静态服务与原版、main并列供人类先验证拖动手感。
 
 动机见 proposal.md。当前 `layeredToolSession.update` 在每批输入对累计轨迹调用 `queryObjectLasso`，再调用 `setSelection`、`setPreview`。查询每次规范化完整多边形并遍历 prepared.entries，候选再执行几何相交；prepared 已在 begin 构建，不应误写为每次 move 重建几何。
