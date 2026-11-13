@@ -9,7 +9,7 @@
 #### Scenario: Wide board presents the reference structure
 
 - **WHEN** 以1280或1440 CSS px宽度打开画板，工具栏展开
-- **THEN** 全部分组按上述顺序呈现为单行，胶囊高60px、外圆角30px、底边距16px加底部安全区，背景为#F5F6F8，边框为#E2E5EA，主操作间距4px，组边缘至1px宽分隔线间距8px
+- **THEN** 全部分组按上述顺序呈现为单行，胶囊高60px、外圆角30px、底部基础间距8px，未提供受控布局时加有效底部安全区（默认取宿主安全区，宿主可显式覆盖）；受控bottom布局使用8px加显式bottom inset，显式0不回退宿主安全区，背景为#F5F6F8，边框为#E2E5EA，主操作间距4px，组边缘至1px宽分隔线间距8px
 
 #### Scenario: Selecting text distinguishes selection from focus
 

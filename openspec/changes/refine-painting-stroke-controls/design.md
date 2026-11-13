@@ -8,7 +8,11 @@
 
 `ToolbarPanel` 复用共享 `ToolbarPopover`，已有面板边界、焦点恢复和 top/bottom 定位。`inlinePickers` 为 Expo DOM 的页面内颜色／选项提供替代路径，现有 `toolbar-inline-pickers.test.tsx`、`native-toolbar-bridge.spec.ts` 覆盖键盘桥接。已有进行中的 `replace-pdf-painting-core` change 聚焦页面／旧文档迁移，未覆盖本次 UI 要求；无需合并或改写它。
 
-主规格中部分安全区示例与当前 `docs/toolbar.md` 不一致，本次不重新定义布局间距，只修改受影响的五条 requirement 并保留原场景。具体兼容行为遵循当前实现及对应布局回归。
+布局间距沿用现有实现：底部基础间距为8px，顶部为16px。依据 `packages/painting/src/toolbar/ToolbarShell.tsx` 的 `gap = edge === 'bottom' ? 8 : 16` 及默认底部 `calc(8px + var(--hn-toolbar-safe-area-bottom, env(safe-area-inset-bottom, 0px)))`，与 `docs/toolbar.md` 的布局章节一致；`toolbarStyles.ts` 不负责外壳定位。未提供layout时叠加有效底部安全区；受控bottom布局使用8px加显式bottom inset，显式0不回退整屏env。
+
+本次只更正change中wide-board场景误抄的16px底边距，不修改布局代码。该requirement同时变更了首层分组，因此按当前schema的MODIFIED规则保留完整场景并更正数值，避免省略原场景导致后续归档丢失。主规格的其他历史安全区示例不在本次修订范围。
+
+开发对账：在1280／1440px宽度测量浮动外壳相对所属画板的bottom；有效安全区0时应为8px、有效安全区34时应为42px；受控bottom=0应为8px、bottom=34应为42px。默认CSS变量显式覆盖0时不再叠加env。另确认top布局仍使用16px加max(top, headerContentInset)，例如top=24/header=44得到60px。本条是沿用布局的回归核对，不改变S5缩放控件验收标准。
 
 ## Goals / Non-Goals
 
