@@ -14,7 +14,7 @@
 
 ## 3. 缩放滑条与交互边界
 
-- [ ] 3.1 在 `toolbarStyles.ts` 为range增加跨引擎track/thumb样式与有效值填充，覆盖缩放及笔宽滑条。按S5检查6px灰轨／紫填充、18px白色紫边滑块、44px交互区及焦点／hover／pressed状态；Chromium与WebKit或Expo DOM分别截图记录。
+- [x] 3.1 在 `toolbarStyles.ts` 为range增加跨引擎track/thumb样式与有效值填充，覆盖缩放及笔宽滑条。按S5检查6px灰轨／紫填充、18px白色紫边滑块、44px交互区及焦点／hover／pressed状态；Chromium与WebKit或Expo DOM分别截图记录。
 - [x] 3.2 保留缩放25–800%、步长25、72px入口、视区中心锚定和拒绝路径，验证S5及S8；数值变化时入口／胶囊／scrollWidth严格相等，世界中心点屏幕误差不超过1 CSS px，书写冻结拒绝不补执行。
 - [x] 3.3 复用 `ToolbarPopover` 焦点、所属栏边界与滚动，验证S6／S8的Tab、Enter／Space、Escape焦点恢复、收起关闭、跨界首击和两栏top／bottom；在320／390px及200%缩放下记录无宿主横向溢出、所有菜单项可达。
 
@@ -26,6 +26,8 @@
 - [x] 4.4 逐项执行 `proposal.md` 冒烟／自测S1–S8，交付记录包含步骤、期望、实际、判定、截图／快照及环境版本；真实压力效果用有压力笔设备，Expo DOM用实际宿主，缺失环境明确标为未验证。撤销／重做、保存重载对比对象快照，确认设置本身不新增历史。
 - [x] 4.5 汇总实现差异、自动化结果、视觉截图及未验证设备项，运行 `openspec validate refine-painting-stroke-controls --strict`；核对每条变更规格都有测试或手工证据后交付评审。
 
-## 验证缺口
+## 验证记录
 
-3.1 的样式和 Chromium 1280／390／320 截图已完成；WebKit 缺系统动态库而无法启动，实际 Expo DOM 宿主未提供，因此跨引擎截图验收未完成，保留未勾选。详见 `docs/implementation/refine-painting-stroke-controls/validation.md`，其中亦记录真实压力设备未验证及既有 16px／8px 间距文字差异。
+3.1 已补齐 Chromium／WebKit 1280／390／320 截图、计算样式与 CSSOM 规则、六张真实滑条裁剪图的像素断言。WebKit 指定整文件命令 exit 0（21 passed／3 个 Chromium CDP 专用用例 skipped，后者仍在 Chromium 40/40 中覆盖）；产品经理两文档规格补丁已应用，1280／1440 间距测量全部通过。当前任务14/14。
+
+真实压力设备与实际 Expo DOM 宿主仍未验证，不用浏览器替身冒充通过。最新证据见 `docs/implementation/refine-painting-stroke-controls/webkit-followup.md`，首轮日志作为历史保留。

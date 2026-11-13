@@ -1,5 +1,7 @@
 # HAM-258 实现与验收记录
 
+更新：WebKit 补验与产品经理的间距规格对账均已完成，任务现为 14/14。最新命令、第二引擎截图、计算样式／像素断言和间距测量见 `webkit-followup.md`；下文保留首轮验证历史。
+
 实现基线：`2f96fc64524ed62c1b4494e7ae4df26e50da74f1`，来源 `agent/agent/4fad8d7762b7`；包含同名 OpenSpec change，未归档，随 PR 交付。
 
 环境：2026-11-13，Linux x86_64，Node v24.15.0，pnpm 10.28.2，Playwright 1.59.1，Chromium 147.0.7727.15，Jest 29.7.0，React 19.2.3。下述 Web/Jest 均指这些版本。实际 Expo DOM 宿主与压感笔设备未提供。
@@ -43,12 +45,12 @@
 实际：Jest 两族值及 document/history 身份断言通过，外部切不支持工具会关闭面板，一般设置仍可使用。浏览器色环回归结果见最终命令表。
 环境：Web/Jest。证据：保留的 palette updates、freehand settings、input preference 测试，以及新增 stroke entry 测试。
 
-## S5 缩放视觉与语义：Chromium 通过，其他引擎未验证
+## S5 缩放视觉与语义：Chromium／WebKit 通过
 
 步骤：1280×900／390×900／320×900 下打开缩放；Home／方向键调 25、125、800 等值，测入口、胶囊、scrollWidth、组位置；平移／缩放并改尺寸后再调节。
 期望：灰轨紫色进度、白色紫边滑块、44px 命中区；入口 72px 且所有尺寸严格稳定；世界中心点投影误差 ≤1 CSS px；文档历史不变。
-证据：`toolbar-round4.spec.ts` 三档严格尺寸比较、`painting-toolbar.spec.ts` 的中心锚定和 stroke smoke，固定视口截图见 evidence。WebKit 启动失败，缺少 libicu*.so.74、libxml2.so.2 等依赖，exit 1（3 个用例均未运行到断言），见 `logs/webkit.txt`。WebKit 与 Expo DOM 视觉明确为未验证，任务 3.1 的跨引擎截图验收保留未完成。
-环境：Chromium；WebKit／Expo DOM 未验证。
+证据：`toolbar-round4.spec.ts` 三档严格尺寸比较、`painting-toolbar.spec.ts` 的中心锚定和 stroke smoke，固定视口截图见 evidence。首轮 WebKit 的 host-requirements 校验失败日志保留于 `logs/webkit.txt`（历史 exit 1，未运行到断言）。环境已修复，补验 WebKit exit 0，三档截图与样式／像素断言通过，见 `webkit-followup.md`。实际 Expo DOM 仍未验证。
+环境：Chromium／WPE WebKit 2.53.0；实际 Expo DOM 未验证。
 
 ## S6 弹层、键盘与窄屏：Chromium 通过
 
@@ -71,9 +73,9 @@
 证据：浏览器 crossing 用例、`tests/toolbar/pane-toolbar.spec.ts` 新增双栏用例、inline 单测及原 zoom 拒绝／冻结单测。实际浏览器结果见最终命令表。真实 Expo DOM 宿主／软键盘／HID 未验证；浏览器 fixture 与桥接替身仅证明 DOM 合约，不能替代宿主录屏。
 环境：Chromium／Jest；实际 Expo DOM 未验证。
 
-## 规格文字遗留差异
+## 规格文字差异：已收口
 
-delta 的 wide-board 场景仍写底边距 16px；现有实现、README 与 `docs/toolbar.md` 的默认底部间距为 8px。design 已要求沿用现有布局，不重新定义此间距，本次保留 8px，未把 16px 条目写成通过。请规格负责人统一这处已有文字差异；本次没有修改／降低该验收文字。
+产品经理通过附件 `HAM-258-spec-spacing.patch` 将 change 的 wide-board 场景统一为底部基础 8px，并补充 design 的依据／对账步骤。已原样应用两文档补丁，保留 tasks 和实现代码。1280／1440px 实测默认与受控底部 8／42px、顶部 60px 均符合修订规格；见 `evidence/PM-spacing-measurements.json`。本次没有更改布局数值。
 
 ## 截图及断言输出
 
@@ -81,22 +83,22 @@ delta 的 wide-board 场景仍写底边距 16px；现有实现、README 与 `doc
 
 S2/S3/S5/S6 的 Chromium stroke smoke 三档均通过；S5 的入口／胶囊／scrollWidth／组位置使用严格相等，中心误差采用现有 ≤1px 断言。S2/S8 文件互斥与两个独立画板、inline 表单归属均通过。完整命令输出位于 `logs/`；命令最终退出码表在下方。
 
-已知验证缺口：WebKit 缺动态库无法启动；真实压感笔、Expo DOM/WebView 宿主、系统 IME/HID 没有设备证据。浏览器桥接使用替身，真实压力效果不能由合成笔输入推断。任务 3.1 因缺跨引擎截图保持未勾选；不宣称全部规格已验收。
+仍未验证：真实压感笔、Expo DOM/WebView 宿主及系统 IME/HID。浏览器桥接使用替身，真实压力效果不能由合成笔输入推断。WebKit 的环境与跨引擎截图缺口已解除。
 
 ## 最终命令与原始退出码
 
-| 命令                                                                                                                                                                                  | 最终退出码 | 结果                                                     |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | -------------------------------------------------------- |
-| `pnpm exec jest --runInBand packages/painting/src/__tests__/layered-toolbar.test.tsx packages/painting/src/__tests__/toolbar-inline-pickers.test.tsx`                                 | `0`        | 25 passed                                                |
-| `pnpm exec playwright test --config=playwright.config.ts tests/ui/painting-toolbar.spec.ts tests/ui/toolbar-round4.spec.ts tests/ui/native-toolbar-bridge.spec.ts --project=chromium` | `0`        | 40 passed；环境变量 PLAYWRIGHT_PORT=53258 隔离开发服务   |
-| `pnpm typecheck`                                                                                                                                                                      | `0`        | painting、painting-board、playground 类型检查通过        |
-| `pnpm build:lib`                                                                                                                                                                      | `0`        | 最终源码串行构建通过；Bob 的既有 exports／esm 警告仍存在 |
-| `pnpm test:toolbar`                                                                                                                                                                   | `0`        | 14 passed，包含新增双画板与文件互斥                      |
-| `pnpm exec playwright test --config=playwright.stroke-webkit.config.ts`                                                                                                               | `1`        | 3 个用例因缺系统库未运行到断言，未验证                   |
-| `openspec validate refine-painting-stroke-controls --strict`                                                                                                                          | `0`        | valid                                                    |
+| 命令                                                                                                                                                                                  | 最终退出码      | 结果                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------------------------------------------- |
+| `pnpm exec jest --runInBand packages/painting/src/__tests__/layered-toolbar.test.tsx packages/painting/src/__tests__/toolbar-inline-pickers.test.tsx`                                 | `0`             | 25 passed                                                |
+| `pnpm exec playwright test --config=playwright.config.ts tests/ui/painting-toolbar.spec.ts tests/ui/toolbar-round4.spec.ts tests/ui/native-toolbar-bridge.spec.ts --project=chromium` | `0`             | 40 passed；环境变量 PLAYWRIGHT_PORT=53258 隔离开发服务   |
+| `pnpm typecheck`                                                                                                                                                                      | `0`             | painting、painting-board、playground 类型检查通过        |
+| `pnpm build:lib`                                                                                                                                                                      | `0`             | 最终源码串行构建通过；Bob 的既有 exports／esm 警告仍存在 |
+| `pnpm test:toolbar`                                                                                                                                                                   | `0`             | 14 passed，包含新增双画板与文件互斥                      |
+| `pnpm exec playwright test --config=playwright.stroke-webkit.config.ts`                                                                                                               | `0`（最新补验） | 3 passed；首次环境失败记录保留在 logs/webkit.txt         |
+| `openspec validate refine-painting-stroke-controls --strict`                                                                                                                          | `0`             | valid                                                    |
 
 早期运行情况保留说明：Jest 初次为 1，修正迁移后的 Tab 预期后为 0；Chromium 早期为 1（旧测试的桥接／子像素断言）、143（运行中断）、1（服务断开导致 ERR_CONNECTION_REFUSED）。使用独立端口最终为 0。`build:lib` 曾为 1（两个构建并发清理同一产物目录），串行复跑为 0；最终源码版本再次串行构建的结果补在下方。`test:toolbar` 曾在打印 14 passed 后返回 143，换 bash 前台包装复跑明确获得原命令退出码 0，未把前次 143 当通过。
 
 补充：`pnpm exec jest --runInBand packages/painting/src/__tests__/pane-toolbar.test.tsx` exit `0`，8 passed；改动文件 ESLint、Prettier 及 `git diff --check` 均通过。
 
-交付进度：13/14。3.1 已实现 CSS 并提供 Chromium 三档截图，但缺 WebKit 或 Expo DOM 的第二套视觉证据，保留未勾选。其余任务按已完成实现／验证记录勾选；真实设备项仍明确未验证。
+当前交付进度：14/14。3.1 已补齐 Chromium／WebKit 三档截图及样式／像素断言。其余任务保持原勾选；真实设备项仍明确未验证。

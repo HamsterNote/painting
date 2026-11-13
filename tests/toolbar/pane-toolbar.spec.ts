@@ -271,3 +271,56 @@ test('stroke panels stay in their own top/bottom pane and inline pickers remain 
     await expect(page.getByRole('dialog')).toHaveCount(0);
   }
 });
+
+for (const width of [1280, 1440]) {
+  test(`PM spacing contract: default and controlled insets at ${width}px`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width, height: 900 });
+    const measurements: { mode: string; inset: number; edge: string; actual: number }[] = [];
+    const measure = async (
+      mode: string,
+      inset: number,
+      edge: 'top' | 'bottom',
+      expected: number
+    ) => {
+      const pane = page.getByTestId('painting');
+      const shell = pane.locator('[data-toolbar-edge]');
+      const board = (await pane.boundingBox())!,
+        toolbar = (await shell.boundingBox())!;
+      const actual =
+        edge === 'bottom'
+          ? board.y + board.height - toolbar.y - toolbar.height
+          : toolbar.y - board.y;
+      expect(actual).toBe(expected);
+      measurements.push({ mode, inset, edge, actual });
+    };
+    await page.goto('/painting.html?legacy');
+    await expect(page.getByRole('toolbar')).toBeVisible();
+    for (const inset of [0, 34]) {
+      await page
+        .getByTestId('painting')
+        .evaluate(
+          (el, inset) => el.style.setProperty('--hn-toolbar-safe-area-bottom', `${inset}px`),
+          inset
+        );
+      await measure('default effective safe-area override', inset, 'bottom', 8 + inset);
+    }
+    await page.goto('/painting.html');
+    await expect(page.getByRole('toolbar')).toBeVisible();
+    // A nonzero effective fallback proves that explicit controlled zero wins.
+    await page
+      .getByTestId('painting')
+      .evaluate((el) => el.style.setProperty('--hn-toolbar-safe-area-bottom', '34px'));
+    await measure('controlled', 34, 'bottom', 42);
+    await page.getByRole('button', { name: '切换零安全区' }).click();
+    await measure('controlled (fallback=34)', 0, 'bottom', 8);
+    await page.getByRole('button', { name: '迁移边缘' }).click();
+    await measure('controlled top=24/header=44', 24, 'top', 60);
+    await info.attach('PM-spacing-measurements.json', {
+      body: JSON.stringify({ width, measurements }, null, 2),
+      contentType: 'application/json',
+    });
+    console.log('PM spacing:', JSON.stringify({ width, measurements }));
+  });
+}

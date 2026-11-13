@@ -198,7 +198,12 @@ test('keyboard menu selection, editable numbers, dismissal and the next canvas d
 
 test('thirty short pen strokes and a crossing do not activate the toolbar or swallow its next click', async ({
   page,
+  browserName,
 }) => {
+  test.skip(
+    browserName !== 'chromium',
+    'CDP pen input is Chromium-only; covered in the Chromium suite.'
+  );
   await openLayeredEditor(page);
   for (let i = 0; i < 30; i++) {
     await dispatchLayeredPointer(page, 'down', { x: 50 + i * 4, y: 30 });
@@ -236,7 +241,12 @@ test('thirty short pen strokes and a crossing do not activate the toolbar or swa
 for (const hostWidth of [640, 780]) {
   test(`200% browser page scale at ${hostWidth / 2}px keeps stroke settings reachable`, async ({
     page,
+    browserName,
   }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'CDP visual viewport emulation is Chromium-only; covered in the Chromium suite.'
+    );
     await page.setViewportSize({ width: hostWidth, height: 844 });
     await openLayeredEditor(page);
     const cdp = await page.context().newCDPSession(page);
@@ -494,6 +504,78 @@ for (const viewportWidth of [1280, 390, 320]) {
     await page.screenshot({
       path: `docs/implementation/refine-painting-stroke-controls/evidence/${info.project.name}-zoom-${viewportWidth}.png`,
     });
+    const styleEvidence = await zoom.evaluate((el) => {
+      const computed = getComputedStyle(el);
+      const rules = Array.from(document.styleSheets)
+        .flatMap((sheet) => Array.from(sheet.cssRules))
+        .filter(
+          (rule): rule is CSSStyleRule =>
+            rule instanceof CSSStyleRule && rule.selectorText.startsWith('.hn-painting-range')
+        )
+        .map((rule) => ({
+          selector: rule.selectorText,
+          height: rule.style.height,
+          width: rule.style.width,
+          background: rule.style.background,
+          borderWidth: rule.style.borderWidth,
+          borderColor: rule.style.borderColor,
+          boxShadow: rule.style.boxShadow,
+        }));
+      return {
+        userAgent: navigator.userAgent,
+        height: computed.height,
+        appearance: computed.getPropertyValue('appearance'),
+        outlineWidth: computed.outlineWidth,
+        outlineColor: computed.outlineColor,
+        outlineOffset: computed.outlineOffset,
+        fill: (el as HTMLElement).style.getPropertyValue('--range-fill'),
+        rules,
+      };
+    });
+    expect(styleEvidence.outlineWidth).toBe('2px');
+    expect(styleEvidence.outlineColor).toBe('rgb(113, 99, 217)');
+    expect(styleEvidence.outlineOffset).toBe('2px');
+    const track = styleEvidence.rules.find(
+      (rule) => rule.selector === '.hn-painting-range::-webkit-slider-runnable-track'
+    )!;
+    const thumb = styleEvidence.rules.find(
+      (rule) => rule.selector === '.hn-painting-range::-webkit-slider-thumb'
+    )!;
+    expect(track.height).toBe('6px');
+    expect(track.background).toMatch(/#7163d9|rgb\(113, 99, 217\)/i);
+    expect(track.background).toMatch(/#e2e5ea|rgb\(226, 229, 234\)/i);
+    expect(thumb.width).toBe('18px');
+    expect(thumb.height).toBe('18px');
+    expect(thumb.borderWidth).toBe('2px');
+    expect(thumb.borderColor).toBe('rgb(113, 99, 217)');
+    expect(thumb.background).toContain('rgb(255, 255, 255)');
+    await info.attach('S5-computed-and-CSSOM-styles.json', {
+      body: JSON.stringify(styleEvidence, null, 2),
+      contentType: 'application/json',
+    });
+    await zoom.screenshot({
+      path: `docs/implementation/refine-painting-stroke-controls/evidence/${info.project.name}-range-${viewportWidth}.png`,
+    });
+    const rangeBounds = (await zoom.boundingBox())!;
+    const thumbX = rangeBounds.x + 9 + ((rangeBounds.width - 18) * 100) / 775;
+    const thumbY = rangeBounds.y + rangeBounds.height / 2;
+    await page.mouse.move(thumbX, thumbY);
+    expect(
+      styleEvidence.rules.find(
+        (rule) => rule.selector === '.hn-painting-range:hover::-webkit-slider-thumb'
+      )!.boxShadow
+    ).not.toBe('none');
+    await zoom.screenshot({ path: info.outputPath('range-hover.png') });
+    await page.mouse.down();
+    expect(await zoom.evaluate((el) => el.matches(':active'))).toBe(true);
+    expect(
+      styleEvidence.rules.find(
+        (rule) => rule.selector === '.hn-painting-range:active::-webkit-slider-thumb'
+      )!.boxShadow
+    ).not.toBe('none');
+    await zoom.screenshot({ path: info.outputPath('range-pressed.png') });
+    await page.mouse.up();
+
     await trigger.click();
     await expect(page.getByRole('dialog')).toHaveCount(1);
     await expect(panel).toBeVisible();

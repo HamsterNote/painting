@@ -1,0 +1,62 @@
+[
+  {
+    "image": "webkit-range-1280.png",
+    "hit_height": 44,
+    "track_height": 6,
+    "fill_height": 6,
+    "thumb_outer_height": 18,
+    "thumb_white_height": 14,
+    "purple_border_pixels": 4,
+    "passed": true
+  },
+  {
+    "image": "webkit-range-390.png",
+    "hit_height": 44,
+    "track_height": 6,
+    "fill_height": 6,
+    "thumb_outer_height": 18,
+    "thumb_white_height": 14,
+    "purple_border_pixels": 4,
+    "passed": true
+  },
+  {
+    "image": "webkit-range-320.png",
+    "hit_height": 44,
+    "track_height": 6,
+    "fill_height": 6,
+    "thumb_outer_height": 18,
+    "thumb_white_height": 14,
+    "purple_border_pixels": 4,
+    "passed": true
+  },
+  {
+    "image": "chromium-range-1280.png",
+    "hit_height": 44,
+    "track_height": 6,
+    "fill_height": 6,
+    "thumb_outer_height": 18,
+    "thumb_white_height": 14,
+    "purple_border_pixels": 4,
+    "passed": true
+  },
+  {
+    "image": "chromium-range-390.png",
+    "hit_height": 44,
+    "track_height": 6,
+    "fill_height": 6,
+    "thumb_outer_height": 18,
+    "thumb_white_height": 14,
+    "purple_border_pixels": 4,
+    "passed": true
+  },
+  {
+    "image": "chromium-range-320.png",
+    "hit_height": 44,
+    "track_height": 6,
+    "fill_height": 6,
+    "thumb_outer_height": 18,
+    "thumb_white_height": 14,
+    "purple_border_pixels": 4,
+    "passed": true
+  }
+]
