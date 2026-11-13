@@ -141,7 +141,7 @@ test('stale edits, invalid transforms and duplicate ids leave document and histo
   expect(controller.getSnapshot('history').canUndo).toBe(false);
 });
 
-test('lasso uses the complete path for live multiselect and restores selection on cancel', () => {
+test('lasso previews the complete path without changing selection and restores it on cancel', () => {
   const controller = makeLayeredController([
     layeredRect('a'),
     { ...layeredRect('b'), transform: { a: 1, b: 0, c: 0, d: 1, tx: 150, ty: 0 } },
@@ -155,7 +155,7 @@ test('lasso uses the complete path for live multiselect and restores selection o
     { x: 300, y: 140 },
     { x: -20, y: 140 },
   ]);
-  expect(controller.getSnapshot('selection')).toEqual(['a', 'b']);
+  expect(controller.getSnapshot('selection')).toEqual(['a']);
   expect(controller.getSnapshot('preview').path.length).toBeGreaterThan(3);
   session.cancel();
   expect(controller.getSnapshot('selection')).toEqual(['a']);

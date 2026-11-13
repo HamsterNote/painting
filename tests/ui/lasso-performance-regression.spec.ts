@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { dispatchLayeredPointer, layeredState, openLayeredEditor } from './layered-helpers';
 
 for (const source of ['mouse', 'pen'] as const) {
-  test(`lasso ${source} publishes live results without history traversal and ends before another frame`, async ({
+  test(`lasso ${source} previews without selection or history traversal and selects only on release`, async ({
     page,
   }) => {
     await openLayeredEditor(page, '&fixture=mixed');
@@ -16,7 +16,10 @@ for (const source of ['mouse', 'pen'] as const) {
       { x: 10, y: 300 },
     ])
       await dispatchLayeredPointer(page, 'move', point, { source });
-    await expect.poll(async () => (await layeredState(page)).selection.length).toBe(5);
+    await page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    );
+    expect((await layeredState(page)).selection).toEqual(before.selection);
     await expect(page.locator('[data-testid="layered-display"] polyline')).toBeVisible();
     expect(await page.evaluate(() => window.__layeredRenders)).toEqual(renders);
     // The final batch and up share a single JS task, leaving no intervening rAF.
@@ -61,7 +64,8 @@ for (const reason of ['Escape', 'pointercancel', 'lostpointercapture', 'blur'] a
       { x: 10, y: 300 },
     ])
       await dispatchLayeredPointer(page, 'move', point);
-    await expect.poll(async () => (await layeredState(page)).selection.length).toBe(5);
+    await expect(page.locator('[data-testid="layered-display"] polyline')).toBeVisible();
+    expect((await layeredState(page)).selection).toEqual(['lower-ink']);
     if (reason === 'Escape') await page.keyboard.press('Escape');
     else if (reason === 'blur') await page.evaluate(() => window.dispatchEvent(new Event('blur')));
     else
