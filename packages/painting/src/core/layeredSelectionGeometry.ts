@@ -1,18 +1,20 @@
 import type { LayeredEditorController } from './layeredEditorController';
 import type { SelectionOperation } from './layeredToolSession';
 import type { Point } from '../model/document';
-import { FreehandGeometryCache } from '../geometry/freehandCache';
-import { deriveLayeredWorldBounds } from '../geometry/worldBounds';
+import { applyAffine, invertAffine } from '../geometry/affine';
+import type { AffineTransform } from '../model/document';
 
 export type SelectionRect = Readonly<{ minX: number; minY: number; maxX: number; maxY: number }>;
 export type LayeredSelectionGeometry = Readonly<{
+  /** Rectangles and handle positions are in the unrotated host-DIP local space. */
   frame: SelectionRect;
+  localToHost: AffineTransform;
+  hostToLocal: AffineTransform;
+  corners: readonly Point[];
   resize: SelectionRect;
   rotate: Readonly<{ x: number; y: number; radius: number }>;
   region: SelectionRect;
 }>;
-
-const caches = new WeakMap<LayeredEditorController, FreehandGeometryCache>();
 
 /** Schema 3 visual bounds mapped to host-local DIP, with fixed screen-size handles. */
 export function deriveLayeredSelectionGeometry(
@@ -21,29 +23,47 @@ export function deriveLayeredSelectionGeometry(
   if (controller.getSnapshot('tools').activeTool !== 'selection') return null;
   const selection = controller.getSnapshot('selection');
   if (!selection.length) return null;
-  const document = controller.getSnapshot('document');
-  const preview = controller.getSnapshot('preview');
+  const session =
+    controller.getSnapshot('preview').selectionFrame ?? controller.getSnapshot('selectionFrame');
+  if (!session) return null;
   const v = controller.getSnapshot('viewport').viewport;
-  let cache = caches.get(controller);
-  if (!cache) caches.set(controller, (cache = new FreehandGeometryCache()));
-  cache.syncDocument(document);
-  const bounds = document.objects
-    .filter((object) => selection.includes(object.objectId))
-    .map(
-      (original) =>
-        deriveLayeredWorldBounds(
-          preview.objects.find((object) => object.objectId === original.objectId) ?? original,
-          cache
-        )?.visualWorldBounds
-    );
-  if (bounds.length !== selection.length || bounds.some((entry) => !entry)) return null;
+  const { transform: t, bounds } = session;
+  const scale = Math.hypot(t.a, t.b);
+  if (!Number.isFinite(scale) || scale <= 0 || !Number.isFinite(v.scale) || v.scale <= 0)
+    return null;
   const frame = {
-    minX: Math.min(...bounds.map((b) => b!.minX)) * v.scale + v.tx,
-    minY: Math.min(...bounds.map((b) => b!.minY)) * v.scale + v.ty,
-    maxX: Math.max(...bounds.map((b) => b!.maxX)) * v.scale + v.tx,
-    maxY: Math.max(...bounds.map((b) => b!.maxY)) * v.scale + v.ty,
+    minX: bounds.minX * scale * v.scale,
+    minY: bounds.minY * scale * v.scale,
+    maxX: bounds.maxX * scale * v.scale,
+    maxY: bounds.maxY * scale * v.scale,
   };
-  if (!Object.values(frame).every(Number.isFinite)) return null;
+  // Keep screen-size handles independent of both viewport and accumulated object scale.
+  const localToHost = {
+    a: t.a / scale,
+    b: t.b / scale,
+    c: t.c / scale,
+    d: t.d / scale,
+    tx: t.tx * v.scale + v.tx,
+    ty: t.ty * v.scale + v.ty,
+  };
+  // Preserve the historical unrotated host coordinates for consumers and zero-angle tests.
+  frame.minX += localToHost.tx;
+  frame.maxX += localToHost.tx;
+  frame.minY += localToHost.ty;
+  frame.maxY += localToHost.ty;
+  localToHost.tx -=
+    localToHost.a * (t.tx * v.scale + v.tx) + localToHost.c * (t.ty * v.scale + v.ty);
+  localToHost.ty -=
+    localToHost.b * (t.tx * v.scale + v.tx) + localToHost.d * (t.ty * v.scale + v.ty);
+  const hostToLocal = invertAffine(localToHost);
+  if (!hostToLocal || !Object.values(frame).every(Number.isFinite)) return null;
+  const corners = [
+    { x: frame.minX, y: frame.minY },
+    { x: frame.maxX, y: frame.minY },
+    { x: frame.maxX, y: frame.maxY },
+    { x: frame.minX, y: frame.maxY },
+  ].map((p) => applyAffine(localToHost, p));
+  if (corners.some((p) => !p)) return null;
   const resize = {
     minX: frame.maxX - 5,
     minY: frame.maxY - 5,
@@ -57,7 +77,7 @@ export function deriveLayeredSelectionGeometry(
     maxX: Math.max(frame.maxX, resize.maxX, rotate.x + rotate.radius),
     maxY: Math.max(frame.maxY, resize.maxY, rotate.y + rotate.radius),
   };
-  return { frame, resize, rotate, region };
+  return { frame, resize, rotate, region, localToHost, hostToLocal, corners: corners as Point[] };
 }
 
 function contains(rect: SelectionRect, point: Point) {
@@ -72,6 +92,9 @@ export function hitLayeredSelectionGeometry(
   point: Point
 ): SelectionOperation | null {
   if (!geometry || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return null;
+  const local = applyAffine(geometry.hostToLocal, point);
+  if (!local) return null;
+  point = local;
   const { rotate } = geometry;
   if (Math.hypot(point.x - rotate.x, point.y - rotate.y) <= rotate.radius) return 'rotate';
   if (contains(geometry.resize, point)) return 'resize';

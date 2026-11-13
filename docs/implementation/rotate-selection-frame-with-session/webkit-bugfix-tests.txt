@@ -1,0 +1,246 @@
+Full related-file regression (port 6259)
+
+[WebServer] (node:2231489) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2231502) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2231531) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2231633) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2231659) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2231719) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2231731) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] Skipping web setup: EXPO_NO_WEB_SETUP is enabled.
+
+Running 88 tests using 2 workers
+
+(node:2231821) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2231818) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2231821) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2231818) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   2 [webkit] › tests/ui/layered-editor.spec.ts:46:3 › plain Web freehand first commit allows more ink, undo/redo and tool switching (14.2s)
+  ✓   1 [webkit] › tests/ui/page-integration.spec.ts:13:5 › page coordinate contract at DPR 1 › disabled text drafts cannot commit or intercept the page; new edits work after enabling (15.6s)
+  ✓   4 [webkit] › tests/ui/page-integration.spec.ts:92:5 › page coordinate contract at DPR 1 › read-only pages show the complete archive on first mount and remount and pass events through (7.7s)
+  ✓   3 [webkit] › tests/ui/layered-editor.spec.ts:46:3 › plain Web line first commit allows more ink, undo/redo and tool switching (9.6s)
+  ✓   6 [webkit] › tests/ui/layered-editor.spec.ts:102:1 › mixed SVG document order equals actual pixel order (5.9s)
+  ✓   5 [webkit] › tests/ui/page-integration.spec.ts:148:5 › page coordinate contract at DPR 1 › page anchors align active Canvas and saved SVG across zoom, scrolling, rotation and pages (10.6s)
+  ✓   7 [webkit] › tests/ui/layered-editor.spec.ts:120:1 › new mouse ink covers existing HTML text in active and historical pixels (8.1s)
+  ✘   9 [webkit] › tests/ui/layered-editor.spec.ts:143:1 › default route opens the layered editor and responds over LAN (7.6s)
+(node:2232787) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2232787) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   8 [webkit] › tests/ui/page-integration.spec.ts:13:5 › page coordinate contract at DPR 2 › disabled text drafts cannot commit or intercept the page; new edits work after enabling (16.2s)
+  ✓  10 [webkit] › tests/ui/layered-editor.spec.ts:155:1 › dot, pressure width and half-opacity delayed handoff remain visible (13.2s)
+  ✓  11 [webkit] › tests/ui/page-integration.spec.ts:92:5 › page coordinate contract at DPR 2 › read-only pages show the complete archive on first mount and remount and pass events through (14.7s)
+  ✓  12 [webkit] › tests/ui/layered-editor.spec.ts:214:1 › active samples do not reconcile history; tools preview and IME commit through the controller (11.3s)
+  ✓  14 [webkit] › tests/ui/layered-editor.spec.ts:243:1 › mobile toolbar fits without horizontal overflow (6.2s)
+  ✓  13 [webkit] › tests/ui/page-integration.spec.ts:148:5 › page coordinate contract at DPR 2 › page anchors align active Canvas and saved SVG across zoom, scrolling, rotation and pages (24.4s)
+  ✓  15 [webkit] › tests/ui/layered-editor.spec.ts:252:1 › settings panel follows the visible host after resize and scrolling (10.4s)
+  ✓  17 [webkit] › tests/ui/layered-editor.spec.ts:326:1 › image file import decodes into ordered SVG pixels and one undo transaction (8.6s)
+  ✓  18 [webkit] › tests/ui/layered-editor.spec.ts:361:1 › real mouse paints over existing SVG ink; keyboard cancellation preserves text (8.6s)
+  ✓  19 [webkit] › tests/ui/layered-editor.spec.ts:390:1 › paper, ruler, touch pinch and minimap use the same viewport (9.1s)
+  ✓  16 [webkit] › tests/ui/page-integration.spec.ts:13:5 › page coordinate contract at DPR 3 › disabled text drafts cannot commit or intercept the page; new edits work after enabling (26.9s)
+  ✓  20 [webkit] › tests/ui/layered-editor.spec.ts:449:3 › line has live preview, cancel and one undo transaction (6.3s)
+  ✓  22 [webkit] › tests/ui/layered-editor.spec.ts:449:3 › rect has live preview, cancel and one undo transaction (6.9s)
+  ✓  23 [webkit] › tests/ui/layered-editor.spec.ts:449:3 › ellipse has live preview, cancel and one undo transaction (6.1s)
+  ✓  21 [webkit] › tests/ui/page-integration.spec.ts:92:5 › page coordinate contract at DPR 3 › read-only pages show the complete archive on first mount and remount and pass events through (20.4s)
+  ✓  24 [webkit] › tests/ui/layered-editor.spec.ts:449:3 › polygon has live preview, cancel and one undo transaction (6.7s)
+  ✓  26 [webkit] › tests/ui/layered-editor.spec.ts:449:3 › bezier has live preview, cancel and one undo transaction (5.7s)
+  ✓  27 [webkit] › tests/ui/layered-editor.spec.ts:493:1 › lasso, move, resize, rotate and fast erase retain raw data and reversible history (7.3s)
+  ✓  28 [webkit] › tests/ui/layered-editor.spec.ts:565:1 › shape dash and freehand pressure settings are isolated (10.6s)
+  ✓  29 [webkit] › tests/ui/layered-editor.spec.ts:589:5 › selection frame mouse › selection frame priority moves empty space, outer band and covered low layer (9.3s)
+  -  30 [webkit] › tests/ui/layered-editor.spec.ts:589:5 › selection frame touch › selection frame priority moves empty space, outer band and covered low layer
+  ✓  25 [webkit] › tests/ui/page-integration.spec.ts:148:5 › page coordinate contract at DPR 3 › page anchors align active Canvas and saved SVG across zoom, scrolling, rotation and pages (44.3s)
+  ✓  31 [webkit] › tests/ui/layered-editor.spec.ts:668:1 › selection session rotates preview and committed frame, retains direction through edits and rejects envelope hits (7.1s)
+(node:2235921) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2235921) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  32 [webkit] › tests/ui/page-integration.spec.ts:228:1 › selection frame page mapping keeps empty-space drag aligned after host zoom and rotation (7.5s)
+  ✓  33 [chromium] › tests/ui/layered-editor.spec.ts:46:3 › plain Web freehand first commit allows more ink, undo/redo and tool switching (8.6s)
+  ✓  34 [webkit] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 0 zoom 0.5 aligns multiselect move and handles (6.9s)
+  ✓  35 [chromium] › tests/ui/layered-editor.spec.ts:46:3 › plain Web line first commit allows more ink, undo/redo and tool switching (5.2s)
+  ✓  36 [webkit] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 0 zoom 1 aligns multiselect move and handles (5.3s)
+  ✓  37 [chromium] › tests/ui/layered-editor.spec.ts:102:1 › mixed SVG document order equals actual pixel order (3.0s)
+  ✓  38 [webkit] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 0 zoom 2 aligns multiselect move and handles (5.0s)
+  ✓  39 [chromium] › tests/ui/layered-editor.spec.ts:120:1 › new mouse ink covers existing HTML text in active and historical pixels (4.0s)
+  ✘  41 [chromium] › tests/ui/layered-editor.spec.ts:143:1 › default route opens the layered editor and responds over LAN (3.9s)
+  ✓  40 [webkit] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 90 zoom 0.5 aligns multiselect move and handles (5.4s)
+(node:2238263) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2238263) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  42 [webkit] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 90 zoom 1 aligns multiselect move and handles (6.2s)
+  ✓  43 [chromium] › tests/ui/layered-editor.spec.ts:155:1 › dot, pressure width and half-opacity delayed handoff remain visible (8.6s)
+  ✓  44 [webkit] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 90 zoom 2 aligns multiselect move and handles (5.8s)
+  ✓  45 [chromium] › tests/ui/layered-editor.spec.ts:214:1 › active samples do not reconcile history; tools preview and IME commit through the controller (5.9s)
+  ✓  46 [webkit] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 180 zoom 0.5 aligns multiselect move and handles (5.6s)
+  ✓  47 [chromium] › tests/ui/layered-editor.spec.ts:243:1 › mobile toolbar fits without horizontal overflow (3.0s)
+  ✓  49 [chromium] › tests/ui/layered-editor.spec.ts:252:1 › settings panel follows the visible host after resize and scrolling (5.5s)
+  ✓  48 [webkit] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 180 zoom 1 aligns multiselect move and handles (7.7s)
+  ✓  50 [chromium] › tests/ui/layered-editor.spec.ts:326:1 › image file import decodes into ordered SVG pixels and one undo transaction (4.2s)
+  ✓  51 [webkit] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 180 zoom 2 aligns multiselect move and handles (6.1s)
+  ✓  52 [chromium] › tests/ui/layered-editor.spec.ts:361:1 › real mouse paints over existing SVG ink; keyboard cancellation preserves text (3.5s)
+  ✓  53 [webkit] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 270 zoom 0.5 aligns multiselect move and handles (4.7s)
+  ✓  54 [chromium] › tests/ui/layered-editor.spec.ts:390:1 › paper, ruler, touch pinch and minimap use the same viewport (5.1s)
+  ✓  56 [chromium] › tests/ui/layered-editor.spec.ts:449:3 › line has live preview, cancel and one undo transaction (4.4s)
+  ✓  55 [webkit] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 270 zoom 1 aligns multiselect move and handles (5.5s)
+  ✓  57 [chromium] › tests/ui/layered-editor.spec.ts:449:3 › rect has live preview, cancel and one undo transaction (3.4s)
+  ✓  58 [webkit] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 270 zoom 2 aligns multiselect move and handles (4.4s)
+(node:2245937) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2245937) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  59 [chromium] › tests/ui/layered-editor.spec.ts:449:3 › ellipse has live preview, cancel and one undo transaction (3.1s)
+  ✓  61 [chromium] › tests/ui/layered-editor.spec.ts:449:3 › polygon has live preview, cancel and one undo transaction (3.0s)
+  ✓  62 [chromium] › tests/ui/layered-editor.spec.ts:449:3 › bezier has live preview, cancel and one undo transaction (3.5s)
+  ✓  60 [chromium] › tests/ui/page-integration.spec.ts:13:5 › page coordinate contract at DPR 1 › disabled text drafts cannot commit or intercept the page; new edits work after enabling (7.5s)
+  ✓  63 [chromium] › tests/ui/layered-editor.spec.ts:493:1 › lasso, move, resize, rotate and fast erase retain raw data and reversible history (4.6s)
+  ✓  64 [chromium] › tests/ui/page-integration.spec.ts:92:5 › page coordinate contract at DPR 1 › read-only pages show the complete archive on first mount and remount and pass events through (4.2s)
+  ✓  65 [chromium] › tests/ui/layered-editor.spec.ts:565:1 › shape dash and freehand pressure settings are isolated (4.0s)
+  ✓  66 [chromium] › tests/ui/page-integration.spec.ts:148:5 › page coordinate contract at DPR 1 › page anchors align active Canvas and saved SVG across zoom, scrolling, rotation and pages (4.6s)
+  ✓  67 [chromium] › tests/ui/layered-editor.spec.ts:589:5 › selection frame mouse › selection frame priority moves empty space, outer band and covered low layer (4.2s)
+  ✓  69 [chromium] › tests/ui/layered-editor.spec.ts:589:5 › selection frame touch › selection frame priority moves empty space, outer band and covered low layer (4.9s)
+  ✓  68 [chromium] › tests/ui/page-integration.spec.ts:13:5 › page coordinate contract at DPR 2 › disabled text drafts cannot commit or intercept the page; new edits work after enabling (9.1s)
+  ✓  71 [chromium] › tests/ui/page-integration.spec.ts:92:5 › page coordinate contract at DPR 2 › read-only pages show the complete archive on first mount and remount and pass events through (4.7s)
+  ✓  70 [chromium] › tests/ui/layered-editor.spec.ts:668:1 › selection session rotates preview and committed frame, retains direction through edits and rejects envelope hits (5.7s)
+  ✓  72 [chromium] › tests/ui/page-integration.spec.ts:148:5 › page coordinate contract at DPR 2 › page anchors align active Canvas and saved SVG across zoom, scrolling, rotation and pages (4.4s)
+  ✓  73 [chromium] › tests/ui/page-integration.spec.ts:13:5 › page coordinate contract at DPR 3 › disabled text drafts cannot commit or intercept the page; new edits work after enabling (5.6s)
+  ✓  74 [chromium] › tests/ui/page-integration.spec.ts:92:5 › page coordinate contract at DPR 3 › read-only pages show the complete archive on first mount and remount and pass events through (4.0s)
+  ✓  75 [chromium] › tests/ui/page-integration.spec.ts:148:5 › page coordinate contract at DPR 3 › page anchors align active Canvas and saved SVG across zoom, scrolling, rotation and pages (5.3s)
+  ✓  76 [chromium] › tests/ui/page-integration.spec.ts:228:1 › selection frame page mapping keeps empty-space drag aligned after host zoom and rotation (2.4s)
+  ✓  77 [chromium] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 0 zoom 0.5 aligns multiselect move and handles (3.7s)
+  ✓  78 [chromium] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 0 zoom 1 aligns multiselect move and handles (4.0s)
+  ✓  79 [chromium] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 0 zoom 2 aligns multiselect move and handles (4.3s)
+  ✓  80 [chromium] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 90 zoom 0.5 aligns multiselect move and handles (3.4s)
+  ✓  81 [chromium] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 90 zoom 1 aligns multiselect move and handles (3.5s)
+  ✓  82 [chromium] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 90 zoom 2 aligns multiselect move and handles (4.0s)
+  ✓  83 [chromium] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 180 zoom 0.5 aligns multiselect move and handles (3.5s)
+  ✓  84 [chromium] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 180 zoom 1 aligns multiselect move and handles (3.0s)
+  ✓  85 [chromium] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 180 zoom 2 aligns multiselect move and handles (3.8s)
+  ✓  86 [chromium] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 270 zoom 0.5 aligns multiselect move and handles (7.8s)
+  ✓  87 [chromium] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 270 zoom 1 aligns multiselect move and handles (4.5s)
+  ✓  88 [chromium] › tests/ui/page-integration.spec.ts:262:5 › selection session page angle 270 zoom 2 aligns multiselect move and handles (3.5s)
+
+
+  1) [webkit] › tests/ui/layered-editor.spec.ts:143:1 › default route opens the layered editor and responds over LAN
+
+    Error: apiRequestContext.get: connect ECONNREFUSED 192.168.0.145:5266
+    Call log:
+      - → GET http://192.168.0.145:5266/
+        - user-agent: Playwright/1.59.1 (x64; ubuntu 26.04) node/24.15 CI/1
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+
+
+      149 |     .find((entry) => entry && entry.family === 'IPv4' && !entry.internal)?.address;
+      150 |   expect(address).toBeTruthy();
+    > 151 |   const response = await request.get(`http://${address}:5266/`);
+          |                                  ^
+      152 |   expect(response.ok()).toBe(true);
+      153 | });
+      154 |
+        at /home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/tests/ui/layered-editor.spec.ts:151:34
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/layered-editor-default-rou-a3f35-ditor-and-responds-over-LAN-webkit/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/layered-editor-default-rou-a3f35-ditor-and-responds-over-LAN-webkit/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/layered-editor-default-rou-a3f35-ditor-and-responds-over-LAN-webkit/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/layered-editor-default-rou-a3f35-ditor-and-responds-over-LAN-webkit/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/layered-editor-default-rou-a3f35-ditor-and-responds-over-LAN-webkit/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium] › tests/ui/layered-editor.spec.ts:143:1 › default route opens the layered editor and responds over LAN
+
+    Error: apiRequestContext.get: connect ECONNREFUSED 192.168.0.145:5266
+    Call log:
+      - → GET http://192.168.0.145:5266/
+        - user-agent: Playwright/1.59.1 (x64; ubuntu 26.04) node/24.15 CI/1
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+
+
+      149 |     .find((entry) => entry && entry.family === 'IPv4' && !entry.internal)?.address;
+      150 |   expect(address).toBeTruthy();
+    > 151 |   const response = await request.get(`http://${address}:5266/`);
+          |                                  ^
+      152 |   expect(response.ok()).toBe(true);
+      153 | });
+      154 |
+        at /home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-249-831542c68739/workdir/painting/tests/ui/layered-editor.spec.ts:151:34
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/layered-editor-default-rou-a3f35-ditor-and-responds-over-LAN-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/layered-editor-default-rou-a3f35-ditor-and-responds-over-LAN-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/layered-editor-default-rou-a3f35-ditor-and-responds-over-LAN-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/layered-editor-default-rou-a3f35-ditor-and-responds-over-LAN-chromium/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/layered-editor-default-rou-a3f35-ditor-and-responds-over-LAN-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [webkit] › tests/ui/layered-editor.spec.ts:143:1 › default route opens the layered editor and responds over LAN
+    [chromium] › tests/ui/layered-editor.spec.ts:143:1 › default route opens the layered editor and responds over LAN
+  1 skipped
+  85 passed (6.5m)
+
+LAN-only rerun (port 5266)
+
+[WebServer] (node:2235252) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2235270) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2235302) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2235599) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2235636) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2235791) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2235807) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] Skipping web setup: EXPO_NO_WEB_SETUP is enabled.
+
+Running 2 tests using 2 workers
+
+(node:2235895) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2235897) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2235897) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2235895) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/ui/layered-editor.spec.ts:143:1 › default route opens the layered editor and responds over LAN (8.5s)
+  ✓  2 [webkit] › tests/ui/layered-editor.spec.ts:143:1 › default route opens the layered editor and responds over LAN (8.0s)
+
+  2 passed (41.8s)
