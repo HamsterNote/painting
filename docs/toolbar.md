@@ -59,9 +59,9 @@ const layout: PaneToolbarLayout = {
 
 宿主解析分屏方向，再传每栏布局：单栏/左右两栏为 bottom，上下上栏为 top、下栏为 bottom。库不计算方向或读取 WebBase 状态。
 
-所有输入为宿主计算的非负有限像素值。`headerContentInset` 表示从栏原点量起的**有效标题遮挡终点**，不是再追加的标题高度；与 safe top 重叠，取 `max(top, headerContentInset)`，不会盲目相加。若宿主的标题高度本来不含状态栏，须由宿主先转为有效遮挡终点。浮动间距16px另加有效 inset：例 top=24/header=44 得 top=60px；bottom=34 得 bottom=50px；显式0得16px，绝不回退整屏 env。
+所有输入为宿主计算的非负有限像素值。`headerContentInset` 表示从栏原点量起的**有效标题遮挡终点**，不是再追加的标题高度；与 safe top 重叠，取 `max(top, headerContentInset)`，不会盲目相加。若宿主的标题高度本来不含状态栏，须由宿主先转为有效遮挡终点。顶部浮动间距16px、底部8px，另加有效 inset：例 top=24/header=44 得 top=60px；bottom=34 得 bottom=42px；底部显式0得8px，绝不回退整屏 env。
 
-未提供 layout 时保留旧底部 `16px + env(safe-area-inset-bottom)`，不改变旧宿主画布占位。受控布局由 `ToolbarShell.onOccupiedSpaceChange({top,bottom})` 报告实际占位，消费者在正文相应侧预留该空间；回调已含16px间距、有效 inset、胶囊及辅助控件，不要再叠加安全区。painting board 已自行预留，页面绘制 surface 也限制在剩余空间内；只变 layout 不更改 controller 或 surface 的 key。
+未提供 layout 时底部使用 `8px + env(safe-area-inset-bottom)`；宿主可用 CSS 变量 `--hn-toolbar-safe-area-bottom` 覆盖默认安全区，不改变画布占位。受控布局由 `ToolbarShell.onOccupiedSpaceChange({top,bottom})` 报告实际占位，消费者在正文相应侧预留该空间；回调已含对应边的间距、有效 inset、胶囊及辅助控件，不要再叠加安全区。painting board 已自行预留，页面绘制 surface 也限制在剩余空间内；只变 layout 不更改 controller 或 surface 的 key。
 
 顶部弹层优先向下、底部优先向上；空间不足时选择可见空间更大的一侧并内部滚动。原始 `Toolbar` 独立入口不拥有正文布局，使用它的宿主也应接入占位回调。
 

@@ -42,6 +42,7 @@ export const ToolbarShell = forwardRef<HTMLDivElement, ToolbarShellProps>(functi
   const lastReported = useRef<ToolbarOccupiedSpace | null>(null);
   useImperativeHandle(ref, () => root.current!, []);
   const edge = layout?.edge ?? 'bottom';
+  const gap = edge === 'bottom' ? 8 : 16;
   const inset = layout
     ? edge === 'top'
       ? Math.max(layout.insets.top, layout.headerContentInset)
@@ -53,7 +54,7 @@ export const ToolbarShell = forwardRef<HTMLDivElement, ToolbarShellProps>(functi
     const view = element.ownerDocument.defaultView!;
     const report = () => {
       const measuredOffset = parseFloat(view.getComputedStyle(element)[edge]);
-      const offset = Number.isFinite(measuredOffset) ? measuredOffset : 16 + inset;
+      const offset = Number.isFinite(measuredOffset) ? measuredOffset : gap + inset;
       const size =
         placement === 'floating'
           ? element.getBoundingClientRect().height + offset
@@ -77,7 +78,7 @@ export const ToolbarShell = forwardRef<HTMLDivElement, ToolbarShellProps>(functi
       view.removeEventListener('resize', report);
       view.visualViewport?.removeEventListener('resize', report);
     };
-  }, [collapsed, edge, inset, placement, onOccupiedSpaceChange]);
+  }, [collapsed, edge, gap, inset, placement, onOccupiedSpaceChange]);
   return (
     <div
       ref={root}
@@ -92,7 +93,9 @@ export const ToolbarShell = forwardRef<HTMLDivElement, ToolbarShellProps>(functi
               position: 'absolute',
               left: layout?.insets.left ?? 0,
               right: layout?.insets.right ?? 0,
-              [edge]: layout ? 16 + inset : 'calc(16px + env(safe-area-inset-bottom, 0px))',
+              [edge]: layout
+                ? gap + inset
+                : 'calc(8px + var(--hn-toolbar-safe-area-bottom, env(safe-area-inset-bottom, 0px)))',
               zIndex: 20,
               pointerEvents: 'none',
             }

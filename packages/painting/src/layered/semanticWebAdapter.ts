@@ -143,7 +143,7 @@ export function createSemanticWebAdapter(options: {
         )
       )
         return;
-      if (tool === 'eraser') eraserTrail.begin(world(point));
+      if (tool === 'eraser') eraserTrail.begin({ ...world(point), time: event.timeStamp });
       owner = { id: event.pointerId, source: event.pointerType, start: point, pan: tool === 'pan' };
       if (options.onTrace)
         traceGesture(options.onTrace, {
@@ -198,7 +198,8 @@ export function createSemanticWebAdapter(options: {
         }
         const points = events.map((sample) => world(screen(sample)));
         engine.update(points);
-        if (controller.getSnapshot('tools').activeTool === 'eraser') eraserTrail.append(points);
+        if (controller.getSnapshot('tools').activeTool === 'eraser')
+          eraserTrail.append(points.map((point, i) => ({ ...point, time: events[i]!.timeStamp })));
       }
     });
     event.preventDefault();
@@ -235,7 +236,7 @@ export function createSemanticWebAdapter(options: {
         const point = world(screen(event));
         engine.update([point]);
         if (controller.getSnapshot('tools').activeTool === 'eraser') {
-          eraserTrail.append([point]);
+          eraserTrail.append([{ ...point, time: event.timeStamp }]);
           eraserTrail.finish(endToolGesture);
         } else endToolGesture();
       }
