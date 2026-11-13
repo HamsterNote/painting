@@ -71,6 +71,11 @@ test.describe('browser touch lasso lifecycle', () => {
       event
     );
   }
+  async function selectionCount(page: Page) {
+    // Poll only the selected IDs. Serializing 500 full strokes on every retry
+    // can consume the polling deadline before the next query task gets a turn.
+    return page.evaluate(() => window.__layeredEditor!.getSnapshot('selection').length);
+  }
 
   for (const input of ['mouse', 'touch'] as const) {
     test(`${input} release computes once and commits the selection after capture is released`, async ({
@@ -98,7 +103,7 @@ test.describe('browser touch lasso lifecycle', () => {
       expect((await layeredState(page)).selection).toEqual(before.selection);
       if (input === 'mouse') await page.mouse.up();
       else await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-      await expect.poll(async () => (await layeredState(page)).selection.length).toBe(115);
+      await expect.poll(() => selectionCount(page)).toBe(115);
       await expect(page.getByLabel('缩放选区')).toBeVisible();
       for (const name of ['query-start', 'query-complete', 'selection-submit'])
         expect(await count(page, name)).toBe(1);
@@ -160,7 +165,7 @@ test.describe('browser touch lasso lifecycle', () => {
       await send('touchStart', [{ ...next[0], id: 3 }]);
       for (const p of next.slice(1)) await send('touchMove', [{ ...p, id: 3 }]);
       await send('touchEnd', []);
-      await expect.poll(async () => (await layeredState(page)).selection.length).toBe(115);
+      await expect.poll(() => selectionCount(page)).toBe(115);
       expect(await count(page, 'selection-submit')).toBe(1);
     });
   }

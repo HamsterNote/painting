@@ -12,7 +12,18 @@ export default defineConfig({
     reuseExistingServer: false,
   },
   projects: [
-    { name: 'chromium', use: { browserName: 'chromium' } },
+    {
+      name: 'chromium',
+      use: {
+        browserName: 'chromium',
+        launchOptions: {
+          ...config.use?.launchOptions,
+          ...(process.env.LASSO_CHROMIUM_EXECUTABLE
+            ? { executablePath: process.env.LASSO_CHROMIUM_EXECUTABLE }
+            : {}),
+        },
+      },
+    },
     { name: 'webkit', use: { browserName: 'webkit', launchOptions: { args: [] } } },
   ],
 });

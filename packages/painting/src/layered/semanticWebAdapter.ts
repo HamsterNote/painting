@@ -351,7 +351,9 @@ export function createSemanticWebAdapter(options: {
     view.addEventListener('pointercancel', pointerCancel);
   }
   view.addEventListener('blur', cancel);
-  view.addEventListener('lostpointercapture', pointerCancel);
+  // Capture changes routing, not gesture lifetime. Keep the owner until the
+  // window receives up/cancel (or a lifecycle interruption), as freehand does.
+  // In particular, a capture loss before up must not discard the final lasso.
   view.addEventListener('pagehide', cancel);
   host.ownerDocument.addEventListener('visibilitychange', hidden);
   host.addEventListener('pointermove', hover);
@@ -387,7 +389,6 @@ export function createSemanticWebAdapter(options: {
       view.removeEventListener('pointerup', up);
       view.removeEventListener('pointercancel', pointerCancel);
       view.removeEventListener('blur', cancel);
-      view.removeEventListener('lostpointercapture', pointerCancel);
       view.removeEventListener('pagehide', cancel);
       view.removeEventListener('keydown', keyDown);
       host.ownerDocument.removeEventListener('visibilitychange', hidden);

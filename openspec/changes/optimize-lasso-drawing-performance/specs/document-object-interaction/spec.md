@@ -13,7 +13,7 @@
 
 #### Scenario: Cancellation restores previous selection
 
-- **WHEN** 套索因 Escape、pointercancel、捕获丢失、失焦、切换工具或卸载而取消
+- **WHEN** 套索因 Escape、pointercancel、失焦、页面隐藏、切换工具或卸载而取消
 - **THEN** 在原文档版本仍有效时恢复手势前选区并清空轨迹，取消待执行工作，迟到回调不改写后续手势；文档变化时清理旧手势且不重新选中已删除对象
 
 #### Scenario: Geometry and editing remain compatible
@@ -28,8 +28,8 @@
 
 #### Scenario: Native touch release commits the final selection
 
-- **WHEN** 浏览器以真实触摸输入完成有效套索，并正常发出 pointerup/touchend，随后释放指针捕获
-- **THEN** MUST 执行一次最终查询并将成功结果写入选区，正常松手后的捕获释放不得误取消在途查询；文档与历史不变。MUST 分开记录触摸与鼠标证据，CDP 触摸或桌面 WebKit 结果不得替代已报告故障设备的复验
+- **WHEN** 浏览器以真实触摸输入完成有效套索，并正常发出 pointerup/touchend，指针捕获可能在正常松手之前或之后释放
+- **THEN** MUST 执行一次最终查询并将成功结果写入选区，捕获丢失只改变路由而不得误取消当前手势或在途查询；保留owner直到up、真正取消或生命周期中断，重复up不重复提交；文档与历史不变。MUST 分开记录触摸与鼠标证据，CDP 触摸或桌面 WebKit 结果不得替代已报告故障设备的复验
 
 #### Scenario: Touch interruption does not submit a stale selection
 
