@@ -1,0 +1,36 @@
+
+> @hamster-note/painting-workspace@0.8.3 test:ui /home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-246-e3f798372f66/workdir/painting
+> playwright test --config=playwright.config.ts --grep 'selection frame|lasso, move, resize, rotate' --workers=1 --retries=0
+
+[WebServer] (node:1728231) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:1728251) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:1728285) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:1729024) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:1729104) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:1729422) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:1729554) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] [33mSkipping web setup: EXPO_NO_WEB_SETUP is enabled.[39m
+
+Running 4 tests using 1 worker
+
+(node:1729966) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1729966) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/ui/layered-editor.spec.ts:482:1 › lasso, move, resize, rotate and fast erase retain raw data and reversible history (20.1s)
+  ✓  2 [chromium] › tests/ui/layered-editor.spec.ts:578:5 › selection frame mouse › selection frame priority moves empty space, outer band and covered low layer (13.9s)
+  ✓  3 [chromium] › tests/ui/layered-editor.spec.ts:578:5 › selection frame touch › selection frame priority moves empty space, outer band and covered low layer (9.3s)
+(node:1731640) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1731640) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  4 [chromium] › tests/ui/page-integration.spec.ts:221:1 › selection frame page mapping keeps empty-space drag aligned after host zoom and rotation (8.3s)
+
+  4 passed (2.1m)

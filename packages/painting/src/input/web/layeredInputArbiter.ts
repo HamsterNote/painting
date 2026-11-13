@@ -1,3 +1,7 @@
+import {
+  deriveLayeredSelectionGeometry,
+  hitLayeredSelectionGeometry,
+} from '../../core/layeredSelectionGeometry';
 import type { GetClientToLocal } from '../../geometry/pageCoordinates';
 import type { LayeredEditorController } from '../../core/layeredEditorController';
 import type { NormalizedPointerInput, TargetRole } from '../../core/input';
@@ -90,7 +94,9 @@ export function createLayeredInputArbiter(options: {
     const targetRole = control
       ? 'safe-control'
       : (options.targetRole?.(event) ??
-        (event.target instanceof Element && event.target.closest('[data-selection-operation]')
+        (event.type === 'pointerdown' &&
+        !state.gesture &&
+        hitLayeredSelectionGeometry(deriveLayeredSelectionGeometry(controller), { x, y })
           ? 'selection'
           : 'paper'));
     return {

@@ -1,0 +1,30 @@
+{
+  "items": [
+    {
+      "id": "prioritize-selection-frame-drag",
+      "type": "change",
+      "valid": true,
+      "issues": [],
+      "durationMs": 248
+    }
+  ],
+  "summary": {
+    "totals": {
+      "items": 1,
+      "passed": 1,
+      "failed": 0
+    },
+    "byType": {
+      "change": {
+        "items": 1,
+        "passed": 1,
+        "failed": 0
+      }
+    }
+  },
+  "version": "1.0",
+  "root": {
+    "path": "/home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-246-e3f798372f66/workdir/painting",
+    "source": "nearest"
+  }
+}

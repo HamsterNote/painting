@@ -217,3 +217,35 @@ for (const dpr of [1, 2, 3]) {
     });
   });
 }
+
+test('selection frame page mapping keeps empty-space drag aligned after host zoom and rotation', async ({
+  page,
+}) => {
+  await page.goto('/?fixture=pages');
+  await expect(page.getByTestId('layered-surface')).toHaveAttribute('data-input-ready', 'true');
+  await page.evaluate(() => window.__pageEditors![0]!.setTool('ellipse'));
+  let box = (await page.getByTestId('pdf-page').boundingBox())!;
+  await page.mouse.move(box.x + 30, box.y + 50);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 130, box.y + 150);
+  await page.mouse.up();
+  await page.evaluate(() => window.__pageEditors![0]!.setTool('selection'));
+  await page.mouse.click(box.x + 30, box.y + 100);
+  await page.getByRole('button', { name: 'Zoom page' }).click();
+  await page.getByRole('button', { name: 'Rotate page' }).click();
+  await page.getByTestId('page-scroll').evaluate((node) => {
+    node.scrollLeft = 1400;
+  });
+  box = (await page.getByTestId('pdf-page').boundingBox())!;
+  const start = { x: box.x + (800 - 100) * 2.5, y: box.y + 80 * 2.5 };
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x - 50, start.y + 75);
+  await page.mouse.up();
+  const objects = await page.evaluate(
+    () => window.__pageEditors![0]!.getSnapshot('document').objects
+  );
+  expect(objects).toHaveLength(1);
+  expect(objects[0].transform.tx).toBeCloseTo(30, 3);
+  expect(objects[0].transform.ty).toBeCloseTo(20, 3);
+});

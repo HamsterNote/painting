@@ -77,7 +77,7 @@ test('source policy and ownership preserve live mouse tools and cancel touch pre
   host.remove();
 });
 
-test.each(['rect', 'lasso', 'eraser', 'selection', 'bezier', 'polygon'] as const)(
+test.each(['rect', 'lasso', 'eraser', 'bezier', 'polygon'] as const)(
   '%s touch transaction cancels before pair and late up cannot edit history',
   async (tool) => {
     const controller = makeLayeredController([layeredRect()]);
@@ -264,5 +264,205 @@ test.each(['auto', 'finger'] as const)(
     semantic.destroy();
     navigation.destroy();
     host.remove();
+  }
+);
+
+function selectionHarness() {
+  const controller = makeLayeredController([layeredRect('a'), layeredRect('b')]);
+  controller.setTool('selection');
+  controller.setSelection(['a']);
+  const host = document.createElement('div');
+  host.innerHTML = '<svg><g data-object-id="b"><path /></g></svg><button>safe</button>';
+  document.body.append(host);
+  const error = jest.fn();
+  const semantic = createSemanticWebAdapter({
+    host,
+    controller,
+    listen: false,
+    allocateId: () => 'new',
+    onText: jest.fn(),
+    onError: error,
+    getClientToLocal: () => (point) => ({ x: (point.x - 100) / 2, y: (point.y - 80) / 2 }),
+  });
+  const navigation = createNavigationWebAdapter(host, controller, false, undefined, {
+    listen: false,
+  });
+  const arbiter = createLayeredInputArbiter({
+    host,
+    controller,
+    tool: semantic,
+    navigation,
+    getClientToLocal: () => (point) => ({ x: (point.x - 100) / 2, y: (point.y - 80) / 2 }),
+  });
+  const send = (
+    phase: string,
+    x: number,
+    y: number,
+    source = 'mouse',
+    id = 1,
+    target: EventTarget = host.querySelector('path')!,
+    shiftKey = false
+  ) => {
+    const event = new Event(`pointer${phase}`, { bubbles: true, cancelable: true });
+    Object.assign(event, {
+      pointerId: id,
+      pointerType: source,
+      clientX: x * 2 + 100,
+      clientY: y * 2 + 80,
+      button: 0,
+      shiftKey,
+    });
+    (phase === 'down' ? target : window).dispatchEvent(event);
+  };
+  return {
+    controller,
+    host,
+    error,
+    send,
+    destroy() {
+      arbiter.destroy();
+      semantic.destroy();
+      navigation.destroy();
+      host.remove();
+    },
+  };
+}
+
+test.each([0.5, 1, 2])(
+  'selection page affine mapping at zoom %s locks covered target and uses final up',
+  (scale) => {
+    const h = selectionHarness();
+    h.controller.updateViewport({
+      type: 'replace',
+      expectedRevision: 0,
+      viewport: { scale, tx: 37, ty: 49 },
+    });
+    const before = h.controller.getSnapshot('document');
+    h.send(
+      'down',
+      30 * scale + 37,
+      50 * scale + 49,
+      'mouse',
+      1,
+      h.host.querySelector('path')!,
+      true
+    );
+    h.send('move', 30 * scale + 57, 50 * scale + 59);
+    h.send('up', 30 * scale + 77, 50 * scale + 79);
+    const objects = h.controller.getSnapshot('document').objects;
+    expect(objects[0].transform.tx).toBeCloseTo(40 / scale);
+    expect(objects[0].transform.ty).toBeCloseTo(30 / scale);
+    expect(objects[1]).toEqual(before.objects[1]);
+    expect(h.controller.getSnapshot('selection')).toEqual(['a']);
+    expect(h.error).not.toHaveBeenCalled();
+    h.destroy();
+  }
+);
+
+test.each(['auto', 'finger', 'pen'] as const)(
+  'selection sources respect %s mode and second touch never steals owner',
+  (mode) => {
+    for (const source of ['mouse', 'pen', 'touch']) {
+      const h = selectionHarness();
+      h.controller.setInputMode(mode);
+      const before = h.controller.getSnapshot('document');
+      h.send('down', 30, 50, source);
+      h.send('move', 50, 60, source);
+      h.send('down', 250, 150, 'touch', 2);
+      h.send('move', 300, 200, 'touch', 2);
+      h.send('up', 70, 80, source);
+      h.send('up', 300, 200, 'touch', 2);
+      const expectedTx = mode === 'pen' && source === 'touch' ? 0 : 40;
+      expect(h.controller.getSnapshot('document').objects[0].transform.tx).toBe(expectedTx);
+      expect(h.controller.getSnapshot('document').objects[1]).toEqual(before.objects[1]);
+      expect(h.error).not.toHaveBeenCalled();
+      h.destroy();
+    }
+  }
+);
+
+test.each(['cancel', 'escape', 'blur', 'hidden', 'tool', 'mode', 'revision', 'unmount'] as const)(
+  'selection %s clears preview and ignores late events',
+  (reason) => {
+    const h = selectionHarness();
+    const before = h.controller.getSnapshot('document');
+    h.send('down', 30, 50);
+    h.send('move', 70, 80);
+    expect(h.controller.getSnapshot('preview').objects).toHaveLength(1);
+    if (reason === 'cancel') h.send('cancel', 70, 80);
+    if (reason === 'escape') window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    if (reason === 'blur') window.dispatchEvent(new Event('blur'));
+    if (reason === 'hidden') {
+      const spy = jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+      spy.mockRestore();
+    }
+    if (reason === 'tool') h.controller.setTool('rect');
+    if (reason === 'mode') h.controller.setInputMode('finger');
+    if (reason === 'revision')
+      h.controller.editObjects({ expectedDocumentRevision: 0, upsert: [{ ...layeredRect('c') }] });
+    if (reason === 'unmount') h.destroy();
+    const history = h.controller.getSnapshot('history');
+    h.send('move', 400, 400);
+    h.send('up', 400, 400);
+    expect(h.controller.getSnapshot('document').objects.slice(0, 2)).toEqual(before.objects);
+    expect(h.controller.getSnapshot('preview')).toEqual({ objects: [], hiddenIds: [], path: [] });
+    expect(h.controller.getSnapshot('history')).toEqual(history);
+    let nextTx = 0;
+    if (reason !== 'unmount') {
+      h.controller.setTool('selection');
+      h.controller.setSelection(['a']);
+      h.send('down', 30, 50);
+      h.send('up', 50, 60);
+      nextTx = 20;
+      h.destroy();
+    }
+    expect(h.controller.getSnapshot('document').objects[0].transform.tx).toBe(nextTx);
+    expect(h.error).not.toHaveBeenCalled();
+  }
+);
+
+test('frame click is history-free, controls are safe and outside shift/blank retain selection rules', () => {
+  const h = selectionHarness();
+  h.send('down', 30, 50);
+  h.send('up', 30, 50);
+  expect(h.controller.getSnapshot('history').canUndo).toBe(false);
+  h.send('down', 30, 50, 'mouse', 1, h.host.querySelector('button')!);
+  h.send('up', 70, 80);
+  expect(h.controller.getSnapshot('history').canUndo).toBe(false);
+  h.send('down', 300, 300, 'mouse', 1, h.host.querySelector('path')!, true);
+  h.send('up', 300, 300);
+  expect(h.controller.getSnapshot('selection')).toEqual(['a', 'b']);
+  h.send('down', 400, 400, 'mouse', 1, h.host);
+  h.send('up', 400, 400);
+  expect(h.controller.getSnapshot('selection')).toEqual([]);
+  h.destroy();
+});
+
+test('auto pen latch keeps frame touches in navigation and leaves document unchanged', () => {
+  const h = selectionHarness();
+  h.controller.recordPenDown();
+  const before = h.controller.getSnapshot('document');
+  h.send('down', 30, 50, 'touch');
+  h.send('up', 70, 80, 'touch');
+  expect(h.controller.getSnapshot('document')).toBe(before);
+  expect(h.controller.getSnapshot('history').canUndo).toBe(false);
+  h.destroy();
+});
+
+test.each(['resize', 'rotate'] as const)(
+  'coordinate %s handle beats covering DOM object',
+  (operation) => {
+    const h = selectionHarness();
+    const before = h.controller.getSnapshot('document');
+    const start = operation === 'resize' ? { x: 101, y: 101 } : { x: 50, y: -21 };
+    h.send('down', start.x, start.y);
+    h.send('up', start.x + 30, start.y + 20);
+    const objects = h.controller.getSnapshot('document').objects;
+    expect(objects[0].transform.a).not.toBe(before.objects[0].transform.a);
+    expect(objects[1]).toEqual(before.objects[1]);
+    expect(h.controller.getSnapshot('selection')).toEqual(['a']);
+    expect(h.error).not.toHaveBeenCalled();
+    h.destroy();
   }
 );

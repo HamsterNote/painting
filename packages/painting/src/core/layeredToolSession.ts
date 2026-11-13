@@ -1,3 +1,7 @@
+import {
+  deriveLayeredSelectionGeometry,
+  hitLayeredSelectionGeometry,
+} from './layeredSelectionGeometry';
 import type { LayeredEditorController, LayeredEditorTool } from './layeredEditorController';
 import {
   prepareLayeredObjectQuery,
@@ -399,14 +403,23 @@ export function createLayeredToolSession(
       }
       if (['freehand', 'text', 'image', 'pan'].includes(tool)) return false;
       const document = controller.getSnapshot('document');
-      if (['selection', 'eraser', 'lasso'].includes(tool)) {
+      const viewport = controller.getSnapshot('viewport').viewport;
+      const selectionHit =
+        tool === 'selection'
+          ? hitLayeredSelectionGeometry(deriveLayeredSelectionGeometry(controller), {
+              x: point.x * viewport.scale + viewport.tx,
+              y: point.y * viewport.scale + viewport.ty,
+            })
+          : null;
+      if (selectionHit && operation === 'move') operation = selectionHit;
+      if (['eraser', 'lasso'].includes(tool)) {
         if (preparedDocument !== document) {
           prepared = prepareLayeredObjectQuery(document, cache);
           requireValue(prepared);
           preparedDocument = document;
         }
       }
-      if (tool === 'selection') {
+      if (tool === 'selection' && !selectionHit) {
         const hits = pointHits(point);
         const id =
           targetId && document.objects.some((object) => object.objectId === targetId)
