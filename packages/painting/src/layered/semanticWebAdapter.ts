@@ -1,5 +1,6 @@
 import type { GetClientToLocal } from '../geometry/pageCoordinates';
 import type { LayeredEditorController } from '../core/layeredEditorController';
+import { supersedesPrimaryPointer } from '../core/input';
 import { createLayeredToolSession, type LassoPerformanceEvent } from '../core/layeredToolSession';
 import type { Point } from '../model/document';
 import type { WebFreehandPolicy } from '../input/web/freehandWebAdapter';
@@ -45,6 +46,7 @@ export function createSemanticWebAdapter(options: {
     };
   const perfView = view as Window & {
     __paintingTestLassoPerf?: (event: LassoPerformanceEvent) => void;
+    __paintingTestLassoWarmup?: boolean;
   };
   const engine = createLayeredToolSession(controller, options.allocateId, {
     // Set by the performance runner before page load; absent in normal use.
@@ -71,11 +73,31 @@ export function createSemanticWebAdapter(options: {
         return () => view.clearTimeout(id);
       },
       now: () => view.performance.now(),
+      idle:
+        perfView.__paintingTestLassoWarmup === false
+          ? undefined
+          : (callback) => {
+              if (typeof view.requestIdleCallback === 'function') {
+                const id = view.requestIdleCallback((deadline) =>
+                  callback(deadline.timeRemaining())
+                );
+                return () => view.cancelIdleCallback(id);
+              }
+              // Safari fallback gives paint/input a turn and keeps work bounded.
+              const id = view.setTimeout(() => callback(4), 32);
+              return () => view.clearTimeout(id);
+            },
     },
     onError: options.onError,
   });
+  const pauseWarmup = () => engine.pauseWarmup();
+  const resumeWarmup = () => engine.resumeWarmup();
+  host.addEventListener('pointerdown', pauseWarmup, true);
+  view.addEventListener('pointerup', resumeWarmup);
+  view.addEventListener('pointercancel', resumeWarmup);
   let committing = false;
-  let owner: { id: number; source: string; start: Point; pan: boolean } | undefined;
+  let owner:
+    { id: number; source: string; isPrimary?: boolean; start: Point; pan: boolean } | undefined;
   let snapshot = controller.getSnapshot('viewport');
   const screen = (event: PointerEvent): Point => {
     if (options.getClientToLocal) {
@@ -107,7 +129,6 @@ export function createSemanticWebAdapter(options: {
   function down(event: PointerEvent) {
     const tool = controller.getSnapshot('tools').activeTool;
     if (
-      owner ||
       tool === 'freehand' ||
       (tool === 'pan' && options.canNavigate?.() === false) ||
       event.button !== 0 ||
@@ -119,6 +140,16 @@ export function createSemanticWebAdapter(options: {
       options.policy?.[event.pointerType as keyof WebFreehandPolicy] === 'none'
     )
       return;
+    if (owner) {
+      if (
+        !supersedesPrimaryPointer(
+          { device: owner.source, isPrimary: owner.isPrimary },
+          { device: event.pointerType, isPrimary: event.isPrimary }
+        ) ||
+        !cancel()
+      )
+        return;
+    }
     snapshot = controller.getSnapshot('viewport');
     const point = screen(event);
     options.beforeGesture?.();
@@ -144,7 +175,13 @@ export function createSemanticWebAdapter(options: {
       )
         return;
       if (tool === 'eraser') eraserTrail.begin({ ...world(point), time: event.timeStamp });
-      owner = { id: event.pointerId, source: event.pointerType, start: point, pan: tool === 'pan' };
+      owner = {
+        id: event.pointerId,
+        source: event.pointerType,
+        isPrimary: event.isPrimary,
+        start: point,
+        pan: tool === 'pan',
+      };
       if (options.onTrace)
         traceGesture(options.onTrace, {
           scope: 'semantic',
@@ -332,7 +369,11 @@ export function createSemanticWebAdapter(options: {
     view.addEventListener('pointercancel', pointerCancel);
   }
   view.addEventListener('blur', cancel);
-  view.addEventListener('lostpointercapture', pointerCancel);
+  // Capture changes routing, not gesture lifetime. Keep the owner until the
+  // window receives up/cancel (or a lifecycle interruption), as freehand does.
+  // In particular, a capture loss before up must not discard the final lasso.
+  // A fresh same-device primary down can instead prove the old cycle ended;
+  // down() cancels that stale session before taking ownership of the new one.
   view.addEventListener('pagehide', cancel);
   host.ownerDocument.addEventListener('visibilitychange', hidden);
   host.addEventListener('pointermove', hover);
@@ -350,6 +391,9 @@ export function createSemanticWebAdapter(options: {
     destroy() {
       cancel();
       engine.destroy();
+      host.removeEventListener('pointerdown', pauseWarmup, true);
+      view.removeEventListener('pointerup', resumeWarmup);
+      view.removeEventListener('pointercancel', resumeWarmup);
       pendingWork.clear();
       workChannel?.port1.close();
       workChannel?.port2.close();
@@ -365,7 +409,6 @@ export function createSemanticWebAdapter(options: {
       view.removeEventListener('pointerup', up);
       view.removeEventListener('pointercancel', pointerCancel);
       view.removeEventListener('blur', cancel);
-      view.removeEventListener('lostpointercapture', pointerCancel);
       view.removeEventListener('pagehide', cancel);
       view.removeEventListener('keydown', keyDown);
       host.ownerDocument.removeEventListener('visibilitychange', hidden);

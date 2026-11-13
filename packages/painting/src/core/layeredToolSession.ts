@@ -5,16 +5,16 @@ import {
 import type { LayeredEditorController, LayeredEditorTool } from './layeredEditorController';
 import {
   prepareLayeredObjectQuery,
+  createControllerObjectQuery,
   createLayeredLassoQuery,
-  type LayeredLassoQueryWork,
-  type LayeredObjectQueryHit,
-  type LayeredObjectQueryResult,
+  warmLayeredLasso,
+  primeLayeredLassoIndex,
   queryObjectPoint,
   queryObjectSweep,
 } from './layeredObjectQuery';
+import { layeredGeometryCache } from './layeredGeometryCache';
 import type { LayeredSelectionFrame } from './layeredSelectionFrame';
 import { applyAffine, composeAffine } from '../geometry/affine';
-import { FreehandGeometryCache } from '../geometry/freehandCache';
 import { deriveShapeGeometry } from '../geometry/shape';
 import {
   IDENTITY_TRANSFORM,
@@ -39,12 +39,7 @@ type ToolGesture = {
   previousSelection: readonly string[];
   pathVersion: number;
   perfSession: number;
-  evaluatedVersion: number;
-  query?: { work: LayeredLassoQueryWork; version: number; pointCount: number };
-  completed?: {
-    version: number;
-    result: LayeredObjectQueryResult<readonly LayeredObjectQueryHit[]>;
-  };
+  pending?: boolean;
   placement?: {
     stage: number;
     anchors: Point[];
@@ -57,11 +52,25 @@ export type LayeredToolScheduler = {
   frame(callback: () => void): () => void;
   work(callback: () => void): () => void;
   now(): number;
+  idle?(callback: (budgetMs: number) => void): () => void;
 };
 
 /** Internal, opt-in measurement hook. No clock/marks/observer runs unless installed by a test. */
 export type LassoPerformanceEvent = {
-  event: 'input' | 'query-start' | 'query-complete' | 'selection-submit' | 'cancel';
+  event:
+    'input' | 'query-start' | 'query-complete' | 'selection-submit' | 'cancel' | 'phase' | 'warmup';
+  phase?:
+    | 'prepare'
+    | 'canonicalize'
+    | 'candidates'
+    | 'exact'
+    | 'fallback'
+    | 'warmup-synthetic'
+    | 'warmup-prepare'
+    | 'warmup-index';
+  complete?: boolean;
+  durationMs?: number;
+  count?: number;
   session: number;
   version: number;
   pointCount: number;
@@ -79,12 +88,19 @@ export function createLayeredToolSession(
     onPerf?: (event: LassoPerformanceEvent) => void;
   } = {}
 ) {
-  const cache = new FreehandGeometryCache();
+  const cache = layeredGeometryCache(controller);
   let gesture: ToolGesture | undefined;
   let prepared: ReturnType<typeof prepareLayeredObjectQuery>;
   let preparedDocument: ReturnType<LayeredEditorController['getSnapshot']> | undefined;
   let stopFrame: (() => void) | undefined;
   let stopWork: (() => void) | undefined;
+  let stopIdle: (() => void) | undefined;
+  let idleEpoch = 0;
+  let inputBusy = false;
+  let syntheticReady = false;
+  let idleNeedsIndex = false;
+  let idlePreparation: ReturnType<typeof createControllerObjectQuery> | undefined;
+  let idleDocument: ReturnType<LayeredEditorController['getSnapshot']> | undefined;
   let destroyed = false;
   let perfSession = 0;
   const perf = (
@@ -106,8 +122,9 @@ export function createLayeredToolSession(
   const scheduler = options.scheduler;
   const clearScheduled = () => {
     stopFrame?.();
+    stopFrame = undefined;
     stopWork?.();
-    stopFrame = stopWork = undefined;
+    stopWork = undefined;
   };
   const requireValue = <T>(
     result: { ok: true; value: T } | { ok: false; error: { code: string } }
@@ -126,6 +143,7 @@ export function createLayeredToolSession(
     )
       controller.setSelection(previous.previousSelection);
     controller.setPreview(null);
+    resumeWarmup();
   };
   const unsubscribeTools = controller.subscribe('tools', () => {
     if (gesture && controller.getSnapshot('tools').activeTool !== gesture.tool) cancel();
@@ -150,86 +168,242 @@ export function createLayeredToolSession(
     gesture = undefined;
     preparedDocument = undefined;
     cache.syncDocument(controller.getSnapshot('document'));
+    idlePreparation = undefined;
+    idleDocument = undefined;
+    idleNeedsIndex = false;
+    stopIdle?.();
+    stopIdle = undefined;
+    idleEpoch++;
+    scheduleWarmup();
   });
 
   const active = (current: ToolGesture) =>
     gesture === current &&
     current.revision === controller.getSnapshot('document').documentRevision &&
     !destroyed;
-  function evaluate(current: ToolGesture, final = false) {
-    perf(current, 'query-start', final);
-    const query = createLayeredLassoQuery(requireValue(prepared), current.points);
-    const result = query.ok ? query.value.step(() => 0, Infinity)! : query;
-    perf(current, 'query-complete', final, undefined, undefined, result.ok);
-    return result;
+  function pauseWarmup() {
+    inputBusy = true;
+    idleEpoch++;
+    stopIdle?.();
+    stopIdle = undefined;
   }
-  function scheduleLasso(current: ToolGesture) {
-    if (!scheduler) {
-      const result = evaluate(current);
-      current.completed = { version: current.pathVersion, result };
-      if (result.ok) {
-        controller.setSelection(result.value.map((hit) => hit.objectId));
-        perf(current, 'selection-submit', false, undefined, undefined, true);
-      }
-      controller.setPreview({ objects: [], hiddenIds: [], path: current.points });
+  function resumeWarmup() {
+    inputBusy = false;
+    scheduleWarmup();
+  }
+  function scheduleWarmup() {
+    if (!scheduler?.idle || stopIdle || destroyed || inputBusy || gesture) return;
+    if (
+      syntheticReady &&
+      !idleNeedsIndex &&
+      preparedDocument === controller.getSnapshot('document')
+    )
       return;
+    const epoch = idleEpoch;
+    let called = false;
+    stopIdle = scheduler.idle((available) => {
+      if (called || epoch !== idleEpoch || destroyed || inputBusy || gesture) return;
+      called = true;
+      stopIdle = undefined;
+      // Native input may not deliver DOM pointerdown. Check only at idle, never
+      // subscribe to every sample and copy the accumulating interaction snapshot.
+      if (controller.getSnapshot('interaction').activeFreehand) return;
+      const budget = Math.min(8, Math.max(0, available));
+      if (budget < 1) {
+        scheduleWarmup();
+        return;
+      }
+      const start = scheduler.now();
+      let phase: LassoPerformanceEvent['phase'];
+      let complete = false;
+      try {
+        if (!syntheticReady) {
+          phase = 'warmup-synthetic';
+          syntheticReady = warmLayeredLasso(scheduler.now, budget);
+          complete = syntheticReady;
+        } else if (idleNeedsIndex) {
+          phase = 'warmup-index';
+          primeLayeredLassoIndex(requireValue(prepared));
+          idleNeedsIndex = false;
+          complete = true;
+        } else {
+          const document = controller.getSnapshot('document');
+          if (idleDocument !== document) {
+            idlePreparation = createControllerObjectQuery(controller, cache);
+            idleDocument = document;
+          }
+          phase = 'warmup-prepare';
+          const result = idlePreparation!.step(scheduler.now, budget);
+          if (result) {
+            requireValue(result);
+            prepared = result;
+            idleNeedsIndex = true;
+            preparedDocument = document;
+            idlePreparation = undefined;
+            idleDocument = undefined;
+            complete = true;
+          }
+        }
+        try {
+          options.onPerf?.({
+            event: 'warmup',
+            phase,
+            durationMs: scheduler.now() - start,
+            complete,
+            session: 0,
+            version: controller.getSnapshot('document').documentRevision,
+            pointCount: 0,
+            final: false,
+          });
+        } catch {
+          /* instrumentation never changes editing */
+        }
+        if (epoch === idleEpoch) scheduleWarmup();
+      } catch {
+        // Idle preparation is optional. A real query retains the existing error path.
+        idlePreparation = undefined;
+        idleDocument = undefined;
+      }
+    });
+  }
+
+  function prepareQuery() {
+    const document = controller.getSnapshot('document');
+    if (preparedDocument !== document) {
+      prepared = createControllerObjectQuery(controller, cache).step(() => 0, Infinity)!;
+      requireValue(prepared);
+      preparedDocument = document;
     }
-    const safely = (action: () => void) => {
+    return requireValue(prepared);
+  }
+
+  function finishLasso(current: ToolGesture) {
+    current.pending = true;
+    const document = controller.getSnapshot('document');
+    // Transfer ownership of partial idle preparation to this final query. Input
+    // has paused the idle callback; never repeat work or share a mutable cursor.
+    let preparation = idleDocument === document ? idlePreparation : undefined;
+    idlePreparation = undefined;
+    idleDocument = undefined;
+    let query: ReturnType<typeof createLayeredLassoQuery> | undefined;
+    let started = false;
+    let exactMs = 0,
+      exactCount = 0;
+    const phase = (phase: LassoPerformanceEvent['phase'], durationMs: number, count?: number) => {
+      try {
+        options.onPerf?.({
+          event: 'phase',
+          phase,
+          durationMs,
+          count,
+          session: current.perfSession,
+          version: current.pathVersion,
+          pointCount: current.points.length,
+          final: true,
+        });
+      } catch {
+        /* observer isolation */
+      }
+    };
+    const now = scheduler?.now ?? (() => 0);
+    const budget = scheduler ? 8 : Infinity;
+    const enqueue = () => {
+      let called = false;
+      stopWork = scheduler!.work(() => {
+        if (called || !active(current)) return;
+        called = true;
+        stopWork = undefined;
+        run();
+      });
+    };
+    const run = () => {
       if (!active(current)) return;
       try {
-        action();
+        if (!started) {
+          started = true;
+          perf(current, 'query-start', true);
+          if (!active(current)) return;
+        }
+        if (preparedDocument !== document) {
+          preparation ??= createControllerObjectQuery(controller, cache);
+          const before = options.onPerf ? now() : 0;
+          const result = preparation.step(now, budget);
+          if (options.onPerf) phase('prepare', now() - before);
+          if (!active(current)) return;
+          if (!result) return enqueue();
+          prepared = result;
+          requireValue(prepared);
+          preparedDocument = document;
+          // Let input/paint run between preparation and exact testing.
+          if (scheduler) return enqueue();
+        }
+        query ??= createLayeredLassoQuery(
+          requireValue(prepared),
+          current.points,
+          options.onPerf
+            ? {
+                now,
+                onPhase: phase,
+                onObject: (_id, ms) => {
+                  exactMs += ms;
+                  exactCount++;
+                },
+                onFallback: (_id, ms) => phase('fallback', ms, 1),
+              }
+            : undefined
+        );
+        const result = query.ok ? query.value.step(now, budget) : query;
+        if (!result) return enqueue();
+        if (options.onPerf) phase('exact', exactMs, exactCount);
+        perf(current, 'query-complete', true, undefined, undefined, result.ok);
+        if (!active(current)) return;
+        gesture = undefined;
+        clearScheduled();
+        if (result.ok) {
+          const selected = result.value.map((hit) => hit.objectId);
+          controller.setSelection(selected);
+          perf(current, 'selection-submit', true, undefined, undefined, true);
+          if (selected.length) controller.setTool('selection');
+        }
+        controller.setPreview(null);
+        resumeWarmup();
+      } catch (error) {
+        if (active(current)) cancel();
+        options.onError?.(error);
+      }
+    };
+    if (!scheduler) run();
+    else {
+      requireValue(
+        controller.setPreview({
+          objects: [],
+          hiddenIds: [],
+          path: current.points,
+          lassoPending: true,
+        })
+      );
+      // The path is already visible and pending state is published above. Yield
+      // out of input handling, then do bounded work without waiting an extra
+      // animation frame before the first chunk. Paint can run between chunks.
+      enqueue();
+    }
+  }
+
+  function scheduleLasso(current: ToolGesture) {
+    const publish = () => {
+      // A cancelled frame may still arrive after end, a new session or a document edit.
+      if (!active(current) || current.pending) return;
+      stopFrame = undefined;
+      try {
+        controller.setPreview({ objects: [], hiddenIds: [], path: current.points });
       } catch (error) {
         cancel();
         options.onError?.(error);
       }
     };
-    if (!stopFrame)
-      stopFrame = scheduler.frame(() => {
-        if (!active(current)) return;
-        stopFrame = undefined;
-        safely(() => {
-          controller.setPreview({ objects: [], hiddenIds: [], path: current.points });
-        });
-      });
-    const work = () => {
-      if (!active(current)) return;
-      stopWork = undefined;
-      safely(() => {
-        if (!current.query) {
-          if (current.evaluatedVersion === current.pathVersion) return;
-          perf(current, 'query-start');
-          const query = createLayeredLassoQuery(requireValue(prepared), current.points);
-          current.evaluatedVersion = current.pathVersion;
-          if (!query.ok) {
-            current.completed = { version: current.pathVersion, result: query };
-            perf(current, 'query-complete', false, undefined, undefined, false);
-            return;
-          }
-          current.query = {
-            work: query.value,
-            version: current.pathVersion,
-            pointCount: current.points.length,
-          };
-        }
-        const result = current.query.work.step(scheduler.now, 4);
-        if (result) {
-          const { version, pointCount } = current.query;
-          perf(current, 'query-complete', false, version, pointCount, result.ok);
-          current.completed = { version: current.query.version, result };
-          current.query = undefined;
-          // One query at a time: completed feedback is ordered by path version.
-          // New samples accumulate independently; they never starve a query already in flight.
-          if (result.ok) {
-            controller.setSelection(result.value.map((hit) => hit.objectId));
-            perf(current, 'selection-submit', false, version, pointCount, true);
-          }
-        }
-        if (current.query || current.evaluatedVersion !== current.pathVersion)
-          stopWork = scheduler.work(work);
-      });
-    };
-    if (!stopWork && (current.query || current.evaluatedVersion !== current.pathVersion))
-      stopWork = scheduler.work(work);
+    // Sampling only records the path. Geometry preparation and selection both wait for end.
+    if (!scheduler) publish();
+    else if (!stopFrame) stopFrame = scheduler.frame(publish);
   }
 
   function pointHits(point: Point) {
@@ -279,7 +453,7 @@ export function createLayeredToolSession(
   }
 
   function update(points: readonly Point[]) {
-    if (!gesture || !points.length) return;
+    if (!gesture || gesture.pending || !points.length) return;
     if (gesture.revision !== controller.getSnapshot('document').documentRevision) {
       cancel();
       return;
@@ -377,21 +551,13 @@ export function createLayeredToolSession(
     if (!gesture) return;
     const current = gesture;
     clearScheduled();
-    // Clear transport ownership before publishing a document mutation to subscribers.
-    gesture = undefined;
+    if (!active(current)) return;
     if (current.tool === 'lasso') {
-      const result =
-        current.completed?.version === current.pathVersion
-          ? current.completed.result
-          : evaluate(current, true);
-      if (result.ok) {
-        const selected = result.value.map((hit) => hit.objectId);
-        controller.setSelection(selected);
-        perf(current, 'selection-submit', true, undefined, undefined, true);
-        // Ownership is already released: tool-change subscribers must not restore the old selection.
-        if (selected.length) controller.setTool('selection');
-      }
+      finishLasso(current);
+      return;
     } else {
+      // Clear ownership before publishing a document mutation to subscribers.
+      gesture = undefined;
       const moved = current.points.some(
         (point) => point.x !== current.points[0]!.x || point.y !== current.points[0]!.y
       );
@@ -412,9 +578,13 @@ export function createLayeredToolSession(
         );
     }
     controller.setPreview(null);
+    resumeWarmup();
   }
 
+  scheduleWarmup();
   return {
+    pauseWarmup,
+    resumeWarmup,
     pointHits,
     begin(
       point: Point,
@@ -423,7 +593,9 @@ export function createLayeredToolSession(
       targetId?: string
     ) {
       if (destroyed) return false;
+      pauseWarmup();
       const tool = controller.getSnapshot('tools').activeTool;
+      if (gesture?.pending) cancel();
       if (gesture) {
         if (!gesture.placement || gesture.tool !== tool) return false;
         if (tool === 'polygon') {
@@ -446,13 +618,7 @@ export function createLayeredToolSession(
             })
           : null;
       if (selectionHit && operation === 'move') operation = selectionHit;
-      if (['eraser', 'lasso'].includes(tool)) {
-        if (preparedDocument !== document) {
-          prepared = prepareLayeredObjectQuery(document, cache);
-          requireValue(prepared);
-          preparedDocument = document;
-        }
-      }
+      if (tool === 'eraser') prepareQuery();
       if (tool === 'selection' && !selectionHit) {
         const hits = pointHits(point);
         const id =
@@ -485,7 +651,6 @@ export function createLayeredToolSession(
         previousSelection: controller.getSnapshot('selection'),
         pathVersion: 0,
         perfSession: ++perfSession,
-        evaluatedVersion: -1,
         ...(tool === 'polygon' || tool === 'bezier'
           ? {
               placement: {
@@ -524,7 +689,7 @@ export function createLayeredToolSession(
       return true;
     },
     end() {
-      if (!gesture) return;
+      if (!gesture || gesture.pending) return;
       if (gesture.placement) {
         if (gesture.tool === 'polygon') return;
         if (gesture.placement.stage < 2) {
@@ -537,13 +702,13 @@ export function createLayeredToolSession(
     cancel,
     destroy() {
       destroyed = true;
+      pauseWarmup();
       cancel();
       unsubscribeTools();
       unsubscribeSelection();
       unsubscribeInput();
       unsubscribeDocument();
       controller.resetSelectionFrame();
-      cache.clear();
     },
   };
 }

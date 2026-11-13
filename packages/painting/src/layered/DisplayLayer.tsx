@@ -1,7 +1,8 @@
 import { memo, useCallback, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import type { LayeredEditorController } from '../core/layeredEditorController';
 import { commandsToSvgPath } from '../geometry/closedPath';
-import { FreehandGeometryCache } from '../geometry/freehandCache';
+import type { FreehandGeometryCache } from '../geometry/freehandCache';
+import { layeredGeometryCache } from '../core/layeredGeometryCache';
 import { deriveShapeGeometry, shapeCommandsToSvgPath } from '../geometry/shape';
 import type { DocumentObject } from '../model/document';
 import type { PresentationCoordinator } from './PresentationCoordinator';
@@ -112,16 +113,29 @@ function useObjectPreview(controller: LayeredEditorController) {
 }
 
 function PathPreview({ controller }: { controller: LayeredEditorController }) {
-  const { path } = useEditorSnapshot(controller, 'preview');
+  const { path, lassoPending } = useEditorSnapshot(controller, 'preview');
   const { viewport } = useEditorSnapshot(controller, 'viewport');
   return path.length > 1 ? (
-    <polyline
-      points={path.map((point) => `${point.x},${point.y}`).join(' ')}
-      fill="none"
-      stroke="#2563eb"
-      strokeWidth={1.5 / viewport.scale}
-      strokeDasharray={`${4 / viewport.scale} ${3 / viewport.scale}`}
-    />
+    <g data-testid="lasso-feedback" aria-busy={lassoPending || undefined}>
+      <polyline
+        points={path.map((point) => `${point.x},${point.y}`).join(' ')}
+        fill="none"
+        stroke="#2563eb"
+        strokeWidth={1.5 / viewport.scale}
+        strokeDasharray={`${4 / viewport.scale} ${3 / viewport.scale}`}
+      />
+      {lassoPending ? (
+        <text
+          role="status"
+          x={path[path.length - 1]!.x + 10 / viewport.scale}
+          y={path[path.length - 1]!.y - 10 / viewport.scale}
+          fontSize={14 / viewport.scale}
+          fill="#2563eb"
+        >
+          正在选择…
+        </text>
+      ) : null}
+    </g>
   ) : null;
 }
 
@@ -162,7 +176,7 @@ const HistoryDisplay = memo(function HistoryDisplay({
   const preview = useObjectPreview(controller);
   const { viewport } = useEditorSnapshot(controller, 'viewport');
   const root = useRef<SVGGElement>(null);
-  const cache = useRef(new FreehandGeometryCache()).current;
+  const cache = layeredGeometryCache(controller);
   onRender?.('display');
   useLayoutEffect(() => {
     cache.syncDocument(document);

@@ -1,10 +1,12 @@
 import {
   createLayeredLassoQuery,
+  createControllerObjectQuery,
   prepareLayeredObjectQuery,
   queryObjectLasso,
 } from '../../core/layeredObjectQuery';
 import { FreehandGeometryCache } from '../../geometry/freehandCache';
-import { layeredRect } from '../fixtures/layered';
+import { layeredRect, makeLayeredController, commitLayeredStroke } from '../fixtures/layered';
+import { layeredGeometryCache } from '../../core/layeredGeometryCache';
 import type { DocumentObject, Point } from '../../model/document';
 
 test('incremental lasso agrees with the complete oracle on seeded mixed geometry and adversarial rings', () => {
@@ -148,4 +150,98 @@ test('bounds index excludes distant objects without losing boundary contact or d
   expect(query.value.step(() => 0, Infinity)).toEqual(
     queryObjectLasso(prepared.value, ring, 'intersects')
   );
+});
+
+test('the measured ink-360 candidate matches the oracle without boolean clipping', () => {
+  let seed = 245;
+  let phase = 0;
+  for (let i = 0; i <= 360; i++)
+    phase = ((seed = (1664525 * seed + 1013904223) >>> 0) / 4294967296) * Math.PI * 2;
+  const object: DocumentObject = {
+    kind: 'freehand',
+    objectId: 'ink-360',
+    commitId: 'ink-360',
+    objectRevision: 1,
+    transformRevision: 1,
+    transform: { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 },
+    samplesRevision: 1,
+    brushRevision: 1,
+    resolvedPressureMode: 'constant',
+    brushSnapshot: {
+      color: '#222222',
+      nominalSize: 3,
+      opacity: 1,
+      pressureMode: 'constant',
+      presetRevision: 1,
+    },
+    samples: Array.from({ length: 64 }, (_, j) => ({
+      sequence: j,
+      x: 50 + j * 0.28,
+      y: 267 + Math.sin(j / 8 + phase) * 3,
+      pressure: 0.5,
+      source: 'pen',
+      phase: j === 0 ? 'down' : j === 63 ? 'up' : 'move',
+      time: j * 8,
+    })),
+  };
+  const prepared = prepareLayeredObjectQuery(
+    { schemaVersion: 3, documentRevision: 0, objects: [object] },
+    new FreehandGeometryCache()
+  );
+  if (!prepared.ok) throw new Error(prepared.error.code);
+  const path = Array.from({ length: 600 }, (_, i) => ({
+    x: 220 + 180 * Math.cos((i / 599) * Math.PI * 2),
+    y: 200 + 120 * Math.sin((i / 599) * Math.PI * 2),
+  }));
+  const onFallback = jest.fn();
+  const query = createLayeredLassoQuery(prepared.value, path, { now: () => 0, onFallback });
+  expect(query.ok && query.value.candidateCount).toBe(1);
+  expect(query.ok && query.value.step(() => 0, Infinity)).toEqual(
+    queryObjectLasso(prepared.value, path, 'intersects')
+  );
+  expect(onFallback).not.toHaveBeenCalled();
+});
+
+test('controller preparation reuses rendered sample identity and invalidates transformed snapshots', () => {
+  const controller = makeLayeredController();
+  commitLayeredStroke(controller, 'stroke');
+  const original = controller.getSnapshot('document').objects[0]!;
+  if (original.kind !== 'freehand') throw new Error('expected stroke');
+  const cache = layeredGeometryCache(controller);
+  const rendered = cache.getPresentation(original, 'final');
+  const read = jest.spyOn(cache, 'getPresentation');
+  const prepared = createControllerObjectQuery(controller, cache).step(() => 0, Infinity)!;
+  expect(prepared.ok).toBe(true);
+  expect(read.mock.calls.every(([object]) => object === original)).toBe(true);
+  expect(read.mock.results.every(({ value }) => value === rendered)).toBe(true);
+  controller.editObjects({
+    expectedDocumentRevision: controller.getSnapshot('document').documentRevision,
+    upsert: [
+      {
+        ...original,
+        transformRevision: 2,
+        objectRevision: 2,
+        transform: { ...original.transform, tx: 500 },
+      },
+    ],
+  });
+  const next = controller.getSnapshot('document').objects[0]!;
+  if (next.kind !== 'freehand') throw new Error('expected stroke');
+  expect(layeredGeometryCache(controller)).toBe(cache);
+  expect(cache.getPresentation(next, 'final').worldBounds.minX).toBeCloseTo(
+    rendered.worldBounds.minX + 500
+  );
+  const moved = createControllerObjectQuery(controller, cache).step(() => 0, Infinity)!;
+  const path = [
+    { x: 0, y: 0 },
+    { x: 150, y: 0 },
+    { x: 150, y: 150 },
+    { x: 0, y: 150 },
+  ];
+  const query = prepared.ok && createLayeredLassoQuery(prepared.value, path);
+  const changed = moved.ok && createLayeredLassoQuery(moved.value, path);
+  const before = query && query.ok && query.value.step(() => 0, Infinity);
+  const after = changed && changed.ok && changed.value.step(() => 0, Infinity);
+  expect(before && before.ok && before.value.map((h) => h.objectId)).toEqual([original.objectId]);
+  expect(after && after.ok && after.value).toEqual([]);
 });

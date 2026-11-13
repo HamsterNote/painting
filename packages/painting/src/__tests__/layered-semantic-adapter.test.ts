@@ -469,7 +469,16 @@ test.each(['resize', 'rotate'] as const)(
   }
 );
 
-test.each(['cancel', 'escape', 'blur', 'capture', 'hidden', 'tool', 'mode', 'unmount'] as const)(
+test.each([
+  'cancel',
+  'escape',
+  'blur',
+  'capture-then-cancel',
+  'hidden',
+  'tool',
+  'mode',
+  'unmount',
+] as const)(
   'rotated selection %s restores committed geometry and rejects non-owner/late input',
   (reason) => {
     const h = selectionHarness();
@@ -502,14 +511,16 @@ test.each(['cancel', 'escape', 'blur', 'capture', 'hidden', 'tool', 'mode', 'unm
     h.send('move', 400, 400, 'mouse', 2);
     h.send('up', 400, 400, 'mouse', 2);
     expect(direction()).toBeCloseTo(60);
-    if (reason === 'cancel') h.send('cancel', 0, 0);
-    if (reason === 'escape') window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    if (reason === 'blur') window.dispatchEvent(new Event('blur'));
-    if (reason === 'capture') {
+    if (reason === 'capture-then-cancel') {
       const e = new Event('lostpointercapture', { bubbles: true });
       Object.assign(e, { pointerId: 1, pointerType: 'mouse' });
       h.host.dispatchEvent(e);
     }
+    expect(direction()).toBeCloseTo(60);
+    expect(h.controller.getSnapshot('document')).toBe(before);
+    if (reason === 'cancel' || reason === 'capture-then-cancel') h.send('cancel', 0, 0);
+    if (reason === 'escape') window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    if (reason === 'blur') window.dispatchEvent(new Event('blur'));
     if (reason === 'hidden') {
       const spy = jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
       document.dispatchEvent(new Event('visibilitychange'));

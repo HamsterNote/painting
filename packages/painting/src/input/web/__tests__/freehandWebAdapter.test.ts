@@ -316,7 +316,14 @@ test.each(['pen', 'touch'] as const)(
     expect(h.controller.getSnapshot('input').penSeen).toBe(source === 'pen');
     h.controller.setInputMode('finger');
     const first = { pointerId: -765894342, pointerType: 'touch', clientX: 40, clientY: 40 };
-    const second = { pointerId: -765894341, pointerType: 'touch', clientX: 100, clientY: 40 };
+    // Concurrent fingers cannot both be primary PointerEvents.
+    const second = {
+      pointerId: -765894341,
+      pointerType: 'touch',
+      isPrimary: false,
+      clientX: 100,
+      clientY: 40,
+    };
     fireHost(h.host, pointer('pointerdown', first));
     fireWindow(pointer('pointermove', { ...first, clientX: 50 }));
     fireHost(h.host, pointer('pointerdown', second));
@@ -348,7 +355,10 @@ test('composed input preserves first pen down and ignores late up after explicit
   h.controller.setInputMode('finger');
   fireHost(h.host, pointer('pointerdown', { pointerId: 2, pointerType: 'touch' }));
   fireWindow(pointer('pointermove', { pointerId: 2, pointerType: 'touch', clientX: 20 }));
-  fireHost(h.host, pointer('pointerdown', { pointerId: 3, pointerType: 'touch', clientX: 40 }));
+  fireHost(
+    h.host,
+    pointer('pointerdown', { pointerId: 3, pointerType: 'touch', isPrimary: false, clientX: 40 })
+  );
   expect(h.controller.getSnapshot('interaction').activeFreehand).toBeUndefined();
   expect(navigation.begin).toHaveBeenCalledTimes(1);
   fireWindow(pointer('pointerup', { pointerId: 2, pointerType: 'touch' }));

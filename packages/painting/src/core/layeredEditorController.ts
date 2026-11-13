@@ -207,6 +207,7 @@ export type LayeredPreviewSnapshot = Readonly<{
   objects: readonly DocumentObject[];
   hiddenIds: readonly string[];
   path: readonly Point[];
+  lassoPending?: boolean;
 }>;
 const EMPTY_PREVIEW: LayeredPreviewSnapshot = Object.freeze({
   objects: Object.freeze([]),
@@ -1677,7 +1678,8 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
         typeof preview !== 'object' ||
         !Array.isArray(preview.objects) ||
         !Array.isArray(preview.path) ||
-        !Array.isArray(preview.hiddenIds)
+        !Array.isArray(preview.hiddenIds) ||
+        (preview.lassoPending !== undefined && typeof preview.lassoPending !== 'boolean')
       )
         return errResult('invalid-input');
       const frame = preview.selectionFrame;
@@ -1706,6 +1708,7 @@ class LayeredEditorControllerImpl implements LayeredEditorController {
         objects: Object.freeze(objects as DocumentObject[]),
         hiddenIds: Object.freeze([...preview.hiddenIds]),
         path: Object.freeze(preview.path.map((point) => Object.freeze({ x: point.x, y: point.y }))),
+        ...(preview.lassoPending ? { lassoPending: true } : {}),
       });
     }
     this.emit(['preview']);

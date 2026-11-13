@@ -143,3 +143,34 @@ test('history preserves arbitrary text/image/shape/ink order and raw data throug
   unmount();
   queue.destroy();
 });
+
+test('pending lasso keeps its path and accessible status without rebuilding history', () => {
+  const controller = makeLayeredController([layeredRect()]);
+  const presentation = new PresentationCoordinator(controller);
+  const onRender = jest.fn();
+  const { container, getByRole, queryByRole, unmount } = render(
+    <DisplayLayer controller={controller} presentation={presentation} onRender={onRender} />
+  );
+  onRender.mockClear();
+  act(() => {
+    controller.setPreview({
+      objects: [],
+      hiddenIds: [],
+      path: [
+        { x: 10, y: 10 },
+        { x: 20, y: 20 },
+      ],
+      lassoPending: true,
+    });
+  });
+  expect(container.querySelector('polyline')).not.toBeNull();
+  expect(getByRole('status').textContent).toBe('正在选择…');
+  expect(onRender).not.toHaveBeenCalled();
+  act(() => {
+    controller.setPreview(null);
+  });
+  expect(queryByRole('status')).toBeNull();
+  expect(container.querySelector('polyline')).toBeNull();
+  unmount();
+  presentation.destroy();
+});

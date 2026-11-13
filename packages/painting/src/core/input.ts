@@ -48,8 +48,26 @@ export type NormalizedPointerInput = Readonly<{
   pressure?: number;
   button?: number;
   buttons?: number;
+  /** Primary identity from down; absent means unknown, never assumed for pen/touch. */
+  isPrimary?: boolean;
   targetRole: TargetRole;
 }>;
+
+/**
+ * Call only for a fresh, valid primary-button down. A mouse cannot have two
+ * concurrent primary pointers; pen/touch require explicit primary identity on
+ * both cycles. A second finger/pen is non-primary and cannot retire the owner.
+ * Capture loss and buttons=0 movement say nothing about pointer lifetime.
+ */
+export function supersedesPrimaryPointer(
+  previous: { device: string; isPrimary?: boolean },
+  next: { device: string; isPrimary?: boolean }
+): boolean {
+  return (
+    previous.device === next.device &&
+    (next.device === 'mouse' || (previous.isPrimary === true && next.isPrimary === true))
+  );
+}
 
 const phases: readonly InputPhase[] = ['down', 'move', 'up', 'cancel'];
 const devices: readonly InputDevice[] = ['mouse', 'touch', 'pen'];
@@ -116,6 +134,7 @@ export function isNormalizedPointerInput(value: unknown): value is NormalizedPoi
     isTargetRole(value.targetRole) &&
     (pressure === undefined || (isFiniteNumber(pressure) && pressure >= 0 && pressure <= 1)) &&
     (button === undefined || (isFiniteInteger(button) && button >= 0)) &&
-    (buttons === undefined || (isFiniteInteger(buttons) && buttons >= 0))
+    (buttons === undefined || (isFiniteInteger(buttons) && buttons >= 0)) &&
+    (value.isPrimary === undefined || typeof value.isPrimary === 'boolean')
   );
 }

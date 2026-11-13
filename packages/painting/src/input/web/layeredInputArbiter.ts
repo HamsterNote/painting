@@ -110,6 +110,7 @@ export function createLayeredInputArbiter(options: {
               : 'move',
       pointerId: event.pointerId,
       device: source,
+      isPrimary: event.isPrimary,
       targetRole,
       screen: { x, y },
       timestamp: event.timeStamp,
@@ -151,7 +152,10 @@ export function createLayeredInputArbiter(options: {
       policy: controller.getSnapshot('input'),
       panTool: controller.getSnapshot('tools').activeTool === 'pan',
     });
-    if (input.phase === 'up' || input.phase === 'cancel') events.delete(input.pointerId);
+    // A fresh primary down can retire an owner whose terminal event never came.
+    for (const id of events.keys()) {
+      if (!state.contacts.some((p) => p.pointerId === id)) events.delete(id);
+    }
   }
   const reset = (reason: LayeredInputResetReason = 'policy') => {
     events.clear();

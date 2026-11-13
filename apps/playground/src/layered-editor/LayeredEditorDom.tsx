@@ -97,11 +97,12 @@ export default function LayeredEditorDom(props: {
   });
   const [renders] = useState(() => ({ display: 0, objects: 0 }));
   const diagnostics = params.get('diagnostics') === '1';
+  const performanceProbe = params.get('lassoPerf') === '1';
   const [trace] = useState(() =>
     diagnostics && params.get('traceGestures') === '1' ? createGestureTrace(controller) : undefined
   );
   useEffect(() => {
-    if (!diagnostics) return;
+    if (!diagnostics && !performanceProbe) return;
     window.__layeredEditor = controller;
     window.__layeredRenders = renders;
     window.__layeredGestureTrace = trace;
@@ -110,7 +111,7 @@ export default function LayeredEditorDom(props: {
       delete window.__layeredRenders;
       delete window.__layeredGestureTrace;
     };
-  }, [controller, diagnostics, renders, trace]);
+  }, [controller, diagnostics, performanceProbe, renders, trace]);
   if (params.get('fixture') === 'pages')
     return <PageIntegrationFixture readOnly={params.get('readonly') === '1'} />;
   return (

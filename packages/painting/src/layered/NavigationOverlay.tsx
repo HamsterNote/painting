@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { LayeredEditorController } from '../core/layeredEditorController';
-import { FreehandGeometryCache } from '../geometry/freehandCache';
+import { layeredGeometryCache } from '../core/layeredGeometryCache';
 import { deriveLayeredWorldBounds } from '../geometry/worldBounds';
 import { getInfiniteRulerLayout } from '../ruler/geometry';
 import { RulerTicks } from '../ruler/RulerTicks';
@@ -17,7 +17,7 @@ export function NavigationOverlay({ controller }: { controller: LayeredEditorCon
   const document = useEditorSnapshot(controller, 'document');
   const root = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 1, height: 1 });
-  const cache = useRef(new FreehandGeometryCache()).current;
+  const cache = layeredGeometryCache(controller);
   useLayoutEffect(() => {
     const measure = () => {
       const rect = root.current!.getBoundingClientRect();

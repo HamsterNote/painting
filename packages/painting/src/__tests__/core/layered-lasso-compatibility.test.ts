@@ -149,7 +149,7 @@ test.each(cases)(
 );
 
 describe.each(cases)('$name: tool session', ({ target, path }) => {
-  test.each(['synchronous', 'end-before-work', 'completed-live'] as const)(
+  test.each(['synchronous', 'end-before-frame', 'preview-flushed'] as const)(
     '%s final selection includes target',
     (mode) => {
       const controller = makeLayeredController([target]);
@@ -171,17 +171,20 @@ describe.each(cases)('$name: tool session', ({ target, path }) => {
       const history = controller.getSnapshot('history');
       session.begin(path[0]!);
       session.update(path.slice(1));
-      if (mode === 'completed-live') {
+      if (mode === 'preview-flushed') {
         while (jobs.size) {
           const batch = [...jobs];
           jobs.clear();
           batch.forEach((job) => job());
         }
       }
-      expect(controller.getSnapshot('selection')).toEqual(
-        mode === 'end-before-work' ? [] : ['target']
-      );
+      expect(controller.getSnapshot('selection')).toEqual([]);
       session.end();
+      for (let i = 0; jobs.size && i < 100; i++) {
+        const batch = [...jobs];
+        jobs.clear();
+        batch.forEach((job) => job());
+      }
       expect(controller.getSnapshot('selection')).toEqual(['target']);
       expect(controller.getSnapshot('tools').activeTool).toBe('selection');
       expect(controller.getSnapshot('document')).toBe(document);

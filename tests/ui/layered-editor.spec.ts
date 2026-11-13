@@ -140,7 +140,11 @@ test('new mouse ink covers existing HTML text in active and historical pixels', 
   expect(pixel(await decodeRgbaPng(await surface.screenshot()), 90, 150)).toEqual([45, 45, 45]);
 });
 
-test('default route opens the layered editor and responds over LAN', async ({ page, request }) => {
+test('default route opens the layered editor and responds over LAN', async ({
+  page,
+  request,
+  baseURL,
+}) => {
   await page.goto('/');
   await expect(page.getByTestId('layered-drawing')).toBeVisible();
   const { networkInterfaces } = await import('node:os');
@@ -148,7 +152,10 @@ test('default route opens the layered editor and responds over LAN', async ({ pa
     .flat()
     .find((entry) => entry && entry.family === 'IPv4' && !entry.internal)?.address;
   expect(address).toBeTruthy();
-  const response = await request.get(`http://${address}:5266/`);
+  const lanUrl = new URL(baseURL!);
+  lanUrl.hostname = address!;
+  lanUrl.pathname = '/';
+  const response = await request.get(lanUrl.toString());
   expect(response.ok()).toBe(true);
 });
 
@@ -507,6 +514,7 @@ test('lasso, move, resize, rotate and fast erase retain raw data and reversible 
   ])
     await pointer(page, 'move', x, y);
   await pointer(page, 'up', 10, 80);
+  await expect(page.getByLabel('缩放选区')).toBeVisible();
   expect(await page.evaluate(() => window.__layeredEditor!.getSnapshot('selection').length)).toBe(
     5
   );

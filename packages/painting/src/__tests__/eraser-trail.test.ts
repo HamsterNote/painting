@@ -2,8 +2,14 @@ import { createEraserTrail } from '../layered/eraserTrail';
 import { createSemanticWebAdapter } from '../layered/semanticWebAdapter';
 import { layeredRect, makeLayeredController } from './fixtures/layered';
 
-beforeEach(() => jest.useFakeTimers());
+beforeEach(() => {
+  jest.useFakeTimers();
+  // These assertions own eraser feedback timers, not the independent lasso
+  // idle-preparation scheduler (covered by layered-lasso-scheduling.test.ts).
+  Object.assign(window, { __paintingTestLassoWarmup: false });
+});
 afterEach(() => {
+  delete (window as Window & { __paintingTestLassoWarmup?: boolean }).__paintingTestLassoWarmup;
   jest.useRealTimers();
   document.body.innerHTML = '';
 });
