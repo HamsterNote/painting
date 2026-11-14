@@ -1,4 +1,4 @@
-import { openToolbarSettings } from './layered-helpers';
+import { openToolbarSettings, openToolbarStroke } from './layered-helpers';
 import { expect, test } from '@playwright/test';
 import { dispatchLayeredPointer, openLayeredEditor } from './layered-helpers';
 
@@ -10,7 +10,7 @@ test.describe('ruler edge browser contract (migrated to raw schema3)', () => {
       await openLayeredEditor(page, source === 'touch' ? '&touchDraw=1' : '');
       await openToolbarSettings(page);
       await page.getByLabel('尺子', { exact: true }).check();
-      await openToolbarSettings(page);
+      await openToolbarStroke(page);
       await page.getByLabel('压力模式', { exact: true }).selectOption('constant');
       await page.evaluate(() => {
         window.__layeredEditor!.setNavigation({
