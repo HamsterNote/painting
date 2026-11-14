@@ -21,8 +21,11 @@ test('inline settings focus a page control, edit all settings, and never mount n
   expect(controller.getSnapshot('input').mode).toBe('finger');
   fireEvent.click(screen.getByRole('button', { name: '笔触设置' }));
   const strokePanel = screen.getByRole('dialog', { name: '笔触设置' });
+  expect(within(strokePanel).getByRole('group', { name: '颜色' })).toBeTruthy();
+  expect(within(strokePanel).queryByText('自定义颜色')).toBeNull();
   fireEvent.click(screen.getByLabelText('恒定'));
-  const color = within(strokePanel).getByRole('textbox', { name: '颜色' });
+  const color = within(strokePanel).getByRole('textbox', { name: '自定义颜色值' });
+  expect(color.getAttribute('data-toolbar-color-field')).toBe('true');
   fireEvent.change(color, { target: { value: '#123456' } });
   expect(controller.getSnapshot('tools').settings.freehand).toMatchObject({
     color: '#123456',
@@ -38,7 +41,7 @@ test('inline settings focus a page control, edit all settings, and never mount n
   expect(document.activeElement).toBe(screen.getByRole('button', { name: '笔触设置' }));
   fireEvent.click(screen.getByRole('button', { name: '笔触设置' }));
   fireEvent.click(screen.getByRole('button', { name: '自由取色' }));
-  expect(document.activeElement).toBe(screen.getByRole('textbox', { name: '颜色' }));
+  expect(document.activeElement).toBe(screen.getByRole('textbox', { name: '自定义颜色值' }));
   expect(screen.getByRole('dialog')).toBeTruthy();
   expect(view.container.querySelector('select,input[type=color]')).toBeNull();
 });
@@ -107,7 +110,7 @@ test('settings bridge yields color to WebKit Tab, restores traversal and closes 
       expect(key('Tab')).toBe(true);
     });
     await settle();
-    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: '颜色' }));
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: '自定义颜色值' }));
     expect(scope).toBe('');
     expect(window.__paintingToolbarKeyboard!.snapshot()).toMatchObject({
       tabOnly: true,
@@ -116,7 +119,7 @@ test('settings bridge yields color to WebKit Tab, restores traversal and closes 
     expect(key('Escape')).toBe(false); // Color Escape belongs to WebKit, not the bridge.
     // Exercise the color Tab handler itself; do not supply the missing focus.
     const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
-    fireEvent(screen.getByRole('textbox', { name: '颜色' }), tab);
+    fireEvent(screen.getByRole('textbox', { name: '自定义颜色值' }), tab);
     expect(tab.defaultPrevented).toBe(true);
     await settle();
     expect(document.activeElement).toBe(screen.getByRole('slider', { name: '不透明度' }));

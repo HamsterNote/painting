@@ -20,7 +20,7 @@ export function ToolbarChoiceField({
   if (!inline)
     return (
       <label>
-        {label}
+        <span>{label}</span>
         <select
           aria-label={ariaLabel}
           value={value}
@@ -36,7 +36,9 @@ export function ToolbarChoiceField({
     );
   return (
     <fieldset className="hn-painting-choices" aria-label={ariaLabel}>
-      <legend>{label}</legend>
+      <legend>
+        <span>{label}</span>
+      </legend>
       {options.map(([option, text]) => (
         <label key={option}>
           <input
@@ -65,25 +67,23 @@ export function ToolbarHexColorField({
   const text = draft ?? value;
   const valid = /^#[\da-f]{6}$/i.test(text);
   return (
-    <label>
-      自定义颜色
-      <input
-        type="text"
-        data-toolbar-color-field="true"
-        aria-label="颜色"
-        aria-invalid={!valid}
-        placeholder="#RRGGBB"
-        spellCheck={false}
-        autoCorrect="off"
-        autoCapitalize="none"
-        value={text}
-        onChange={(event) => {
-          const next = event.target.value;
-          setDraft(next);
-          if (/^#[\da-f]{6}$/i.test(next)) onChange(next);
-        }}
-        onBlur={() => setDraft(null)}
-      />
-    </label>
+    <input
+      className="hn-painting-hex-color"
+      type="text"
+      data-toolbar-color-field="true"
+      aria-label="自定义颜色值"
+      aria-invalid={!valid}
+      placeholder="#RRGGBB"
+      spellCheck={false}
+      autoCorrect="off"
+      autoCapitalize="none"
+      value={text}
+      onChange={(event) => {
+        const next = event.target.value;
+        setDraft(next);
+        if (/^#[\da-f]{6}$/i.test(next)) onChange(next);
+      }}
+      onBlur={() => setDraft(null)}
+    />
   );
 }

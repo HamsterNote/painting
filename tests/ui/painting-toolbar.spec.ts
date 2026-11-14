@@ -453,6 +453,46 @@ for (const viewportWidth of [1280, 390, 320]) {
     await page.keyboard.press('Space');
     const panel = page.getByRole('dialog', { name: '笔触设置', exact: true });
     await expect(panel).toBeVisible();
+    await expect(panel.getByRole('group', { name: '颜色', exact: true })).toBeVisible();
+    const layoutEvidence = await panel.evaluate((element) => {
+      const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      const labels = new Map<string, HTMLElement>();
+      let customColorTextCount = 0;
+      let current = walker.nextNode();
+      while (current) {
+        const text = current.textContent?.trim();
+        if (text === '自定义颜色') customColorTextCount += 1;
+        if (text && ['笔宽', '颜色', '不透明度', '压力'].includes(text))
+          labels.set(text, current.parentElement as HTMLElement);
+        current = walker.nextNode();
+      }
+      const rect = (text: string) => labels.get(text)!.getBoundingClientRect();
+      const slider = element.querySelector<HTMLInputElement>('input[aria-label="笔宽滑条"]')!;
+      return {
+        viewportWidth: window.innerWidth,
+        customColorTextCount,
+        widthLabelTop: rect('笔宽').top,
+        widthSliderTop: slider.getBoundingClientRect().top,
+        widthTopDelta: Math.abs(rect('笔宽').top - slider.getBoundingClientRect().top),
+        labelLefts: Object.fromEntries(
+          ['笔宽', '颜色', '不透明度', '压力'].map((text) => [text, rect(text).left])
+        ),
+      };
+    });
+    console.log(`STROKE_LAYOUT ${JSON.stringify(layoutEvidence)}`);
+    expect(layoutEvidence.customColorTextCount).toBe(0);
+    expect(layoutEvidence.widthTopDelta).toBeLessThanOrEqual(2);
+    expect(new Set(Object.values(layoutEvidence.labelLefts)).size).toBe(1);
+    await info.attach(`S2-stroke-layout-${viewportWidth}.json`, {
+      body: JSON.stringify(layoutEvidence, null, 2),
+      contentType: 'application/json',
+    });
+    const panelScreenshot = info.outputPath(`S2-stroke-panel-${viewportWidth}.png`);
+    await panel.screenshot({ path: panelScreenshot });
+    await info.attach(`S2-stroke-panel-${viewportWidth}.png`, {
+      path: panelScreenshot,
+      contentType: 'image/png',
+    });
     await expect(page.getByRole('toolbar').locator('input,.hn-painting-palette')).toHaveCount(0);
     const number = panel.getByRole('spinbutton', { name: '笔宽', exact: true });
     const preview = trigger.locator('path');

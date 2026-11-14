@@ -119,7 +119,7 @@ test('freehand settings are isolated from shapes through the real settings path'
   stroke();
   fireEvent.change(screen.getByLabelText('笔宽'), { target: { value: '24' } });
   fireEvent.change(screen.getByLabelText('压力模式'), { target: { value: 'constant' } });
-  fireEvent.change(screen.getByLabelText('颜色'), { target: { value: '#123456' } });
+  fireEvent.change(screen.getByLabelText('自由取色'), { target: { value: '#123456' } });
   fireEvent.change(screen.getByLabelText('不透明度'), { target: { value: '0.7' } });
   expect(screen.queryByLabelText('形状线型')).toBeNull();
   expect(controller.getSnapshot('tools').settings.freehand).toEqual({
@@ -233,8 +233,8 @@ test('palette updates only the current family, never existing objects or history
   );
   expect(controller.getSnapshot('tools').settings.freehand.color).toBe('#7FA3C3');
   stroke();
-  fireEvent.change(screen.getByLabelText('颜色'), { target: { value: '#123456' } });
-  const palette = screen.getByRole('group', { name: '调色板，用于绘图或形状' });
+  fireEvent.change(screen.getByLabelText('自由取色'), { target: { value: '#123456' } });
+  const palette = screen.getByRole('group', { name: '颜色' });
   expect(within(palette).queryAllByRole('button', { pressed: true })).toHaveLength(0);
   choose('文字');
   expect(screen.queryByRole('dialog')).toBeNull();
@@ -335,7 +335,7 @@ test('black defaults apply only to new editors and the custom ring tracks each f
   stroke();
   expect(controller.getSnapshot('tools').settings.freehand.color).toBe('#2D2D2D');
   expect(controller.getSnapshot('tools').settings.shape.color).toBe('#2D2D2D');
-  const palette = screen.getByRole('group', { name: '调色板，用于绘图或形状' });
+  const palette = screen.getByRole('group', { name: '颜色' });
   expect(within(palette).getAllByRole('button')[0].getAttribute('aria-label')).toBe('黑');
   fireEvent.change(screen.getByLabelText('自由取色'), { target: { value: '#123456' } });
   expect(controller.getSnapshot('tools').settings.freehand.color).toBe('#123456');
@@ -629,6 +629,9 @@ test('stroke entry owns the palette, previews authoritative parameters and isola
   expect(screen.getByRole('toolbar').querySelector('input,.hn-painting-palette')).toBeNull();
   stroke();
   const panel = screen.getByRole('dialog', { name: '笔触设置' });
+  expect(within(panel).getByRole('group', { name: '颜色' })).toBeTruthy();
+  expect(within(panel).queryByText('自定义颜色')).toBeNull();
+  expect(panel.querySelectorAll('input[type="color"]')).toHaveLength(1);
   expect(
     within(panel)
       .getAllByRole('button')

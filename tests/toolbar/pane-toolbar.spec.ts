@@ -261,7 +261,7 @@ test('stroke panels stay in their own top/bottom pane and inline pickers remain 
     expect(popup.y).toBeGreaterThanOrEqual(bounds.y);
     expect(popup.y + popup.height).toBeLessThanOrEqual(bounds.y + bounds.height);
     await panel.getByRole('button', { name: '自由取色' }).click();
-    const color = panel.getByRole('textbox', { name: '颜色', exact: true });
+    const color = panel.getByRole('textbox', { name: '自定义颜色值', exact: true });
     await expect(color).toBeFocused();
     await color.fill('#123456');
     await panel.getByLabel('恒定', { exact: true }).check();
