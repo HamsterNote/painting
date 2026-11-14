@@ -8,13 +8,14 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import { sampleHost, versionOrder } from './lasso-host-gate.mjs';
 import { waitForLassoHost } from './lasso-preflight.mjs';
 
 const [output, base, candidate, mode] = process.argv.slice(2);
 if (mode !== undefined && mode !== '--verify-only') throw Error('Unknown mode');
 const verificationOnly = mode === '--verify-only';
+const rate = Number(process.env.LASSO_CPU_RATE ?? 1);
+if (!Number.isFinite(rate) || rate < 1) throw Error('Invalid CPU throttling rate');
 if (!output || !base || !candidate)
   throw Error(
     'Usage: node scripts/perf/lasso-prefix-paired.mjs OUTPUT BASE_SHA CANDIDATE_SHA [--verify-only]'
@@ -44,6 +45,7 @@ await mkdir(output, { recursive: true });
 const metadata = {
   revisions,
   verificationOnly,
+  rate,
   command: process.argv,
   node: process.version,
   cpu: os.cpus()[0].model,
@@ -55,7 +57,7 @@ const metadata = {
   bundles: {},
   method: verificationOnly
     ? 'Functional verification only; one diagnostic round and operation counts against the oracle. All latency p95 and fallback-share verdicts are null. Host load recorded but not used to reject correctness checks; no performance acceptance claim.'
-    : 'Query-only headless Chromium, no CPU throttle; same prepared fixture; adjacent AB/BA; 2 warmup + 5 formal + 1 diagnostic. Formal p95 is nearest rank (max of 5). Diagnostic oracle and operation counts excluded from timing. Every round bracketed by load<=cores/2 and idle>=50% checks; invalid whole rounds retained, not counted. No UI/device acceptance claim.',
+    : `Query-only headless Chromium, ${rate}x CPU throttle; same prepared fixture; adjacent AB/BA; 2 warmup + 5 formal + 1 diagnostic. Formal p95 is nearest rank (max of 5). Diagnostic oracle and operation counts excluded from timing. Every round bracketed by load<=cores/2 and idle>=50% checks; stop at first invalid round, retain it without counting. No UI/device acceptance claim.`,
 };
 await writeFile(`${output}/environment.json`, JSON.stringify(metadata, null, 2), { flag: 'wx' });
 await writeFile(`${output}/probe.ts`, probe);
@@ -142,6 +144,8 @@ if (!eligible) {
     const pages = {};
     for (const label of ['A', 'B']) {
       pages[label] = await browser.newPage();
+      const cdp = await pages[label].context().newCDPSession(pages[label]);
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate });
       await pages[label].addScriptTag({ path: `${output}/${label}-plain.js` });
     }
     let complete = true;
@@ -192,7 +196,8 @@ if (!eligible) {
           await save();
           if (accepted) break;
           console.log(JSON.stringify({ id, invalid: true, before, after }));
-          if (attempt < 2) await delay(30000);
+          // This measurement window stops on pollution; never retry to a passing sample.
+          break;
         }
         if (!accepted) {
           complete = false;
