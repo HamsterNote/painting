@@ -68,8 +68,9 @@ accepted input，不使用较早捕获监听器看到的旧前缀。旧 session/
 
 内核的所有预检记录保存在 `attempts.json`，CPU 配对入口保存在原结果文件的
 `attempts` 数组；UI 新增 `host-preflight-attempts.json` 保存完整记录，同时保持
-`host-preflight.json` 为最近一次主机读数。轮内前后负载检查、污染样本废弃和
-配对重试策略不变；`LASSO_MAX_ATTEMPTS` 仍只控制 CPU 配对样本重试。
+`host-preflight.json` 为最近一次主机读数。轮内前后负载检查和污染样本废弃不变；
+后续正式窗口按新指令将内核入口改为首次污染即停。`LASSO_MAX_ATTEMPTS` 仍只
+控制独立 CPU 配对工具的样本重试，该工具未用于本次第 1～3 条正式窗口。
 
 `--verify-only` 是不作性能判定的功能模式，仍只记录一次负载；
 `lasso-fallback-geometry.mjs` 是离线几何解释，不计时，均不进入启动等待。
@@ -88,8 +89,9 @@ node --test scripts/perf/lasso-preflight.test.mjs scripts/perf/lasso-host-gate.t
 
 ## 下次采集
 
-本轮未启动真实主机预检等待或正式测量；等待协调者唤醒后再运行测量命令，
-各入口会自行完成上述预检。
+口径与预检对齐轮仅做功能验证。随后协调者开启了正式窗口；该轮在第一个
+预热轮的轮前门禁失败后停止，见 [窗口记录](./quiet-window-2026-11-14.md)。
+各入口会自行完成上述启动预检。
 
 在同一冻结 production 构建上准备好 Xvfb/DISPLAY 后运行（**本轮未执行**）：
 
