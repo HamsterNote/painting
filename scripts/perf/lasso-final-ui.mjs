@@ -1,6 +1,7 @@
-// Complete production gesture, headed Chromium. Gate uses first Paint after selection DOM commit.
-// This is a presentation proxy under Xvfb, not physical display/hand timing.
-// Secondary acceptance evidence only. Do not compare independent invocations;
+// Complete production gesture, headed Chromium. Primary metric is pointerup ->
+// final selection-submit (setSelection return), including empty selections.
+// Paint/DOM remain diagnostic proxies, not physical display/hand timing.
+// Do not use independent invocations as a revision comparison;
 // use lasso-clean-pair.mjs for adjacent AB/BA kernel CPU and operation counts.
 import { chromium } from '@playwright/test';
 import { spawn, execFileSync } from 'node:child_process';
@@ -10,13 +11,37 @@ import { mkdir, writeFile, cp } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import os from 'node:os';
 import { lassoTrajectory } from './lasso-fixture.mjs';
-import { sampleHost } from './lasso-host-gate.mjs';
+import { sampleHost, roundHostValid } from './lasso-host-gate.mjs';
+import { waitForLassoHost } from './lasso-preflight.mjs';
+import { settleLassoPages } from './lasso-settle.mjs';
+import {
+  lassoReleaseTiming,
+  releaseThresholdMs,
+  summarizeReleaseTiming,
+} from './lasso-release-timing.mjs';
 const output = process.argv[2] ?? 'artifacts/research/lasso-final-query/ui';
 const root = process.env.LASSO_EXPORT_ROOT ?? 'apps/playground/dist';
+const scenarios = (process.env.LASSO_SCENARIOS ?? 'local,dense').split(',');
+const counts = (process.env.LASSO_COUNTS ?? '0,100,500,1000').split(',').map(Number);
+const repeats = Number(process.env.LASSO_REPEATS ?? 5);
+const rounds = Number(process.env.LASSO_ROUNDS ?? 1);
+if (
+  ![repeats, rounds].every((n) => Number.isInteger(n) && n > 0) ||
+  !counts.every((n) => Number.isInteger(n) && n >= 0)
+)
+  throw Error('Invalid measurement counts');
 await mkdir(output, { recursive: true });
-const preflight = await sampleHost();
-await writeFile(`${output}/host-preflight.json`, JSON.stringify(preflight, null, 2));
-if (!preflight.valid) throw new Error('Invalid host: no UI timing run; retry after load drops');
+const preflightAttempts = [];
+const eligible = await waitForLassoHost(async (record) => {
+  preflightAttempts.push(record);
+  await writeFile(`${output}/host-preflight.json`, JSON.stringify(record.host, null, 2));
+  await writeFile(
+    `${output}/host-preflight-attempts.json`,
+    JSON.stringify(preflightAttempts, null, 2)
+  );
+  console.log(JSON.stringify(record));
+});
+if (!eligible) throw new Error('Invalid host after 20 preflights: no UI timing run');
 await cp(root, `${output}/site`, { recursive: true });
 const xroot = 'artifacts/research/lasso-release/x11/root';
 const display = process.env.DISPLAY ?? process.env.LASSO_X_DISPLAY ?? ':248';
@@ -62,6 +87,14 @@ try {
         browser: browser.version(),
         headless: false,
         rate: 6,
+        hostWindowMs: 3000,
+        settle:
+          'blank page first frames, then two consecutive valid 3s windows; maximum ten windows',
+        scenarios,
+        counts,
+        repeats,
+        rounds,
+        metric: 'pointerup -> final selection-submit; p95 over fresh-page first gestures only',
         cpu: os.cpus()[0].model,
         load: os.loadavg(),
         sha: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
@@ -76,21 +109,42 @@ try {
     )
   );
   const rows = [];
-  for (let repeat = 0; repeat < Number(process.env.LASSO_REPEATS ?? 1); repeat++)
-    for (const scenario of (process.env.LASSO_SCENARIOS ?? 'local,dense').split(','))
-      for (const count of (process.env.LASSO_COUNTS ?? '500,1000').split(',').map(Number)) {
+  const settleAttempts = [];
+  for (let repeat = 0; repeat < repeats; repeat++)
+    for (const scenario of scenarios)
+      for (const count of counts) {
+        const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+        const page = await context.newPage();
+        const cdp = await context.newCDPSession(page);
+        await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
+        const settled = await settleLassoPages([page], async (record) => {
+          const entry = { scenario, count, repeat, ...record };
+          settleAttempts.push(entry);
+          await writeFile(
+            `${output}/host-settle-attempts.json`,
+            JSON.stringify(settleAttempts, null, 2)
+          );
+          console.log(JSON.stringify(entry));
+        });
+        if (!settled) throw Error('Browser did not settle: no UI gesture started');
         // Sample before navigation: waiting here must not give the first gesture
-        // an extra 500ms of application idle warmup.
+        // an extra 3s of application idle warmup.
         const pageHostBefore = await sampleHost();
         if (!pageHostBefore.valid) {
           await writeFile(
             `${output}/${scenario}-${count}-p${repeat}.invalid-host.json`,
-            JSON.stringify(pageHostBefore, null, 2)
+            JSON.stringify(
+              {
+                before: pageHostBefore,
+                after: null,
+                abortReason: 'host-before-invalid:page-not-navigated',
+              },
+              null,
+              2
+            )
           );
           throw new Error('Invalid host: cold page rejected before navigation');
         }
-        const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-        const page = await context.newPage();
         const errors = [];
         page.on('pageerror', (e) => errors.push(e.message));
         await page.addInitScript((skipWarmup) => {
@@ -105,8 +159,6 @@ try {
             }
           };
         }, process.env.LASSO_SKIP_WARMUP === '1');
-        const cdp = await context.newCDPSession(page);
-        await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
         const startupEvents = [];
         const startupCollect = ({ value }) => startupEvents.push(...value);
         cdp.on('Tracing.dataCollected', startupCollect);
@@ -119,14 +171,22 @@ try {
           `http://127.0.0.1:${port}/layered-editor?lassoPerf=1&fixture=lasso&lassoCount=${count}&lassoScenario=${scenario}`
         );
         await page.waitForFunction(() => Boolean(window.__layeredEditor));
-        for (let round = 0; round < Number(process.env.LASSO_ROUNDS ?? 3); round++) {
+        for (let round = 0; round < rounds; round++) {
           const id = `${scenario}-${count}-p${repeat}-r${round}`;
           await page.bringToFront();
           const hostBefore = round === 0 ? pageHostBefore : await sampleHost();
           if (!hostBefore.valid) {
             await writeFile(
               `${output}/${id}.invalid-host.json`,
-              JSON.stringify(hostBefore, null, 2)
+              JSON.stringify(
+                {
+                  before: hostBefore,
+                  after: null,
+                  abortReason: 'host-before-invalid:gesture-not-started',
+                },
+                null,
+                2
+              )
             );
             throw new Error('Invalid host: round rejected before input; retry in a fresh page');
           }
@@ -152,8 +212,10 @@ try {
             const listener = (e) => {
               record.events.push({
                 type: e.type,
-                stamp: e.timeStamp,
+                stamp: e.timeStamp > 1e12 ? e.timeStamp - performance.timeOrigin : e.timeStamp,
+                rawTimestamp: e.timeStamp,
                 time: performance.now(),
+                pointerId: e.pointerId,
                 trusted: e.isTrusted,
               });
               if (e.type !== 'pointermove') performance.mark(`input:${e.type}`);
@@ -232,7 +294,22 @@ try {
           let timeout = false;
           try {
             await page.waitForFunction(
-              () => window.__finalRecord.selectionDOM !== null,
+              () => {
+                const marks = window.__lassoMarks;
+                const input = marks.findLast((m) => m.event === 'input');
+                return (
+                  input &&
+                  marks.some(
+                    (m) =>
+                      m.event === 'selection-submit' &&
+                      m.final &&
+                      m.ok &&
+                      m.session === input.session &&
+                      m.version === input.version &&
+                      m.pointCount === input.pointCount
+                  )
+                );
+              },
               {},
               { timeout: 15000 }
             );
@@ -251,6 +328,7 @@ try {
             r.stop();
             return {
               events: r.events,
+              timeOrigin: performance.timeOrigin,
               frames: r.frames,
               selectionDOM: r.selectionDOM,
               pendingDOM: r.pendingDOM,
@@ -262,17 +340,30 @@ try {
               warmup: window.__warmupMarks ?? [],
             };
           });
+          const releaseTiming = lassoReleaseTiming(raw);
           const hostAfter = await sampleHost();
           await writeFile(
             `${output}/${id}.json`,
-            JSON.stringify({ ...raw, errors, timeout, hostBefore, hostAfter })
+            JSON.stringify({
+              ...raw,
+              releaseTiming,
+              scenario,
+              count,
+              repeat,
+              cold: round === 0,
+              rate: 6,
+              errors,
+              timeout,
+              hostBefore,
+              hostAfter,
+            })
           );
           await writeFile(`${output}/${id}.trace.json`, JSON.stringify({ traceEvents: events }));
           await page.screenshot({ path: `${output}/${id}.png` });
           const down = events.find((e) => e.name === 'input:pointerdown'),
             dom = events.find((e) => e.name === 'selection:dom');
           const origin = down.ts - down.args.data.startTime * 1000;
-          const release = raw.events.find((e) => e.type === 'pointerup').stamp;
+          const release = releaseTiming.pointerupTimestamp;
           const start = origin + raw.events.find((e) => e.type === 'pointerdown').stamp * 1000;
           const paint =
             dom &&
@@ -371,8 +462,28 @@ try {
               e.tid === down.tid &&
               e.ts < start
           );
+          const dragQueries = raw.marks.filter(
+            (m) => m.event === 'query-start' && m.time < release
+          ).length;
+          const valid =
+            roundHostValid(hostBefore, hostAfter) &&
+            releaseTiming.ok &&
+            !timeout &&
+            !errors.length &&
+            !raw.marks.some((m) => m.event === 'cancel') &&
+            warmupDuringDrag === 0 &&
+            dragQueries === 0 &&
+            raw.unchangedDocument;
           const row = {
             id,
+            scenario,
+            count,
+            repeat,
+            rate: 6,
+            skipWarmup: process.env.LASSO_SKIP_WARMUP === '1',
+            releaseTiming,
+            releaseToSubmitMs: releaseTiming.releaseToSubmitMs,
+            thresholdMs: releaseThresholdMs(count),
             // Legacy field: summed elapsed time inside warmup calls, not OS CPU.
             warmupCpuMs: warmCpu,
             warmupThreadCpuMs: warmTasks.every((e) => Number.isFinite(e.tdur))
@@ -394,13 +505,7 @@ try {
             loadMaxTaskMs: Math.max(0, ...loadTasks.map((e) => e.dur / 1000)),
             loadOver200: loadTasks.filter((e) => e.dur > 200000).length,
             cold: round === 0,
-            valid:
-              hostBefore.valid &&
-              hostAfter.valid &&
-              !!paint &&
-              !timeout &&
-              !errors.length &&
-              !raw.marks.some((m) => m.event === 'cancel'),
+            valid,
             objectCount: raw.objectCount,
             selected: raw.selected.length,
             releaseToPaintMs: latency,
@@ -412,30 +517,31 @@ try {
             hostLoad: os.loadavg(),
             hostBefore,
             hostAfter,
-            measurementRole: 'secondary UI acceptance; not an independent-version comparison',
+            measurementRole:
+              round === 0
+                ? 'cold release-to-submit acceptance'
+                : 'warm diagnostic, excluded from cold p95',
             phases,
             gcMs: gc,
             taskMaxMs: Math.max(0, ...tasks.map((e) => e.dur / 1000)),
             over200: long.length,
+            longTaskPass: long.length === 0 && warmTasks.every((e) => e.dur <= 200000),
             long,
-            dragQueries: raw.marks.filter((m) => m.event === 'query-start' && m.time < release)
-              .length,
+            dragQueries,
             pass:
-              hostBefore.valid &&
-              hostAfter.valid &&
-              !!paint &&
-              !timeout &&
-              !errors.length &&
-              !raw.marks.some((m) => m.event === 'cancel') &&
-              warmupDuringDrag === 0 &&
-              !raw.marks.some((m) => m.event === 'query-start' && m.time < release) &&
-              latency <= (count === 500 ? 150 : 400) &&
-              long.length === 0 &&
-              warmTasks.every((e) => e.dur <= 200000),
+              round !== 0 ||
+              process.env.LASSO_SKIP_WARMUP === '1' ||
+              releaseThresholdMs(count) === null
+                ? null
+                : valid && releaseTiming.releaseToSubmitMs <= releaseThresholdMs(count),
           };
           rows.push(row);
           console.log(JSON.stringify(row));
           await writeFile(`${output}/summary.json`, JSON.stringify(rows, null, 2));
+          await writeFile(
+            `${output}/release-summary.json`,
+            JSON.stringify(summarizeReleaseTiming(rows, { scenarios, counts, repeats }), null, 2)
+          );
           if (!hostAfter.valid)
             throw new Error('Host became invalid: discard round and retry on a fresh page');
         }

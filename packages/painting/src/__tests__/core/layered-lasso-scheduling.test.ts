@@ -5,6 +5,7 @@ import {
   type LassoPerformanceEvent,
 } from '../../core/layeredToolSession';
 import { layeredRect, makeLayeredController } from '../fixtures/layered';
+import { FreehandGeometryCache } from '../../geometry/freehandCache';
 
 function scheduler(withIdle = false) {
   const frames = new Set<() => void>(),
@@ -444,6 +445,76 @@ test('release resumes partial idle preparation without restarting or sharing its
     expect(controller.getSnapshot('preview').path).toEqual([]);
   } finally {
     prepare.mockRestore();
+    session.destroy();
+  }
+});
+
+test('new batched input and final release ignore an older partially evaluated query', () => {
+  const controller = makeLayeredController([
+    ...Array.from({ length: 30 }, (_, i) => layeredRect(`r${i}`)),
+    { ...layeredRect('b'), transform: { a: 1, b: 0, c: 0, d: 1, tx: 600, ty: 0 } },
+  ]);
+  controller.setTool('lasso');
+  controller.setSelection(['r0']);
+  const clock = scheduler();
+  const events: LassoPerformanceEvent[] = [];
+  const session = createLayeredToolSession(controller, () => 'unused', {
+    scheduler: clock.adapter,
+    onPerf: (event) => events.push(event),
+  });
+  try {
+    session.begin({ x: -20, y: -20 });
+    session.update(path);
+    session.end();
+    for (let i = 0; i < 100 && !events.some((e) => e.phase === 'canonicalize'); i++) clock.query();
+    expect(events.some((e) => e.phase === 'canonicalize')).toBe(true);
+    expect(events.some((e) => e.event === 'query-complete')).toBe(false);
+    expect(clock.work.size).toBe(1);
+    const late = [...clock.all];
+    const nextPath = [
+      { x: 580, y: -20 },
+      { x: 720, y: -20 },
+      { x: 720, y: 140 },
+      { x: 580, y: 140 },
+    ];
+    expect(session.begin(nextPath[0]!)).toBe(true);
+    for (const point of nextPath.slice(1, -1)) {
+      session.update([point]);
+      late
+        .slice()
+        .reverse()
+        .forEach((callback) => callback());
+      clock.frame();
+      clock.drain();
+      expect(controller.getSnapshot('selection')).toEqual(['r0']);
+      expect(events.filter((e) => e.event === 'query-start')).toHaveLength(1);
+    }
+    session.update(nextPath.slice(-1)); // Final batch has not reached a preview frame.
+    const latest = events.at(-1)!;
+    session.end();
+    late.forEach((callback) => callback());
+    clock.frame();
+    clock.drain();
+    const prepared = objectQuery
+      .createControllerObjectQuery(controller, new FreehandGeometryCache())
+      .step(() => 0, Infinity)!;
+    if (!prepared.ok) throw new Error(prepared.error.code);
+    const expected = objectQuery.queryObjectLasso(prepared.value, nextPath, 'intersects');
+    expect(expected.ok && expected.value.map((h) => h.objectId)).toEqual(['b']);
+    expect(controller.getSnapshot('selection')).toEqual(['b']);
+    expect(events.filter((e) => e.event === 'query-complete')).toEqual([
+      expect.objectContaining({
+        session: latest.session,
+        version: latest.version,
+        pointCount: latest.pointCount,
+        final: true,
+        ok: true,
+      }),
+    ]);
+    late.forEach((callback) => callback());
+    expect(controller.getSnapshot('selection')).toEqual(['b']);
+    expect(clock.work.size + clock.frames.size).toBe(0);
+  } finally {
     session.destroy();
   }
 });

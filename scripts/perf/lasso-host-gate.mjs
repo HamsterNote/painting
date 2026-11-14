@@ -65,7 +65,7 @@ export function hostVerdict(before, after, loadBefore, loadAfter, cores) {
   };
 }
 
-export async function sampleHost(windowMs = 500) {
+export async function sampleHost(windowMs = 3000) {
   const status = await readFile('/proc/self/status', 'utf8');
   const allowed = new Set(
     status
@@ -95,6 +95,17 @@ export async function sampleHost(windowMs = 500) {
       Math.min(before.length, os.availableParallelism())
     ),
   };
+}
+
+// A round requires two distinct, nonoverlapping >=3s measurements. An aborted
+// round has after=null and cannot borrow its pre-sample as a post-sample.
+export function roundHostValid(before, after) {
+  if (!before?.valid || !after?.valid || before === after) return false;
+  return (
+    [before, after].every(
+      (h) => h.windowMs >= 3000 && Date.parse(h.endedAt) - Date.parse(h.startedAt) >= 3000
+    ) && Date.parse(after.startedAt) >= Date.parse(before.endedAt)
+  );
 }
 
 export const versionOrder = (round) => (round % 2 ? ['B', 'A'] : ['A', 'B']);
