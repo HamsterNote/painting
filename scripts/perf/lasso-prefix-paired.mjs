@@ -10,6 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { sampleHost, versionOrder } from './lasso-host-gate.mjs';
+import { waitForLassoHost } from './lasso-preflight.mjs';
 
 const [output, base, candidate, mode] = process.argv.slice(2);
 if (mode !== undefined && mode !== '--verify-only') throw Error('Unknown mode');
@@ -65,18 +66,15 @@ const save = async () => {
   await writeFile(`${output}/attempts.json`, JSON.stringify(attempts, null, 2));
   await writeFile(`${output}/pairs.json`, JSON.stringify(pairs, null, 2));
 };
-let eligible = false;
-for (let attempt = 0; attempt < 3; attempt++) {
-  const host = await sampleHost();
-  attempts.push({ stage: 'preflight', attempt, host });
+const recordPreflight = async (record) => {
+  attempts.push(record);
   await save();
-  if (host.valid || verificationOnly) {
-    eligible = true;
-    break;
-  }
-  console.log(JSON.stringify({ stage: 'preflight', attempt, host }));
-  if (attempt < 2) await delay(30000);
-}
+  console.log(JSON.stringify(record));
+};
+// Correctness-only mode still records load but has no performance verdict.
+if (verificationOnly)
+  await recordPreflight({ stage: 'preflight', attempt: 0, host: await sampleHost() });
+const eligible = verificationOnly || (await waitForLassoHost(recordPreflight));
 if (!eligible) {
   process.exitCode = 2;
 } else {

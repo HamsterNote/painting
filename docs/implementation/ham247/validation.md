@@ -5,6 +5,8 @@ is implemented and documented in [release-measurement.md](./release-measurement.
 Its current endpoint is final submission, 0/100/500 use 150ms, and 1000 has no
 threshold. The old live-selection conflict below is resolved; all original
 measurements and their limitations remain historical evidence.
+That document also records the later shared 60-second / 20-check startup policy;
+the three-preflight limit below describes this historical first run only.
 
 2026-11-14. **Performance acceptance is blocked, not passed.** No product algorithm,
 threshold, host integration or interaction behavior changed in this delivery.

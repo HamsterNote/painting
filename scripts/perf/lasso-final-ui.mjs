@@ -12,6 +12,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import os from 'node:os';
 import { lassoTrajectory } from './lasso-fixture.mjs';
 import { sampleHost } from './lasso-host-gate.mjs';
+import { waitForLassoHost } from './lasso-preflight.mjs';
 import {
   lassoReleaseTiming,
   releaseThresholdMs,
@@ -29,9 +30,17 @@ if (
 )
   throw Error('Invalid measurement counts');
 await mkdir(output, { recursive: true });
-const preflight = await sampleHost();
-await writeFile(`${output}/host-preflight.json`, JSON.stringify(preflight, null, 2));
-if (!preflight.valid) throw new Error('Invalid host: no UI timing run; retry after load drops');
+const preflightAttempts = [];
+const eligible = await waitForLassoHost(async (record) => {
+  preflightAttempts.push(record);
+  await writeFile(`${output}/host-preflight.json`, JSON.stringify(record.host, null, 2));
+  await writeFile(
+    `${output}/host-preflight-attempts.json`,
+    JSON.stringify(preflightAttempts, null, 2)
+  );
+  console.log(JSON.stringify(record));
+});
+if (!eligible) throw new Error('Invalid host after 20 preflights: no UI timing run');
 await cp(root, `${output}/site`, { recursive: true });
 const xroot = 'artifacts/research/lasso-release/x11/root';
 const display = process.env.DISPLAY ?? process.env.LASSO_X_DISPLAY ?? ':248';

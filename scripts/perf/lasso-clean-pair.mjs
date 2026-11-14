@@ -7,6 +7,7 @@ import { resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { sampleHost, versionOrder, queryTraceMetrics } from './lasso-host-gate.mjs';
+import { waitForLassoHost } from './lasso-preflight.mjs';
 
 const revisions = { A: '3ac6e585', B: 'c23d4ca' };
 const queryPath = 'packages/painting/src/core/layeredObjectQuery.ts';
@@ -225,6 +226,7 @@ export async function runCleanPairs(output) {
   });
   const attempts = [],
     accepted = [];
+  // This override controls sample-pair retries, not the shared startup preflight.
   const maxAttempts = Number(process.env.LASSO_MAX_ATTEMPTS ?? 3);
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 10)
     throw Error('max attempts must be 1..10');
@@ -247,18 +249,11 @@ export async function runCleanPairs(output) {
     );
   try {
     // Bounded retries: do not launch browsers or compile probes while the host is already invalid.
-    let eligible = false;
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const host = await sampleHost();
-      attempts.push({ stage: 'preflight', attempt, host });
+    const eligible = await waitForLassoHost(async (record) => {
+      attempts.push(record);
       await save();
-      if (host.valid) {
-        eligible = true;
-        break;
-      }
-      console.log(JSON.stringify({ invalid: host, attempt }));
-      if (attempt + 1 < maxAttempts) await delay(30000);
-    }
+      console.log(JSON.stringify(record));
+    });
     if (!eligible) return false;
     probes = await buildProbes(`${output}/bundles`);
     const display = process.env.DISPLAY ?? ':249';
