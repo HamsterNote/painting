@@ -148,6 +148,57 @@ test.each(cases)(
   }
 );
 
+test('seed 245 trajectory 9180 retains the overlapping-bounds diagnostic on the full path', () => {
+  const { target, path } = cases[2]!;
+  const document = prepared([target]);
+  const onFallback = jest.fn();
+  const result = complete(createLayeredLassoQuery(document, path, { now: () => 0, onFallback }));
+  expect(result).toEqual(queryObjectLasso(document, path, 'intersects'));
+  expect(result.ok && result.value.map((hit) => hit.objectId)).toEqual(['target']);
+  expect(onFallback).toHaveBeenCalledWith('target', 0, 'overlapping-bounds');
+});
+
+test('in-flight prefixes on one prepared snapshot keep independent results through reverse completion', () => {
+  const { path } = cases[2]!;
+  const objects = Array.from({ length: 100 }, (_, i) =>
+    image(`image-${i}`, (i % 10) * 10 + 1, Math.floor(i / 10) * 10 + 1, 3)
+  );
+  const document = prepared(objects);
+  const pending: {
+    query: Extract<ReturnType<typeof createLayeredLassoQuery>, { ok: true }>['value'];
+    expected: ReturnType<typeof queryObjectLasso>;
+  }[] = [];
+  const rejected: {
+    actual: ReturnType<typeof queryObjectLasso>;
+    expected: ReturnType<typeof queryObjectLasso>;
+  }[] = [];
+  for (let length = 3; length <= path.length; length++) {
+    const prefix = path.slice(0, length);
+    const query = createLayeredLassoQuery(document, prefix);
+    const expected = queryObjectLasso(document, prefix, 'intersects');
+    if (!query.ok) {
+      // The first three points of this exact trajectory are collinear.
+      rejected.push({ actual: query, expected });
+      continue;
+    }
+    // Leave earlier queries unfinished while each newer prefix enters. Zero
+    // budget advances one candidate, independent of machine speed.
+    expect(query.value.candidateCount).toBeGreaterThan(1);
+    expect(query.value.step(() => 0, 0)).toBeNull();
+    pending.push({ query: query.value, expected });
+  }
+  // Finish the full path first, then older prefixes; caches are shared but
+  // each result's membership and document ordering must belong to its path.
+  expect(rejected.map(({ actual }) => actual)).toEqual(rejected.map(({ expected }) => expected));
+  expect(pending.length).toBeGreaterThan(1);
+  for (const { query, expected } of pending.slice().reverse()) {
+    let result = query.step(() => 0, 0);
+    while (!result) result = query.step(() => 0, 0);
+    expect(result).toEqual(expected);
+    expect(query.step(() => 0, Infinity)).toBe(result);
+  }
+});
+
 describe.each(cases)('$name: tool session', ({ target, path }) => {
   test.each(['synchronous', 'end-before-frame', 'preview-flushed'] as const)(
     '%s final selection includes target',
