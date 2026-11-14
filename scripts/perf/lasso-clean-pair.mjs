@@ -6,8 +6,9 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { sampleHost, versionOrder, queryTraceMetrics } from './lasso-host-gate.mjs';
+import { sampleHost, versionOrder, queryTraceMetrics, roundHostValid } from './lasso-host-gate.mjs';
 import { waitForLassoHost } from './lasso-preflight.mjs';
+import { settleLassoPages } from './lasso-settle.mjs';
 
 const revisions = { A: '3ac6e585', B: 'c23d4ca' };
 const queryPath = 'packages/painting/src/core/layeredObjectQuery.ts';
@@ -197,7 +198,7 @@ export async function querySample(probe, mode) {
 
 export function pairVerdict(samples) {
   if (samples.length !== 2 || samples[0].label === samples[1].label) return false;
-  if (samples.some((s) => !s.before.valid || !s.after.valid)) return false;
+  if (samples.some((s) => !roundHostValid(s.before, s.after))) return false;
   if (
     samples.some(
       (s) =>
@@ -288,13 +289,28 @@ export async function runCleanPairs(output) {
               const id = `${scenario}-${count}-${mode}-r${round}-a${retry}`;
               const host = await sampleHost();
               if (!host.valid) {
-                attempts.push({ id, valid: false, host });
+                attempts.push({
+                  id,
+                  valid: false,
+                  before: host,
+                  after: null,
+                  abortReason: 'host-before-invalid:pair-not-started',
+                });
                 await save();
               } else {
                 const pages = {};
                 try {
                   for (const label of versionOrder(round))
                     pages[label] = await openProbe(browser, probes[label], mode, count, scenario);
+                  const settled = await settleLassoPages(
+                    Object.values(pages).map((p) => p.page),
+                    async (record) => {
+                      attempts.push({ id, ...record });
+                      await save();
+                      console.log(JSON.stringify({ id, ...record }));
+                    }
+                  );
+                  if (!settled) return false;
                   const temperatures = [];
                   for (let temperature = 0; temperature < 2; temperature++) {
                     const samples = [];
@@ -302,7 +318,12 @@ export async function runCleanPairs(output) {
                       await pages[label].page.bringToFront();
                       const before = await sampleHost();
                       if (!before.valid) {
-                        samples.push({ label, before, after: before });
+                        samples.push({
+                          label,
+                          before,
+                          after: null,
+                          abortReason: 'host-before-invalid:query-not-started',
+                        });
                         break;
                       }
                       const result = await querySample(pages[label], mode);

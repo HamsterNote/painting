@@ -1,9 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cpuRows, hostVerdict, queryTraceMetrics, versionOrder } from './lasso-host-gate.mjs';
+import {
+  cpuRows,
+  hostVerdict,
+  queryTraceMetrics,
+  versionOrder,
+  roundHostValid,
+} from './lasso-host-gate.mjs';
 import { pairVerdict } from './lasso-clean-pair.mjs';
 const before = cpuRows('cpu0 0 0 0 0 0 0 0 0 0 0');
 const after = cpuRows('cpu0 10 0 10 80 0 0 0 0 500 500');
+const hostSample = (startMs, valid = true) => ({
+  valid,
+  windowMs: 3000,
+  startedAt: new Date(startMs).toISOString(),
+  endedAt: new Date(startMs + 3000).toISOString(),
+});
 test('load over 3 rejects a six-core round even with 80% idle; guest ticks are not double-counted', () => {
   assert.equal(after[0].total, 100);
   assert.equal(hostVerdict(before, after, [3, 8, 9], [3, 8, 9], 6).valid, true);
@@ -13,8 +25,8 @@ test('load over 3 rejects a six-core round even with 80% idle; guest ticks are n
 test('a contaminated side, stale comparison or mismatched hit set invalidates the whole pair', () => {
   const a = {
     label: 'A',
-    before: { valid: true },
-    after: { valid: true },
+    before: hostSample(0),
+    after: hostSample(3000),
     cold: true,
     queryThreadCpuMs: 1,
     selected: ['x'],
@@ -28,6 +40,20 @@ test('a contaminated side, stale comparison or mismatched hit set invalidates th
   assert.equal(pairVerdict([a, { ...b, selected: [] }]), false);
   assert.equal(pairVerdict([a, { ...b, queryThreadCpuMs: undefined }]), false);
   assert.equal(pairVerdict([a]), false);
+});
+
+test('rounds require two real >=3s windows; copied, missing or overlapping after is invalid', () => {
+  const a = hostSample(0),
+    b = hostSample(4000);
+  assert.equal(roundHostValid(a, b), true);
+  assert.equal(roundHostValid(a, hostSample(4000, false)), false);
+  assert.equal(roundHostValid(hostSample(0, false), b), false);
+  assert.equal(roundHostValid(a, null), false);
+  assert.equal(roundHostValid(a, a), false);
+  assert.equal(roundHostValid(a, { ...a }), false);
+  assert.equal(roundHostValid(a, hostSample(2999)), false);
+  assert.equal(roundHostValid(a, { ...b, windowMs: 500 }), false);
+  assert.equal(roundHostValid(a, { ...b, endedAt: new Date(4500).toISOString() }), false);
 });
 test('idle and counter failures reject misleading samples', () => {
   const busy = cpuRows('cpu0 70 0 10 20 0 0 0 0');

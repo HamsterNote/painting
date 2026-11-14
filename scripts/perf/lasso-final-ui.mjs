@@ -11,8 +11,9 @@ import { mkdir, writeFile, cp } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import os from 'node:os';
 import { lassoTrajectory } from './lasso-fixture.mjs';
-import { sampleHost } from './lasso-host-gate.mjs';
+import { sampleHost, roundHostValid } from './lasso-host-gate.mjs';
 import { waitForLassoHost } from './lasso-preflight.mjs';
+import { settleLassoPages } from './lasso-settle.mjs';
 import {
   lassoReleaseTiming,
   releaseThresholdMs,
@@ -86,6 +87,9 @@ try {
         browser: browser.version(),
         headless: false,
         rate: 6,
+        hostWindowMs: 3000,
+        settle:
+          'blank page first frames, then two consecutive valid 3s windows; maximum ten windows',
         scenarios,
         counts,
         repeats,
@@ -105,21 +109,42 @@ try {
     )
   );
   const rows = [];
+  const settleAttempts = [];
   for (let repeat = 0; repeat < repeats; repeat++)
     for (const scenario of scenarios)
       for (const count of counts) {
+        const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+        const page = await context.newPage();
+        const cdp = await context.newCDPSession(page);
+        await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
+        const settled = await settleLassoPages([page], async (record) => {
+          const entry = { scenario, count, repeat, ...record };
+          settleAttempts.push(entry);
+          await writeFile(
+            `${output}/host-settle-attempts.json`,
+            JSON.stringify(settleAttempts, null, 2)
+          );
+          console.log(JSON.stringify(entry));
+        });
+        if (!settled) throw Error('Browser did not settle: no UI gesture started');
         // Sample before navigation: waiting here must not give the first gesture
-        // an extra 500ms of application idle warmup.
+        // an extra 3s of application idle warmup.
         const pageHostBefore = await sampleHost();
         if (!pageHostBefore.valid) {
           await writeFile(
             `${output}/${scenario}-${count}-p${repeat}.invalid-host.json`,
-            JSON.stringify(pageHostBefore, null, 2)
+            JSON.stringify(
+              {
+                before: pageHostBefore,
+                after: null,
+                abortReason: 'host-before-invalid:page-not-navigated',
+              },
+              null,
+              2
+            )
           );
           throw new Error('Invalid host: cold page rejected before navigation');
         }
-        const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-        const page = await context.newPage();
         const errors = [];
         page.on('pageerror', (e) => errors.push(e.message));
         await page.addInitScript((skipWarmup) => {
@@ -134,8 +159,6 @@ try {
             }
           };
         }, process.env.LASSO_SKIP_WARMUP === '1');
-        const cdp = await context.newCDPSession(page);
-        await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
         const startupEvents = [];
         const startupCollect = ({ value }) => startupEvents.push(...value);
         cdp.on('Tracing.dataCollected', startupCollect);
@@ -155,7 +178,15 @@ try {
           if (!hostBefore.valid) {
             await writeFile(
               `${output}/${id}.invalid-host.json`,
-              JSON.stringify(hostBefore, null, 2)
+              JSON.stringify(
+                {
+                  before: hostBefore,
+                  after: null,
+                  abortReason: 'host-before-invalid:gesture-not-started',
+                },
+                null,
+                2
+              )
             );
             throw new Error('Invalid host: round rejected before input; retry in a fresh page');
           }
@@ -435,8 +466,7 @@ try {
             (m) => m.event === 'query-start' && m.time < release
           ).length;
           const valid =
-            hostBefore.valid &&
-            hostAfter.valid &&
+            roundHostValid(hostBefore, hostAfter) &&
             releaseTiming.ok &&
             !timeout &&
             !errors.length &&

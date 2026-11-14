@@ -8,8 +8,9 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { sampleHost, versionOrder } from './lasso-host-gate.mjs';
+import { sampleHost, versionOrder, roundHostValid } from './lasso-host-gate.mjs';
 import { waitForLassoHost } from './lasso-preflight.mjs';
+import { settleLassoPages } from './lasso-settle.mjs';
 
 const [output, base, candidate, mode] = process.argv.slice(2);
 if (mode !== undefined && mode !== '--verify-only') throw Error('Unknown mode');
@@ -43,9 +44,12 @@ assert.equal(git('diff', revisions.A, revisions.B, '--', 'pnpm-lock.yaml').trim(
 assert.equal(git('diff', revisions.A, '--', 'pnpm-lock.yaml').trim(), '');
 await mkdir(output, { recursive: true });
 const metadata = {
+  runnerRevision: git('rev-parse', 'HEAD').trim(),
   revisions,
   verificationOnly,
   rate,
+  hostWindowMs: 3000,
+  settle: 'first frames, then two consecutive valid 3s windows; maximum ten windows',
   command: process.argv,
   node: process.version,
   cpu: os.cpus()[0].model,
@@ -148,8 +152,10 @@ if (!eligible) {
       await cdp.send('Emulation.setCPUThrottlingRate', { rate });
       await pages[label].addScriptTag({ path: `${output}/${label}-plain.js` });
     }
-    let complete = true;
+    let complete =
+      verificationOnly || (await settleLassoPages(Object.values(pages), recordPreflight));
     matrix: for (const [scenario, count] of cells) {
+      if (!complete) break;
       for (const label of ['A', 'B'])
         await pages[label].evaluate(
           ({ scenario, count }) => {
@@ -188,14 +194,15 @@ if (!eligible) {
               assert(last.startedAt >= first.endedAt && last.startedAt - first.endedAt <= 30000);
               rows.push({ scenario, count, prefix, round, attempt, versions });
             }
-          const after = before.valid || verificationOnly ? await sampleHost() : before;
-          const timingValid = !verificationOnly && before.valid && after.valid;
+          const after = before.valid || verificationOnly ? await sampleHost() : null;
+          const abortReason = after === null ? 'host-before-invalid:query-not-started' : null;
+          const timingValid = !verificationOnly && roundHostValid(before, after);
           accepted = verificationOnly || timingValid;
-          attempts.push({ id, before, after, accepted, timingValid });
+          attempts.push({ id, before, after, abortReason, accepted, timingValid });
           if (accepted) pairs.push(...rows);
           await save();
           if (accepted) break;
-          console.log(JSON.stringify({ id, invalid: true, before, after }));
+          console.log(JSON.stringify({ id, invalid: true, before, after, abortReason }));
           // This measurement window stops on pollution; never retry to a passing sample.
           break;
         }
