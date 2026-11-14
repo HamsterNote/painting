@@ -1,0 +1,56 @@
+{
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/147.0.7727.15 Safari/537.36",
+  "height": "44px",
+  "appearance": "none",
+  "outlineWidth": "2px",
+  "outlineColor": "rgb(113, 99, 217)",
+  "outlineOffset": "2px",
+  "fill": "12.903225806451612%",
+  "rules": [
+    {
+      "selector": ".hn-painting-range::-webkit-slider-runnable-track",
+      "height": "6px",
+      "width": "",
+      "background": "linear-gradient(to right,#7163D9 0 var(--range-fill),#E2E5EA var(--range-fill) 100%)",
+      "borderWidth": "",
+      "borderColor": "",
+      "boxShadow": ""
+    },
+    {
+      "selector": ".hn-painting-range::-webkit-slider-thumb",
+      "height": "18px",
+      "width": "18px",
+      "background": "rgb(255, 255, 255)",
+      "borderWidth": "2px",
+      "borderColor": "rgb(113, 99, 217)",
+      "boxShadow": ""
+    },
+    {
+      "selector": ".hn-painting-range:hover::-webkit-slider-thumb",
+      "height": "",
+      "width": "",
+      "background": "",
+      "borderWidth": "",
+      "borderColor": "",
+      "boxShadow": "rgba(113, 99, 217, 0.133) 0px 0px 0px 4px"
+    },
+    {
+      "selector": ".hn-painting-range:active::-webkit-slider-thumb",
+      "height": "",
+      "width": "",
+      "background": "",
+      "borderWidth": "",
+      "borderColor": "",
+      "boxShadow": "rgba(113, 99, 217, 0.2) 0px 0px 0px 6px"
+    },
+    {
+      "selector": ".hn-painting-range:disabled",
+      "height": "",
+      "width": "",
+      "background": "",
+      "borderWidth": "",
+      "borderColor": "",
+      "boxShadow": ""
+    }
+  ]
+}

@@ -59,8 +59,14 @@ export function ToolbarPopover({
       const bottom = visibleBottom - 8;
       const width = Math.max(0, Math.min(288, right - left));
       const rect = trigger.getBoundingClientRect();
-      const rectTop = Math.max(top, Math.min(rect.top - 8, bottom));
-      const rectBottom = Math.max(top, Math.min(rect.bottom + 8, bottom));
+      // Painting's shell includes an independent collapse button above/below the
+      // capsule. Keep the panel outside that whole shell so it cannot cover the
+      // only collapse target when its trigger is near the capsule's center.
+      const shell = boundary.current?.hasAttribute('data-toolbar-placement')
+        ? boundary.current.getBoundingClientRect()
+        : rect;
+      const rectTop = Math.max(top, Math.min(Math.min(rect.top, shell.top) - 8, bottom));
+      const rectBottom = Math.max(top, Math.min(Math.max(rect.bottom, shell.bottom) + 8, bottom));
       const below = layout?.edge === 'top';
       const preferred = below ? bottom - rectBottom : rectTop - top;
       const opposite = below ? rectTop - top : bottom - rectBottom;

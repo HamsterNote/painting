@@ -1,5 +1,6 @@
 import {
   openToolbarSettings,
+  openToolbarStroke,
   openToolbarZoom,
   selectToolbarTool,
   setToolbarInputMode,
@@ -50,8 +51,10 @@ test('toolbar static labels reject browser selection while controls keep editing
   await openToolbarSettings(page);
   const panel = page.getByRole('dialog', { name: '绘图设置' });
   for (const label of await panel.locator('label').all()) await expectUserSelect(label, 'none');
-  const label = toolbar.locator('label').filter({ hasText: '笔宽' });
   await page.keyboard.press('Escape');
+  await openToolbarStroke(page);
+  const strokePanel = page.getByRole('dialog', { name: '笔触设置' });
+  const label = strokePanel.locator('.hn-painting-stroke-label').filter({ hasText: '笔宽' });
   await label.dblclick({ position: { x: 3, y: 8 } });
   const bounds = (await label.boundingBox())!;
   await page.mouse.move(bounds.x + 2, bounds.y + 8);
@@ -65,7 +68,7 @@ test('toolbar static labels reject browser selection while controls keep editing
   await pointer(page, 'up', { x: 81, y: 8 });
   expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('outside');
 
-  await openToolbarSettings(page);
+  await openToolbarStroke(page);
   const width = page.getByLabel('笔宽', { exact: true });
   await expectUserSelect(width, 'text');
   await width.click();
@@ -75,7 +78,7 @@ test('toolbar static labels reject browser selection while controls keep editing
   await expect(width).toHaveValue('24');
   await expect(width).toBeFocused();
   expect((await layeredState(page)).tools.settings.freehand.nominalSize).toBe(24);
-  await openToolbarSettings(page);
+  await openToolbarStroke(page);
   const opacity = page.getByLabel('不透明度');
   await opacity.focus();
   await expect(opacity).toBeFocused();
@@ -83,13 +86,13 @@ test('toolbar static labels reject browser selection while controls keep editing
   await opacity.press('ArrowRight');
   expect((await layeredState(page)).tools.settings.freehand.opacity).toBe(0.05);
   await opacity.press('Tab');
-  await openToolbarSettings(page);
+  await openToolbarStroke(page);
   const pressure = page.getByLabel('压力模式');
   await expect(pressure).toBeFocused();
   await pressure.selectOption('constant');
   await setToolbarInputMode(page, 'pen');
-  await openToolbarSettings(page);
-  const color = page.getByLabel('颜色', { exact: true });
+  await openToolbarStroke(page);
+  const color = page.getByLabel('自由取色', { exact: true });
   await color.focus();
   await expect(color).toBeFocused();
   // Updating the native value verifies React's change path; the OS picker is manual QA.

@@ -5,6 +5,7 @@ import {
   layeredState,
   openLayeredEditor,
   selectToolbarTool,
+  openToolbarStroke,
 } from './layered-helpers';
 
 for (const width of [1280, 390, 320]) {
@@ -43,12 +44,15 @@ test('primary width reaches new brush snapshots and restores each tool family', 
   page,
 }) => {
   await openLayeredEditor(page);
-  const width = page.getByRole('toolbar').getByLabel('笔宽', { exact: true });
+  await openToolbarStroke(page);
+  const width = page.getByRole('dialog', { name: '笔触设置' }).getByLabel('笔宽', { exact: true });
   await width.fill('4');
   await drawLayeredStroke(page, 100);
+  await openToolbarStroke(page);
   await width.fill('16');
   await drawLayeredStroke(page, 160);
   await selectToolbarTool(page, '矩形');
+  await openToolbarStroke(page);
   await width.fill('3');
   await pointer(page, 'down', { x: 300, y: 100 });
   await pointer(page, 'up', { x: 400, y: 180 });
@@ -66,13 +70,16 @@ test('primary width reaches new brush snapshots and restores each tool family', 
   await page.getByRole('button', { name: '重做', exact: true }).click();
   expect((await layeredState(page)).document.objects).toEqual(before);
   await selectToolbarTool(page, '画笔');
+  await openToolbarStroke(page);
   await expect(width).toHaveValue('16');
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await expect(page.getByRole('dialog').getByLabel('笔宽', { exact: true })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await selectToolbarTool(page, '橡皮擦');
-  await expect(width).toBeDisabled();
+  await expect(width).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '笔触设置' })).toBeDisabled();
   await selectToolbarTool(page, '矩形');
+  await openToolbarStroke(page);
   await expect(width).toHaveValue('3');
 });
 

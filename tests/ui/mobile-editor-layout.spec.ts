@@ -152,7 +152,7 @@ test('capsule acquires full narrow-host width as soon as its host is laid out', 
   await strip.evaluate((node) => {
     node.scrollLeft = node.scrollWidth;
   });
-  await expect(page.getByLabel('自由取色', { exact: true })).toBeInViewport();
+  await expect(page.getByRole('button', { name: '清空画布', exact: true })).toBeInViewport();
 });
 
 test('editing transformed content keeps controls upright and cancel preserves the original object', async ({

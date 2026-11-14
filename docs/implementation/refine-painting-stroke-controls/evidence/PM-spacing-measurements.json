@@ -1,0 +1,72 @@
+[
+  {
+    "width": 1280,
+    "measurements": [
+      {
+        "mode": "default effective safe-area override",
+        "inset": 0,
+        "edge": "bottom",
+        "actual": 8
+      },
+      {
+        "mode": "default effective safe-area override",
+        "inset": 34,
+        "edge": "bottom",
+        "actual": 42
+      },
+      {
+        "mode": "controlled",
+        "inset": 34,
+        "edge": "bottom",
+        "actual": 42
+      },
+      {
+        "mode": "controlled (fallback=34)",
+        "inset": 0,
+        "edge": "bottom",
+        "actual": 8
+      },
+      {
+        "mode": "controlled top=24/header=44",
+        "inset": 24,
+        "edge": "top",
+        "actual": 60
+      }
+    ]
+  },
+  {
+    "width": 1440,
+    "measurements": [
+      {
+        "mode": "default effective safe-area override",
+        "inset": 0,
+        "edge": "bottom",
+        "actual": 8
+      },
+      {
+        "mode": "default effective safe-area override",
+        "inset": 34,
+        "edge": "bottom",
+        "actual": 42
+      },
+      {
+        "mode": "controlled",
+        "inset": 34,
+        "edge": "bottom",
+        "actual": 42
+      },
+      {
+        "mode": "controlled (fallback=34)",
+        "inset": 0,
+        "edge": "bottom",
+        "actual": 8
+      },
+      {
+        "mode": "controlled top=24/header=44",
+        "inset": 24,
+        "edge": "top",
+        "actual": 60
+      }
+    ]
+  }
+]

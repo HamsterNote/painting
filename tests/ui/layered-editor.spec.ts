@@ -5,7 +5,7 @@ import {
   rotateSelection,
   expectSelectionAngle,
 } from './selection-session-helpers';
-import { openToolbarSettings, selectToolbarTool } from './layered-helpers';
+import { openToolbarSettings, openToolbarStroke, selectToolbarTool } from './layered-helpers';
 import { expect, test, type Page } from '@playwright/test';
 import { decodeRgbaPng } from './canvas2d-pen-pixel-helpers';
 
@@ -74,8 +74,15 @@ for (const firstTool of ['freehand', 'line'] as const) {
     await expect(objects.first()).toHaveCSS('visibility', 'visible');
     const firstPath = await objects.first().locator('path').getAttribute('d');
     expect(firstPath).toBeTruthy();
-    await openToolbarSettings(page);
-    await page.getByLabel('颜色', { exact: true }).fill('#df2468');
+    await openToolbarStroke(page);
+    await page.getByLabel('自由取色', { exact: true }).evaluate((input) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+        input,
+        '#df2468'
+      );
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
     await pen(150);
     await expect(objects).toHaveCount(2);
     await page.getByRole('button', { name: '撤销', exact: true }).click();
@@ -121,9 +128,9 @@ test('new mouse ink covers existing HTML text in active and historical pixels', 
   page,
 }) => {
   await openEditor(page, '&fixture=mixed');
-  await openToolbarSettings(page);
+  await openToolbarStroke(page);
   await page.getByLabel('笔宽', { exact: true }).fill('40');
-  await openToolbarSettings(page);
+  await openToolbarStroke(page);
   await page.getByLabel('压力模式', { exact: true }).selectOption('constant');
   const surface = page.getByTestId('layered-surface');
   const box = (await surface.boundingBox())!;
@@ -163,11 +170,11 @@ test('dot, pressure width and half-opacity delayed handoff remain visible', asyn
   page,
 }, testInfo) => {
   await openEditor(page, '&handoffDelay=500');
-  await openToolbarSettings(page);
+  await openToolbarStroke(page);
   await page.getByLabel('笔宽', { exact: true }).fill('40');
-  await openToolbarSettings(page);
+  await openToolbarStroke(page);
   await page.getByLabel('不透明度', { exact: true }).fill('0.5');
-  await openToolbarSettings(page);
+  await openToolbarStroke(page);
   await page.getByLabel('压力模式', { exact: true }).selectOption('constant');
   const box = (await page.getByTestId('layered-surface').boundingBox())!;
   // Full viewport captures keep the video coordinate system stable during the handoff.
@@ -192,7 +199,7 @@ test('dot, pressure width and half-opacity delayed handoff remain visible', asyn
     surfacePixel(await decodeRgbaPng(final), 100, 100),
     surfacePixel(pending, 100, 100)
   );
-  await openToolbarSettings(page);
+  await openToolbarStroke(page);
   await page.getByLabel('压力模式', { exact: true }).selectOption('real');
   await pointer(page, 'down', 160, 140, 0.1);
   await pointer(page, 'move', 240, 140, 0.1);
@@ -208,7 +215,7 @@ test('dot, pressure width and half-opacity delayed handoff remain visible', asyn
       ([r, g, b]) => r < 200 && g < 200 && b < 200
     ).length;
   expect(thickness(220)).toBeGreaterThan(thickness(140) + 8);
-  await openToolbarSettings(page);
+  await openToolbarStroke(page);
   await page.getByLabel('压力模式', { exact: true }).selectOption('constant');
   await pointer(page, 'down', 350, 100);
   await pointer(page, 'move', 358, 100);
@@ -276,16 +283,16 @@ test('settings panel follows the visible host after resize and scrolling', async
   await page.getByRole('button', { name: '设置', exact: true }).click();
   const panel = page.getByRole('dialog', { name: '绘图设置' });
   await expect(panel).toBeVisible();
-  await page.setViewportSize({ width: 812, height: 375 });
+  await page.setViewportSize({ width: 812, height: 250 });
   const hostBox = (await page.locator('[data-painting-board]').boundingBox())!;
   expect(hostBox.y).toBe(80);
   expect(hostBox.height).toBe(600);
   const trigger = await page.getByRole('button', { name: '设置', exact: true }).boundingBox();
   expect(trigger!.y).toBeGreaterThan(100);
-  await expect.poll(async () => (await panel.boundingBox())!.y).toBeLessThan(375);
+  await expect.poll(async () => (await panel.boundingBox())!.y).toBeLessThan(250);
   const resizedBox = (await panel.boundingBox())!;
   expect(resizedBox.y).toBe(88);
-  expect(resizedBox.y + resizedBox.height).toBe(367);
+  expect(resizedBox.y + resizedBox.height).toBe(242);
   expect(await panel.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
   const expectControlInView = async (label: string, top: number, bottom: number) => {
     const control = panel.getByLabel(label, { exact: true });
@@ -298,8 +305,8 @@ test('settings panel follows the visible host after resize and scrolling', async
     expect(bounds!.y).toBeGreaterThanOrEqual(top);
     expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(bottom);
   };
-  await expectControlInView('输入模式', 88, 367);
-  await expectControlInView('小地图', 88, 367);
+  await expectControlInView('输入模式', 88, 242);
+  await expectControlInView('小地图', 88, 242);
   await panel.getByLabel('小地图', { exact: true }).check();
   expect(
     (await page.evaluate(() => window.__layeredEditor!.getSnapshot('navigation'))).minimap
@@ -572,22 +579,22 @@ test('lasso, move, resize, rotate and fast erase retain raw data and reversible 
 
 test('shape dash and freehand pressure settings are isolated', async ({ page }) => {
   await openEditor(page);
-  await openToolbarSettings(page);
+  await openToolbarStroke(page);
   await page.getByLabel('压力模式', { exact: true }).selectOption('real');
   await selectToolbarTool(page, '直线');
-  await openToolbarSettings(page);
+  await openToolbarStroke(page);
   await page.getByLabel('形状线型', { exact: true }).selectOption('dash');
   await selectToolbarTool(page, '自由笔');
-  await openToolbarSettings(page);
+  await openToolbarStroke(page);
   await expect(page.getByLabel('形状线型', { exact: true })).toHaveCount(0);
-  await openToolbarSettings(page);
+  await openToolbarStroke(page);
   await expect(page.getByLabel('压力模式', { exact: true })).toHaveValue('real');
   await pointer(page, 'down', 100, 100);
   await pointer(page, 'move', 200, 100);
   await pointer(page, 'up', 220, 100, 0);
   expect(await page.locator('[data-object-id] path').getAttribute('stroke-dasharray')).toBeNull();
   await selectToolbarTool(page, '直线');
-  await openToolbarSettings(page);
+  await openToolbarStroke(page);
   await expect(page.getByLabel('形状线型', { exact: true })).toHaveValue('dash');
 });
 

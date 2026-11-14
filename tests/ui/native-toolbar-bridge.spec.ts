@@ -48,7 +48,7 @@ async function key(page: Page, key: string, shiftKey = false) {
   );
 }
 
-for (const trigger of ['工具菜单', '缩放比例', '设置']) {
+for (const trigger of ['工具菜单', '缩放比例', '设置', '笔触设置']) {
   test(`bridge contract: ${trigger} Escape restores focus; both Tab directions exit`, async ({
     page,
   }) => {
@@ -65,13 +65,28 @@ for (const trigger of ['工具菜单', '缩放比例', '设置']) {
       await button.click();
       await expect(panel).toBeVisible();
       for (let i = 0; i < 25 && (await panel.count()); i++) {
-        expect(await key(page, 'Tab', shift)).toBe(true);
+        const editingWidth = await page
+          .getByRole('spinbutton', { name: '笔宽', exact: true })
+          .evaluateAll((nodes) => nodes.some((node) => node === document.activeElement));
+        if (editingWidth) {
+          // Numeric text editing belongs to the web keyboard, as it does on Expo DOM.
+          expect(await key(page, 'Tab', shift)).toBe(false);
+          await page.keyboard.press(shift ? 'Shift+Tab' : 'Tab');
+        } else expect(await key(page, 'Tab', shift)).toBe(true);
       }
       await expect(panel).toHaveCount(0);
     }
     const events = await page.evaluate(() => (window as any).bridgeEvents);
     expect(events.length).toBeGreaterThan(2);
-    expect(events.every((e: { trusted: boolean }) => !e.trusted)).toBe(true);
+    if (trigger === '笔触设置') {
+      expect(events.some((e: { trusted: boolean }) => e.trusted)).toBe(true);
+      expect(events.some((e: { trusted: boolean }) => !e.trusted)).toBe(true);
+      expect(
+        events
+          .filter((e: { trusted: boolean }) => e.trusted)
+          .every((e: { key: string }) => ['Tab', 'Shift'].includes(e.key))
+      ).toBe(true);
+    } else expect(events.every((e: { trusted: boolean }) => !e.trusted)).toBe(true);
   });
 }
 

@@ -1,0 +1,50 @@
+[2m[WebServer] [22m(node:2673496) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:2673509) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:2673535) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:2673608) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:2673621) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:2673660) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:2673672) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m[33mSkipping web setup: EXPO_NO_WEB_SETUP is enabled.[39m
+
+Running 24 tests using 1 worker
+
+(node:2673743) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2673743) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Skipping host requirements validation logic because `PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS` env variable is set.
+  ✓   1 [webkit] › tests/ui/painting-toolbar.spec.ts:17:3 › 工具 returns focus on Escape and closes after keyboard traversal (3.2s)
+  ✓   2 [webkit] › tests/ui/painting-toolbar.spec.ts:54:3 › 工具 returns to its trigger when Tab runs past the document (2.0s)
+  ✓   3 [webkit] › tests/ui/painting-toolbar.spec.ts:17:3 › 缩放设置 returns focus on Escape and closes after keyboard traversal (2.6s)
+  ✓   4 [webkit] › tests/ui/painting-toolbar.spec.ts:54:3 › 缩放设置 returns to its trigger when Tab runs past the document (2.1s)
+  ✓   5 [webkit] › tests/ui/painting-toolbar.spec.ts:17:3 › 绘图设置 returns focus on Escape and closes after keyboard traversal (2.3s)
+  ✓   6 [webkit] › tests/ui/painting-toolbar.spec.ts:54:3 › 绘图设置 returns to its trigger when Tab runs past the document (2.3s)
+  ✓   7 [webkit] › tests/ui/painting-toolbar.spec.ts:17:3 › 笔触设置 returns focus on Escape and closes after keyboard traversal (2.2s)
+  ✓   8 [webkit] › tests/ui/painting-toolbar.spec.ts:54:3 › 笔触设置 returns to its trigger when Tab runs past the document (1.6s)
+  ✓   9 [webkit] › tests/ui/painting-toolbar.spec.ts:78:3 › toolbar layout and keyboard reach at 320px (2.8s)
+  ✓  10 [webkit] › tests/ui/painting-toolbar.spec.ts:78:3 › toolbar layout and keyboard reach at 390px (2.4s)
+  ✓  11 [webkit] › tests/ui/painting-toolbar.spec.ts:78:3 › toolbar layout and keyboard reach at 768px (2.9s)
+  ✓  12 [webkit] › tests/ui/painting-toolbar.spec.ts:78:3 › toolbar layout and keyboard reach at 1024px (3.4s)
+  ✓  13 [webkit] › tests/ui/painting-toolbar.spec.ts:78:3 › toolbar layout and keyboard reach at 1280px (4.3s)
+  ✓  14 [webkit] › tests/ui/painting-toolbar.spec.ts:78:3 › toolbar layout and keyboard reach at 1440px (4.8s)
+  ✓  15 [webkit] › tests/ui/painting-toolbar.spec.ts:158:1 › keyboard menu selection, editable numbers, dismissal and the next canvas down (3.6s)
+  -  16 [webkit] › tests/ui/painting-toolbar.spec.ts:199:1 › thirty short pen strokes and a crossing do not activate the toolbar or swallow its next click
+  -  17 [webkit] › tests/ui/painting-toolbar.spec.ts:242:3 › 200% browser page scale at 320px keeps stroke settings reachable
+  -  18 [webkit] › tests/ui/painting-toolbar.spec.ts:242:3 › 200% browser page scale at 390px keeps stroke settings reachable
+  ✓  19 [webkit] › tests/ui/painting-toolbar.spec.ts:276:1 › custom color and clear canvas preserve independent styles and reversible history (2.7s)
+  ✓  20 [webkit] › tests/ui/painting-toolbar.spec.ts:314:1 › dragging zoom preserves visible center ink after pan, embedded offset and resize (2.9s)
+  ✓  21 [webkit] › tests/ui/painting-toolbar.spec.ts:399:1 › preset rings match the selected color and the custom ring only outlines custom colors (2.9s)
+  ✓  22 [webkit] › tests/ui/painting-toolbar.spec.ts:448:3 › stroke smoke S2 S3 S5 S6 visual evidence at 1280px (3.5s)
+  ✓  23 [webkit] › tests/ui/painting-toolbar.spec.ts:448:3 › stroke smoke S2 S3 S5 S6 visual evidence at 390px (2.6s)
+  ✓  24 [webkit] › tests/ui/painting-toolbar.spec.ts:448:3 › stroke smoke S2 S3 S5 S6 visual evidence at 320px (3.0s)
+
+  3 skipped
+  21 passed (1.4m)

@@ -90,3 +90,8 @@ export async function setToolbarZoom(page: Page, value: number) {
   await zoom.press('Home');
   for (let current = 25; current < value; current += 25) await zoom.press('ArrowRight');
 }
+
+export async function openToolbarStroke(page: Page) {
+  if (await page.getByRole('dialog', { name: '笔触设置', exact: true }).isVisible()) return;
+  await page.getByRole('button', { name: '笔触设置', exact: true }).click();
+}

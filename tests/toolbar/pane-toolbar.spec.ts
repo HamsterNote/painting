@@ -170,7 +170,7 @@ test('320px board: file and tool/settings/zoom panels exclude each other in both
   const toolbar = page.getByRole('toolbar');
   const files = toolbar.getByRole('button', { name: '文件', exact: true });
   const menu = page.getByRole('menu', { name: '文件列表' });
-  for (const name of ['设置', '工具菜单', '缩放比例']) {
+  for (const name of ['设置', '工具菜单', '缩放比例', '笔触设置']) {
     const trigger = toolbar.getByRole('button', { name, exact: true });
     await trigger.click();
     await expect(trigger).toHaveAttribute('aria-expanded', 'true');
@@ -239,5 +239,88 @@ for (const remove of [false, true]) {
     // Scroll to a later row and confirm the preceding long name cannot intercept it.
     await menu.getByRole('menuitemradio').nth(1).click();
     await expect(menu).toHaveCount(0);
+  });
+}
+
+test('stroke panels stay in their own top/bottom pane and inline pickers remain DOM controls', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 1000 });
+  await page.goto('/painting.html?split&inline');
+  for (const paneName of ['painting', 'secondary']) {
+    const pane = page.getByTestId(paneName);
+    const trigger = pane.getByRole('button', { name: '笔触设置', exact: true });
+    await trigger.click();
+    const panel = pane.getByRole('dialog', { name: '笔触设置' });
+    await expect(panel).toBeVisible();
+    await expect(panel.locator('select,input[type=color]')).toHaveCount(0);
+    const bounds = (await pane.boundingBox())!,
+      popup = (await panel.boundingBox())!;
+    expect(popup.x).toBeGreaterThanOrEqual(bounds.x);
+    expect(popup.x + popup.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+    expect(popup.y).toBeGreaterThanOrEqual(bounds.y);
+    expect(popup.y + popup.height).toBeLessThanOrEqual(bounds.y + bounds.height);
+    await panel.getByRole('button', { name: '自由取色' }).click();
+    const color = panel.getByRole('textbox', { name: '自定义颜色值', exact: true });
+    await expect(color).toBeFocused();
+    await color.fill('#123456');
+    await panel.getByLabel('恒定', { exact: true }).check();
+    await expect(trigger.locator('path')).toHaveAttribute('stroke', '#123456');
+    await page.keyboard.press('Escape');
+    await expect(trigger).toBeFocused();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  }
+});
+
+for (const width of [1280, 1440]) {
+  test(`PM spacing contract: default and controlled insets at ${width}px`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width, height: 900 });
+    const measurements: { mode: string; inset: number; edge: string; actual: number }[] = [];
+    const measure = async (
+      mode: string,
+      inset: number,
+      edge: 'top' | 'bottom',
+      expected: number
+    ) => {
+      const pane = page.getByTestId('painting');
+      const shell = pane.locator('[data-toolbar-edge]');
+      const board = (await pane.boundingBox())!,
+        toolbar = (await shell.boundingBox())!;
+      const actual =
+        edge === 'bottom'
+          ? board.y + board.height - toolbar.y - toolbar.height
+          : toolbar.y - board.y;
+      expect(actual).toBe(expected);
+      measurements.push({ mode, inset, edge, actual });
+    };
+    await page.goto('/painting.html?legacy');
+    await expect(page.getByRole('toolbar')).toBeVisible();
+    for (const inset of [0, 34]) {
+      await page
+        .getByTestId('painting')
+        .evaluate(
+          (el, inset) => el.style.setProperty('--hn-toolbar-safe-area-bottom', `${inset}px`),
+          inset
+        );
+      await measure('default effective safe-area override', inset, 'bottom', 8 + inset);
+    }
+    await page.goto('/painting.html');
+    await expect(page.getByRole('toolbar')).toBeVisible();
+    // A nonzero effective fallback proves that explicit controlled zero wins.
+    await page
+      .getByTestId('painting')
+      .evaluate((el) => el.style.setProperty('--hn-toolbar-safe-area-bottom', '34px'));
+    await measure('controlled', 34, 'bottom', 42);
+    await page.getByRole('button', { name: '切换零安全区' }).click();
+    await measure('controlled (fallback=34)', 0, 'bottom', 8);
+    await page.getByRole('button', { name: '迁移边缘' }).click();
+    await measure('controlled top=24/header=44', 24, 'top', 60);
+    await info.attach('PM-spacing-measurements.json', {
+      body: JSON.stringify({ width, measurements }, null, 2),
+      contentType: 'application/json',
+    });
+    console.log('PM spacing:', JSON.stringify({ width, measurements }));
   });
 }

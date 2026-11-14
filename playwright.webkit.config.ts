@@ -6,6 +6,7 @@ export default defineConfig({
   outputDir: 'test-results/webkit',
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report/webkit' }]],
   testMatch: [
+    'painting-toolbar.spec.ts',
     'lasso-performance-regression.spec.ts',
     'page-integration.spec.ts',
     'acceptance-feedback.spec.ts',

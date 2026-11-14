@@ -1,0 +1,43 @@
+
+> @hamster-note/painting-workspace@0.8.3 test:toolbar /home/zhangxiao/multica_workspaces/hamster-arm-d6b65621f809/ham-258-b192151121a1/workdir/painting
+> playwright test --config=playwright.toolbar.config.ts
+
+[2m[WebServer] [22m(node:2677535) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:2677548) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:2677561) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:2677604) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:2677618) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:2677652) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 16 tests using 1 worker
+
+(node:2677673) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2677673) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 tests/toolbar/eraser-trail.spec.ts:52:1 › sample joints and self-crossings never accumulate alpha, including during fade (997ms)
+  ✓   2 tests/toolbar/eraser-trail.spec.ts:80:1 › a five-second uninterrupted drag keeps only the last second and fades while held still (3.3s)
+  ✓   3 tests/toolbar/eraser-trail.spec.ts:111:1 › different-age crossings use the newer coverage across separate gestures (1.4s)
+  ✓   4 tests/toolbar/eraser-trail.spec.ts:148:3 › resuming after a five-second hold keeps the whole new segment (stationary sample=true) (1.3s)
+  ✓   5 tests/toolbar/eraser-trail.spec.ts:148:3 › resuming after a five-second hold keeps the whole new segment (stationary sample=false) (1.1s)
+  ✓   6 tests/toolbar/pane-toolbar.spec.ts:3:1 › public lightweight artifact serves reader/notes contract adapters without drawing runtime (616ms)
+  ✓   7 tests/toolbar/pane-toolbar.spec.ts:38:1 › 320px actual board: order, tap targets, async failure, zero inset and edge migration preserve ink (1.5s)
+  ✓   8 tests/toolbar/pane-toolbar.spec.ts:93:1 › legacy compiled PaintingBoard retains the bottom default and existing tools (651ms)
+  ✓   9 tests/toolbar/pane-toolbar.spec.ts:110:1 › browser host success and cancellation preserve controlled list ordering (1.4s)
+  ✓  10 tests/toolbar/pane-toolbar.spec.ts:132:1 › shared pane layouts consume 24/34 once in side-by-side and vertical hosts (603ms)
+  ✓  11 tests/toolbar/pane-toolbar.spec.ts:165:1 › 320px board: file and tool/settings/zoom panels exclude each other in both directions (2.0s)
+  ✓  12 tests/toolbar/pane-toolbar.spec.ts:200:3 › 320px board: long Chinese names and storage paths stay inside file hit regions (remove=false) (775ms)
+  ✓  13 tests/toolbar/pane-toolbar.spec.ts:200:3 › 320px board: long Chinese names and storage paths stay inside file hit regions (remove=true) (854ms)
+  ✓  14 tests/toolbar/pane-toolbar.spec.ts:245:1 › stroke panels stay in their own top/bottom pane and inline pickers remain DOM controls (1.1s)
+PM spacing: {"width":1280,"measurements":[{"mode":"default effective safe-area override","inset":0,"edge":"bottom","actual":8},{"mode":"default effective safe-area override","inset":34,"edge":"bottom","actual":42},{"mode":"controlled","inset":34,"edge":"bottom","actual":42},{"mode":"controlled (fallback=34)","inset":0,"edge":"bottom","actual":8},{"mode":"controlled top=24/header=44","inset":24,"edge":"top","actual":60}]}
+  ✓  15 tests/toolbar/pane-toolbar.spec.ts:276:3 › PM spacing contract: default and controlled insets at 1280px (1.1s)
+PM spacing: {"width":1440,"measurements":[{"mode":"default effective safe-area override","inset":0,"edge":"bottom","actual":8},{"mode":"default effective safe-area override","inset":34,"edge":"bottom","actual":42},{"mode":"controlled","inset":34,"edge":"bottom","actual":42},{"mode":"controlled (fallback=34)","inset":0,"edge":"bottom","actual":8},{"mode":"controlled top=24/header=44","inset":24,"edge":"top","actual":60}]}
+  ✓  16 tests/toolbar/pane-toolbar.spec.ts:276:3 › PM spacing contract: default and controlled insets at 1440px (897ms)
+
+  16 passed (31.8s)

@@ -40,7 +40,7 @@ const editableStyle: CSSProperties = {
   WebkitUserSelect: 'text',
   WebkitTouchCallout: 'default',
 };
-type Panel = 'tools' | 'settings' | 'zoom';
+type Panel = 'tools' | 'settings' | 'zoom' | 'stroke';
 export type ToolbarProps = ToolbarFileNavigationProps & {
   layout?: PaneToolbarLayout;
   onOccupiedSpaceChange?: (space: ToolbarOccupiedSpace) => void;
@@ -83,6 +83,10 @@ export function Toolbar({
   const shape = ['line', 'rect', 'ellipse', 'polygon', 'bezier'].includes(activeTool);
   const style = freehand ? settings.freehand : settings.shape;
   const supportedColor = freehand || shape;
+  const width = freehand ? settings.freehand.nominalSize : settings.shape.width;
+  useLayoutEffect(() => {
+    if (!supportedColor && openPanel === 'stroke') setOpenPanel(null);
+  }, [supportedColor, openPanel]);
   const customColorActive =
     supportedColor &&
     !COLORS.some(([, color]) => color.toLowerCase() === style.color.toLowerCase());
@@ -136,6 +140,8 @@ export function Toolbar({
       type="button"
       aria-label={label}
       className={panel === 'zoom' ? 'hn-painting-zoom' : undefined}
+      disabled={panel === 'stroke' && !supportedColor}
+      aria-describedby={panel === 'stroke' ? `${descriptionId}-stroke` : undefined}
       title={label}
       aria-haspopup={panel === 'tools' ? 'menu' : 'dialog'}
       aria-expanded={openPanel === panel}
@@ -158,6 +164,22 @@ export function Toolbar({
           {currentTool?.[1] ?? '工具'}
           <Icon name="chevron-down" />
         </>
+      ) : panel === 'stroke' ? (
+        <svg className="hn-painting-stroke-preview" viewBox="0 0 40 24" aria-hidden="true">
+          <path
+            d="M 5 17 C 5 0, 35 24, 35 7"
+            fill="none"
+            stroke={supportedColor ? style.color : '#9AA5B5'}
+            strokeWidth={
+              supportedColor
+                ? 1 + (5 * Math.log(Math.max(0.5, Math.min(200, width)) / 0.5)) / Math.log(400)
+                : 2
+            }
+            opacity={supportedColor ? style.opacity : 1}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
       ) : (
         <Icon name="settings" />
       )}
@@ -201,11 +223,20 @@ export function Toolbar({
           <span id={`${descriptionId}-palette`} hidden>
             用于绘图或形状
           </span>
+          <span id={`${descriptionId}-stroke`} hidden>
+            {supportedColor
+              ? `颜色 ${style.color}，笔宽 ${width}，不透明度 ${style.opacity}`
+              : '用于绘图或形状'}
+          </span>
           {openPanel && !collapsed ? (
             <ToolbarPanel
               key={openPanel}
               id={panelId}
-              label={{ tools: '工具', settings: '绘图设置', zoom: '缩放设置' }[openPanel]}
+              label={
+                { tools: '工具', settings: '绘图设置', zoom: '缩放设置', stroke: '笔触设置' }[
+                  openPanel
+                ]
+              }
               menu={openPanel === 'tools'}
               anchor={anchor}
               boundary={root}
@@ -235,6 +266,12 @@ export function Toolbar({
                 <label>
                   缩放{' '}
                   <input
+                    className="hn-painting-range"
+                    style={
+                      {
+                        '--range-fill': `${Math.max(0, Math.min(100, ((Math.round(viewport.scale * 100) - 25) / 775) * 100))}%`,
+                      } as CSSProperties
+                    }
                     aria-label="缩放"
                     type="range"
                     min={25}
@@ -261,6 +298,191 @@ export function Toolbar({
                   <output>{Math.round(viewport.scale * 100)}%</output>
                 </label>
               ) : null}
+              {openPanel === 'stroke' && supportedColor ? (
+                <div className="hn-painting-stroke-controls" key={freehand ? 'freehand' : 'shape'}>
+                  <div
+                    className="hn-painting-stroke-row hn-painting-stroke-width hn-painting-width"
+                    role="group"
+                    aria-label="笔触宽度"
+                  >
+                    <span className="hn-painting-stroke-label">笔宽</span>
+                    <div className="hn-painting-width-row">
+                      <input
+                        className="hn-painting-range"
+                        aria-label="笔宽滑条"
+                        type="range"
+                        min={0.5}
+                        max={200}
+                        step={0.5}
+                        value={width}
+                        style={
+                          {
+                            '--range-fill': `${Math.max(0, Math.min(100, ((width - 0.5) / 199.5) * 100))}%`,
+                          } as CSSProperties
+                        }
+                        onChange={(event) =>
+                          updateStyle({ width: event.currentTarget.valueAsNumber })
+                        }
+                      />
+                      <ToolbarNumberField
+                        key={freehand ? 'freehand' : 'shape'}
+                        label="笔宽"
+                        min={0.5}
+                        max={200}
+                        step={0.5}
+                        style={editableStyle}
+                        value={width}
+                        apply={(next) => {
+                          updateStyle({ width: next });
+                          const current = controller.getSnapshot('tools').settings;
+                          return freehand ? current.freehand.nominalSize : current.shape.width;
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="hn-painting-stroke-row hn-painting-color-row">
+                    <span id={`${panelId}-color-label`} className="hn-painting-stroke-label">
+                      颜色
+                    </span>
+                    <div className="hn-painting-color-controls">
+                      <div
+                        className="hn-painting-group hn-painting-palette"
+                        role="group"
+                        aria-labelledby={`${panelId}-color-label`}
+                      >
+                        {COLORS.map(([name, color]) => {
+                          const selected = style.color.toLowerCase() === color.toLowerCase();
+                          return (
+                            <button
+                              key={color}
+                              style={{ '--swatch-color': color } as CSSProperties}
+                              type="button"
+                              aria-label={name}
+                              title={`${name}，用于绘图或形状`}
+                              className="hn-painting-color"
+                              aria-pressed={selected}
+                              aria-describedby={`${descriptionId}-palette`}
+                              onClick={() => updateStyle({ color })}
+                            >
+                              <span style={{ background: color }} aria-hidden="true">
+                                {selected ? '✓' : ''}
+                              </span>
+                            </button>
+                          );
+                        })}
+                        {inlinePickers ? (
+                          <button
+                            type="button"
+                            className="hn-painting-color hn-painting-custom-color"
+                            aria-label="自由取色"
+                            title="自由取色"
+                            aria-description={
+                              customColorActive ? '当前自定义颜色' : '选择自定义颜色'
+                            }
+                            aria-describedby={`${descriptionId}-palette`}
+                            data-active={customColorActive}
+                            style={{ '--current-color': style.color } as CSSProperties}
+                            onClick={() =>
+                              root.current?.ownerDocument
+                                .getElementById(panelId)
+                                ?.querySelector<HTMLInputElement>('[data-toolbar-color-field]')
+                                ?.focus()
+                            }
+                          >
+                            <span aria-hidden="true" />
+                          </button>
+                        ) : (
+                          <label
+                            className="hn-painting-custom-color"
+                            data-active={customColorActive}
+                            title={customColorActive ? '自由取色，当前自定义颜色' : '自由取色'}
+                            style={{ '--current-color': style.color } as CSSProperties}
+                          >
+                            <span aria-hidden="true" />
+                            <input
+                              type="color"
+                              aria-label="自由取色"
+                              aria-description={
+                                customColorActive ? '当前自定义颜色' : '选择自定义颜色'
+                              }
+                              value={style.color}
+                              aria-describedby={`${descriptionId}-palette`}
+                              onChange={(event) => updateStyle({ color: event.target.value })}
+                            />
+                          </label>
+                        )}
+                      </div>
+                      {inlinePickers ? (
+                        <ToolbarHexColorField
+                          value={style.color}
+                          onChange={(color) => updateStyle({ color })}
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                  <label className="hn-painting-stroke-row hn-painting-opacity-row">
+                    <span className="hn-painting-stroke-label">不透明度</span>
+                    <input
+                      className="hn-painting-range"
+                      aria-label="不透明度"
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      style={
+                        {
+                          width: 80,
+                          '--range-fill': `${Math.max(0, Math.min(100, style.opacity * 100))}%`,
+                        } as CSSProperties
+                      }
+                      value={style.opacity}
+                      onChange={(event) => updateStyle({ opacity: event.target.valueAsNumber })}
+                    />
+                  </label>
+                  {freehand ? (
+                    <div className="hn-painting-stroke-choice">
+                      <ToolbarChoiceField
+                        inline={inlinePickers}
+                        label="压力"
+                        ariaLabel="压力模式"
+                        value={settings.freehand.pressureMode}
+                        options={[
+                          ['auto', '自动'],
+                          ['real', '真实'],
+                          ['simulated', '模拟'],
+                          ['constant', '恒定'],
+                        ]}
+                        onChange={(pressureMode) =>
+                          controller.setFreehandSettings({
+                            ...settings.freehand,
+                            pressureMode: pressureMode as PressureMode,
+                          })
+                        }
+                      />
+                    </div>
+                  ) : null}
+                  {shape ? (
+                    <div className="hn-painting-stroke-choice">
+                      <ToolbarChoiceField
+                        inline={inlinePickers}
+                        label="线型"
+                        ariaLabel="形状线型"
+                        value={settings.shape.dash?.length ? 'dash' : 'solid'}
+                        options={[
+                          ['solid', '实线'],
+                          ['dash', '虚线'],
+                        ]}
+                        onChange={(dash) =>
+                          controller.setShapeSettings({
+                            ...settings.shape,
+                            dash: dash === 'dash' ? [8, 5] : [],
+                          })
+                        }
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               {openPanel === 'settings' ? (
                 <>
                   <ToolbarChoiceField
@@ -277,78 +499,6 @@ export function Toolbar({
                         writeInputModePreference(mode);
                     }}
                   />
-                  {freehand || shape ? (
-                    <>
-                      {inlinePickers ? (
-                        <ToolbarHexColorField
-                          value={style.color}
-                          onChange={(color) => updateStyle({ color })}
-                        />
-                      ) : (
-                        <label>
-                          自定义颜色
-                          <input
-                            type="color"
-                            aria-label="颜色"
-                            title="颜色"
-                            value={style.color}
-                            onChange={(event) => updateStyle({ color: event.target.value })}
-                          />
-                        </label>
-                      )}
-                      <label>
-                        不透明度{' '}
-                        <input
-                          aria-label="不透明度"
-                          type="range"
-                          min={0}
-                          max={1}
-                          step={0.05}
-                          style={{ width: 80 }}
-                          value={style.opacity}
-                          onChange={(event) => updateStyle({ opacity: event.target.valueAsNumber })}
-                        />
-                      </label>
-                    </>
-                  ) : null}
-                  {freehand ? (
-                    <ToolbarChoiceField
-                      inline={inlinePickers}
-                      label="压力"
-                      ariaLabel="压力模式"
-                      value={settings.freehand.pressureMode}
-                      options={[
-                        ['auto', '自动'],
-                        ['real', '真实'],
-                        ['simulated', '模拟'],
-                        ['constant', '恒定'],
-                      ]}
-                      onChange={(pressureMode) =>
-                        controller.setFreehandSettings({
-                          ...settings.freehand,
-                          pressureMode: pressureMode as PressureMode,
-                        })
-                      }
-                    />
-                  ) : null}
-                  {shape ? (
-                    <ToolbarChoiceField
-                      inline={inlinePickers}
-                      label="线型"
-                      ariaLabel="形状线型"
-                      value={settings.shape.dash?.length ? 'dash' : 'solid'}
-                      options={[
-                        ['solid', '实线'],
-                        ['dash', '虚线'],
-                      ]}
-                      onChange={(dash) =>
-                        controller.setShapeSettings({
-                          ...settings.shape,
-                          dash: dash === 'dash' ? [8, 5] : [],
-                        })
-                      }
-                    />
-                  ) : null}
                   <label>
                     <input
                       type="checkbox"
@@ -414,29 +564,7 @@ export function Toolbar({
       <span className="hn-painting-divider" aria-hidden="true" />
       <div className="hn-painting-group">{menuButton('tools', '工具菜单')}</div>
       <span className="hn-painting-divider" aria-hidden="true" />
-      <div className="hn-painting-group hn-painting-width" role="group" aria-label="笔触宽度">
-        <label>
-          笔宽
-          {supportedColor ? (
-            <ToolbarNumberField
-              key={freehand ? 'freehand' : 'shape'}
-              label="笔宽"
-              min={0.5}
-              max={200}
-              step={0.5}
-              style={editableStyle}
-              value={freehand ? settings.freehand.nominalSize : settings.shape.width}
-              apply={(width) => {
-                updateStyle({ width });
-                const current = controller.getSnapshot('tools').settings;
-                return freehand ? current.freehand.nominalSize : current.shape.width;
-              }}
-            />
-          ) : (
-            <input aria-label="笔宽" type="number" disabled value="" placeholder="—" />
-          )}
-        </label>
-      </div>
+      <div className="hn-painting-group">{menuButton('stroke', '笔触设置')}</div>
       <span className="hn-painting-divider" aria-hidden="true" />
       <div className="hn-painting-group" role="group" aria-label="画布操作">
         {menuButton('settings', '设置')}
@@ -493,71 +621,6 @@ export function Toolbar({
         >
           <Icon name="delete" />
         </button>
-      </div>
-      <span className="hn-painting-divider" aria-hidden="true" />
-      <div
-        className="hn-painting-group hn-painting-palette"
-        role="group"
-        aria-label="调色板，用于绘图或形状"
-      >
-        {COLORS.map(([name, color]) => {
-          const selected = (freehand || shape) && style.color.toLowerCase() === color.toLowerCase();
-          return (
-            <button
-              key={color}
-              style={{ '--swatch-color': color } as CSSProperties}
-              type="button"
-              aria-label={name}
-              title={`${name}，用于绘图或形状`}
-              className="hn-painting-color"
-              disabled={!freehand && !shape}
-              aria-pressed={selected}
-              aria-describedby={`${descriptionId}-palette`}
-              onClick={() => updateStyle({ color })}
-            >
-              <span style={{ background: color }} aria-hidden="true">
-                {selected ? '✓' : ''}
-              </span>
-            </button>
-          );
-        })}
-        {inlinePickers ? (
-          <button
-            type="button"
-            className="hn-painting-color hn-painting-custom-color"
-            aria-label="自由取色"
-            title="自由取色"
-            aria-haspopup="dialog"
-            aria-expanded={openPanel === 'settings'}
-            aria-controls={openPanel === 'settings' ? panelId : undefined}
-            aria-description={customColorActive ? '当前自定义颜色' : '选择自定义颜色'}
-            aria-describedby={`${descriptionId}-palette`}
-            data-active={customColorActive}
-            disabled={!supportedColor}
-            style={{ '--current-color': style.color } as CSSProperties}
-            onClick={(event) => togglePanel('settings', event.currentTarget)}
-          >
-            <span aria-hidden="true" />
-          </button>
-        ) : (
-          <label
-            className="hn-painting-custom-color"
-            data-active={customColorActive}
-            title={customColorActive ? '自由取色，当前自定义颜色' : '自由取色'}
-            style={{ '--current-color': style.color } as CSSProperties}
-          >
-            <span aria-hidden="true" />
-            <input
-              type="color"
-              aria-label="自由取色"
-              aria-description={customColorActive ? '当前自定义颜色' : '选择自定义颜色'}
-              value={style.color}
-              disabled={!freehand && !shape}
-              aria-describedby={`${descriptionId}-palette`}
-              onChange={(event) => updateStyle({ color: event.target.value })}
-            />
-          </label>
-        )}
       </div>
     </ToolbarShell>
   );

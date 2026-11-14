@@ -1,4 +1,4 @@
-import { openToolbarSettings, setToolbarInputMode } from './layered-helpers';
+import { openToolbarSettings, openToolbarStroke, setToolbarInputMode } from './layered-helpers';
 import { devices, expect, test } from '@playwright/test';
 import { layeredState, openLayeredEditor } from './layered-helpers';
 import type { Locator } from '@playwright/test';
@@ -75,18 +75,18 @@ for (const source of ['pen', 'touch'] as const) {
     await tap(page.getByRole('button', { name: '工具菜单', exact: true }));
     await tap(page.getByRole('menuitemradio', { name: '画笔', exact: true }));
     await tap(page.getByRole('button', { name: '设置', exact: true }));
-    await openToolbarSettings(page);
+    await openToolbarStroke(page);
     const width = page.getByLabel('笔宽', { exact: true });
     await tap(width);
     await expect(width).toBeFocused();
     await width.press('ControlOrMeta+A');
     await width.press('1');
     await width.press('6');
-    await openToolbarSettings(page);
+    await openToolbarStroke(page);
     const opacity = page.getByLabel('不透明度');
     await tap(opacity, 0.75);
     if (source === 'pen') await expect(opacity).toBeFocused();
-    await openToolbarSettings(page);
+    await openToolbarStroke(page);
     const pressure = page.getByLabel('压力模式');
     await tap(pressure);
     await page.keyboard.press('Escape');

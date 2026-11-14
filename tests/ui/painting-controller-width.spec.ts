@@ -1,4 +1,4 @@
-import { selectToolbarTool } from './layered-helpers';
+import { openToolbarStroke, selectToolbarTool } from './layered-helpers';
 import { expect, test } from '@playwright/test';
 import { drawLayeredStroke, layeredState, openLayeredEditor } from './layered-helpers';
 
@@ -7,6 +7,7 @@ test('five nominal widths reach brush snapshots and do not modify earlier ink', 
 }) => {
   await openLayeredEditor(page);
   for (const [index, width] of [1, 2, 4, 8, 16].entries()) {
+    await openToolbarStroke(page);
     await page.getByLabel('笔宽', { exact: true }).fill(String(width));
     await drawLayeredStroke(page, 100 + index * 50);
     const object = (await layeredState(page)).document.objects.at(-1);
@@ -17,6 +18,6 @@ test('five nominal widths reach brush snapshots and do not modify earlier ink', 
     objects.filter((o) => o.kind === 'freehand').map((o) => o.brushSnapshot.nominalSize)
   ).toEqual([1, 2, 4, 8, 16]);
   await selectToolbarTool(page, '套索');
-  await expect(page.getByLabel('笔宽', { exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '笔触设置', exact: true })).toBeDisabled();
   expect((await layeredState(page)).document.objects).toEqual(objects);
 });

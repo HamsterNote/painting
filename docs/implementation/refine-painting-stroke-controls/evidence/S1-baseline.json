@@ -1,0 +1,106 @@
+{
+  "entry": "http://127.0.0.1:5266/layered-editor?diagnostics=1",
+  "initial": {
+    "activeTool": "freehand",
+    "settings": {
+      "freehand": {
+        "color": "#2D2D2D",
+        "nominalSize": 8,
+        "opacity": 1,
+        "pressureMode": "auto",
+        "presetRevision": 1
+      },
+      "shape": {
+        "color": "#2D2D2D",
+        "width": 2,
+        "opacity": 1
+      }
+    }
+  },
+  "objects": [
+    {
+      "kind": "freehand",
+      "objectId": "editor-1-object-1",
+      "objectRevision": 1,
+      "transform": {
+        "a": 1,
+        "b": 0,
+        "c": 0,
+        "d": 1,
+        "tx": 0,
+        "ty": 0
+      },
+      "transformRevision": 1,
+      "commitId": "surface-1-commit-1",
+      "samples": [
+        {
+          "sequence": 0,
+          "x": 100,
+          "y": 120,
+          "pressure": 0.5,
+          "time": 11770.800000190735,
+          "phase": "down",
+          "source": "pen"
+        },
+        {
+          "sequence": 1,
+          "x": 180,
+          "y": 120,
+          "pressure": 0.5,
+          "time": 11821.300000190735,
+          "phase": "move",
+          "source": "pen"
+        },
+        {
+          "sequence": 2,
+          "x": 220,
+          "y": 120,
+          "pressure": 0,
+          "time": 11878.300000190735,
+          "phase": "up",
+          "source": "pen"
+        }
+      ],
+      "brushSnapshot": {
+        "color": "#2D2D2D",
+        "nominalSize": 8,
+        "opacity": 1,
+        "pressureMode": "auto",
+        "presetRevision": 1
+      },
+      "resolvedPressureMode": "real",
+      "samplesRevision": 1,
+      "brushRevision": 1
+    },
+    {
+      "kind": "shape",
+      "objectId": "object-1794583238597-2",
+      "objectRevision": 1,
+      "transform": {
+        "a": 1,
+        "b": 0,
+        "c": 0,
+        "d": 1,
+        "tx": 0,
+        "ty": 0
+      },
+      "transformRevision": 1,
+      "shapeType": "rect",
+      "points": [
+        {
+          "x": 300,
+          "y": 200
+        },
+        {
+          "x": 400,
+          "y": 300
+        }
+      ],
+      "style": {
+        "color": "#2D2D2D",
+        "width": 2,
+        "opacity": 1
+      }
+    }
+  ]
+}
