@@ -55,6 +55,9 @@ accepted input，不使用较早捕获监听器看到的旧前缀。旧 session/
 
 `scripts/perf/lasso-preflight.mjs` 统一三个测量入口的启动等待：
 
+当前采样实现已进一步修订为 3 秒窗口、独立 before/after、首帧后有界 settle；
+依据曲线、全部拒绝记录及两次正式尝试见 [采样修订记录](./sampling-2026-11-14.md)。
+
 - `lasso-prefix-paired.mjs`：第 1 条逐前缀内核矩阵；第 3 条回退耗时插桩位于
   同一入口的 `round === 7`，共用启动预检。
 - `lasso-final-ui.mjs`：第 2 条松手到最终提交测量。
@@ -91,7 +94,8 @@ node --test scripts/perf/lasso-preflight.test.mjs scripts/perf/lasso-host-gate.t
 
 口径与预检对齐轮仅做功能验证。随后协调者开启了正式窗口；该轮在第一个
 预热轮的轮前门禁失败后停止，见 [窗口记录](./quiet-window-2026-11-14.md)。
-各入口会自行完成上述启动预检。
+之后修正采样控制又做了两次尝试，均未通过 settle，已按上限停止。
+后续测量条件由人选择；各入口会自行完成上述启动预检。
 
 在同一冻结 production 构建上准备好 Xvfb/DISPLAY 后运行（**本轮未执行**）：
 
