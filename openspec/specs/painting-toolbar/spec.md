@@ -232,14 +232,14 @@ painting SHALL 提供无绘图 controller、解析器或原生运行时依赖的
 - **WHEN** 旧画板宿主不提供文件列表，或 reader/notes 契约适配器仅导入公开 toolbar 编译入口
 - **THEN** 旧宿主工具和默认布局不变，适配器复用相同外壳和菜单且打包依赖图不含绘图运行时
 
-### Requirement: Controlled pane edge and occupied content space
+### Requirement: Controlled pane edge and full-bleed content
 
-layout SHALL 使用宿主已解析 edge、四边有效 insets、headerContentInset 及可选 viewport bounds，不在库中判断分屏方向。显式0 SHALL 覆盖整屏 env，顶部避让 SHALL 取 top 与有效标题遮挡终点的较大值而不相加；底部仅消费 bottom。top 弹层优先向下、bottom 优先向上，均限制在所属栏与可见 viewport 交集中。外壳 SHALL 报告占位；受控画板 SHALL 在对应边预留真实空间并约束 surface。迁移边缘 SHALL 保留原 controller、笔画和撤销状态，不更改文档 key。
+layout SHALL 使用宿主已解析 edge、四边有效 insets、headerContentInset 及可选 viewport bounds，不在库中判断分屏方向。显式0 SHALL 覆盖整屏 env，顶部避让 SHALL 取 top 与有效标题遮挡终点的较大值而不相加；底部仅消费 bottom。top 弹层优先向下、bottom 优先向上，均限制在所属栏与可见 viewport 交集中。外壳 SHALL 报告占位供需要避免遮挡正文的宿主使用；受控画板 MUST NOT 将浮动栏占位或 safe area 转为 surface padding，画布 SHALL 铺满画板并延伸至工具栏及安全区后面。迁移边缘 SHALL 保留原 controller、笔画、撤销状态和 surface 尺寸，不更改文档 key。
 
 #### Scenario: Safe area and top/bottom migration
 
 - **WHEN** 向画板传入 bottom=34、改为显式0，再改为 top=24/headerContentInset=44 的 top 布局
-- **THEN** 胶囊外壳底距依次为50、16，顶部外壳距为60；正文不被栏遮挡，弹层向内容区展开，笔画及历史不变且surface不重挂载
+- **THEN** 胶囊外壳底距依次为42、8，顶部外壳距为60；surface 位置和尺寸始终不变，弹层向内容区展开，笔画及历史不变且surface不重挂载
 
 #### Scenario: Side-by-side and vertical pane hosts
 
