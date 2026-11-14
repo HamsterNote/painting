@@ -260,7 +260,7 @@ test.each([
     expect(controller.getSnapshot('document').objects).toHaveLength(previous.length + 1);
     fireEvent.click(view.getByRole('button', { name: '笔触设置' }));
     expect(view.getByRole('dialog', { name: '笔触设置' })).toBeTruthy();
-    fireEvent.change(view.getByLabelText('颜色', { exact: true }), {
+    fireEvent.change(view.getByLabelText('自由取色', { exact: true }), {
       target: { value: '#df2468' },
     });
     // A pooled event from the disconnected native epoch must not reopen its session.

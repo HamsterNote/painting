@@ -487,9 +487,25 @@ for (const viewportWidth of [1280, 390, 320]) {
       body: JSON.stringify(layoutEvidence, null, 2),
       contentType: 'application/json',
     });
-    const panelScreenshot = info.outputPath(`S2-stroke-panel-${viewportWidth}.png`);
-    await panel.screenshot({ path: panelScreenshot });
-    await info.attach(`S2-stroke-panel-${viewportWidth}.png`, {
+    const panelBounds = (await panel.boundingBox())!;
+    const clipTop = Math.max(0, panelBounds.y - 40);
+    await page.evaluate(
+      ({ width, top }) => {
+        const caption = document.createElement('div');
+        caption.dataset.strokeViewportEvidence = 'true';
+        caption.textContent = `视口宽度 ${width}px`;
+        caption.style.cssText = `position:fixed;left:8px;top:${top}px;z-index:2147483647;padding:4px 8px;border-radius:6px;background:#2D2D2D;color:#FFF;font:12px/16px system-ui,sans-serif;pointer-events:none`;
+        document.body.append(caption);
+      },
+      { width: viewportWidth, top: panelBounds.y - 32 }
+    );
+    const panelScreenshot = info.outputPath(`S2-stroke-viewport-${viewportWidth}.png`);
+    await page.screenshot({
+      path: panelScreenshot,
+      clip: { x: 0, y: clipTop, width: viewportWidth, height: panelBounds.height + 40 },
+    });
+    await page.locator('[data-stroke-viewport-evidence]').evaluate((caption) => caption.remove());
+    await info.attach(`S2-stroke-viewport-${viewportWidth}.png`, {
       path: panelScreenshot,
       contentType: 'image/png',
     });
