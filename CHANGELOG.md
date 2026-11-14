@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-11-14
+
+`@hamster-note/painting` 与 `@hamster-note/painting-board` 同步发布，后者精确依赖 painting `0.9.2`。
+
+### Fixed
+
+- HAM-266：浮动工具栏继续按 safe area 和标题遮挡定位，但不再通过内容 padding 压缩画布；顶部/底部布局切换时 surface 保持铺满画板，画布可延伸到工具栏及安全区后面。
+
 ## [0.9.1] - 2026-11-13
 
 `@hamster-note/painting` 与 `@hamster-note/painting-board` 同步发布，后者精确依赖 painting `0.9.1`。本次修复既有工具栏、擦除反馈与选择交互，未新增公开 API，按补丁版本交付。

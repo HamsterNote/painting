@@ -84,8 +84,11 @@ test('320px actual board: order, tap targets, async failure, zero inset and edge
   const triggerBox = (await trigger.boundingBox())!;
   expect(popup.y).toBeGreaterThanOrEqual(triggerBox.y + triggerBox.height);
   const canvasBox = (await surface.boundingBox())!;
+  expect(canvasBox.y).toBe(surfaceBox.y);
+  expect(canvasBox.height).toBe(surfaceBox.height);
   const stripBox = (await toolbar.boundingBox())!;
-  expect(canvasBox.y).toBeGreaterThanOrEqual(stripBox.y + stripBox.height);
+  expect(stripBox.y).toBeGreaterThanOrEqual(canvasBox.y);
+  expect(stripBox.y + stripBox.height).toBeLessThanOrEqual(canvasBox.y + canvasBox.height);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
   await page.screenshot({ path: info.outputPath('top-toolbar-320.png') });
 });

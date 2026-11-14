@@ -1,9 +1,4 @@
-import { useCallback, useState } from 'react';
-import type {
-  ToolbarFileNavigationProps,
-  PaneToolbarLayout,
-  ToolbarOccupiedSpace,
-} from '../toolbar';
+import type { ToolbarFileNavigationProps, PaneToolbarLayout } from '../toolbar';
 import type { LayeredDrawingSurfaceProps } from './DrawingSurface';
 import { LayeredDrawingSurface } from './DrawingSurface';
 import { Toolbar } from './Toolbar';
@@ -28,20 +23,12 @@ export function LayeredPaintingBoard({
   layout,
   ...props
 }: LayeredPaintingBoardProps) {
-  const [occupied, setOccupied] = useState<ToolbarOccupiedSpace>({ top: 0, bottom: 0 });
-  const reportOccupied = useCallback((space: ToolbarOccupiedSpace) => {
-    setOccupied((previous) =>
-      previous.top === space.top && previous.bottom === space.bottom ? previous : space
-    );
-  }, []);
   return (
     <div
       data-painting-board="true"
       data-pane-toolbar-boundary="true"
       style={{
         boxSizing: 'border-box',
-        paddingTop: toolbar && layout ? occupied.top : 0,
-        paddingBottom: toolbar && layout ? occupied.bottom : 0,
         display: 'flex',
         flexDirection: 'column',
         width: '100%',
@@ -74,7 +61,6 @@ export function LayeredPaintingBoard({
           onSelectFile={onSelectFile}
           onRequestRemove={onRequestRemove}
           layout={layout}
-          onOccupiedSpaceChange={layout ? reportOccupied : undefined}
           placement="floating"
           inlinePickers={toolbarInlinePickers}
         />
