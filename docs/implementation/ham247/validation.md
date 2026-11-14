@@ -1,5 +1,11 @@
 # HAM-247: current baseline and measurement blockers
 
+This is the first-run evidence record (09:35 UTC). The later criterion-2 revision
+is implemented and documented in [release-measurement.md](./release-measurement.md).
+Its current endpoint is final submission, 0/100/500 use 150ms, and 1000 has no
+threshold. The old live-selection conflict below is resolved; all original
+measurements and their limitations remain historical evidence.
+
 2026-11-14. **Performance acceptance is blocked, not passed.** No product algorithm,
 threshold, host integration or interaction behavior changed in this delivery.
 The changes are a frozen-revision measurement runner, structural fallback probes,
@@ -63,9 +69,8 @@ confirm this (local/1000/p600: 20,233 point tests, only 600 uncached bounds vert
 
 ## Performance gate result
 
-The existing HAM-245 gate requires load <= half the available CPUs and idle CPU
-
-> =50%. This host exposes six CPUs, so the load limit is 3.
+The existing HAM-245 gate requires load <= half the available CPUs and at least
+50% idle CPU. This host exposes six CPUs, so the load limit is 3.
 
 | Preflight UTC | Load before / after | Idle CPU | Result   |
 | ------------- | ------------------: | -------: | -------- |
